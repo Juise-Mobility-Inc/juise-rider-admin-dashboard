@@ -1,0 +1,521 @@
+.login-shell {
+  min-height: 100svh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 460px);
+  gap: 24px;
+  padding: 24px;
+}
+
+.login-panel,
+.panel,
+.brand-card,
+.stat-card,
+.banner,
+.hero-card,
+.reservation-card,
+.data-card,
+.school-pill {
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg);
+  box-shadow: var(--panel-shadow);
+}
+
+.login-panel {
+  border-radius: 32px;
+  padding: 40px;
+}
+
+.login-hero {
+  background:
+    radial-gradient(circle at top right, rgba(246, 174, 45, 0.35), transparent 28%),
+    linear-gradient(140deg, rgba(17, 45, 78, 0.96), rgba(11, 27, 48, 0.94));
+  color: #f5efe5;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-form-panel {
+  display: grid;
+  align-items: center;
+}
+
+.hero-copy {
+  max-width: 42rem;
+  color: rgba(245, 239, 229, 0.8);
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 40px;
+}
+
+.hero-card {
+  border-radius: 22px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px);
+}
+
+.hero-card span {
+  display: block;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(245, 239, 229, 0.62);
+  margin-bottom: 10px;
+}
+
+.login-form {
+  display: grid;
+  gap: 18px;
+}
+
+.auth-switcher {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.login-form-panel .nav-button {
+  background: rgba(17, 45, 78, 0.06);
+  color: var(--text-strong);
+}
+
+.login-form-panel .nav-button-active {
+  border-color: rgba(246, 174, 45, 0.7);
+  background: rgba(246, 174, 45, 0.12);
+}
+
+.app-shell {
+  min-height: 100svh;
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+}
+
+.sidebar {
+  background:
+    linear-gradient(180deg, rgba(22, 66, 91, 0.97), rgba(11, 27, 48, 0.97)),
+    var(--nav-bg);
+  color: #f5efe5;
+  padding: 24px;
+  display: grid;
+  gap: 20px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.brand-card {
+  border-radius: 28px;
+  padding: 22px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.scope-form,
+.sidebar-block,
+.section-nav {
+  display: grid;
+  gap: 12px;
+}
+
+.sidebar-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.92rem;
+  color: rgba(245, 239, 229, 0.74);
+}
+
+.school-list {
+  display: grid;
+  gap: 10px;
+}
+
+.school-pill {
+  border-radius: 18px;
+  padding: 14px 16px;
+  text-align: left;
+  display: grid;
+  gap: 4px;
+  color: #f5efe5;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.school-pill strong,
+.reservation-card strong {
+  font-size: 0.96rem;
+}
+
+.school-pill span,
+.reservation-card span,
+.muted-text {
+  color: var(--muted);
+}
+
+.school-pill-active,
+.nav-button-active,
+.reservation-card-active {
+  border-color: rgba(246, 174, 45, 0.8);
+  background: rgba(246, 174, 45, 0.12);
+}
+
+.nav-button,
+.text-button,
+.secondary-button,
+.primary-button,
+.danger-button,
+.school-pill,
+.reservation-card {
+  appearance: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.nav-button:hover,
+.text-button:hover,
+.secondary-button:hover,
+.primary-button:hover,
+.danger-button:hover,
+.school-pill:hover,
+.reservation-card:hover {
+  transform: translateY(-1px);
+}
+
+.section-nav {
+  margin-top: 8px;
+}
+
+.nav-button {
+  border-radius: 18px;
+  padding: 14px 16px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.04);
+  color: #f5efe5;
+}
+
+.workspace {
+  padding: 28px;
+  display: grid;
+  gap: 20px;
+}
+
+.workspace-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.workspace-copy {
+  color: var(--muted-strong);
+}
+
+.header-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  min-width: min(360px, 100%);
+}
+
+.stat-card {
+  border-radius: 22px;
+  padding: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.stat-card span {
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.stat-card strong {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.banner {
+  border-radius: 22px;
+  padding: 14px 18px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.banner-success {
+  background: rgba(47, 111, 72, 0.12);
+  border-color: rgba(47, 111, 72, 0.35);
+}
+
+.banner-error {
+  background: rgba(179, 58, 58, 0.11);
+  border-color: rgba(179, 58, 58, 0.28);
+}
+
+.banner-info {
+  background: rgba(22, 66, 91, 0.1);
+  border-color: rgba(22, 66, 91, 0.22);
+}
+
+.panel {
+  border-radius: 30px;
+  padding: 24px;
+}
+
+.panel-header,
+.student-panel-header,
+.data-section-header,
+.form-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.school-form,
+.term-list,
+.student-panel,
+.data-section {
+  display: grid;
+  gap: 18px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  font-size: 0.92rem;
+}
+
+.field span {
+  color: var(--muted);
+}
+
+.field input,
+.field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 16px;
+  border: 1px solid var(--input-border);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--text-strong);
+  padding: 13px 14px;
+  font: inherit;
+}
+
+.field textarea {
+  min-height: 180px;
+  resize: vertical;
+}
+
+.checkbox-field {
+  align-content: end;
+}
+
+.checkbox-field input {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+
+.field-span-2 {
+  grid-column: span 2;
+}
+
+.compact-field input {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f5efe5;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.compact-field span {
+  color: rgba(245, 239, 229, 0.7);
+}
+
+.primary-button,
+.secondary-button,
+.danger-button {
+  border-radius: 999px;
+  padding: 12px 18px;
+  font: inherit;
+  font-weight: 700;
+}
+
+.primary-button {
+  background: linear-gradient(135deg, #16425b, #1f6f78);
+  color: #f5efe5;
+}
+
+.secondary-button {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--input-border);
+  color: inherit;
+}
+
+.danger-button {
+  background: rgba(179, 58, 58, 0.12);
+  border-color: rgba(179, 58, 58, 0.24);
+  color: #8a1f1f;
+}
+
+.text-button {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.full-width-button {
+  width: 100%;
+}
+
+.term-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr auto;
+  gap: 12px;
+  align-items: end;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.reservation-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.2fr);
+  gap: 20px;
+}
+
+.reservation-list,
+.stack-list {
+  display: grid;
+  gap: 12px;
+}
+
+.reservation-card {
+  border-radius: 20px;
+  padding: 16px 18px;
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.reservation-card div,
+.data-card {
+  display: grid;
+  gap: 6px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.detail-row {
+  border-radius: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.56);
+  display: grid;
+  gap: 6px;
+}
+
+.detail-row span {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.data-section-header h4,
+.student-panel-header h3,
+.panel-header h2,
+.brand-card h2 {
+  margin: 0;
+}
+
+.data-card {
+  border-radius: 18px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.54);
+}
+
+.empty-state,
+.error-text {
+  border-radius: 18px;
+  padding: 14px 16px;
+}
+
+.empty-state {
+  background: rgba(22, 66, 91, 0.06);
+  color: var(--muted-strong);
+}
+
+.error-text {
+  background: rgba(179, 58, 58, 0.11);
+  color: #8a1f1f;
+}
+
+@media (max-width: 1180px) {
+  .login-shell,
+  .app-shell,
+  .reservation-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+}
+
+@media (max-width: 840px) {
+  .workspace,
+  .login-shell,
+  .sidebar {
+    padding: 18px;
+  }
+
+  .login-panel,
+  .panel {
+    padding: 20px;
+    border-radius: 24px;
+  }
+
+  .hero-grid,
+  .form-grid,
+  .detail-grid,
+  .header-stats,
+  .term-row {
+    grid-template-columns: 1fr;
+  }
+
+  .field-span-2 {
+    grid-column: span 1;
+  }
+
+  .workspace-header,
+  .panel-header,
+  .student-panel-header,
+  .data-section-header,
+  .form-actions,
+  .banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
