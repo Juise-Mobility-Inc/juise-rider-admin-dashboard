@@ -14,19 +14,26 @@ import {
 	fetchNebulaUser,
 	fetchPendingReservations,
 	fetchSchool,
+	fetchSchoolStudentRoster,
+	fetchSchoolTermReservations,
 	fetchStudentProfile,
+	fetchUserMediaAssets,
 	loginWithIdentifier,
 	saveSchool,
 	saveSchoolTerms,
 	setApiSession,
 	setSessionObserver,
+	signSchoolMedia,
 	type AdminSession,
 	type Pack,
 	type PackSpotReservation,
 	type School,
 	type SchoolColorScheme,
+	type SchoolStudentRosterEntry,
 	type SchoolTerm,
 	type StudentProfileBundle,
+	type UserMediaAsset,
+	type UserSchoolMembership,
 } from "./lib/api";
 import {
 	PackLocationPicker,
@@ -41,7 +48,7 @@ import {
 	type DashboardContext,
 } from "./lib/storage";
 
-type Section = "school" | "terms" | "packs" | "reservations";
+type Section = "school" | "terms" | "students" | "packs" | "reservations";
 type BannerTone = "success" | "error" | "info";
 type AuthMode = "login" | "signup";
 
@@ -87,6 +94,10 @@ interface PackDraft {
 	lat: string;
 	lng: string;
 }
+
+type StudentIdPhotoSlot = "front" | "back";
+type StudentIdPhotoKeys = Partial<Record<StudentIdPhotoSlot, string>>;
+type StudentRosterPhotoKeyMap = Record<string, StudentIdPhotoKeys>;
 
 const authAppId =
 	import.meta.env.VITE_AUTH_APP_ID ?? "juise_rider_admin_dashboard";
@@ -347,6 +358,118 @@ function getErrorMessage(error: unknown): string {
 	return "An unexpected error occurred.";
 }
 
+function buildStudentIdEntityUUID(schoolId: string, campusId: string): string {
+	return `${schoolId.trim()}.${campusId.trim()}`;
+}
+
+function resolveMediaObjectKey(
+	asset?: Pick<UserMediaAsset, "object_key">,
+): string {
+	return asset?.object_key?.trim() ?? "";
+}
+
+function resolveStudentPhotoObjectKey(
+	membership: UserSchoolMembership,
+	photoKeysByMembership: StudentRosterPhotoKeyMap,
+	slot: StudentIdPhotoSlot,
+): string {
+	if (slot === "front") {
+		return (
+			resolveMediaObjectKey(membership.front_photo) ||
+			photoKeysByMembership[membership.membership_uuid]?.front?.trim() ||
+			""
+		);
+	}
+
+	return (
+		resolveMediaObjectKey(membership.back_photo) ||
+		photoKeysByMembership[membership.membership_uuid]?.back?.trim() ||
+		""
+	);
+}
+
+function collectStudentIdPhotoKeys(assets: UserMediaAsset[]): StudentIdPhotoKeys {
+	const photoKeys: StudentIdPhotoKeys = {};
+	for (const asset of assets) {
+		const slot = asset.slot?.trim();
+		if ((slot === "front" || slot === "back") && !photoKeys[slot]) {
+			const objectKey = asset.object_key?.trim() ?? "";
+			if (objectKey) {
+				photoKeys[slot] = objectKey;
+			}
+		}
+	}
+	return photoKeys;
+}
+
+async function resolveSchoolStudentPhotoState(
+	managedAppId: string,
+	schoolId: string,
+	roster: SchoolStudentRosterEntry[],
+): Promise<{
+	photoKeysByMembership: StudentRosterPhotoKeyMap;
+	signedUrls: Record<string, string>;
+}> {
+	const photoKeysByMembership: StudentRosterPhotoKeyMap = {};
+	const fallbackMediaEntries = roster.filter((entry) => {
+		const membership = entry.membership;
+		return (
+			!resolveMediaObjectKey(membership.front_photo) ||
+			!resolveMediaObjectKey(membership.back_photo)
+		);
+	});
+
+	const fallbackMediaResults = await Promise.allSettled(
+		fallbackMediaEntries.map(async (entry) => {
+			const membership = entry.membership;
+			const assets = await fetchUserMediaAssets(
+				managedAppId,
+				entry.user.k_guid || membership.user_uuid,
+				"student_id",
+				buildStudentIdEntityUUID(membership.school_id, membership.campus_id),
+			);
+			return {
+				membershipUUID: membership.membership_uuid,
+				photoKeys: collectStudentIdPhotoKeys(assets),
+			};
+		}),
+	);
+
+	for (const result of fallbackMediaResults) {
+		if (result.status !== "fulfilled") {
+			continue;
+		}
+		const { membershipUUID, photoKeys } = result.value;
+		if (photoKeys.front || photoKeys.back) {
+			photoKeysByMembership[membershipUUID] = photoKeys;
+		}
+	}
+
+	const objectKeys = roster.flatMap((entry) => {
+		const membership = entry.membership;
+		return [
+			resolveStudentPhotoObjectKey(
+				membership,
+				photoKeysByMembership,
+				"front",
+			),
+			resolveStudentPhotoObjectKey(
+				membership,
+				photoKeysByMembership,
+				"back",
+			),
+		].filter((value): value is string => value !== "");
+	});
+
+	const signedUrls =
+		objectKeys.length > 0 ? await signSchoolMedia(schoolId, objectKeys) : {};
+
+	return {
+		photoKeysByMembership,
+		signedUrls,
+	};
+}
+
 function formatUnixTimestamp(value?: number): string {
 	if (!value) {
 		return "Not set";
@@ -440,6 +563,25 @@ function formatAdminIdentity(session: AdminSession): string {
 	return session.claims.user_uuid;
 }
 
+function formatNebulaUserName(profile: {
+	first_name?: string;
+	last_name?: string;
+	username?: string;
+	email?: string;
+}): string {
+	const fullName = `${profile.first_name?.trim() ?? ""} ${profile.last_name?.trim() ?? ""}`.trim();
+	if (fullName) {
+		return fullName;
+	}
+	if (profile.username?.trim()) {
+		return profile.username.trim();
+	}
+	if (profile.email?.trim()) {
+		return profile.email.trim();
+	}
+	return "Unnamed student";
+}
+
 function App() {
 	const [session, setSession] = useState<AdminSession | null>(() =>
 		readDashboardSession(),
@@ -484,6 +626,19 @@ function App() {
 		useState<StudentProfileBundle | null>(null);
 	const [studentBusy, setStudentBusy] = useState(false);
 	const [studentError, setStudentError] = useState("");
+	const [schoolStudentRoster, setSchoolStudentRoster] = useState<
+		SchoolStudentRosterEntry[]
+	>([]);
+	const [schoolStudentReservations, setSchoolStudentReservations] = useState<
+		PackSpotReservation[]
+	>([]);
+	const [schoolStudentMediaUrls, setSchoolStudentMediaUrls] = useState<
+		Record<string, string>
+	>({});
+	const [schoolStudentPhotoKeys, setSchoolStudentPhotoKeys] =
+		useState<StudentRosterPhotoKeyMap>({});
+	const [schoolStudentRosterBusy, setSchoolStudentRosterBusy] = useState(false);
+	const [schoolStudentRosterError, setSchoolStudentRosterError] = useState("");
 	const scopedSchoolId = session?.claims.school_id?.trim() ?? "";
 	const activeSchoolId = scopedSchoolId;
 
@@ -523,6 +678,47 @@ function App() {
 			(membership) => membership.school_id === activeSchoolId,
 		);
 	}, [activeSchoolId, studentProfile]);
+
+	const sortedSchoolStudentRoster = useMemo(
+		() =>
+			[...schoolStudentRoster].sort((left, right) => {
+				const leftName = formatNebulaUserName(left.user).toLowerCase();
+				const rightName = formatNebulaUserName(right.user).toLowerCase();
+				if (leftName !== rightName) {
+					return leftName.localeCompare(rightName);
+				}
+				return left.membership.student_id.localeCompare(
+					right.membership.student_id,
+				);
+			}),
+		[schoolStudentRoster],
+	);
+
+	const schoolReservationsByMembership = useMemo(() => {
+		const reservationsByMembership = new Map<string, PackSpotReservation[]>();
+		for (const reservation of schoolStudentReservations) {
+			const membershipUUID = reservation.membership_uuid?.trim() ?? "";
+			if (!membershipUUID) {
+				continue;
+			}
+
+			const currentReservations =
+				reservationsByMembership.get(membershipUUID) ?? [];
+			currentReservations.push(reservation);
+			reservationsByMembership.set(membershipUUID, currentReservations);
+		}
+
+		for (const reservationsForMembership of reservationsByMembership.values()) {
+			reservationsForMembership.sort((left, right) => {
+				if (left.start_time !== right.start_time) {
+					return right.start_time - left.start_time;
+				}
+				return right.updated - left.updated;
+			});
+		}
+
+		return reservationsByMembership;
+	}, [schoolStudentReservations]);
 
 	const resolvedSchoolColors = useMemo(
 		() => normalizeSchoolColorScheme(schoolDraft.color_scheme),
@@ -655,6 +851,10 @@ function App() {
 			setReservations([]);
 			setSelectedReservationId("");
 			setStudentProfile(null);
+			setSchoolStudentRoster([]);
+			setSchoolStudentReservations([]);
+			setSchoolStudentMediaUrls({});
+			setSchoolStudentRosterError("");
 			setSchoolDraft(createEmptySchoolDraft());
 			setTermDrafts([]);
 			return;
@@ -816,6 +1016,76 @@ function App() {
 		};
 	}, [context.managedAppId, selectedReservation, session]);
 
+	useEffect(() => {
+		if (!session || currentSection !== "students" || !activeSchoolId) {
+			return;
+		}
+
+		let cancelled = false;
+		const adminUserUUID = session.claims.user_uuid;
+
+		async function loadSchoolStudentRoster() {
+			setSchoolStudentRosterBusy(true);
+			setSchoolStudentRosterError("");
+			try {
+				const [nextRoster, nextReservations] = await Promise.all([
+					fetchSchoolStudentRoster(context.managedAppId, activeSchoolId),
+					fetchSchoolTermReservations(
+						adminUserUUID,
+						context.managedAppId,
+						activeSchoolId,
+					),
+				]);
+				if (cancelled) {
+					return;
+				}
+
+				setSchoolStudentRoster(nextRoster);
+				setSchoolStudentReservations(nextReservations);
+
+				try {
+					const { photoKeysByMembership, signedUrls } =
+						await resolveSchoolStudentPhotoState(
+							context.managedAppId,
+							activeSchoolId,
+							nextRoster,
+						);
+					if (!cancelled) {
+						setSchoolStudentPhotoKeys(photoKeysByMembership);
+						setSchoolStudentMediaUrls(signedUrls);
+					}
+				} catch (error) {
+					if (!cancelled) {
+						setSchoolStudentPhotoKeys({});
+						setSchoolStudentMediaUrls({});
+						setBanner({
+							tone: "error",
+							message: getErrorMessage(error),
+						});
+					}
+				}
+			} catch (error) {
+				if (!cancelled) {
+					setSchoolStudentRoster([]);
+					setSchoolStudentReservations([]);
+					setSchoolStudentPhotoKeys({});
+					setSchoolStudentMediaUrls({});
+					setSchoolStudentRosterError(getErrorMessage(error));
+				}
+			} finally {
+				if (!cancelled) {
+					setSchoolStudentRosterBusy(false);
+				}
+			}
+		}
+
+		void loadSchoolStudentRoster()
+
+		return () => {
+			cancelled = true;
+		};
+	}, [activeSchoolId, context.managedAppId, currentSection, session]);
+
 	async function refreshActiveSchool() {
 		if (!session || !activeSchoolId) {
 			return;
@@ -873,6 +1143,52 @@ function App() {
 			});
 		} finally {
 			setReservationsBusy(false);
+		}
+	}
+
+	async function refreshStudentRoster() {
+		if (!session || !activeSchoolId) {
+			return;
+		}
+
+		setSchoolStudentRosterBusy(true);
+		setSchoolStudentRosterError("");
+		try {
+			const [nextRoster, nextReservations] = await Promise.all([
+				fetchSchoolStudentRoster(context.managedAppId, activeSchoolId),
+				fetchSchoolTermReservations(
+					session.claims.user_uuid,
+					context.managedAppId,
+					activeSchoolId,
+				),
+			]);
+			setSchoolStudentRoster(nextRoster);
+			setSchoolStudentReservations(nextReservations);
+			try {
+				const { photoKeysByMembership, signedUrls } =
+					await resolveSchoolStudentPhotoState(
+						context.managedAppId,
+						activeSchoolId,
+						nextRoster,
+					);
+				setSchoolStudentPhotoKeys(photoKeysByMembership);
+				setSchoolStudentMediaUrls(signedUrls);
+			} catch (error) {
+				setSchoolStudentPhotoKeys({});
+				setSchoolStudentMediaUrls({});
+				setBanner({
+					tone: "error",
+					message: getErrorMessage(error),
+				});
+			}
+		} catch (error) {
+			setSchoolStudentRoster([]);
+			setSchoolStudentReservations([]);
+			setSchoolStudentPhotoKeys({});
+			setSchoolStudentMediaUrls({});
+			setSchoolStudentRosterError(getErrorMessage(error));
+		} finally {
+			setSchoolStudentRosterBusy(false);
 		}
 	}
 
@@ -1472,6 +1788,16 @@ function App() {
 					<button
 						type="button"
 						className={
+							currentSection === "students"
+								? "nav-button nav-button-active"
+								: "nav-button"
+						}
+						onClick={() => setCurrentSection("students")}>
+						Students
+					</button>
+					<button
+						type="button"
+						className={
 							currentSection === "packs"
 								? "nav-button nav-button-active"
 								: "nav-button"
@@ -1536,6 +1862,10 @@ function App() {
 						<div className="stat-card">
 							<span>Terms</span>
 							<strong>{termDrafts.length}</strong>
+						</div>
+						<div className="stat-card">
+							<span>Students</span>
+							<strong>{schoolStudentRoster.length}</strong>
 						</div>
 						<div className="stat-card">
 							<span>Pending</span>
@@ -1891,6 +2221,203 @@ function App() {
 								))}
 							</div>
 						) : null}
+					</section>
+				) : null}
+
+				{currentSection === "students" ? (
+					<section className="panel">
+						<div className="panel-header">
+							<div>
+								<p className="eyebrow">School Roster</p>
+								<h2>Registered students</h2>
+							</div>
+							<button
+								className="secondary-button"
+								type="button"
+								onClick={() => void refreshStudentRoster()}
+								disabled={schoolStudentRosterBusy || !activeSchoolId}>
+								Refresh
+							</button>
+						</div>
+
+						{!activeSchoolId ? (
+							<p className="empty-state">
+								This admin login is not scoped to a school.
+							</p>
+						) : null}
+						{activeSchoolId && schoolStudentRosterBusy ? (
+							<p className="muted-text">Loading registered students…</p>
+						) : null}
+						{schoolStudentRosterError ? (
+							<p className="error-text">{schoolStudentRosterError}</p>
+						) : null}
+						{activeSchoolId &&
+						!schoolStudentRosterBusy &&
+						!schoolStudentRosterError &&
+						sortedSchoolStudentRoster.length === 0 ? (
+							<p className="empty-state">
+								No registered students were found for this school yet.
+							</p>
+						) : null}
+
+						<div className="student-roster-list">
+							{sortedSchoolStudentRoster.map((entry) => {
+								const membership = entry.membership;
+								const frontPhotoObjectKey = resolveStudentPhotoObjectKey(
+									membership,
+									schoolStudentPhotoKeys,
+									"front",
+								);
+								const backPhotoObjectKey = resolveStudentPhotoObjectKey(
+									membership,
+									schoolStudentPhotoKeys,
+									"back",
+								);
+								const frontPhotoUrl = frontPhotoObjectKey
+									? schoolStudentMediaUrls[frontPhotoObjectKey] ?? ""
+									: "";
+								const backPhotoUrl = backPhotoObjectKey
+									? schoolStudentMediaUrls[backPhotoObjectKey] ?? ""
+									: "";
+								const reservationsForMembership =
+									schoolReservationsByMembership.get(
+										membership.membership_uuid,
+									) ?? [];
+
+								return (
+									<article
+										className="student-roster-card"
+										key={membership.membership_uuid}>
+										<div className="student-roster-header">
+											<div>
+												<p className="eyebrow">Student</p>
+												<h3>{formatNebulaUserName(entry.user)}</h3>
+											</div>
+											<div className="student-roster-badges">
+												<span className="student-badge">
+													{membership.status || "active"}
+												</span>
+												<span className="student-badge student-badge-muted">
+													{membership.student_id || "No student ID"}
+												</span>
+											</div>
+										</div>
+
+										<div className="student-roster-content">
+											<div className="student-roster-photos">
+												<div className="student-photo-card">
+													<span>Front of ID</span>
+													{frontPhotoUrl ? (
+														<img
+															className="student-photo-image"
+															src={frontPhotoUrl}
+															alt={`${formatNebulaUserName(entry.user)} front ID`}
+														/>
+													) : (
+														<div className="student-photo-placeholder">
+															Front ID not available
+														</div>
+													)}
+												</div>
+												<div className="student-photo-card">
+													<span>Back of ID</span>
+													{backPhotoUrl ? (
+														<img
+															className="student-photo-image"
+															src={backPhotoUrl}
+															alt={`${formatNebulaUserName(entry.user)} back ID`}
+														/>
+													) : (
+														<div className="student-photo-placeholder">
+															Back ID not available
+														</div>
+													)}
+												</div>
+											</div>
+
+											<div className="student-roster-data">
+												<div className="detail-grid">
+													<DetailRow
+														label="Student ID"
+														value={membership.student_id || "Not set"}
+													/>
+													<DetailRow
+														label="Campus"
+														value={membership.campus_id || "Not set"}
+													/>
+													<DetailRow
+														label="Email"
+														value={entry.user.email || "Not set"}
+													/>
+													<DetailRow
+														label="Phone"
+														value={entry.user.phone || "Not set"}
+													/>
+												</div>
+
+												<div className="data-section">
+													<div className="data-section-header">
+														<h4>School terms</h4>
+														<span>{membership.terms.length}</span>
+													</div>
+													{membership.terms.length === 0 ? (
+														<p className="muted-text">
+															No membership terms assigned.
+														</p>
+													) : (
+														<div className="stack-list">
+															{membership.terms.map((term) => (
+																<div className="data-card" key={term.term_uuid}>
+																	<strong>{term.name}</strong>
+																	<span>
+																		{formatDateOnly(term.start_date)} -{" "}
+																		{formatDateOnly(term.end_date)}
+																	</span>
+																</div>
+															))}
+														</div>
+													)}
+												</div>
+
+												<div className="data-section">
+													<div className="data-section-header">
+														<h4>Parking reservations by term</h4>
+														<span>{reservationsForMembership.length}</span>
+													</div>
+													{reservationsForMembership.length === 0 ? (
+														<p className="muted-text">
+															No parking reservations have been submitted for
+															this student.
+														</p>
+													) : (
+														<div className="stack-list">
+															{reservationsForMembership.map((reservation) => (
+																<div
+																	className="data-card"
+																	key={reservation.reservation_uuid}>
+																	<strong>
+																		{reservation.term_name || "School term"}
+																	</strong>
+																	<span>
+																		{reservation.pack_name || "Juise Pack"} · Spot{" "}
+																		{reservation.spot_number || "TBD"}
+																	</span>
+																	<span>
+																		Status: {reservation.status} ·{" "}
+																		{formatUnixTimestamp(reservation.start_time)} -{" "}
+																		{formatUnixTimestamp(reservation.end_time)}
+																	</span>
+																</div>
+															))}
+														</div>
+													)}
+												</div>
+											</div>
+										</div>
+									</article>
+								);
+							})}
+						</div>
 					</section>
 				) : null}
 

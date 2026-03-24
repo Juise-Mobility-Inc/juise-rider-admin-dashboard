@@ -27,6 +27,22 @@ export interface AdminSession {
   user?: NebulaUser
 }
 
+export interface UserMediaAsset {
+  media_uuid: string
+  user_uuid: string
+  app_id: string
+  entity_type: string
+  entity_uuid: string
+  slot: string
+  object_key: string
+  content_type: string
+  size: number
+  storage_provider: string
+  active: boolean
+  created_at: number
+  updated_at: number
+}
+
 export interface SchoolTerm {
   term_uuid: string
   app_id: string
@@ -175,6 +191,9 @@ export interface UserSchoolMembership {
   created_at: number
   updated_at: number
   terms: UserSchoolMembershipTerm[]
+  photo?: UserMediaAsset
+  front_photo?: UserMediaAsset
+  back_photo?: UserMediaAsset
 }
 
 export interface RegisteredDevice {
@@ -200,12 +219,22 @@ export interface StudentProfileBundle {
   devices: RegisteredDevice[]
 }
 
+export interface SchoolStudentRosterEntry {
+  user: NebulaUser
+  membership: UserSchoolMembership
+}
+
 interface AuthAccountResponse {
   user: NebulaUser
   tokens: AuthTokenBundle
 }
 
-type ServiceName = 'auth' | 'nebula' | 'hubStore'
+export interface SignedSchoolMediaItem {
+  object_key: string
+  get_url: string
+}
+
+type ServiceName = 'auth' | 'nebula' | 'hubStore' | 'kcaProxy'
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
@@ -219,6 +248,7 @@ const serviceBase: Record<ServiceName, string> = {
   auth: import.meta.env.VITE_AUTH_API_BASE ?? '/auth-api',
   nebula: import.meta.env.VITE_NEBULA_API_BASE ?? '/nebula-api',
   hubStore: import.meta.env.VITE_HUB_STORE_API_BASE ?? '/hub-store-api',
+  kcaProxy: import.meta.env.VITE_KCA_PROXY_API_BASE ?? '/kca-api',
 }
 
 let currentSession: AdminSession | null = null
@@ -530,11 +560,22 @@ export async function fetchPendingReservations(
   managedAppId: string,
   schoolId: string,
 ): Promise<PackSpotReservation[]> {
+  return fetchSchoolTermReservations(adminUser, managedAppId, schoolId, 'PendingApproval')
+}
+
+export async function fetchSchoolTermReservations(
+  adminUser: string,
+  managedAppId: string,
+  schoolId: string,
+  status?: string,
+): Promise<PackSpotReservation[]> {
   const search = new URLSearchParams({
-    status: 'PendingApproval',
     app_id: managedAppId,
     school_id: schoolId,
   })
+  if (status && status.trim() !== '') {
+    search.set('status', status)
+  }
 
   return request<PackSpotReservation[]>(
     'hubStore',
@@ -543,6 +584,73 @@ export async function fetchPendingReservations(
       authRequired: false,
       retryOnUnauthorized: false,
     },
+  )
+}
+
+export async function fetchSchoolStudentRoster(
+  managedAppId: string,
+  schoolId: string,
+): Promise<SchoolStudentRosterEntry[]> {
+  return request<SchoolStudentRosterEntry[]>(
+    'nebula',
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/students`,
+    {
+      appIdHeader: managedAppId,
+    },
+  )
+}
+
+export async function fetchUserMediaAssets(
+  managedAppId: string,
+  userUUID: string,
+  entityType: string,
+  entityUUID: string,
+): Promise<UserMediaAsset[]> {
+  const search = new URLSearchParams({
+    entity_type: entityType,
+    entity_uuid: entityUUID,
+  })
+
+  return request<UserMediaAsset[]>(
+    'nebula',
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/user/${encodeURIComponent(userUUID)}/media?${search.toString()}`,
+    {
+      appIdHeader: managedAppId,
+    },
+  )
+}
+
+export async function signSchoolMedia(
+  schoolId: string,
+  objectKeys: string[],
+): Promise<Record<string, string>> {
+  const uniqueObjectKeys = Array.from(
+    new Set(
+      objectKeys
+        .map((value) => value.trim())
+        .filter((value) => value !== ''),
+    ),
+  )
+
+  if (uniqueObjectKeys.length === 0) {
+    return {}
+  }
+
+  const response = await request<{
+    items: SignedSchoolMediaItem[]
+  }>(
+    'kcaProxy',
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/media/sign`,
+    {
+      method: 'POST',
+      body: {
+        object_keys: uniqueObjectKeys,
+      },
+    },
+  )
+
+  return Object.fromEntries(
+    (response.items ?? []).map((item) => [item.object_key, item.get_url]),
   )
 }
 

@@ -9,6 +9,7 @@ React + TypeScript dashboard for Juise Pack school administration.
 - Reviews pending school term parking reservations
 - Approves or denies reservation requests
 - Shows the requesting student's Nebula profile, school memberships, and registered devices
+- Shows the full school roster with front/back ID photos, student IDs, and school-term parking assignments
 
 ## Local development
 
@@ -17,6 +18,7 @@ React + TypeScript dashboard for Juise Pack school administration.
    - `global-auth-service` on `http://localhost:3864`
    - `nebula-user-server` on `http://localhost:7893`
    - `hub-store-service` on `http://localhost:9635`
+   - `kca-proxy` on `http://localhost:8088`
 3. Run the dashboard:
 
 ```bash
@@ -29,6 +31,7 @@ The Vite dev server proxies:
 - `/auth-api` -> global auth
 - `/nebula-api` -> nebula user server
 - `/hub-store-api` -> hub-store service
+- `/kca-api` -> kca-proxy
 
 ## Notes
 

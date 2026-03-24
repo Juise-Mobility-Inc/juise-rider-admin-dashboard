@@ -24,6 +24,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/hub-store-api/, ''),
         },
+        '/kca-api': {
+          target: env.VITE_KCA_PROXY_TARGET || 'http://localhost:8088',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/kca-api/, ''),
+        },
       },
     },
     preview: {

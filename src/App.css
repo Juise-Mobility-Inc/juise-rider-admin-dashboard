@@ -437,7 +437,7 @@
 
 .header-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   min-width: min(360px, 100%);
 }
@@ -803,6 +803,104 @@
   gap: 14px;
 }
 
+.student-roster-list {
+  display: grid;
+  gap: 18px;
+}
+
+.student-roster-card {
+  display: grid;
+  gap: 18px;
+  border-radius: 24px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.52);
+  padding: 20px;
+}
+
+.student-roster-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.student-roster-header h3 {
+  margin: 0;
+}
+
+.student-roster-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.student-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(22, 66, 91, 0.12);
+  border: 1px solid rgba(22, 66, 91, 0.12);
+  color: var(--text-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.student-badge-muted {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: var(--panel-border);
+}
+
+.student-roster-content {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.28fr);
+  gap: 18px;
+}
+
+.student-roster-photos,
+.student-roster-data {
+  display: grid;
+  gap: 14px;
+}
+
+.student-photo-card {
+  display: grid;
+  gap: 10px;
+}
+
+.student-photo-card > span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.student-photo-image,
+.student-photo-placeholder {
+  width: 100%;
+  min-height: 220px;
+  border-radius: 20px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.student-photo-image {
+  display: block;
+  object-fit: cover;
+  aspect-ratio: 1.5 / 1;
+}
+
+.student-photo-placeholder {
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  color: var(--muted-strong);
+  text-align: center;
+}
+
 .detail-row {
   border-radius: 18px;
   padding: 14px 16px;
@@ -884,7 +982,8 @@
   .term-row,
   .color-input-row,
   .pack-map-grid,
-  .coordinate-grid {
+  .coordinate-grid,
+  .student-roster-content {
     grid-template-columns: 1fr;
   }
 
@@ -904,6 +1003,7 @@
   .workspace-header,
   .panel-header,
   .student-panel-header,
+  .student-roster-header,
   .data-section-header,
   .form-actions,
   .banner {
