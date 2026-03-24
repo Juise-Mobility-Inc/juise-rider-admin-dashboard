@@ -398,6 +398,61 @@
   gap: 20px;
 }
 
+.pack-layout {
+  display: grid;
+  grid-template-columns: minmax(420px, 1.2fr) minmax(320px, 0.8fr);
+  gap: 20px;
+}
+
+.pack-builder,
+.pack-preview-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.pack-map-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+  gap: 16px;
+}
+
+.map-card {
+  display: grid;
+  gap: 14px;
+  border-radius: 22px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.58);
+  padding: 18px;
+}
+
+.pack-map-shell {
+  display: grid;
+  gap: 10px;
+}
+
+.pack-map-shell-disabled {
+  opacity: 0.7;
+}
+
+.pack-map {
+  height: 360px;
+  width: 100%;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(22, 66, 91, 0.12);
+}
+
+.pack-map-caption {
+  font-size: 0.9rem;
+  color: var(--muted-strong);
+}
+
+.coordinate-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .reservation-list,
 .stack-list {
   display: grid;
@@ -474,7 +529,8 @@
 @media (max-width: 1180px) {
   .login-shell,
   .app-shell,
-  .reservation-layout {
+  .reservation-layout,
+  .pack-layout {
     grid-template-columns: 1fr;
   }
 
@@ -501,7 +557,9 @@
   .form-grid,
   .detail-grid,
   .header-stats,
-  .term-row {
+  .term-row,
+  .pack-map-grid,
+  .coordinate-grid {
     grid-template-columns: 1fr;
   }
 

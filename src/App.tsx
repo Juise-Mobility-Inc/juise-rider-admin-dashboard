@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import './App.css'
 import {
   approveReservation,
+  createSchoolPack,
   createSchoolAdminAccount,
   denyReservation,
   fetchPendingReservations,
@@ -14,11 +15,13 @@ import {
   setApiSession,
   setSessionObserver,
   type AdminSession,
+  type Pack,
   type PackSpotReservation,
   type School,
   type SchoolTerm,
   type StudentProfileBundle,
 } from './lib/api'
+import { PackLocationPicker, type PackMapPoint } from './components/PackLocationPicker'
 import {
   clearDashboardSession,
   readDashboardContext,
@@ -28,7 +31,7 @@ import {
   type DashboardContext,
 } from './lib/storage'
 
-type Section = 'school' | 'terms' | 'reservations'
+type Section = 'school' | 'terms' | 'packs' | 'reservations'
 type BannerTone = 'success' | 'error' | 'info'
 type AuthMode = 'login' | 'signup'
 
@@ -64,6 +67,15 @@ interface SignupFormState {
   email: string
   phone: string
   password: string
+}
+
+interface PackDraft {
+  name: string
+  description: string
+  number_of_spots: string
+  campus_id: string
+  lat: string
+  lng: string
 }
 
 const authAppId = import.meta.env.VITE_AUTH_APP_ID ?? 'juise_rider_admin_dashboard'
@@ -130,6 +142,29 @@ function createEmptyTermDraft(): TermDraft {
     start_date: '',
     end_date: '',
   }
+}
+
+function createEmptyPackDraft(defaultCampusId = ''): PackDraft {
+  return {
+    name: '',
+    description: '',
+    number_of_spots: '8',
+    campus_id: defaultCampusId,
+    lat: '',
+    lng: '',
+  }
+}
+
+function formatCoordinateValue(value: number): string {
+  return value.toFixed(6)
+}
+
+function parseCoordinateInput(value: string, label: string): number {
+  const parsed = Number(value.trim())
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${label} must be a valid number.`)
+  }
+  return parsed
 }
 
 function parseObjectJson(source: string, label: string): Record<string, unknown> {
@@ -231,6 +266,9 @@ function App() {
   const [isCreatingSchool, setIsCreatingSchool] = useState(false)
   const [schoolDraft, setSchoolDraft] = useState<SchoolDraft>(() => createEmptySchoolDraft())
   const [termDrafts, setTermDrafts] = useState<TermDraft[]>([])
+  const [packDraft, setPackDraft] = useState<PackDraft>(() => createEmptyPackDraft())
+  const [packBusy, setPackBusy] = useState(false)
+  const [createdPack, setCreatedPack] = useState<Pack | null>(null)
 
   const [reservations, setReservations] = useState<PackSpotReservation[]>([])
   const [reservationsBusy, setReservationsBusy] = useState(false)
@@ -240,11 +278,31 @@ function App() {
   const [studentError, setStudentError] = useState('')
   const scopedSchoolId = session?.claims.school_id?.trim() ?? ''
   const isSchoolScopedAdmin = scopedSchoolId !== ''
+  const activePackSchoolId = scopedSchoolId || context.selectedSchoolId
 
   const selectedSchool = useMemo(
     () => schools.find((school) => school.school_id === context.selectedSchoolId) ?? null,
     [context.selectedSchoolId, schools],
   )
+
+  const selectedPackLocation = useMemo<PackMapPoint | null>(() => {
+    const lat = packDraft.lat.trim()
+    const lng = packDraft.lng.trim()
+    if (!lat || !lng) {
+      return null
+    }
+
+    const parsedLat = Number(lat)
+    const parsedLng = Number(lng)
+    if (!Number.isFinite(parsedLat) || !Number.isFinite(parsedLng)) {
+      return null
+    }
+
+    return {
+      lat: parsedLat,
+      lng: parsedLng,
+    }
+  }, [packDraft.lat, packDraft.lng])
 
   const selectedReservation = useMemo(
     () =>
@@ -262,6 +320,11 @@ function App() {
       (membership) => membership.school_id === context.selectedSchoolId,
     )
   }, [context.selectedSchoolId, studentProfile])
+
+  useEffect(() => {
+    setPackDraft(createEmptyPackDraft(selectedSchool?.default_campus_id ?? ''))
+    setCreatedPack(null)
+  }, [activePackSchoolId, selectedSchool?.default_campus_id])
 
   useEffect(() => {
     setManagedAppInput(context.managedAppId)
@@ -754,6 +817,82 @@ function App() {
     }
   }
 
+  function handlePackLocationSelect(point: PackMapPoint) {
+    setPackDraft((current) => ({
+      ...current,
+      lat: formatCoordinateValue(point.lat),
+      lng: formatCoordinateValue(point.lng),
+    }))
+  }
+
+  async function handleCreatePack(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!session) {
+      return
+    }
+    if (!activePackSchoolId) {
+      setBanner({
+        tone: 'error',
+        message: 'Select a school first before creating a Juise Pack.',
+      })
+      return
+    }
+
+    let parsedLat = 0
+    let parsedLng = 0
+    let parsedSpotCount = 0
+
+    try {
+      parsedLat = parseCoordinateInput(packDraft.lat, 'Latitude')
+      parsedLng = parseCoordinateInput(packDraft.lng, 'Longitude')
+      parsedSpotCount = Number.parseInt(packDraft.number_of_spots.trim(), 10)
+      if (!Number.isFinite(parsedSpotCount) || parsedSpotCount < 1) {
+        throw new Error('Number of spots must be greater than 0.')
+      }
+    } catch (error) {
+      setBanner({
+        tone: 'error',
+        message: getErrorMessage(error),
+      })
+      return
+    }
+
+    setPackBusy(true)
+    try {
+      const campusId =
+        packDraft.campus_id.trim() || selectedSchool?.default_campus_id.trim() || undefined
+      const created = await createSchoolPack(session.claims.user_uuid, {
+        name: packDraft.name.trim() || undefined,
+        description: packDraft.description.trim() || undefined,
+        number_of_spots: parsedSpotCount,
+        location: {
+          lat: parsedLat,
+          lng: parsedLng,
+        },
+        school_owner: {
+          app_id: context.managedAppId,
+          school_id: activePackSchoolId,
+          campus_id: campusId,
+        },
+      })
+
+      setCreatedPack(created)
+      setPackDraft(createEmptyPackDraft(campusId ?? ''))
+      setBanner({
+        tone: 'success',
+        message: `Created Juise Pack ${created.name || created.pack_uuid} for school ${activePackSchoolId}.`,
+      })
+    } catch (error) {
+      setBanner({
+        tone: 'error',
+        message: getErrorMessage(error),
+      })
+    } finally {
+      setPackBusy(false)
+    }
+  }
+
   async function handleApproveSelected() {
     if (!session || !selectedReservation) {
       return
@@ -1091,6 +1230,13 @@ function App() {
           </button>
           <button
             type="button"
+            className={currentSection === 'packs' ? 'nav-button nav-button-active' : 'nav-button'}
+            onClick={() => setCurrentSection('packs')}
+          >
+            Juise Packs
+          </button>
+          <button
+            type="button"
             className={
               currentSection === 'reservations' ? 'nav-button nav-button-active' : 'nav-button'
             }
@@ -1379,6 +1525,220 @@ function App() {
                 ))}
               </div>
             ) : null}
+          </section>
+        ) : null}
+
+        {currentSection === 'packs' ? (
+          <section className="panel pack-layout">
+            <div className="pack-builder">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Juise Pack Builder</p>
+                  <h2>Create a school-owned parking pack</h2>
+                </div>
+                {packBusy ? <span className="muted-text">Creating…</span> : null}
+              </div>
+
+              {!activePackSchoolId ? (
+                <p className="empty-state">
+                  Select a school first. New packs are linked to the active school scope.
+                </p>
+              ) : null}
+
+              <form className="school-form" onSubmit={handleCreatePack}>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>School ID</span>
+                    <input value={activePackSchoolId} disabled />
+                  </label>
+                  <label className="field">
+                    <span>Campus ID</span>
+                    <input
+                      value={packDraft.campus_id}
+                      onChange={(event) =>
+                        setPackDraft((current) => ({
+                          ...current,
+                          campus_id: event.target.value,
+                        }))
+                      }
+                      placeholder={selectedSchool?.default_campus_id || 'main'}
+                      disabled={!activePackSchoolId}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Pack Name</span>
+                    <input
+                      value={packDraft.name}
+                      onChange={(event) =>
+                        setPackDraft((current) => ({
+                          ...current,
+                          name: event.target.value,
+                        }))
+                      }
+                      placeholder="North Garage Pack"
+                      disabled={!activePackSchoolId}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Number of Spots</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={packDraft.number_of_spots}
+                      onChange={(event) =>
+                        setPackDraft((current) => ({
+                          ...current,
+                          number_of_spots: event.target.value,
+                        }))
+                      }
+                      disabled={!activePackSchoolId}
+                    />
+                  </label>
+                  <label className="field field-span-2">
+                    <span>Description</span>
+                    <textarea
+                      value={packDraft.description}
+                      onChange={(event) =>
+                        setPackDraft((current) => ({
+                          ...current,
+                          description: event.target.value,
+                        }))
+                      }
+                      placeholder="Covered student parking near the library entrance."
+                      rows={5}
+                      disabled={!activePackSchoolId}
+                    />
+                  </label>
+                </div>
+
+                <div className="pack-map-grid">
+                  <div className="map-card">
+                    <div className="data-section-header">
+                      <h3>Pack location</h3>
+                      <span>{selectedPackLocation ? 'Pin placed' : 'No pin yet'}</span>
+                    </div>
+                    <PackLocationPicker
+                      disabled={!activePackSchoolId}
+                      onChange={handlePackLocationSelect}
+                      value={selectedPackLocation}
+                    />
+                  </div>
+
+                  <div className="map-card">
+                    <div className="data-section-header">
+                      <h3>Coordinates</h3>
+                      <span>Fine tune manually</span>
+                    </div>
+                    <div className="coordinate-grid">
+                      <label className="field">
+                        <span>Latitude</span>
+                        <input
+                          value={packDraft.lat}
+                          onChange={(event) =>
+                            setPackDraft((current) => ({
+                              ...current,
+                              lat: event.target.value,
+                            }))
+                          }
+                          placeholder="42.678000"
+                          disabled={!activePackSchoolId}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Longitude</span>
+                        <input
+                          value={packDraft.lng}
+                          onChange={(event) =>
+                            setPackDraft((current) => ({
+                              ...current,
+                              lng: event.target.value,
+                            }))
+                          }
+                          placeholder="-83.195000"
+                          disabled={!activePackSchoolId}
+                        />
+                      </label>
+                    </div>
+                    <p className="muted-text">
+                      Click the map to drop a pin. The created pack is automatically assigned to{' '}
+                      <code>{activePackSchoolId || 'selected-school'}</code> for{' '}
+                      <code>{context.managedAppId}</code>.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="form-actions">
+                  <button className="primary-button" type="submit" disabled={packBusy || !activePackSchoolId}>
+                    {packBusy ? 'Creating Pack…' : 'Create Juise Pack'}
+                  </button>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled={packBusy}
+                    onClick={() =>
+                      setPackDraft(createEmptyPackDraft(selectedSchool?.default_campus_id ?? ''))
+                    }
+                  >
+                    Reset Form
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div className="pack-preview-panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Last Created Pack</p>
+                  <h2>{createdPack?.name || 'No pack created yet'}</h2>
+                </div>
+              </div>
+
+              {!createdPack ? (
+                <p className="empty-state">
+                  Create a Juise Pack here and its generated UUID, school owner, and spot count will
+                  appear in this panel.
+                </p>
+              ) : (
+                <div className="student-panel">
+                  <div className="detail-grid">
+                    <DetailRow label="Pack UUID" value={createdPack.pack_uuid} />
+                    <DetailRow label="School ID" value={createdPack.school_owner?.school_id || activePackSchoolId} />
+                    <DetailRow
+                      label="Campus ID"
+                      value={createdPack.school_owner?.campus_id || packDraft.campus_id || 'Not set'}
+                    />
+                    <DetailRow label="Spot Count" value={String(createdPack.spot_count)} />
+                    <DetailRow
+                      label="Latitude"
+                      value={
+                        createdPack.location ? formatCoordinateValue(createdPack.location.lat) : 'Not set'
+                      }
+                    />
+                    <DetailRow
+                      label="Longitude"
+                      value={
+                        createdPack.location ? formatCoordinateValue(createdPack.location.lng) : 'Not set'
+                      }
+                    />
+                  </div>
+
+                  <div className="data-section">
+                    <div className="data-section-header">
+                      <h4>Generated spots</h4>
+                      <span>{createdPack.spots.length}</span>
+                    </div>
+                    <div className="stack-list">
+                      {createdPack.spots.slice(0, 6).map((spot) => (
+                        <div className="data-card" key={spot.spot_uuid}>
+                          <strong>Spot {spot.spot_number}</strong>
+                          <span>{spot.spot_uuid}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </section>
         ) : null}
 

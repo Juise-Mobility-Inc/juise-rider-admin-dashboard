@@ -70,6 +70,45 @@ export interface SchoolTermWriteInput {
   end_date: string
 }
 
+export interface PackLocationInput {
+  lat: number
+  lng: number
+}
+
+export interface PackSchoolOwnerInput {
+  app_id: string
+  school_id: string
+  campus_id?: string
+}
+
+export interface PackSpot {
+  spot_uuid: string
+  pack_uuid: string
+  spot_number: number
+  active: boolean
+  updated: number
+}
+
+export interface Pack {
+  pack_uuid: string
+  name: string
+  description: string
+  active: boolean
+  updated: number
+  spot_count: number
+  location?: PackLocationInput
+  school_owner?: PackSchoolOwnerInput
+  spots: PackSpot[]
+}
+
+export interface PackCreateForSchoolInput {
+  name?: string
+  description?: string
+  number_of_spots: number
+  location: PackLocationInput
+  school_owner: PackSchoolOwnerInput
+}
+
 export interface PackSpotReservation {
   reservation_uuid: string
   spot_uuid: string
@@ -447,6 +486,23 @@ export async function saveSchoolTerms(
       method: 'PUT',
       body: { terms },
       appIdHeader: managedAppId,
+    },
+  )
+}
+
+export async function createSchoolPack(
+  adminUser: string,
+  input: PackCreateForSchoolInput,
+): Promise<Pack> {
+  return request<Pack>(
+    'hubStore',
+    `/api/v1/admin/${encodeURIComponent(adminUser)}/school-pack`,
+    {
+      method: 'POST',
+      body: input,
+      authRequired: false,
+      appIdHeader: input.school_owner.app_id,
+      retryOnUnauthorized: false,
     },
   )
 }
