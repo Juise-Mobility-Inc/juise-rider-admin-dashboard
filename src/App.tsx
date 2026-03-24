@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import { type CSSProperties, type FormEvent, useEffect, useMemo, useState } from 'react'
 import './App.css'
 import {
   approveReservation,
@@ -82,13 +82,26 @@ interface PackDraft {
 const authAppId = import.meta.env.VITE_AUTH_APP_ID ?? 'juise_rider_admin_dashboard'
 const defaultManagedAppId =
   import.meta.env.VITE_DEFAULT_MANAGED_APP_ID ?? 'juise-customer-app'
+const juiseColors = {
+  red: '#FF5C5C',
+  green: '#27CC5E',
+  mediumgreen: '#28AE4C',
+  darkGreen: '#03200D',
+  darkGrey: '#010C05',
+  mediumGrey: '#1e2124',
+  gold: '#EEC253',
+  lightGrey: '#424549',
+  text: '#E6EAE8',
+  fadedText: '#b5b5b5',
+  disabledText: '#999999',
+}
 const schoolColorHexPattern = /^#(?:[0-9a-fA-F]{6})$/
 const defaultSchoolColorScheme: Required<SchoolColorScheme> = {
-  primary: '#16425b',
-  secondary: '#1f6f78',
-  accent: '#f6ae2d',
-  background: '#f5efe5',
-  text: '#112d4e',
+  primary: juiseColors.green,
+  secondary: juiseColors.mediumGrey,
+  accent: juiseColors.gold,
+  background: juiseColors.darkGreen,
+  text: juiseColors.text,
 }
 const schoolColorFields: Array<{
   key: keyof SchoolColorScheme
@@ -101,6 +114,7 @@ const schoolColorFields: Array<{
   { key: 'background', label: 'Background', fallback: defaultSchoolColorScheme.background },
   { key: 'text', label: 'Text', fallback: defaultSchoolColorScheme.text },
 ]
+type SidebarThemeStyle = CSSProperties & Record<string, string>
 
 function makeDraftId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -118,13 +132,58 @@ function prettyJson(value: Record<string, unknown> | Record<string, string> | un
   return JSON.stringify(value, null, 2)
 }
 
+function clampChannel(value: number): number {
+  return Math.min(255, Math.max(0, Math.round(value)))
+}
+
+function resolveHexColor(value: string | undefined, fallback: string): string {
+  const trimmed = value?.trim() ?? ''
+  return schoolColorHexPattern.test(trimmed) ? trimmed.toLowerCase() : fallback
+}
+
+function hexToRgb(color: string): { r: number; g: number; b: number } {
+  const normalized = resolveHexColor(color, '#000000').slice(1)
+  return {
+    r: Number.parseInt(normalized.slice(0, 2), 16),
+    g: Number.parseInt(normalized.slice(2, 4), 16),
+    b: Number.parseInt(normalized.slice(4, 6), 16),
+  }
+}
+
+function hexToRgba(color: string, alpha: number): string {
+  const { r, g, b } = hexToRgb(color)
+  return `rgba(${r}, ${g}, ${b}, ${Math.min(1, Math.max(0, alpha))})`
+}
+
+function mixHexColors(base: string, tint: string, weight: number): string {
+  const normalizedWeight = Math.min(1, Math.max(0, weight))
+  const baseRgb = hexToRgb(base)
+  const tintRgb = hexToRgb(tint)
+  const r = clampChannel(baseRgb.r + (tintRgb.r - baseRgb.r) * normalizedWeight)
+  const g = clampChannel(baseRgb.g + (tintRgb.g - baseRgb.g) * normalizedWeight)
+  const b = clampChannel(baseRgb.b + (tintRgb.b - baseRgb.b) * normalizedWeight)
+  return `#${[r, g, b].map((channel) => channel.toString(16).padStart(2, '0')).join('')}`
+}
+
+function getReadableTextColor(background: string): string {
+  const { r, g, b } = hexToRgb(background)
+  const [sr, sg, sb] = [r, g, b].map((channel) => {
+    const normalized = channel / 255
+    return normalized <= 0.03928
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4
+  })
+  const luminance = 0.2126 * sr + 0.7152 * sg + 0.0722 * sb
+  return luminance > 0.52 ? juiseColors.darkGrey : juiseColors.text
+}
+
 function normalizeSchoolColorScheme(value?: SchoolColorScheme): SchoolColorScheme {
   return {
-    primary: value?.primary?.trim() || defaultSchoolColorScheme.primary,
-    secondary: value?.secondary?.trim() || defaultSchoolColorScheme.secondary,
-    accent: value?.accent?.trim() || defaultSchoolColorScheme.accent,
-    background: value?.background?.trim() || defaultSchoolColorScheme.background,
-    text: value?.text?.trim() || defaultSchoolColorScheme.text,
+    primary: resolveHexColor(value?.primary, defaultSchoolColorScheme.primary),
+    secondary: resolveHexColor(value?.secondary, defaultSchoolColorScheme.secondary),
+    accent: resolveHexColor(value?.accent, defaultSchoolColorScheme.accent),
+    background: resolveHexColor(value?.background, defaultSchoolColorScheme.background),
+    text: resolveHexColor(value?.text, defaultSchoolColorScheme.text),
   }
 }
 
@@ -132,8 +191,7 @@ function getColorPickerValue(
   value: string | undefined,
   fallback: keyof typeof defaultSchoolColorScheme,
 ): string {
-  const trimmed = value?.trim() ?? ''
-  return schoolColorHexPattern.test(trimmed) ? trimmed : defaultSchoolColorScheme[fallback]
+  return resolveHexColor(value, defaultSchoolColorScheme[fallback])
 }
 
 function createEmptySchoolDraft(): SchoolDraft {
@@ -369,6 +427,47 @@ function App() {
     () => normalizeSchoolColorScheme(schoolDraft.color_scheme),
     [schoolDraft.color_scheme],
   )
+
+  const sidebarThemeStyle = useMemo<SidebarThemeStyle>(() => {
+    const primary = resolvedSchoolColors.primary || defaultSchoolColorScheme.primary
+    const secondary = resolvedSchoolColors.secondary || defaultSchoolColorScheme.secondary
+    const accent = resolvedSchoolColors.accent || defaultSchoolColorScheme.accent
+    const background = resolvedSchoolColors.background || defaultSchoolColorScheme.background
+    const text = resolvedSchoolColors.text || defaultSchoolColorScheme.text
+    const sidebarBgStart = mixHexColors(background, primary, 0.16)
+    const sidebarBgEnd = mixHexColors(juiseColors.darkGrey, background, 0.7)
+    const surface = hexToRgba(mixHexColors(background, secondary, 0.42), 0.88)
+    const surfaceStrong = hexToRgba(mixHexColors(background, primary, 0.18), 0.98)
+    const itemBg = hexToRgba(mixHexColors(background, secondary, 0.58), 0.54)
+    const itemHoverBg = hexToRgba(mixHexColors(background, primary, 0.28), 0.74)
+    const activeBase = mixHexColors(primary, accent, 0.26)
+    const activeBg = `linear-gradient(135deg, ${activeBase}, ${accent})`
+
+    return {
+      '--sidebar-bg-start': sidebarBgStart,
+      '--sidebar-bg-end': sidebarBgEnd,
+      '--sidebar-glow-primary': hexToRgba(primary, 0.24),
+      '--sidebar-glow-accent': hexToRgba(accent, 0.18),
+      '--sidebar-text': text,
+      '--sidebar-muted': hexToRgba(text, 0.76),
+      '--sidebar-soft-text': hexToRgba(text, 0.58),
+      '--sidebar-border': hexToRgba(text, 0.12),
+      '--sidebar-accent-border': hexToRgba(accent, 0.32),
+      '--sidebar-surface': surface,
+      '--sidebar-surface-strong': surfaceStrong,
+      '--sidebar-item-bg': itemBg,
+      '--sidebar-item-hover-bg': itemHoverBg,
+      '--sidebar-item-active-bg': activeBg,
+      '--sidebar-item-active-text': getReadableTextColor(activeBase),
+      '--sidebar-form-bg': hexToRgba(mixHexColors(background, secondary, 0.68), 0.92),
+      '--sidebar-form-border': hexToRgba(accent, 0.16),
+      '--sidebar-chip-bg': hexToRgba(accent, 0.2),
+      '--sidebar-chip-text': getReadableTextColor(accent),
+      '--sidebar-primary': primary,
+      '--sidebar-secondary': secondary,
+      '--sidebar-accent': accent,
+    }
+  }, [resolvedSchoolColors])
 
   useEffect(() => {
     setPackDraft(createEmptyPackDraft(selectedSchool?.default_campus_id ?? ''))
@@ -1201,10 +1300,17 @@ function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand-card">
-          <p className="eyebrow">Juise Rider Admin</p>
-          <h2>School operations</h2>
+      <aside className="sidebar" style={sidebarThemeStyle}>
+        <div className="brand-card sidebar-brand-card">
+          <div className="sidebar-brand-top">
+            <div>
+              <p className="eyebrow">Juise Rider Admin</p>
+              <h2>School operations</h2>
+            </div>
+            <span className="sidebar-theme-chip">
+              {context.selectedSchoolId || schoolDraft.school_id || 'Juise default'}
+            </span>
+          </div>
           <p>Signed in as {session.claims.user_uuid}</p>
           {isSchoolScopedAdmin ? <p>School scope: {scopedSchoolId}</p> : null}
         </div>
@@ -1305,9 +1411,11 @@ function App() {
           </button>
         </nav>
 
-        <button className="secondary-button full-width-button" type="button" onClick={handleLogout}>
-          Sign Out
-        </button>
+        <div className="sidebar-footer">
+          <button className="secondary-button full-width-button" type="button" onClick={handleLogout}>
+            Sign Out
+          </button>
+        </div>
       </aside>
 
       <main className="workspace">
