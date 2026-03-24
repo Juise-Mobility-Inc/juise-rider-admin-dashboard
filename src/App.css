@@ -287,9 +287,11 @@
 }
 
 .nav-button {
+  display: block;
   border-radius: 18px;
   padding: 14px 16px;
   text-align: left;
+  text-decoration: none;
   background: rgba(255, 255, 255, 0.04);
   color: #f5efe5;
 }

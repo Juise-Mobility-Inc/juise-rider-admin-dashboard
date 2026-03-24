@@ -5,6 +5,7 @@ import {
 	useMemo,
 	useState,
 } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
 import {
 	approveReservation,
@@ -51,6 +52,26 @@ import {
 type Section = "school" | "terms" | "students" | "packs" | "reservations";
 type BannerTone = "success" | "error" | "info";
 type AuthMode = "login" | "signup";
+
+const dashboardSections: Array<{
+	section: Section;
+	label: string;
+	path: string;
+}> = [
+	{ section: "school", label: "School Profile", path: "/school" },
+	{ section: "terms", label: "School Terms", path: "/terms" },
+	{ section: "students", label: "Students", path: "/students" },
+	{ section: "packs", label: "Juise Packs", path: "/packs" },
+	{
+		section: "reservations",
+		label: "Pending Reservations",
+		path: "/reservations",
+	},
+];
+
+const sectionPathByName: Record<Section, string> = Object.fromEntries(
+	dashboardSections.map(({ section, path }) => [section, path]),
+) as Record<Section, string>;
 
 interface BannerState {
 	tone: BannerTone;
@@ -582,7 +603,25 @@ function formatNebulaUserName(profile: {
 	return "Unnamed student";
 }
 
+function normalizeDashboardPath(pathname: string): string {
+	if (!pathname || pathname === "/") {
+		return pathname || "/";
+	}
+
+	return pathname.replace(/\/+$/, "");
+}
+
+function resolveSectionFromPathname(pathname: string): Section | null {
+	const normalizedPath = normalizeDashboardPath(pathname);
+	const matchingSection = dashboardSections.find(
+		({ path }) => path === normalizedPath,
+	);
+	return matchingSection?.section ?? null;
+}
+
 function App() {
+	const location = useLocation();
+	const navigate = useNavigate();
 	const [session, setSession] = useState<AdminSession | null>(() =>
 		readDashboardSession(),
 	);
@@ -590,7 +629,6 @@ function App() {
 		readDashboardContext(defaultManagedAppId),
 	);
 	const [managedAppInput, setManagedAppInput] = useState(context.managedAppId);
-	const [currentSection, setCurrentSection] = useState<Section>("school");
 	const [banner, setBanner] = useState<BannerState | null>(null);
 	const [authMode, setAuthMode] = useState<AuthMode>("login");
 
@@ -641,6 +679,7 @@ function App() {
 	const [schoolStudentRosterError, setSchoolStudentRosterError] = useState("");
 	const scopedSchoolId = session?.claims.school_id?.trim() ?? "";
 	const activeSchoolId = scopedSchoolId;
+	const currentSection = resolveSectionFromPathname(location.pathname) ?? "school";
 
 	const selectedPackLocation = useMemo<PackMapPoint | null>(() => {
 		const lat = packDraft.lat.trim();
@@ -778,6 +817,14 @@ function App() {
 			"--sidebar-accent": accent,
 		};
 	}, [resolvedSchoolColors]);
+
+	useEffect(() => {
+		if (resolveSectionFromPathname(location.pathname)) {
+			return;
+		}
+
+		navigate(sectionPathByName.school, { replace: true });
+	}, [location.pathname, navigate]);
 
 	useEffect(() => {
 		setPackDraft(createEmptyPackDraft(schoolDraft.default_campus_id ?? ""));
@@ -1268,7 +1315,9 @@ function App() {
 		setContext({
 			managedAppId: trimmedAppId,
 		});
-		setCurrentSection("school");
+		if (normalizeDashboardPath(location.pathname) !== sectionPathByName.school) {
+			navigate(sectionPathByName.school);
+		}
 	}
 
 	function handleSchoolColorChange(
@@ -1765,56 +1814,16 @@ function App() {
 				</div>
 
 				<nav className="section-nav">
-					<button
-						type="button"
-						className={
-							currentSection === "school"
-								? "nav-button nav-button-active"
-								: "nav-button"
-						}
-						onClick={() => setCurrentSection("school")}>
-						School Profile
-					</button>
-					<button
-						type="button"
-						className={
-							currentSection === "terms"
-								? "nav-button nav-button-active"
-								: "nav-button"
-						}
-						onClick={() => setCurrentSection("terms")}>
-						School Terms
-					</button>
-					<button
-						type="button"
-						className={
-							currentSection === "students"
-								? "nav-button nav-button-active"
-								: "nav-button"
-						}
-						onClick={() => setCurrentSection("students")}>
-						Students
-					</button>
-					<button
-						type="button"
-						className={
-							currentSection === "packs"
-								? "nav-button nav-button-active"
-								: "nav-button"
-						}
-						onClick={() => setCurrentSection("packs")}>
-						Juise Packs
-					</button>
-					<button
-						type="button"
-						className={
-							currentSection === "reservations"
-								? "nav-button nav-button-active"
-								: "nav-button"
-						}
-						onClick={() => setCurrentSection("reservations")}>
-						Pending Reservations
-					</button>
+					{dashboardSections.map(({ section, label, path }) => (
+						<NavLink
+							key={section}
+							to={path}
+							className={({ isActive }) =>
+								isActive ? "nav-button nav-button-active" : "nav-button"
+							}>
+							{label}
+						</NavLink>
+					))}
 				</nav>
 
 				<div className="sidebar-footer">
