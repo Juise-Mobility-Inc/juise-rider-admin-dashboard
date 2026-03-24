@@ -2,7 +2,6 @@ import type { AdminSession } from './api'
 
 export interface DashboardContext {
   managedAppId: string
-  selectedSchoolId: string
 }
 
 const sessionStorageKey = 'juise-rider-admin-dashboard.session'
@@ -36,7 +35,6 @@ export function readDashboardContext(defaultManagedAppId: string): DashboardCont
   const stored = readJson<DashboardContext>(contextStorageKey)
   return {
     managedAppId: stored?.managedAppId || defaultManagedAppId,
-    selectedSchoolId: stored?.selectedSchoolId || '',
   }
 }
 
