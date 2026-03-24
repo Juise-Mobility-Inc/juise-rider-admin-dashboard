@@ -24,6 +24,7 @@ export interface AdminSession {
   authAppId: string
   tokens: AuthTokenBundle
   claims: AccessClaims
+  user?: NebulaUser
 }
 
 export interface SchoolTerm {
@@ -281,10 +282,12 @@ async function refreshSession(): Promise<AdminSession> {
 
   const tokens = await parseResponse<AuthTokenBundle>(response)
   const claims = await inspectAccessToken(tokens, currentSession.authAppId)
+  const user = await fetchNebulaUser(claims.user_uuid)
   const refreshedSession: AdminSession = {
     ...currentSession,
     tokens,
     claims,
+    user,
   }
 
   updateSession(refreshedSession)
@@ -360,6 +363,10 @@ export async function inspectAccessToken(
   })
 }
 
+export async function fetchNebulaUser(userUUID: string): Promise<NebulaUser> {
+  return request<NebulaUser>('nebula', `/api/v1/user/${encodeURIComponent(userUUID)}`)
+}
+
 export async function loginWithIdentifier(
   identifier: string,
   password: string,
@@ -381,11 +388,13 @@ export async function loginWithIdentifier(
   if (!claims.admin) {
     throw new Error('This account is not marked as an admin user.')
   }
+  const user = await fetchNebulaUser(claims.user_uuid)
 
   const session: AdminSession = {
     authAppId,
     tokens,
     claims,
+    user,
   }
   updateSession(session)
   return session
@@ -441,6 +450,7 @@ export async function createSchoolAdminAccount(
     authAppId,
     tokens: response.tokens,
     claims,
+    user: response.user,
   }
   updateSession(session)
   return session

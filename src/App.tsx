@@ -11,6 +11,7 @@ import {
 	createSchoolPack,
 	createSchoolAdminAccount,
 	denyReservation,
+	fetchNebulaUser,
 	fetchPendingReservations,
 	fetchSchool,
 	fetchStudentProfile,
@@ -429,6 +430,16 @@ function SchoolLogoPreview(props: {
 	);
 }
 
+function formatAdminIdentity(session: AdminSession): string {
+	const firstName = session.user?.first_name?.trim() ?? "";
+	const lastName = session.user?.last_name?.trim() ?? "";
+	const fullName = `${firstName} ${lastName}`.trim();
+	if (fullName) {
+		return fullName;
+	}
+	return session.claims.user_uuid;
+}
+
 function App() {
 	const [session, setSession] = useState<AdminSession | null>(() =>
 		readDashboardSession(),
@@ -588,6 +599,41 @@ function App() {
 		} else {
 			clearDashboardSession();
 		}
+	}, [session]);
+
+	useEffect(() => {
+		if (!session?.claims.user_uuid || session.user) {
+			return;
+		}
+
+		const sessionUserUUID = session.claims.user_uuid;
+		let cancelled = false;
+
+		async function hydrateAdminUser() {
+			try {
+				const user = await fetchNebulaUser(sessionUserUUID);
+				if (cancelled) {
+					return;
+				}
+
+				setSession((current) =>
+					current && current.claims.user_uuid === sessionUserUUID
+						? {
+								...current,
+								user,
+							}
+						: current,
+				);
+			} catch {
+				// Keep the UUID fallback if the profile lookup is unavailable.
+			}
+		}
+
+		void hydrateAdminUser();
+
+		return () => {
+			cancelled = true;
+		};
 	}, [session]);
 
 	useEffect(() => {
@@ -846,7 +892,7 @@ function App() {
 			setAuthMode("login");
 			setBanner({
 				tone: "success",
-				message: `Signed in as ${nextSession.claims.user_uuid}.`,
+				message: `Signed in as ${formatAdminIdentity(nextSession)}.`,
 			});
 		} catch (error) {
 			setAuthError(getErrorMessage(error));
@@ -869,7 +915,7 @@ function App() {
 			}));
 			setBanner({
 				tone: "success",
-				message: `Created school admin account for ${signupForm.school_id}.`,
+				message: `Created school admin account for ${signupForm.school_id} as ${formatAdminIdentity(nextSession)}.`,
 			});
 		} catch (error) {
 			setAuthError(getErrorMessage(error));
@@ -1361,7 +1407,7 @@ function App() {
 							{activeSchoolId || schoolDraft.school_id || "Juise default"}
 						</span>
 					</div>
-					<p>Signed in as {session.claims.user_uuid}</p>
+					<p>Signed in as {formatAdminIdentity(session)}</p>
 					<p>School scope: {activeSchoolId || "Unscoped login"}</p>
 				</div>
 
