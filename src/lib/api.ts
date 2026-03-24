@@ -38,6 +38,14 @@ export interface SchoolTerm {
   updated_at: number
 }
 
+export interface SchoolColorScheme {
+  primary?: string
+  secondary?: string
+  accent?: string
+  background?: string
+  text?: string
+}
+
 export interface School {
   school_id: string
   app_id: string
@@ -45,7 +53,7 @@ export interface School {
   title: string
   logo_url: string
   default_campus_id: string
-  color_scheme: Record<string, string>
+  color_scheme: SchoolColorScheme
   terms: SchoolTerm[]
   metadata?: Record<string, unknown>
   active: boolean
@@ -58,7 +66,7 @@ export interface SchoolWriteInput {
   title: string
   logo_url: string
   default_campus_id: string
-  color_scheme: Record<string, string>
+  color_scheme: SchoolColorScheme
   metadata: Record<string, unknown>
   active?: boolean
 }

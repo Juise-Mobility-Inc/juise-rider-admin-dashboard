@@ -18,6 +18,7 @@ import {
   type Pack,
   type PackSpotReservation,
   type School,
+  type SchoolColorScheme,
   type SchoolTerm,
   type StudentProfileBundle,
 } from './lib/api'
@@ -46,7 +47,7 @@ interface SchoolDraft {
   title: string
   logo_url: string
   default_campus_id: string
-  color_scheme: string
+  color_scheme: SchoolColorScheme
   metadata: string
   active: boolean
 }
@@ -81,6 +82,25 @@ interface PackDraft {
 const authAppId = import.meta.env.VITE_AUTH_APP_ID ?? 'juise_rider_admin_dashboard'
 const defaultManagedAppId =
   import.meta.env.VITE_DEFAULT_MANAGED_APP_ID ?? 'juise-customer-app'
+const schoolColorHexPattern = /^#(?:[0-9a-fA-F]{6})$/
+const defaultSchoolColorScheme: Required<SchoolColorScheme> = {
+  primary: '#16425b',
+  secondary: '#1f6f78',
+  accent: '#f6ae2d',
+  background: '#f5efe5',
+  text: '#112d4e',
+}
+const schoolColorFields: Array<{
+  key: keyof SchoolColorScheme
+  label: string
+  fallback: string
+}> = [
+  { key: 'primary', label: 'Primary', fallback: defaultSchoolColorScheme.primary },
+  { key: 'secondary', label: 'Secondary', fallback: defaultSchoolColorScheme.secondary },
+  { key: 'accent', label: 'Accent', fallback: defaultSchoolColorScheme.accent },
+  { key: 'background', label: 'Background', fallback: defaultSchoolColorScheme.background },
+  { key: 'text', label: 'Text', fallback: defaultSchoolColorScheme.text },
+]
 
 function makeDraftId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -98,6 +118,24 @@ function prettyJson(value: Record<string, unknown> | Record<string, string> | un
   return JSON.stringify(value, null, 2)
 }
 
+function normalizeSchoolColorScheme(value?: SchoolColorScheme): SchoolColorScheme {
+  return {
+    primary: value?.primary?.trim() || defaultSchoolColorScheme.primary,
+    secondary: value?.secondary?.trim() || defaultSchoolColorScheme.secondary,
+    accent: value?.accent?.trim() || defaultSchoolColorScheme.accent,
+    background: value?.background?.trim() || defaultSchoolColorScheme.background,
+    text: value?.text?.trim() || defaultSchoolColorScheme.text,
+  }
+}
+
+function getColorPickerValue(
+  value: string | undefined,
+  fallback: keyof typeof defaultSchoolColorScheme,
+): string {
+  const trimmed = value?.trim() ?? ''
+  return schoolColorHexPattern.test(trimmed) ? trimmed : defaultSchoolColorScheme[fallback]
+}
+
 function createEmptySchoolDraft(): SchoolDraft {
   return {
     school_id: '',
@@ -105,7 +143,7 @@ function createEmptySchoolDraft(): SchoolDraft {
     title: '',
     logo_url: '',
     default_campus_id: '',
-    color_scheme: '{\n  "primary": "#16425b",\n  "accent": "#f6ae2d"\n}',
+    color_scheme: normalizeSchoolColorScheme(),
     metadata: '{}',
     active: true,
   }
@@ -118,7 +156,7 @@ function schoolToDraft(school: School): SchoolDraft {
     title: school.title,
     logo_url: school.logo_url,
     default_campus_id: school.default_campus_id,
-    color_scheme: prettyJson(school.color_scheme),
+    color_scheme: normalizeSchoolColorScheme(school.color_scheme),
     metadata: prettyJson(school.metadata),
     active: school.active,
   }
@@ -181,15 +219,21 @@ function parseObjectJson(source: string, label: string): Record<string, unknown>
   return parsed as Record<string, unknown>
 }
 
-function parseStringMapJson(source: string): Record<string, string> {
-  const parsed = parseObjectJson(source, 'Color scheme')
-  const entries = Object.entries(parsed)
-  for (const [key, value] of entries) {
-    if (typeof value !== 'string') {
-      throw new Error(`Color scheme value for "${key}" must be a string.`)
+function sanitizeSchoolColorScheme(colorScheme: SchoolColorScheme): SchoolColorScheme {
+  const nextColorScheme: SchoolColorScheme = {}
+
+  for (const field of schoolColorFields) {
+    const rawValue = colorScheme[field.key]?.trim() ?? ''
+    if (!rawValue) {
+      continue
     }
+    if (!schoolColorHexPattern.test(rawValue)) {
+      throw new Error(`${field.label} color must use #RRGGBB hex format.`)
+    }
+    nextColorScheme[field.key] = rawValue.toLowerCase()
   }
-  return Object.fromEntries(entries) as Record<string, string>
+
+  return nextColorScheme
 }
 
 function getErrorMessage(error: unknown): string {
@@ -320,6 +364,11 @@ function App() {
       (membership) => membership.school_id === context.selectedSchoolId,
     )
   }, [context.selectedSchoolId, studentProfile])
+
+  const resolvedSchoolColors = useMemo(
+    () => normalizeSchoolColorScheme(schoolDraft.color_scheme),
+    [schoolDraft.color_scheme],
+  )
 
   useEffect(() => {
     setPackDraft(createEmptyPackDraft(selectedSchool?.default_campus_id ?? ''))
@@ -733,6 +782,16 @@ function App() {
     setTermDrafts([])
   }
 
+  function handleSchoolColorChange(field: keyof SchoolColorScheme, value: string) {
+    setSchoolDraft((current) => ({
+      ...current,
+      color_scheme: {
+        ...current.color_scheme,
+        [field]: value,
+      },
+    }))
+  }
+
   async function handleSaveSchool(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -752,7 +811,7 @@ function App() {
         title: schoolDraft.title.trim(),
         logo_url: schoolDraft.logo_url.trim(),
         default_campus_id: schoolDraft.default_campus_id.trim(),
-        color_scheme: parseStringMapJson(schoolDraft.color_scheme),
+        color_scheme: sanitizeSchoolColorScheme(schoolDraft.color_scheme),
         metadata: parseObjectJson(schoolDraft.metadata, 'Metadata'),
         active: schoolDraft.active,
       })
@@ -1382,19 +1441,70 @@ function App() {
                     }
                   />
                 </label>
-                <label className="field field-span-2">
-                  <span>Color Scheme JSON</span>
-                  <textarea
-                    value={schoolDraft.color_scheme}
-                    onChange={(event) =>
-                      setSchoolDraft((current) => ({
-                        ...current,
-                        color_scheme: event.target.value,
-                      }))
-                    }
-                    rows={8}
-                  />
-                </label>
+                <div className="field field-span-2">
+                  <span>Color Scheme</span>
+                  <div className="color-scheme-grid">
+                    {schoolColorFields.map((field) => (
+                      <div className="color-input-row" key={field.key}>
+                        <div className="color-input-copy">
+                          <strong>{field.label}</strong>
+                          <span>{field.key}</span>
+                        </div>
+                        <input
+                          type="text"
+                          value={schoolDraft.color_scheme[field.key] ?? ''}
+                          onChange={(event) =>
+                            handleSchoolColorChange(field.key, event.target.value)
+                          }
+                          placeholder={field.fallback}
+                        />
+                        <input
+                          type="color"
+                          className="color-picker-input"
+                          value={getColorPickerValue(
+                            schoolDraft.color_scheme[field.key],
+                            field.key as keyof typeof defaultSchoolColorScheme,
+                          )}
+                          onChange={(event) =>
+                            handleSchoolColorChange(field.key, event.target.value)
+                          }
+                          aria-label={`${field.label} color`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div
+                    className="color-preview-card"
+                    style={{
+                      background: resolvedSchoolColors.background,
+                      color: resolvedSchoolColors.text,
+                      borderColor: resolvedSchoolColors.secondary,
+                    }}
+                  >
+                    <div className="color-preview-swatches" aria-hidden="true">
+                      <span style={{ background: resolvedSchoolColors.primary }} />
+                      <span style={{ background: resolvedSchoolColors.secondary }} />
+                      <span style={{ background: resolvedSchoolColors.accent }} />
+                      <span style={{ background: resolvedSchoolColors.background }} />
+                      <span style={{ background: resolvedSchoolColors.text }} />
+                    </div>
+                    <strong>{schoolDraft.title.trim() || schoolDraft.name.trim() || 'Brand preview'}</strong>
+                    <p>
+                      Preview the school palette before saving. The admin dashboard sends this as
+                      the structured <code>SchoolColorScheme</code> object.
+                    </p>
+                    <button
+                      className="color-preview-button"
+                      type="button"
+                      style={{
+                        background: resolvedSchoolColors.primary,
+                        color: resolvedSchoolColors.background,
+                      }}
+                    >
+                      Sample Primary Action
+                    </button>
+                  </div>
+                </div>
                 <label className="field field-span-2">
                   <span>Metadata JSON</span>
                   <textarea
