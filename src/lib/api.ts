@@ -106,10 +106,31 @@ export interface PackSchoolOwnerInput {
   campus_id?: string
 }
 
+export interface PackQrCode {
+  qr_code_uuid: string
+  pack_uuid: string
+  bucket_key: string
+  path_do_spaces: string
+  type: string
+  updated: number
+  active: boolean
+}
+
+export interface PackSpotQrCode {
+  qr_code_uuid: string
+  spot_uuid: string
+  bucket_key: string
+  path_do_spaces: string
+  type: string
+  updated: number
+  active: boolean
+}
+
 export interface PackSpot {
   spot_uuid: string
   pack_uuid: string
   spot_number: number
+  qr_code?: PackSpotQrCode
   active: boolean
   updated: number
 }
@@ -123,6 +144,7 @@ export interface Pack {
   spot_count: number
   location?: PackLocationInput
   school_owner?: PackSchoolOwnerInput
+  qr_code?: PackQrCode
   spots: PackSpot[]
 }
 
@@ -581,6 +603,70 @@ export async function createSchoolPack(
       body: input,
       authRequired: false,
       appIdHeader: input.school_owner.app_id,
+      retryOnUnauthorized: false,
+    },
+  )
+}
+
+export async function fetchAdminSchoolPacks(
+  adminUser: string,
+  managedAppId: string,
+  schoolId: string,
+): Promise<Pack[]> {
+  const search = new URLSearchParams({
+    app_id: managedAppId,
+    school_id: schoolId,
+  })
+
+  return request<Pack[]>(
+    'hubStore',
+    `/api/v1/admin/${encodeURIComponent(adminUser)}/school-packs?${search.toString()}`,
+    {
+      authRequired: false,
+      retryOnUnauthorized: false,
+    },
+  )
+}
+
+export function getAdminPackQrCodeDownloadUrl(
+  adminUser: string,
+  packUUID: string,
+): string {
+  return `${serviceBase.hubStore}/api/v1/admin/${encodeURIComponent(adminUser)}/pack/${encodeURIComponent(packUUID)}/qr-code/download`
+}
+
+export function getAdminPackSpotQrCodeDownloadUrl(
+  adminUser: string,
+  spotUUID: string,
+): string {
+  return `${serviceBase.hubStore}/api/v1/admin/${encodeURIComponent(adminUser)}/pack/spot/${encodeURIComponent(spotUUID)}/qr-code/download`
+}
+
+export async function generateAdminPackQrCode(
+  adminUser: string,
+  packUUID: string,
+): Promise<Pack> {
+  return request<Pack>(
+    'hubStore',
+    `/api/v1/admin/${encodeURIComponent(adminUser)}/pack/${encodeURIComponent(packUUID)}/qr-code`,
+    {
+      method: 'POST',
+      authRequired: false,
+      retryOnUnauthorized: false,
+    },
+  )
+}
+
+export async function generateAdminPackSpotQrCode(
+  adminUser: string,
+  spotUUID: string,
+): Promise<PackSpot> {
+  return request<PackSpot>(
+    'hubStore',
+    `/api/v1/admin/${encodeURIComponent(adminUser)}/pack/spot/${encodeURIComponent(spotUUID)}/qr-code`,
+    {
+      method: 'POST',
+      authRequired: false,
       retryOnUnauthorized: false,
     },
   )

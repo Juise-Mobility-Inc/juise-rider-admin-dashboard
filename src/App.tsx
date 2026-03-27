@@ -12,6 +12,7 @@ import {
 	createSchoolPack,
 	createSchoolAdminAccount,
 	denyReservation,
+	fetchAdminSchoolPacks,
 	fetchNebulaUser,
 	fetchPendingReservations,
 	fetchSchool,
@@ -19,6 +20,10 @@ import {
 	fetchSchoolTermReservations,
 	fetchStudentProfile,
 	fetchUserMediaAssets,
+	generateAdminPackQrCode,
+	generateAdminPackSpotQrCode,
+	getAdminPackQrCodeDownloadUrl,
+	getAdminPackSpotQrCodeDownloadUrl,
 	loginWithIdentifier,
 	saveSchool,
 	saveSchoolTerms,
@@ -27,6 +32,7 @@ import {
 	signSchoolMedia,
 	type AdminSession,
 	type Pack,
+	type PackSpot,
 	type PackSpotReservation,
 	type School,
 	type SchoolColorScheme,
@@ -379,6 +385,52 @@ function getErrorMessage(error: unknown): string {
 	return "An unexpected error occurred.";
 }
 
+async function copyTextToClipboard(value: string): Promise<void> {
+	const normalizedValue = value.trim();
+	if (!normalizedValue) {
+		throw new Error("Nothing to copy.");
+	}
+
+	if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+		await navigator.clipboard.writeText(normalizedValue);
+		return;
+	}
+
+	if (typeof document === "undefined") {
+		throw new Error("Clipboard is unavailable in this browser.");
+	}
+
+	const textarea = document.createElement("textarea");
+	textarea.value = normalizedValue;
+	textarea.setAttribute("readonly", "");
+	textarea.style.position = "fixed";
+	textarea.style.opacity = "0";
+	textarea.style.pointerEvents = "none";
+	document.body.appendChild(textarea);
+	textarea.focus();
+	textarea.select();
+
+	const didCopy = document.execCommand("copy");
+	document.body.removeChild(textarea);
+
+	if (!didCopy) {
+		throw new Error("Clipboard copy failed.");
+	}
+}
+
+function triggerFileDownload(url: string): void {
+	if (typeof document === "undefined") {
+		return;
+	}
+
+	const link = document.createElement("a");
+	link.href = url;
+	link.rel = "noopener noreferrer";
+	document.body.appendChild(link);
+	link.click();
+	document.body.removeChild(link);
+}
+
 function buildStudentIdEntityUUID(schoolId: string, campusId: string): string {
 	return `${schoolId.trim()}.${campusId.trim()}`;
 }
@@ -528,6 +580,36 @@ function DetailRow(props: { label: string; value: string }) {
 	);
 }
 
+function UuidCopyField(props: {
+	label: string;
+	value?: string;
+	onCopy: (label: string, value: string) => void | Promise<void>;
+}) {
+	const normalizedValue = props.value?.trim() ?? "";
+
+	return (
+		<div className="uuid-copy-card">
+			<span className="uuid-copy-label">{props.label}</span>
+			{normalizedValue ? (
+				<div className="uuid-copy-row">
+					<code className="uuid-copy-value" title={normalizedValue}>
+						{normalizedValue}
+					</code>
+					<button
+						className="secondary-button uuid-copy-button"
+						type="button"
+						aria-label={`Copy ${props.label}`}
+						onClick={() => void props.onCopy(props.label, normalizedValue)}>
+						Copy
+					</button>
+				</div>
+			) : (
+				<strong className="uuid-copy-empty">Not set</strong>
+			)}
+		</div>
+	);
+}
+
 function buildSchoolMonogram(label: string): string {
 	const normalized = label.trim();
 	if (!normalized) {
@@ -603,6 +685,17 @@ function formatNebulaUserName(profile: {
 	return "Unnamed student";
 }
 
+function sortPacksForDisplay(packs: Pack[]): Pack[] {
+	return [...packs].sort((left, right) => {
+		const leftName = left.name.trim().toLowerCase();
+		const rightName = right.name.trim().toLowerCase();
+		if (leftName !== rightName) {
+			return leftName.localeCompare(rightName);
+		}
+		return left.pack_uuid.localeCompare(right.pack_uuid);
+	});
+}
+
 function normalizeDashboardPath(pathname: string): string {
 	if (!pathname || pathname === "/") {
 		return pathname || "/";
@@ -655,7 +748,9 @@ function App() {
 		createEmptyPackDraft(),
 	);
 	const [packBusy, setPackBusy] = useState(false);
-	const [createdPack, setCreatedPack] = useState<Pack | null>(null);
+	const [schoolPacks, setSchoolPacks] = useState<Pack[]>([]);
+	const [packsLoading, setPacksLoading] = useState(false);
+	const [qrActionTarget, setQrActionTarget] = useState("");
 
 	const [reservations, setReservations] = useState<PackSpotReservation[]>([]);
 	const [reservationsBusy, setReservationsBusy] = useState(false);
@@ -818,6 +913,141 @@ function App() {
 		};
 	}, [resolvedSchoolColors]);
 
+	async function handleCopyUuid(label: string, value: string) {
+		try {
+			await copyTextToClipboard(value);
+			setBanner({
+				tone: "success",
+				message: `Copied ${label}.`,
+			});
+		} catch (error) {
+			setBanner({
+				tone: "error",
+				message: getErrorMessage(error),
+			});
+		}
+	}
+
+	function upsertSchoolPack(nextPack: Pack) {
+		setSchoolPacks((current) =>
+			sortPacksForDisplay([
+				nextPack,
+				...current.filter((pack) => pack.pack_uuid !== nextPack.pack_uuid),
+			]),
+		);
+	}
+
+	function upsertSchoolPackSpot(updatedSpot: PackSpot) {
+		setSchoolPacks((current) =>
+			sortPacksForDisplay(
+				current.map((pack) =>
+					pack.pack_uuid !== updatedSpot.pack_uuid
+						? pack
+						: {
+								...pack,
+								spots: pack.spots.map((spot) =>
+									spot.spot_uuid === updatedSpot.spot_uuid ? updatedSpot : spot,
+								),
+							},
+				),
+			),
+		);
+	}
+
+	function handleDownloadPackQrCode(targetPack: Pack) {
+		if (!session?.claims.user_uuid || !targetPack.pack_uuid || !targetPack.qr_code) {
+			setBanner({
+				tone: "error",
+				message: "Pack QR code is not available yet.",
+			});
+			return;
+		}
+
+		triggerFileDownload(
+			getAdminPackQrCodeDownloadUrl(
+				session.claims.user_uuid,
+				targetPack.pack_uuid,
+			),
+		);
+	}
+
+	function handleDownloadPackSpotQrCode(spot: PackSpot) {
+		if (!session?.claims.user_uuid || !spot.spot_uuid || !spot.qr_code) {
+			setBanner({
+				tone: "error",
+				message: "Pack spot QR code is not available yet.",
+			});
+			return;
+		}
+
+		triggerFileDownload(
+			getAdminPackSpotQrCodeDownloadUrl(
+				session.claims.user_uuid,
+				spot.spot_uuid,
+			),
+		);
+	}
+
+	async function handleGeneratePackQrCode(targetPack: Pack) {
+		if (!session?.claims.user_uuid || !targetPack.pack_uuid) {
+			setBanner({
+				tone: "error",
+				message: "Pack QR code cannot be generated right now.",
+			});
+			return;
+		}
+
+		setQrActionTarget(`pack:${targetPack.pack_uuid}`);
+		try {
+			const updatedPack = await generateAdminPackQrCode(
+				session.claims.user_uuid,
+				targetPack.pack_uuid,
+			);
+			upsertSchoolPack(updatedPack);
+			setBanner({
+				tone: "success",
+				message: "Pack QR code is ready.",
+			});
+		} catch (error) {
+			setBanner({
+				tone: "error",
+				message: getErrorMessage(error),
+			});
+		} finally {
+			setQrActionTarget("");
+		}
+	}
+
+	async function handleGeneratePackSpotQrCode(spot: PackSpot) {
+		if (!session?.claims.user_uuid || !spot.spot_uuid) {
+			setBanner({
+				tone: "error",
+				message: "Pack spot QR code cannot be generated right now.",
+			});
+			return;
+		}
+
+		setQrActionTarget(`spot:${spot.spot_uuid}`);
+		try {
+			const updatedSpot = await generateAdminPackSpotQrCode(
+				session.claims.user_uuid,
+				spot.spot_uuid,
+			);
+			upsertSchoolPackSpot(updatedSpot);
+			setBanner({
+				tone: "success",
+				message: `Spot ${updatedSpot.spot_number} QR code is ready.`,
+			});
+		} catch (error) {
+			setBanner({
+				tone: "error",
+				message: getErrorMessage(error),
+			});
+		} finally {
+			setQrActionTarget("");
+		}
+	}
+
 	useEffect(() => {
 		if (resolveSectionFromPathname(location.pathname)) {
 			return;
@@ -828,8 +1058,11 @@ function App() {
 
 	useEffect(() => {
 		setPackDraft(createEmptyPackDraft(schoolDraft.default_campus_id ?? ""));
-		setCreatedPack(null);
-	}, [activeSchoolId, schoolDraft.default_campus_id]);
+	}, [schoolDraft.default_campus_id]);
+
+	useEffect(() => {
+		setSchoolPacks([]);
+	}, [activeSchoolId]);
 
 	useEffect(() => {
 		setManagedAppInput(context.managedAppId);
@@ -898,6 +1131,7 @@ function App() {
 			setReservations([]);
 			setSelectedReservationId("");
 			setStudentProfile(null);
+			setSchoolPacks([]);
 			setSchoolStudentRoster([]);
 			setSchoolStudentReservations([]);
 			setSchoolStudentMediaUrls({});
@@ -1133,6 +1367,48 @@ function App() {
 		};
 	}, [activeSchoolId, context.managedAppId, currentSection, session]);
 
+	useEffect(() => {
+		if (!session || currentSection !== "packs" || !activeSchoolId) {
+			return;
+		}
+		const adminUser = session.claims.user_uuid;
+
+		let cancelled = false;
+
+		async function loadSchoolPacks() {
+			setPacksLoading(true);
+			try {
+				const packs = await fetchAdminSchoolPacks(
+					adminUser,
+					context.managedAppId,
+					activeSchoolId,
+				);
+				if (cancelled) {
+					return;
+				}
+
+				setSchoolPacks(sortPacksForDisplay(packs));
+			} catch (error) {
+				if (!cancelled) {
+					setBanner({
+						tone: "error",
+						message: getErrorMessage(error),
+					});
+				}
+			} finally {
+				if (!cancelled) {
+					setPacksLoading(false);
+				}
+			}
+		}
+
+		void loadSchoolPacks();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [activeSchoolId, context.managedAppId, currentSection, session]);
+
 	async function refreshActiveSchool() {
 		if (!session || !activeSchoolId) {
 			return;
@@ -1159,6 +1435,30 @@ function App() {
 			}
 		} finally {
 			setSchoolBusy(false);
+		}
+	}
+
+	async function refreshSchoolPacks() {
+		if (!session || !activeSchoolId) {
+			return;
+		}
+		const adminUser = session.claims.user_uuid;
+
+		setPacksLoading(true);
+		try {
+			const packs = await fetchAdminSchoolPacks(
+				adminUser,
+				context.managedAppId,
+				activeSchoolId,
+			);
+			setSchoolPacks(sortPacksForDisplay(packs));
+		} catch (error) {
+			setBanner({
+				tone: "error",
+				message: getErrorMessage(error),
+			});
+		} finally {
+			setPacksLoading(false);
 		}
 	}
 
@@ -1470,7 +1770,12 @@ function App() {
 				},
 			});
 
-			setCreatedPack(created);
+			setSchoolPacks((current) =>
+				sortPacksForDisplay([
+					created,
+					...current.filter((pack) => pack.pack_uuid !== created.pack_uuid),
+				]),
+			);
 			setPackDraft(createEmptyPackDraft(campusId ?? ""));
 			setBanner({
 				tone: "success",
@@ -2411,6 +2716,18 @@ function App() {
 																		{reservation.pack_name || "Juise Pack"} · Spot{" "}
 																		{reservation.spot_number || "TBD"}
 																	</span>
+																	<div className="uuid-copy-stack">
+																		<UuidCopyField
+																			label="pack_uuid"
+																			value={reservation.pack_uuid}
+																			onCopy={handleCopyUuid}
+																		/>
+																		<UuidCopyField
+																			label="pack_spot_uuid"
+																			value={reservation.spot_uuid}
+																			onCopy={handleCopyUuid}
+																		/>
+																	</div>
 																	<span>
 																		Status: {reservation.status} ·{" "}
 																		{formatUnixTimestamp(reservation.start_time)} -{" "}
@@ -2599,74 +2916,169 @@ function App() {
 						<div className="pack-preview-panel">
 							<div className="panel-header">
 								<div>
-									<p className="eyebrow">Last Created Pack</p>
-									<h2>{createdPack?.name || "No pack created yet"}</h2>
+									<p className="eyebrow">School Inventory</p>
+									<h2>Existing Juise Packs</h2>
 								</div>
+								<button
+									className="secondary-button"
+									type="button"
+									onClick={() => void refreshSchoolPacks()}
+									disabled={packsLoading || !activeSchoolId}>
+									Refresh
+								</button>
 							</div>
 
-							{!createdPack ? (
+							{!activeSchoolId ? (
 								<p className="empty-state">
-									Create a Juise Pack here and its generated UUID, school owner,
-									and spot count will appear in this panel.
+									This admin login is not scoped to a school.
+								</p>
+							) : null}
+
+							{activeSchoolId && packsLoading && schoolPacks.length === 0 ? (
+								<p className="muted-text">Loading school packs…</p>
+							) : null}
+
+							{activeSchoolId &&
+							!packsLoading &&
+							schoolPacks.length === 0 ? (
+								<p className="empty-state">
+									No school-owned Juise packs have been created for this
+									school yet.
 								</p>
 							) : (
-								<div className="student-panel">
-									<div className="detail-grid">
-										<DetailRow
-											label="Pack UUID"
-											value={createdPack.pack_uuid}
-										/>
-										<DetailRow
-											label="School ID"
-											value={
-												createdPack.school_owner?.school_id ||
-												activeSchoolId
-											}
-										/>
-										<DetailRow
-											label="Campus ID"
-											value={
-												createdPack.school_owner?.campus_id ||
-												packDraft.campus_id ||
-												"Not set"
-											}
-										/>
-										<DetailRow
-											label="Spot Count"
-											value={String(createdPack.spot_count)}
-										/>
-										<DetailRow
-											label="Latitude"
-											value={
-												createdPack.location
-													? formatCoordinateValue(createdPack.location.lat)
-													: "Not set"
-											}
-										/>
-										<DetailRow
-											label="Longitude"
-											value={
-												createdPack.location
-													? formatCoordinateValue(createdPack.location.lng)
-													: "Not set"
-											}
-										/>
-									</div>
-
-									<div className="data-section">
-										<div className="data-section-header">
-											<h4>Generated spots</h4>
-											<span>{createdPack.spots.length}</span>
-										</div>
-										<div className="stack-list">
-											{createdPack.spots.slice(0, 6).map((spot) => (
-												<div className="data-card" key={spot.spot_uuid}>
-													<strong>Spot {spot.spot_number}</strong>
-													<span>{spot.spot_uuid}</span>
+								<div className="stack-list">
+									{schoolPacks.map((pack) => (
+										<article
+											className="data-card pack-record-card"
+											key={pack.pack_uuid}>
+											<div className="data-section-header">
+												<div>
+													<strong>{pack.name || "Juise Pack"}</strong>
+													<p className="muted-text">
+														{pack.description || "No description set."}
+													</p>
 												</div>
-											))}
-										</div>
-									</div>
+												<span>{pack.spot_count} spots</span>
+											</div>
+
+											<div className="detail-grid">
+												<DetailRow
+													label="School ID"
+													value={
+														pack.school_owner?.school_id || activeSchoolId
+													}
+												/>
+												<DetailRow
+													label="Campus ID"
+													value={pack.school_owner?.campus_id || "Not set"}
+												/>
+												<DetailRow
+													label="Latitude"
+													value={
+														pack.location
+															? formatCoordinateValue(pack.location.lat)
+															: "Not set"
+													}
+												/>
+												<DetailRow
+													label="Longitude"
+													value={
+														pack.location
+															? formatCoordinateValue(pack.location.lng)
+															: "Not set"
+													}
+												/>
+											</div>
+
+											<div className="uuid-copy-stack">
+												<UuidCopyField
+													label="pack_uuid"
+													value={pack.pack_uuid}
+													onCopy={handleCopyUuid}
+												/>
+											</div>
+
+											<div className="form-actions pack-download-actions">
+												{pack.qr_code ? (
+													<button
+														className="secondary-button"
+														type="button"
+														onClick={() => handleDownloadPackQrCode(pack)}>
+														Download Pack QR
+													</button>
+												) : (
+													<button
+														className="secondary-button"
+														type="button"
+														onClick={() =>
+															void handleGeneratePackQrCode(pack)
+														}
+														disabled={
+															qrActionTarget === `pack:${pack.pack_uuid}`
+														}>
+														{qrActionTarget === `pack:${pack.pack_uuid}`
+															? "Generating Pack QR…"
+															: "Generate Pack QR"}
+													</button>
+												)}
+											</div>
+
+											<div className="data-section">
+												<div className="data-section-header">
+													<h4>Spots</h4>
+													<span>{pack.spots.length}</span>
+												</div>
+												<div className="stack-list">
+													{pack.spots.map((spot) => (
+														<div
+															className="data-card pack-spot-card"
+															key={spot.spot_uuid}>
+															<div className="pack-spot-header">
+																<div className="pack-spot-copy">
+																	<strong>Spot {spot.spot_number}</strong>
+																	<span>
+																		{pack.name || pack.pack_uuid}
+																	</span>
+																</div>
+																{spot.qr_code ? (
+																	<button
+																		className="secondary-button"
+																		type="button"
+																		onClick={() =>
+																			handleDownloadPackSpotQrCode(spot)
+																		}>
+																		Download Spot QR
+																	</button>
+																) : (
+																	<button
+																		className="secondary-button"
+																		type="button"
+																		onClick={() =>
+																			void handleGeneratePackSpotQrCode(spot)
+																		}
+																		disabled={
+																			qrActionTarget ===
+																			`spot:${spot.spot_uuid}`
+																		}>
+																		{qrActionTarget ===
+																		`spot:${spot.spot_uuid}`
+																			? "Generating Spot QR…"
+																			: "Generate Spot QR"}
+																	</button>
+																)}
+															</div>
+
+															<UuidCopyField
+																label="pack_spot_uuid"
+																value={spot.spot_uuid}
+																onCopy={handleCopyUuid}
+															/>
+														</div>
+													))}
+												</div>
+											</div>
+										</article>
+									))}
 								</div>
 							)}
 						</div>
