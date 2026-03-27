@@ -242,6 +242,7 @@ interface RequestOptions {
   authRequired?: boolean
   appIdHeader?: string
   retryOnUnauthorized?: boolean
+  accessToken?: string
 }
 
 const serviceBase: Record<ServiceName, string> = {
@@ -291,7 +292,8 @@ async function parseErrorMessage(response: Response): Promise<string> {
 }
 
 async function refreshSession(): Promise<AdminSession> {
-  if (!currentSession) {
+  const previousSession = currentSession
+  if (!previousSession) {
     throw new Error('Login required')
   }
 
@@ -299,9 +301,9 @@ async function refreshSession(): Promise<AdminSession> {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
-      'X-App-Id': currentSession.authAppId,
+      'X-App-Id': previousSession.authAppId,
     },
-    body: JSON.stringify(currentSession.tokens),
+    body: JSON.stringify(previousSession.tokens),
   })
 
   if (!response.ok) {
@@ -311,17 +313,29 @@ async function refreshSession(): Promise<AdminSession> {
   }
 
   const tokens = await parseResponse<AuthTokenBundle>(response)
-  const claims = await inspectAccessToken(tokens, currentSession.authAppId)
-  const user = await fetchNebulaUser(claims.user_uuid)
+  const claims = await inspectAccessToken(tokens, previousSession.authAppId)
   const refreshedSession: AdminSession = {
-    ...currentSession,
+    ...previousSession,
     tokens,
     claims,
-    user,
   }
 
   updateSession(refreshedSession)
-  return refreshedSession
+
+  try {
+    const user = await fetchNebulaUser(claims.user_uuid, {
+      accessToken: tokens.access_token.token,
+      retryOnUnauthorized: false,
+    })
+    const hydratedSession: AdminSession = {
+      ...refreshedSession,
+      user,
+    }
+    updateSession(hydratedSession)
+    return hydratedSession
+  } catch {
+    return refreshedSession
+  }
 }
 
 async function request<T>(
@@ -335,6 +349,7 @@ async function request<T>(
     authRequired = true,
     appIdHeader,
     retryOnUnauthorized = true,
+    accessToken,
   } = options
 
   const headers = new Headers()
@@ -345,10 +360,11 @@ async function request<T>(
     headers.set('X-App-Id', appIdHeader)
   }
   if (authRequired) {
-    if (!currentSession) {
+    const bearerToken = accessToken ?? currentSession?.tokens.access_token.token
+    if (!bearerToken) {
       throw new Error('Login required')
     }
-    headers.set('Authorization', `Bearer ${currentSession.tokens.access_token.token}`)
+    headers.set('Authorization', `Bearer ${bearerToken}`)
   }
 
   const response = await fetch(`${serviceBase[service]}${path}`, {
@@ -393,8 +409,11 @@ export async function inspectAccessToken(
   })
 }
 
-export async function fetchNebulaUser(userUUID: string): Promise<NebulaUser> {
-  return request<NebulaUser>('nebula', `/api/v1/user/${encodeURIComponent(userUUID)}`)
+export async function fetchNebulaUser(
+  userUUID: string,
+  options: Pick<RequestOptions, 'accessToken' | 'retryOnUnauthorized'> = {},
+): Promise<NebulaUser> {
+  return request<NebulaUser>('nebula', `/api/v1/user/${encodeURIComponent(userUUID)}`, options)
 }
 
 export async function loginWithIdentifier(
@@ -418,16 +437,28 @@ export async function loginWithIdentifier(
   if (!claims.admin) {
     throw new Error('This account is not marked as an admin user.')
   }
-  const user = await fetchNebulaUser(claims.user_uuid)
 
   const session: AdminSession = {
     authAppId,
     tokens,
     claims,
-    user,
   }
   updateSession(session)
-  return session
+
+  try {
+    const user = await fetchNebulaUser(claims.user_uuid, {
+      accessToken: tokens.access_token.token,
+      retryOnUnauthorized: false,
+    })
+    const hydratedSession: AdminSession = {
+      ...session,
+      user,
+    }
+    updateSession(hydratedSession)
+    return hydratedSession
+  } catch {
+    return session
+  }
 }
 
 export async function createSchoolAdminAccount(
