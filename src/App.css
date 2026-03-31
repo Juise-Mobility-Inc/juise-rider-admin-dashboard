@@ -27,7 +27,11 @@
 
 .login-hero {
   background:
-    radial-gradient(circle at top right, rgba(246, 174, 45, 0.35), transparent 28%),
+    radial-gradient(
+      circle at top right,
+      rgba(246, 174, 45, 0.35),
+      transparent 28%
+    ),
     linear-gradient(140deg, rgba(17, 45, 78, 0.96), rgba(11, 27, 48, 0.94));
   color: #f5efe5;
   position: relative;
@@ -116,8 +120,16 @@
   --sidebar-chip-bg: rgba(238, 194, 83, 0.18);
   --sidebar-chip-text: #010c05;
   background:
-    radial-gradient(circle at top left, var(--sidebar-glow-accent), transparent 32%),
-    radial-gradient(circle at top right, var(--sidebar-glow-primary), transparent 34%),
+    radial-gradient(
+      circle at top left,
+      var(--sidebar-glow-accent),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at top right,
+      var(--sidebar-glow-primary),
+      transparent 34%
+    ),
     linear-gradient(180deg, var(--sidebar-bg-start), var(--sidebar-bg-end));
   color: var(--sidebar-text);
   padding: 24px 18px 18px;
@@ -433,7 +445,11 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   background:
-    radial-gradient(circle at top right, rgba(246, 174, 45, 0.32), transparent 34%),
+    radial-gradient(
+      circle at top right,
+      rgba(246, 174, 45, 0.32),
+      transparent 34%
+    ),
     linear-gradient(160deg, rgba(22, 66, 91, 0.2), rgba(255, 255, 255, 0.66));
 }
 
@@ -716,10 +732,108 @@
   background: rgba(255, 255, 255, 0.55);
 }
 
+.poi-layout,
+.poi-list,
+.poi-map-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.poi-map-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+.poi-row {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.55);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.poi-row-active {
+  border-color: rgba(246, 174, 45, 0.42);
+  box-shadow: 0 12px 28px rgba(17, 45, 78, 0.1);
+  transform: translateY(-1px);
+}
+
+.poi-row-header,
+.poi-row-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.poi-row-header {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.poi-row-header h3 {
+  margin: 0;
+}
+
+.poi-row-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .reservation-layout {
   display: grid;
   grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.2fr);
   gap: 20px;
+}
+
+.pack-tabs-panel {
+  display: grid;
+  gap: 20px;
+}
+
+.pack-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pack-tab-button {
+  appearance: none;
+  border: 1px solid rgba(22, 66, 91, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--text-strong);
+  padding: 12px 18px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.pack-tab-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(246, 174, 45, 0.45);
+  background: rgba(246, 174, 45, 0.12);
+}
+
+.pack-tab-button-active {
+  border-color: rgba(246, 174, 45, 0.58);
+  background:
+    linear-gradient(135deg, rgba(246, 174, 45, 0.22), rgba(22, 66, 91, 0.08)),
+    rgba(255, 255, 255, 0.82);
+  box-shadow: 0 10px 26px rgba(17, 45, 78, 0.12);
+}
+
+.pack-tab-panel {
+  display: grid;
+  gap: 18px;
 }
 
 .pack-layout {
@@ -732,6 +846,13 @@
 .pack-preview-panel {
   display: grid;
   gap: 18px;
+}
+
+.pack-inventory-layout {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.95fr) minmax(0, 1.05fr);
+  gap: 20px;
+  align-items: start;
 }
 
 .pack-map-grid {
@@ -747,6 +868,10 @@
   border: 1px solid var(--panel-border);
   background: rgba(255, 255, 255, 0.58);
   padding: 18px;
+}
+
+.pack-map-card .pack-map {
+  height: 420px;
 }
 
 .pack-map-shell {
@@ -1027,7 +1152,9 @@
   .login-shell,
   .app-shell,
   .reservation-layout,
-  .pack-layout {
+  .poi-map-grid,
+  .pack-layout,
+  .pack-inventory-layout {
     grid-template-columns: 1fr;
   }
 
@@ -1048,6 +1175,11 @@
   .panel {
     padding: 20px;
     border-radius: 24px;
+  }
+
+  .pack-tabs {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .hero-grid,
@@ -1073,6 +1205,10 @@
     justify-self: stretch;
   }
 
+  .pack-tab-button {
+    width: 100%;
+  }
+
   .pack-spot-header {
     flex-direction: column;
     align-items: flex-start;
@@ -1084,6 +1220,8 @@
 
   .workspace-header,
   .panel-header,
+  .poi-row-header,
+  .poi-row-actions,
   .student-panel-header,
   .student-roster-header,
   .data-section-header,
