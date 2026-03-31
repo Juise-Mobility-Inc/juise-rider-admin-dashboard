@@ -69,6 +69,25 @@ export interface SchoolPOI {
   updated_at: number;
 }
 
+export interface SchoolZonePoint {
+  lat: number;
+  lng: number;
+}
+
+export interface SchoolZone {
+  zone_uuid: string;
+  app_id: string;
+  school_id: string;
+  title: string;
+  description: string;
+  zone_type: "no_go" | "speed_limit";
+  speed_limit_mph?: number | null;
+  polygon: SchoolZonePoint[];
+  active: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
 export interface SchoolColorScheme {
   primary?: string;
   secondary?: string;
@@ -116,6 +135,15 @@ export interface SchoolPOIWriteInput {
   lat: number;
   lng: number;
   bonus_points: number;
+}
+
+export interface SchoolZoneWriteInput {
+  zone_uuid?: string;
+  title: string;
+  description: string;
+  zone_type: "no_go" | "speed_limit";
+  speed_limit_mph?: number | null;
+  polygon: SchoolZonePoint[];
 }
 
 export interface PackLocationInput {
@@ -652,6 +680,35 @@ export async function saveSchoolPOIs(
     {
       method: "PUT",
       body: { pois },
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
+export async function fetchSchoolZones(
+  managedAppId: string,
+  schoolId: string,
+): Promise<SchoolZone[]> {
+  return request<SchoolZone[]>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/zones`,
+    {
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
+export async function saveSchoolZones(
+  managedAppId: string,
+  schoolId: string,
+  zones: SchoolZoneWriteInput[],
+): Promise<SchoolZone[]> {
+  return request<SchoolZone[]>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/zones`,
+    {
+      method: "PUT",
+      body: { zones },
       appIdHeader: managedAppId,
     },
   );

@@ -17,6 +17,7 @@ import {
   fetchPendingReservations,
   fetchSchool,
   fetchSchoolPOIs,
+  fetchSchoolZones,
   fetchSchoolStudentRoster,
   fetchSchoolTermReservations,
   fetchStudentProfile,
@@ -28,6 +29,7 @@ import {
   loginWithIdentifier,
   saveSchool,
   saveSchoolPOIs,
+  saveSchoolZones,
   saveSchoolTerms,
   setApiSession,
   setSessionObserver,
@@ -39,6 +41,7 @@ import {
   type School,
   type SchoolColorScheme,
   type SchoolPOI,
+  type SchoolZone,
   type SchoolStudentRosterEntry,
   type SchoolTerm,
   type StudentProfileBundle,
@@ -52,6 +55,11 @@ import {
   type PackMapPoint,
 } from "./components/PackLocationPicker";
 import {
+  SchoolZoneMapEditor,
+  SchoolZonesMap,
+  type SchoolZoneMapPolygon,
+} from "./components/SchoolZoneMapEditor";
+import {
   clearDashboardSession,
   readDashboardContext,
   readDashboardSession,
@@ -64,6 +72,7 @@ type Section =
   | "school"
   | "terms"
   | "pois"
+  | "zones"
   | "students"
   | "packs"
   | "reservations";
@@ -79,6 +88,7 @@ const dashboardSections: Array<{
   { section: "school", label: "School Profile", path: "/school" },
   { section: "terms", label: "School Terms", path: "/terms" },
   { section: "pois", label: "School POIs", path: "/pois" },
+  { section: "zones", label: "School Zones", path: "/zones" },
   { section: "students", label: "Students", path: "/students" },
   { section: "packs", label: "Juise Packs", path: "/packs" },
   {
@@ -124,6 +134,16 @@ interface POIDraft {
   lat: string;
   lng: string;
   bonus_points: string;
+}
+
+interface ZoneDraft {
+  id: string;
+  zone_uuid: string;
+  title: string;
+  description: string;
+  zone_type: "no_go" | "speed_limit";
+  speed_limit_mph: string;
+  polygon: PackMapPoint[];
 }
 
 interface SignupFormState {
@@ -363,6 +383,44 @@ function createEmptyPOIDraft(): POIDraft {
     lat: "",
     lng: "",
     bonus_points: "0",
+  };
+}
+
+function zoneToDraft(zone: SchoolZone): ZoneDraft {
+  return {
+    id: zone.zone_uuid || makeDraftId(),
+    zone_uuid: zone.zone_uuid,
+    title: zone.title,
+    description: zone.description,
+    zone_type: zone.zone_type,
+    speed_limit_mph:
+      typeof zone.speed_limit_mph === "number"
+        ? String(zone.speed_limit_mph)
+        : "",
+    polygon: Array.isArray(zone.polygon)
+      ? zone.polygon
+          .filter(
+            (point) => Number.isFinite(point.lat) && Number.isFinite(point.lng),
+          )
+          .map((point) => ({
+            lat: point.lat,
+            lng: point.lng,
+          }))
+      : [],
+  };
+}
+
+function createEmptyZoneDraft(
+  zoneType: ZoneDraft["zone_type"] = "no_go",
+): ZoneDraft {
+  return {
+    id: makeDraftId(),
+    zone_uuid: "",
+    title: "",
+    description: "",
+    zone_type: zoneType,
+    speed_limit_mph: zoneType === "speed_limit" ? "15" : "",
+    polygon: [],
   };
 }
 
@@ -750,6 +808,21 @@ function sortPOIsForDisplay(pois: SchoolPOI[]): SchoolPOI[] {
   });
 }
 
+function sortZonesForDisplay(zones: SchoolZone[]): SchoolZone[] {
+  return [...zones].sort((left, right) => {
+    if (left.zone_type !== right.zone_type) {
+      return left.zone_type.localeCompare(right.zone_type);
+    }
+
+    const leftTitle = left.title.trim().toLowerCase();
+    const rightTitle = right.title.trim().toLowerCase();
+    if (leftTitle !== rightTitle) {
+      return leftTitle.localeCompare(rightTitle);
+    }
+    return left.zone_uuid.localeCompare(right.zone_uuid);
+  });
+}
+
 function normalizeDashboardPath(pathname: string): string {
   if (!pathname || pathname === "/") {
     return pathname || "/";
@@ -801,6 +874,9 @@ function App() {
   const [poiDrafts, setPoiDrafts] = useState<POIDraft[]>([]);
   const [poiBusy, setPoiBusy] = useState(false);
   const [activePoiDraftId, setActivePoiDraftId] = useState("");
+  const [zoneDrafts, setZoneDrafts] = useState<ZoneDraft[]>([]);
+  const [zoneBusy, setZoneBusy] = useState(false);
+  const [activeZoneDraftId, setActiveZoneDraftId] = useState("");
   const [packDraft, setPackDraft] = useState<PackDraft>(() =>
     createEmptyPackDraft(),
   );
@@ -859,6 +935,11 @@ function App() {
     [activePoiDraftId, poiDrafts],
   );
 
+  const selectedZoneDraft = useMemo(
+    () => zoneDrafts.find((zone) => zone.id === activeZoneDraftId) ?? null,
+    [activeZoneDraftId, zoneDrafts],
+  );
+
   const selectedPoiLocation = useMemo<PackMapPoint | null>(() => {
     const lat = selectedPoiDraft?.lat.trim() ?? "";
     const lng = selectedPoiDraft?.lng.trim() ?? "";
@@ -913,6 +994,37 @@ function App() {
         return sum + (Number.isFinite(bonusPoints) ? bonusPoints : 0);
       }, 0),
     [poiDrafts],
+  );
+
+  const zoneMapPolygons = useMemo<SchoolZoneMapPolygon[]>(
+    () =>
+      zoneDrafts.map((zone) => ({
+        id: zone.zone_uuid || zone.id,
+        label: zone.title.trim() || "Untitled zone",
+        description: [
+          zone.description.trim(),
+          zone.zone_type === "no_go"
+            ? "No-go zone"
+            : zone.speed_limit_mph.trim()
+              ? `${zone.speed_limit_mph.trim()} mph limit`
+              : "Speed limit zone",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        zoneType: zone.zone_type,
+        speedLimitMph: (() => {
+          const parsed = Number(zone.speed_limit_mph.trim());
+          return Number.isFinite(parsed) ? parsed : null;
+        })(),
+        points: zone.polygon,
+        highlighted: zone.id === activeZoneDraftId,
+      })),
+    [activeZoneDraftId, zoneDrafts],
+  );
+
+  const mappedZoneCount = useMemo(
+    () => zoneDrafts.filter((zone) => zone.polygon.length >= 3).length,
+    [zoneDrafts],
   );
 
   const selectedReservation = useMemo(
@@ -1224,6 +1336,10 @@ function App() {
   }, [activeSchoolId]);
 
   useEffect(() => {
+    setZoneDrafts([]);
+  }, [activeSchoolId]);
+
+  useEffect(() => {
     if (poiDrafts.length === 0) {
       setActivePoiDraftId("");
       return;
@@ -1233,6 +1349,19 @@ function App() {
       poiDrafts.some((poi) => poi.id === current) ? current : poiDrafts[0].id,
     );
   }, [poiDrafts]);
+
+  useEffect(() => {
+    if (zoneDrafts.length === 0) {
+      setActiveZoneDraftId("");
+      return;
+    }
+
+    setActiveZoneDraftId((current) =>
+      zoneDrafts.some((zone) => zone.id === current)
+        ? current
+        : zoneDrafts[0].id,
+    );
+  }, [zoneDrafts]);
 
   useEffect(() => {
     setManagedAppInput(context.managedAppId);
@@ -1476,6 +1605,46 @@ function App() {
   }, [activeSchoolId, context.managedAppId, currentSection, session]);
 
   useEffect(() => {
+    if (!session || currentSection !== "zones" || !activeSchoolId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadSchoolZones() {
+      setZoneBusy(true);
+      try {
+        const zones = await fetchSchoolZones(
+          context.managedAppId,
+          activeSchoolId,
+        );
+        if (cancelled) {
+          return;
+        }
+
+        setZoneDrafts(sortZonesForDisplay(zones).map(zoneToDraft));
+      } catch (error) {
+        if (!cancelled) {
+          setBanner({
+            tone: "error",
+            message: getErrorMessage(error),
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setZoneBusy(false);
+        }
+      }
+    }
+
+    void loadSchoolZones();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSchoolId, context.managedAppId, currentSection, session]);
+
+  useEffect(() => {
     if (!session || !selectedReservation) {
       setStudentProfile(null);
       setStudentError("");
@@ -1674,6 +1843,25 @@ function App() {
       });
     } finally {
       setPoiBusy(false);
+    }
+  }
+
+  async function refreshSchoolZones() {
+    if (!session || !activeSchoolId) {
+      return;
+    }
+
+    setZoneBusy(true);
+    try {
+      const zones = await fetchSchoolZones(context.managedAppId, activeSchoolId);
+      setZoneDrafts(sortZonesForDisplay(zones).map(zoneToDraft));
+    } catch (error) {
+      setBanner({
+        tone: "error",
+        message: getErrorMessage(error),
+      });
+    } finally {
+      setZoneBusy(false);
     }
   }
 
@@ -1977,6 +2165,23 @@ function App() {
     );
   }
 
+  function handleZonePointAdd(point: PackMapPoint) {
+    if (!activeZoneDraftId) {
+      return;
+    }
+
+    setZoneDrafts((current) =>
+      current.map((zone) =>
+        zone.id === activeZoneDraftId
+          ? {
+              ...zone,
+              polygon: [...zone.polygon, point],
+            }
+          : zone,
+      ),
+    );
+  }
+
   async function handleSavePOIs() {
     if (!activeSchoolId) {
       setBanner({
@@ -2035,6 +2240,82 @@ function App() {
       });
     } finally {
       setPoiBusy(false);
+    }
+  }
+
+  async function handleSaveZones() {
+    if (!activeSchoolId) {
+      setBanner({
+        tone: "error",
+        message: "Save the school profile first before managing zones.",
+      });
+      return;
+    }
+
+    setZoneBusy(true);
+    try {
+      const savedZones = await saveSchoolZones(
+        context.managedAppId,
+        activeSchoolId,
+        zoneDrafts.map((zone, index) => {
+          const title = zone.title.trim();
+          if (!title) {
+            throw new Error(`Zone ${index + 1} title is required.`);
+          }
+          if (zone.polygon.length < 3) {
+            throw new Error(
+              `Zone ${index + 1} needs at least 3 polygon points.`,
+            );
+          }
+
+          const speedLimitMPH = zone.speed_limit_mph.trim();
+          if (zone.zone_type === "speed_limit") {
+            const parsedSpeedLimit = Number(speedLimitMPH);
+            if (!Number.isFinite(parsedSpeedLimit) || parsedSpeedLimit <= 0) {
+              throw new Error(
+                `Zone ${index + 1} speed limit must be greater than 0 mph.`,
+              );
+            }
+
+            return {
+              zone_uuid: zone.zone_uuid.trim() || undefined,
+              title,
+              description: zone.description.trim(),
+              zone_type: zone.zone_type,
+              speed_limit_mph: parsedSpeedLimit,
+              polygon: zone.polygon.map((point) => ({
+                lat: point.lat,
+                lng: point.lng,
+              })),
+            };
+          }
+
+          return {
+            zone_uuid: zone.zone_uuid.trim() || undefined,
+            title,
+            description: zone.description.trim(),
+            zone_type: zone.zone_type,
+            speed_limit_mph: null,
+            polygon: zone.polygon.map((point) => ({
+              lat: point.lat,
+              lng: point.lng,
+            })),
+          };
+        }),
+      );
+
+      setZoneDrafts(sortZonesForDisplay(savedZones).map(zoneToDraft));
+      setBanner({
+        tone: "success",
+        message: `Updated ${savedZones.length} school zone${savedZones.length === 1 ? "" : "s"}.`,
+      });
+    } catch (error) {
+      setBanner({
+        tone: "error",
+        message: getErrorMessage(error),
+      });
+    } finally {
+      setZoneBusy(false);
     }
   }
 
@@ -3117,6 +3398,325 @@ function App() {
                               )
                             }
                             placeholder="Give riders a quick reason this checkpoint matters."
+                            rows={4}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {currentSection === "zones" ? (
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">School Zones</p>
+                <h2>Manage no-go and speed limit polygons</h2>
+              </div>
+              <div className="form-actions">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() =>
+                    setZoneDrafts((current) => [
+                      ...current,
+                      createEmptyZoneDraft("no_go"),
+                    ])
+                  }
+                  disabled={!activeSchoolId}
+                >
+                  Add No-Go Zone
+                </button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() =>
+                    setZoneDrafts((current) => [
+                      ...current,
+                      createEmptyZoneDraft("speed_limit"),
+                    ])
+                  }
+                  disabled={!activeSchoolId}
+                >
+                  Add Speed Zone
+                </button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => void refreshSchoolZones()}
+                  disabled={zoneBusy || !activeSchoolId}
+                >
+                  Reload
+                </button>
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => void handleSaveZones()}
+                  disabled={zoneBusy || !activeSchoolId}
+                >
+                  Save Zones
+                </button>
+              </div>
+            </div>
+
+            {zoneBusy ? (
+              <p className="muted-text">Syncing school zones…</p>
+            ) : null}
+
+            {!activeSchoolId ? (
+              <p className="empty-state">
+                This admin login is not scoped to a school.
+              </p>
+            ) : null}
+
+            {activeSchoolId ? (
+              <div className="zone-layout">
+                <div className="zone-map-grid">
+                  <div className="map-card">
+                    <div className="data-section-header">
+                      <h3>Zone polygon editor</h3>
+                      <span>
+                        {selectedZoneDraft
+                          ? selectedZoneDraft.title.trim() || "Selected zone"
+                          : "No zone selected"}
+                      </span>
+                    </div>
+                    {zoneDrafts.length === 0 ? (
+                      <p className="empty-state">
+                        Add a no-go or speed limit zone to begin drawing a
+                        polygon.
+                      </p>
+                    ) : (
+                      <>
+                        <SchoolZoneMapEditor
+                          disabled={!selectedZoneDraft}
+                          onAddPoint={handleZonePointAdd}
+                          polygons={zoneMapPolygons}
+                          selectedPolygon={
+                            selectedZoneDraft
+                              ? zoneMapPolygons.find(
+                                  (polygon) =>
+                                    polygon.id ===
+                                    (selectedZoneDraft.zone_uuid ||
+                                      selectedZoneDraft.id),
+                                ) ?? null
+                              : null
+                          }
+                        />
+                        <p className="muted-text">
+                          Choose a zone row, then click the map to add polygon
+                          vertices. Use undo or clear to reshape the zone.
+                        </p>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="map-card">
+                    <div className="data-section-header">
+                      <h3>School zone coverage</h3>
+                      <span>{mappedZoneCount} mapped polygons</span>
+                    </div>
+                    <SchoolZonesMap polygons={zoneMapPolygons} />
+                    <div className="detail-grid">
+                      <DetailRow
+                        label="Active Zones"
+                        value={String(zoneDrafts.length)}
+                      />
+                      <DetailRow
+                        label="Mapped Polygons"
+                        value={String(mappedZoneCount)}
+                      />
+                      <DetailRow
+                        label="No-Go Zones"
+                        value={String(
+                          zoneDrafts.filter((zone) => zone.zone_type === "no_go")
+                            .length,
+                        )}
+                      />
+                      <DetailRow
+                        label="Speed Zones"
+                        value={String(
+                          zoneDrafts.filter(
+                            (zone) => zone.zone_type === "speed_limit",
+                          ).length,
+                        )}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="zone-list">
+                  {zoneDrafts.length === 0 ? (
+                    <p className="empty-state">
+                      No school zones configured yet for this school.
+                    </p>
+                  ) : null}
+                  {zoneDrafts.map((zone, index) => (
+                    <div
+                      className={`zone-row ${
+                        zone.id === activeZoneDraftId ? "zone-row-active" : ""
+                      }`}
+                      key={zone.id}
+                    >
+                      <div className="zone-row-header">
+                        <div>
+                          <p className="eyebrow">Zone {index + 1}</p>
+                          <h3>{zone.title.trim() || "Untitled zone"}</h3>
+                        </div>
+                        <div className="zone-row-actions">
+                          <button
+                            className="secondary-button"
+                            type="button"
+                            onClick={() => setActiveZoneDraftId(zone.id)}
+                          >
+                            {zone.id === activeZoneDraftId
+                              ? "Editing on Map"
+                              : "Pick on Map"}
+                          </button>
+                          <button
+                            className="secondary-button"
+                            type="button"
+                            onClick={() =>
+                              setZoneDrafts((current) =>
+                                current.map((item) =>
+                                  item.id === zone.id
+                                    ? {
+                                        ...item,
+                                        polygon: item.polygon.slice(0, -1),
+                                      }
+                                    : item,
+                                ),
+                              )
+                            }
+                            disabled={zone.polygon.length === 0}
+                          >
+                            Undo Point
+                          </button>
+                          <button
+                            className="secondary-button"
+                            type="button"
+                            onClick={() =>
+                              setZoneDrafts((current) =>
+                                current.map((item) =>
+                                  item.id === zone.id
+                                    ? { ...item, polygon: [] }
+                                    : item,
+                                ),
+                              )
+                            }
+                            disabled={zone.polygon.length === 0}
+                          >
+                            Clear Shape
+                          </button>
+                          <button
+                            className="danger-button"
+                            type="button"
+                            onClick={() =>
+                              setZoneDrafts((current) =>
+                                current.filter((item) => item.id !== zone.id),
+                              )
+                            }
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="form-grid">
+                        <label className="field">
+                          <span>Title</span>
+                          <input
+                            value={zone.title}
+                            onChange={(event) =>
+                              setZoneDrafts((current) =>
+                                current.map((item) =>
+                                  item.id === zone.id
+                                    ? { ...item, title: event.target.value }
+                                    : item,
+                                ),
+                              )
+                            }
+                            placeholder="North Mall No-Go Zone"
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Zone Type</span>
+                          <select
+                            value={zone.zone_type}
+                            onChange={(event) =>
+                              setZoneDrafts((current) =>
+                                current.map((item) =>
+                                  item.id === zone.id
+                                    ? {
+                                        ...item,
+                                        zone_type: event.target
+                                          .value as ZoneDraft["zone_type"],
+                                        speed_limit_mph:
+                                          event.target.value === "speed_limit"
+                                            ? item.speed_limit_mph || "15"
+                                            : "",
+                                      }
+                                    : item,
+                                ),
+                              )
+                            }
+                          >
+                            <option value="no_go">No-go zone</option>
+                            <option value="speed_limit">Speed limit zone</option>
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span>Speed Limit (mph)</span>
+                          <input
+                            disabled={zone.zone_type !== "speed_limit"}
+                            min={1}
+                            step={1}
+                            type="number"
+                            value={zone.speed_limit_mph}
+                            onChange={(event) =>
+                              setZoneDrafts((current) =>
+                                current.map((item) =>
+                                  item.id === zone.id
+                                    ? {
+                                        ...item,
+                                        speed_limit_mph: event.target.value,
+                                      }
+                                    : item,
+                                ),
+                              )
+                            }
+                            placeholder="15"
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Vertices</span>
+                          <input
+                            disabled
+                            value={String(zone.polygon.length)}
+                            placeholder="0"
+                          />
+                        </label>
+                        <label className="field field-span-2">
+                          <span>Description</span>
+                          <textarea
+                            value={zone.description}
+                            onChange={(event) =>
+                              setZoneDrafts((current) =>
+                                current.map((item) =>
+                                  item.id === zone.id
+                                    ? {
+                                        ...item,
+                                        description: event.target.value,
+                                      }
+                                    : item,
+                                ),
+                              )
+                            }
+                            placeholder="Explain why riders lose points here."
                             rows={4}
                           />
                         </label>

@@ -734,17 +734,22 @@
 
 .poi-layout,
 .poi-list,
-.poi-map-grid {
+.poi-map-grid,
+.zone-layout,
+.zone-list,
+.zone-map-grid {
   display: grid;
   gap: 18px;
 }
 
-.poi-map-grid {
+.poi-map-grid,
+.zone-map-grid {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: start;
 }
 
-.poi-row {
+.poi-row,
+.zone-row {
   display: grid;
   gap: 16px;
   padding: 18px;
@@ -757,28 +762,34 @@
     transform 140ms ease;
 }
 
-.poi-row-active {
+.poi-row-active,
+.zone-row-active {
   border-color: rgba(246, 174, 45, 0.42);
   box-shadow: 0 12px 28px rgba(17, 45, 78, 0.1);
   transform: translateY(-1px);
 }
 
 .poi-row-header,
-.poi-row-actions {
+.poi-row-actions,
+.zone-row-header,
+.zone-row-actions {
   display: flex;
   gap: 12px;
 }
 
-.poi-row-header {
+.poi-row-header,
+.zone-row-header {
   justify-content: space-between;
   align-items: flex-start;
 }
 
-.poi-row-header h3 {
+.poi-row-header h3,
+.zone-row-header h3 {
   margin: 0;
 }
 
-.poi-row-actions {
+.poi-row-actions,
+.zone-row-actions {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -1153,6 +1164,7 @@
   .app-shell,
   .reservation-layout,
   .poi-map-grid,
+  .zone-map-grid,
   .pack-layout,
   .pack-inventory-layout {
     grid-template-columns: 1fr;
@@ -1222,6 +1234,8 @@
   .panel-header,
   .poi-row-header,
   .poi-row-actions,
+  .zone-row-header,
+  .zone-row-actions,
   .student-panel-header,
   .student-roster-header,
   .data-section-header,
