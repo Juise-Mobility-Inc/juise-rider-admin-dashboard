@@ -2182,6 +2182,46 @@ function App() {
     );
   }
 
+  function handleZonePointMove(pointIndex: number, point: PackMapPoint) {
+    if (!activeZoneDraftId) {
+      return;
+    }
+
+    setZoneDrafts((current) =>
+      current.map((zone) =>
+        zone.id === activeZoneDraftId
+          ? {
+              ...zone,
+              polygon: zone.polygon.map((existingPoint, index) =>
+                index === pointIndex ? point : existingPoint,
+              ),
+            }
+          : zone,
+      ),
+    );
+  }
+
+  function handleZonePointInsert(pointIndex: number, point: PackMapPoint) {
+    if (!activeZoneDraftId) {
+      return;
+    }
+
+    setZoneDrafts((current) =>
+      current.map((zone) =>
+        zone.id === activeZoneDraftId
+          ? {
+              ...zone,
+              polygon: [
+                ...zone.polygon.slice(0, pointIndex),
+                point,
+                ...zone.polygon.slice(pointIndex),
+              ],
+            }
+          : zone,
+      ),
+    );
+  }
+
   async function handleSavePOIs() {
     if (!activeSchoolId) {
       setBanner({
@@ -3495,6 +3535,8 @@ function App() {
                         <SchoolZoneMapEditor
                           disabled={!selectedZoneDraft}
                           onAddPoint={handleZonePointAdd}
+                          onInsertPoint={handleZonePointInsert}
+                          onMovePoint={handleZonePointMove}
                           polygons={zoneMapPolygons}
                           selectedPolygon={
                             selectedZoneDraft
@@ -3508,8 +3550,10 @@ function App() {
                           }
                         />
                         <p className="muted-text">
-                          Choose a zone row, then click the map to add polygon
-                          vertices. Use undo or clear to reshape the zone.
+                          Choose a zone row, then click to add vertices, drag
+                          any existing point to reshape the outline, and tap
+                          midpoint handles to insert a new point without
+                          redrawing the whole zone.
                         </p>
                       </>
                     )}
