@@ -88,6 +88,86 @@ export interface SchoolZone {
   updated_at: number;
 }
 
+export interface SchoolChallenge {
+  challenge_uuid: string;
+  app_id: string;
+  school_id: string;
+  title: string;
+  description: string;
+  image_url: string;
+  metric_type: "distance_miles" | "points";
+  target_value: number;
+  start_time: number;
+  end_time: number;
+  active: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface SchoolChallengeWriteInput {
+  title: string;
+  description: string;
+  image_url: string;
+  metric_type: "distance_miles" | "points";
+  target_value: number;
+  start_time: number;
+  end_time: number;
+  active?: boolean;
+}
+
+export interface SchoolChallengeImageUploadInitResponse {
+  school_id: string;
+  object_key: string;
+  public_url: string;
+  put_url: string;
+  content_type: string;
+  expires_in: number;
+}
+
+export interface SchoolChallengeImageUploadResponse {
+  school_id: string;
+  object_key: string;
+  public_url: string;
+  content_type: string;
+  size: number;
+}
+
+export interface SchoolChallengeParticipation {
+  participation_uuid: string;
+  challenge_uuid: string;
+  app_id: string;
+  school_id: string;
+  user_uuid: string;
+  membership_uuid: string;
+  joined_at: number;
+  left_at?: number | null;
+  active: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface SchoolChallengeParticipantProgress {
+  participation_uuid: string;
+  challenge_uuid: string;
+  user_uuid: string;
+  membership_uuid: string;
+  student_id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  username: string;
+  joined_at: number;
+  left_at?: number | null;
+  active: boolean;
+  metric_type: "distance_miles" | "points";
+  target_value: number;
+  progress_value: number;
+  completion_percent: number;
+  completed: boolean;
+  total_sessions: number;
+  last_activity_at?: number | null;
+}
+
 export interface SchoolColorScheme {
   primary?: string;
   secondary?: string;
@@ -144,6 +224,16 @@ export interface SchoolZoneWriteInput {
   zone_type: "no_go" | "speed_limit";
   speed_limit_mph?: number | null;
   polygon: SchoolZonePoint[];
+}
+
+export interface UserSchoolChallengeProgress {
+  challenge: SchoolChallenge;
+  participation?: SchoolChallengeParticipation | null;
+  progress_value: number;
+  completion_percent: number;
+  completed: boolean;
+  total_sessions: number;
+  last_activity_at?: number | null;
 }
 
 export interface PackLocationInput {
@@ -712,6 +802,164 @@ export async function saveSchoolZones(
       appIdHeader: managedAppId,
     },
   );
+}
+
+export async function fetchSchoolChallenges(
+  managedAppId: string,
+  schoolId: string,
+): Promise<SchoolChallenge[]> {
+  return request<SchoolChallenge[]>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/challenges`,
+    {
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
+export async function createSchoolChallenge(
+  managedAppId: string,
+  schoolId: string,
+  input: SchoolChallengeWriteInput,
+): Promise<SchoolChallenge> {
+  return request<SchoolChallenge>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/challenges`,
+    {
+      method: "POST",
+      body: input,
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
+export async function updateSchoolChallenge(
+  managedAppId: string,
+  schoolId: string,
+  challengeUUID: string,
+  input: SchoolChallengeWriteInput,
+): Promise<SchoolChallenge> {
+  return request<SchoolChallenge>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/challenges/${encodeURIComponent(challengeUUID)}`,
+    {
+      method: "PUT",
+      body: input,
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
+export async function deleteSchoolChallenge(
+  managedAppId: string,
+  schoolId: string,
+  challengeUUID: string,
+): Promise<void> {
+  return request<void>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/challenges/${encodeURIComponent(challengeUUID)}`,
+    {
+      method: "DELETE",
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
+export async function fetchSchoolChallengeParticipants(
+  managedAppId: string,
+  schoolId: string,
+  challengeUUID: string,
+): Promise<SchoolChallengeParticipantProgress[]> {
+  return request<SchoolChallengeParticipantProgress[]>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/challenges/${encodeURIComponent(challengeUUID)}/participants`,
+    {
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
+export async function initSchoolChallengeImageUpload(
+  managedAppId: string,
+  schoolId: string,
+  input: {
+    file_ext?: string;
+    content_type?: string;
+  },
+): Promise<SchoolChallengeImageUploadInitResponse> {
+  return request<SchoolChallengeImageUploadInitResponse>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/challenges/media/upload/init`,
+    {
+      method: "POST",
+      body: input,
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
+export async function uploadSchoolChallengeImage(
+  managedAppId: string,
+  schoolId: string,
+  file: File,
+  retryOnUnauthorized = true,
+): Promise<SchoolChallengeImageUploadResponse> {
+  const bearerToken = currentSession?.tokens.access_token.token;
+  if (!bearerToken) {
+    throw new Error("Login required");
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("file_ext", file.name.split(".").pop()?.trim() ?? "");
+  if (file.type) {
+    formData.append("content_type", file.type);
+  }
+
+  const response = await fetch(
+    `${serviceBase.nebula}/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/challenges/media/upload`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${bearerToken}`,
+        "X-App-Id": managedAppId,
+      },
+      body: formData,
+    },
+  );
+
+  if (response.status === 401 && retryOnUnauthorized) {
+    await refreshSession();
+    return uploadSchoolChallengeImage(managedAppId, schoolId, file, false);
+  }
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response));
+  }
+
+  return parseResponse<SchoolChallengeImageUploadResponse>(response);
+}
+
+export async function uploadFileToSignedUrl(
+  putUrl: string,
+  file: Blob,
+  contentType?: string,
+): Promise<void> {
+  const headers = new Headers();
+  if (contentType) {
+    headers.set("Content-Type", contentType);
+  }
+
+  const response = await fetch(putUrl, {
+    method: "PUT",
+    headers,
+    body: file,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text.trim() || `Upload failed with status ${response.status}`);
+  }
 }
 
 export async function createSchoolPack(

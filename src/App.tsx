@@ -1,4 +1,5 @@
 import {
+  type ChangeEvent,
   type CSSProperties,
   type FormEvent,
   useEffect,
@@ -9,13 +10,17 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
 import {
   approveReservation,
+  createSchoolChallenge,
   createSchoolPack,
   createSchoolAdminAccount,
+  deleteSchoolChallenge,
   denyReservation,
   fetchAdminSchoolPacks,
   fetchNebulaUser,
   fetchPendingReservations,
   fetchSchool,
+  fetchSchoolChallengeParticipants,
+  fetchSchoolChallenges,
   fetchSchoolPOIs,
   fetchSchoolZones,
   fetchSchoolStudentRoster,
@@ -40,11 +45,15 @@ import {
   type PackSpotReservation,
   type School,
   type SchoolColorScheme,
+  type SchoolChallenge,
+  type SchoolChallengeParticipantProgress,
   type SchoolPOI,
   type SchoolZone,
   type SchoolStudentRosterEntry,
   type SchoolTerm,
   type StudentProfileBundle,
+  updateSchoolChallenge,
+  uploadSchoolChallengeImage,
   type UserMediaAsset,
   type UserSchoolMembership,
 } from "./lib/api";
@@ -73,6 +82,7 @@ type Section =
   | "terms"
   | "pois"
   | "zones"
+  | "challenges"
   | "students"
   | "packs"
   | "reservations";
@@ -89,6 +99,7 @@ const dashboardSections: Array<{
   { section: "terms", label: "School Terms", path: "/terms" },
   { section: "pois", label: "School POIs", path: "/pois" },
   { section: "zones", label: "School Zones", path: "/zones" },
+  { section: "challenges", label: "Challenges", path: "/challenges" },
   { section: "students", label: "Students", path: "/students" },
   { section: "packs", label: "Juise Packs", path: "/packs" },
   {
@@ -165,9 +176,22 @@ interface PackDraft {
   lng: string;
 }
 
+interface ChallengeDraft {
+  challenge_uuid: string;
+  title: string;
+  description: string;
+  image_url: string;
+  metric_type: "distance_miles" | "points";
+  target_value: string;
+  start_time: string;
+  end_time: string;
+  active: boolean;
+}
+
 type StudentIdPhotoSlot = "front" | "back";
 type StudentIdPhotoKeys = Partial<Record<StudentIdPhotoSlot, string>>;
 type StudentRosterPhotoKeyMap = Record<string, StudentIdPhotoKeys>;
+const newChallengeSelectionId = "__new_challenge__";
 
 const authAppId =
   import.meta.env.VITE_AUTH_APP_ID ?? "juise_rider_admin_dashboard";
@@ -435,6 +459,51 @@ function createEmptyPackDraft(defaultCampusId = ""): PackDraft {
   };
 }
 
+function formatDateTimeLocalValue(value?: number): string {
+  if (!value || value <= 0) {
+    return "";
+  }
+
+  const date = new Date(value * 1000);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function createEmptyChallengeDraft(): ChallengeDraft {
+  const now = new Date();
+  const end = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  return {
+    challenge_uuid: "",
+    title: "",
+    description: "",
+    image_url: "",
+    metric_type: "distance_miles",
+    target_value: "10",
+    start_time: formatDateTimeLocalValue(Math.floor(now.getTime() / 1000)),
+    end_time: formatDateTimeLocalValue(Math.floor(end.getTime() / 1000)),
+    active: true,
+  };
+}
+
+function challengeToDraft(challenge: SchoolChallenge): ChallengeDraft {
+  return {
+    challenge_uuid: challenge.challenge_uuid,
+    title: challenge.title,
+    description: challenge.description,
+    image_url: challenge.image_url,
+    metric_type: challenge.metric_type,
+    target_value: String(challenge.target_value),
+    start_time: formatDateTimeLocalValue(challenge.start_time),
+    end_time: formatDateTimeLocalValue(challenge.end_time),
+    active: challenge.active,
+  };
+}
+
 function formatCoordinateValue(value: number): string {
   return value.toFixed(6);
 }
@@ -445,6 +514,20 @@ function parseCoordinateInput(value: string, label: string): number {
     throw new Error(`${label} must be a valid number.`);
   }
   return parsed;
+}
+
+function parseDateTimeLocalInput(value: string, label: string): number {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new Error(`${label} is required.`);
+  }
+
+  const parsed = new Date(trimmed).getTime();
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${label} must be a valid date and time.`);
+  }
+
+  return Math.floor(parsed / 1000);
 }
 
 function parseObjectJson(
@@ -670,6 +753,75 @@ function formatDateOnly(value: string): string {
   }).format(parsed);
 }
 
+function formatDateTimeForDisplay(value?: number): string {
+  if (!value) {
+    return "Not set";
+  }
+
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(value * 1000));
+  } catch {
+    return formatUnixTimestamp(value);
+  }
+}
+
+function formatChallengeMetricValue(
+  metricType: ChallengeDraft["metric_type"],
+  value: number,
+): string {
+  if (!Number.isFinite(value)) {
+    return metricType === "points" ? "0 pts" : "0 mi";
+  }
+
+  if (metricType === "points") {
+    const rounded = Math.round(value);
+    return `${rounded} pt${rounded === 1 ? "" : "s"}`;
+  }
+
+  const rounded = value >= 10 ? value.toFixed(0) : value.toFixed(1);
+  return `${rounded} mi`;
+}
+
+function resolveChallengeStatus(challenge: SchoolChallenge): string {
+  const now = Math.floor(Date.now() / 1000);
+  if (now < challenge.start_time) {
+    return "Upcoming";
+  }
+  if (now > challenge.end_time) {
+    return "Ended";
+  }
+  return "Live";
+}
+
+function sortChallengesForDisplay(
+  challenges: SchoolChallenge[],
+): SchoolChallenge[] {
+  return [...challenges].sort((left, right) => {
+    const leftStatus = resolveChallengeStatus(left);
+    const rightStatus = resolveChallengeStatus(right);
+    const statusRank = (status: string) =>
+      status === "Live" ? 0 : status === "Upcoming" ? 1 : 2;
+
+    if (statusRank(leftStatus) !== statusRank(rightStatus)) {
+      return statusRank(leftStatus) - statusRank(rightStatus);
+    }
+
+    if (leftStatus === "Upcoming" && left.start_time !== right.start_time) {
+      return left.start_time - right.start_time;
+    }
+    if (leftStatus === "Ended" && left.end_time !== right.end_time) {
+      return right.end_time - left.end_time;
+    }
+    if (left.start_time !== right.start_time) {
+      return left.start_time - right.start_time;
+    }
+    return left.title.localeCompare(right.title);
+  });
+}
+
 function DetailRow(props: { label: string; value: string }) {
   return (
     <div className="detail-row">
@@ -750,6 +902,36 @@ function SchoolLogoPreview(props: {
       ) : (
         <div className="school-logo-fallback" aria-hidden="true">
           {monogram}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChallengeImagePreview(props: {
+  imageUrl?: string;
+  label: string;
+}) {
+  const [hasImageError, setHasImageError] = useState(false);
+  const normalizedUrl = props.imageUrl?.trim() ?? "";
+  const showImage = normalizedUrl !== "" && !hasImageError;
+
+  useEffect(() => {
+    setHasImageError(false);
+  }, [normalizedUrl]);
+
+  return (
+    <div className="challenge-image-preview">
+      {showImage ? (
+        <img
+          className="challenge-image-preview-image"
+          src={normalizedUrl}
+          alt={`${props.label} challenge`}
+          onError={() => setHasImageError(true)}
+        />
+      ) : (
+        <div className="challenge-image-preview-fallback" aria-hidden="true">
+          Challenge image preview
         </div>
       )}
     </div>
@@ -877,6 +1059,22 @@ function App() {
   const [zoneDrafts, setZoneDrafts] = useState<ZoneDraft[]>([]);
   const [zoneBusy, setZoneBusy] = useState(false);
   const [activeZoneDraftId, setActiveZoneDraftId] = useState("");
+  const [schoolChallenges, setSchoolChallenges] = useState<SchoolChallenge[]>(
+    [],
+  );
+  const [challengeDraft, setChallengeDraft] = useState<ChallengeDraft>(() =>
+    createEmptyChallengeDraft(),
+  );
+  const [challengeBusy, setChallengeBusy] = useState(false);
+  const [challengeListBusy, setChallengeListBusy] = useState(false);
+  const [challengeImageUploadBusy, setChallengeImageUploadBusy] =
+    useState(false);
+  const [selectedChallengeId, setSelectedChallengeId] = useState("");
+  const [challengeParticipants, setChallengeParticipants] = useState<
+    SchoolChallengeParticipantProgress[]
+  >([]);
+  const [challengeParticipantsBusy, setChallengeParticipantsBusy] =
+    useState(false);
   const [packDraft, setPackDraft] = useState<PackDraft>(() =>
     createEmptyPackDraft(),
   );
@@ -938,6 +1136,14 @@ function App() {
   const selectedZoneDraft = useMemo(
     () => zoneDrafts.find((zone) => zone.id === activeZoneDraftId) ?? null,
     [activeZoneDraftId, zoneDrafts],
+  );
+
+  const selectedChallenge = useMemo(
+    () =>
+      schoolChallenges.find(
+        (challenge) => challenge.challenge_uuid === selectedChallengeId,
+      ) ?? null,
+    [schoolChallenges, selectedChallengeId],
   );
 
   const selectedPoiLocation = useMemo<PackMapPoint | null>(() => {
@@ -1117,6 +1323,18 @@ function App() {
     return reservationsByMembership;
   }, [schoolStudentReservations]);
 
+  const challengeParticipantSummary = useMemo(
+    () => ({
+      joined: challengeParticipants.length,
+      active: challengeParticipants.filter((participant) => participant.active)
+        .length,
+      completed: challengeParticipants.filter(
+        (participant) => participant.completed,
+      ).length,
+    }),
+    [challengeParticipants],
+  );
+
   const resolvedSchoolColors = useMemo(
     () => normalizeSchoolColorScheme(schoolDraft.color_scheme),
     [schoolDraft.color_scheme],
@@ -1196,6 +1414,17 @@ function App() {
       sortPacksForDisplay([
         nextPack,
         ...current.filter((pack) => pack.pack_uuid !== nextPack.pack_uuid),
+      ]),
+    );
+  }
+
+  function upsertSchoolChallenge(nextChallenge: SchoolChallenge) {
+    setSchoolChallenges((current) =>
+      sortChallengesForDisplay([
+        nextChallenge,
+        ...current.filter(
+          (challenge) => challenge.challenge_uuid !== nextChallenge.challenge_uuid,
+        ),
       ]),
     );
   }
@@ -1340,6 +1569,13 @@ function App() {
   }, [activeSchoolId]);
 
   useEffect(() => {
+    setSchoolChallenges([]);
+    setChallengeParticipants([]);
+    setChallengeDraft(createEmptyChallengeDraft());
+    setSelectedChallengeId("");
+  }, [activeSchoolId]);
+
+  useEffect(() => {
     if (poiDrafts.length === 0) {
       setActivePoiDraftId("");
       return;
@@ -1437,11 +1673,37 @@ function App() {
       setSchoolStudentReservations([]);
       setSchoolStudentMediaUrls({});
       setSchoolStudentRosterError("");
+      setSchoolChallenges([]);
+      setChallengeParticipants([]);
+      setChallengeDraft(createEmptyChallengeDraft());
+      setSelectedChallengeId("");
       setSchoolDraft(createEmptySchoolDraft());
       setTermDrafts([]);
       return;
     }
   }, [session]);
+
+  useEffect(() => {
+    if (selectedChallengeId === newChallengeSelectionId) {
+      setChallengeDraft(createEmptyChallengeDraft());
+      setChallengeParticipants([]);
+      return;
+    }
+
+    if (schoolChallenges.length === 0) {
+      setSelectedChallengeId("");
+      setChallengeDraft(createEmptyChallengeDraft());
+      setChallengeParticipants([]);
+      return;
+    }
+
+    if (!selectedChallenge) {
+      setSelectedChallengeId(schoolChallenges[0]?.challenge_uuid ?? "");
+      return;
+    }
+
+    setChallengeDraft(challengeToDraft(selectedChallenge));
+  }, [schoolChallenges, selectedChallenge, selectedChallengeId]);
 
   useEffect(() => {
     if (!session) {
@@ -1643,6 +1905,103 @@ function App() {
       cancelled = true;
     };
   }, [activeSchoolId, context.managedAppId, currentSection, session]);
+
+  useEffect(() => {
+    if (!session || currentSection !== "challenges" || !activeSchoolId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadSchoolChallenges() {
+      setChallengeListBusy(true);
+      try {
+        const challenges = await fetchSchoolChallenges(
+          context.managedAppId,
+          activeSchoolId,
+        );
+        if (cancelled) {
+          return;
+        }
+
+        setSchoolChallenges(sortChallengesForDisplay(challenges));
+      } catch (error) {
+        if (!cancelled) {
+          setBanner({
+            tone: "error",
+            message: getErrorMessage(error),
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setChallengeListBusy(false);
+        }
+      }
+    }
+
+    void loadSchoolChallenges();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSchoolId, context.managedAppId, currentSection, session]);
+
+  useEffect(() => {
+    if (
+      !session ||
+      currentSection !== "challenges" ||
+      !activeSchoolId ||
+      !selectedChallenge ||
+      selectedChallengeId === newChallengeSelectionId
+    ) {
+      setChallengeParticipants([]);
+      return;
+    }
+
+    let cancelled = false;
+    const selectedChallengeUUID = selectedChallenge.challenge_uuid;
+
+    async function loadChallengeParticipants() {
+      setChallengeParticipantsBusy(true);
+      try {
+        const participants = await fetchSchoolChallengeParticipants(
+          context.managedAppId,
+          activeSchoolId,
+          selectedChallengeUUID,
+        );
+        if (cancelled) {
+          return;
+        }
+
+        setChallengeParticipants(participants);
+      } catch (error) {
+        if (!cancelled) {
+          setChallengeParticipants([]);
+          setBanner({
+            tone: "error",
+            message: getErrorMessage(error),
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setChallengeParticipantsBusy(false);
+        }
+      }
+    }
+
+    void loadChallengeParticipants();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeSchoolId,
+    context.managedAppId,
+    currentSection,
+    selectedChallenge,
+    selectedChallengeId,
+    session,
+  ]);
 
   useEffect(() => {
     if (!session || !selectedReservation) {
@@ -1862,6 +2221,57 @@ function App() {
       });
     } finally {
       setZoneBusy(false);
+    }
+  }
+
+  async function refreshSchoolChallenges() {
+    if (!session || !activeSchoolId) {
+      return;
+    }
+
+    setChallengeListBusy(true);
+    try {
+      const challenges = await fetchSchoolChallenges(
+        context.managedAppId,
+        activeSchoolId,
+      );
+      setSchoolChallenges(sortChallengesForDisplay(challenges));
+    } catch (error) {
+      setBanner({
+        tone: "error",
+        message: getErrorMessage(error),
+      });
+    } finally {
+      setChallengeListBusy(false);
+    }
+  }
+
+  async function refreshChallengeParticipants(challengeUUID?: string) {
+    if (!session || !activeSchoolId) {
+      return;
+    }
+
+    const targetChallengeUUID = challengeUUID || selectedChallenge?.challenge_uuid;
+    if (!targetChallengeUUID) {
+      setChallengeParticipants([]);
+      return;
+    }
+
+    setChallengeParticipantsBusy(true);
+    try {
+      const participants = await fetchSchoolChallengeParticipants(
+        context.managedAppId,
+        activeSchoolId,
+        targetChallengeUUID,
+      );
+      setChallengeParticipants(participants);
+    } catch (error) {
+      setBanner({
+        tone: "error",
+        message: getErrorMessage(error),
+      });
+    } finally {
+      setChallengeParticipantsBusy(false);
     }
   }
 
@@ -2356,6 +2766,172 @@ function App() {
       });
     } finally {
       setZoneBusy(false);
+    }
+  }
+
+  async function handleChallengeImageFileChange(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+    if (!activeSchoolId) {
+      setBanner({
+        tone: "error",
+        message: "Save the school profile first before uploading challenge media.",
+      });
+      return;
+    }
+
+    setChallengeImageUploadBusy(true);
+    try {
+      const upload = await uploadSchoolChallengeImage(
+        context.managedAppId,
+        activeSchoolId,
+        file,
+      );
+
+      setChallengeDraft((current) => ({
+        ...current,
+        image_url: upload.public_url,
+      }));
+      setBanner({
+        tone: "success",
+        message: "Uploaded challenge image.",
+      });
+    } catch (error) {
+      setBanner({
+        tone: "error",
+        message: getErrorMessage(error),
+      });
+    } finally {
+      setChallengeImageUploadBusy(false);
+    }
+  }
+
+  async function handleSaveChallenge(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!activeSchoolId) {
+      setBanner({
+        tone: "error",
+        message: "Save the school profile first before managing challenges.",
+      });
+      return;
+    }
+
+    let targetValue = 0;
+    let startTime = 0;
+    let endTime = 0;
+
+    try {
+      targetValue = Number(challengeDraft.target_value.trim());
+      if (!Number.isFinite(targetValue) || targetValue <= 0) {
+        throw new Error("Challenge target must be greater than 0.");
+      }
+
+      startTime = parseDateTimeLocalInput(
+        challengeDraft.start_time,
+        "Challenge start",
+      );
+      endTime = parseDateTimeLocalInput(challengeDraft.end_time, "Challenge end");
+      if (endTime <= startTime) {
+        throw new Error("Challenge end must be after the start time.");
+      }
+    } catch (error) {
+      setBanner({
+        tone: "error",
+        message: getErrorMessage(error),
+      });
+      return;
+    }
+
+    setChallengeBusy(true);
+    try {
+      const payload = {
+        title: challengeDraft.title.trim(),
+        description: challengeDraft.description.trim(),
+        image_url: challengeDraft.image_url.trim(),
+        metric_type: challengeDraft.metric_type,
+        target_value: targetValue,
+        start_time: startTime,
+        end_time: endTime,
+        active: challengeDraft.active,
+      } as const;
+
+      const savedChallenge = challengeDraft.challenge_uuid
+        ? await updateSchoolChallenge(
+            context.managedAppId,
+            activeSchoolId,
+            challengeDraft.challenge_uuid,
+            payload,
+          )
+        : await createSchoolChallenge(
+            context.managedAppId,
+            activeSchoolId,
+            payload,
+          );
+
+      upsertSchoolChallenge(savedChallenge);
+      setSelectedChallengeId(savedChallenge.challenge_uuid);
+      setChallengeDraft(challengeToDraft(savedChallenge));
+      await refreshChallengeParticipants(savedChallenge.challenge_uuid);
+      setBanner({
+        tone: "success",
+        message: `${challengeDraft.challenge_uuid ? "Updated" : "Created"} challenge ${savedChallenge.title}.`,
+      });
+    } catch (error) {
+      setBanner({
+        tone: "error",
+        message: getErrorMessage(error),
+      });
+    } finally {
+      setChallengeBusy(false);
+    }
+  }
+
+  async function handleDeleteSelectedChallenge() {
+    if (!selectedChallenge || !activeSchoolId) {
+      return;
+    }
+
+    const shouldContinue = window.confirm(
+      `Delete challenge "${selectedChallenge.title}"? Students will no longer see or join it.`,
+    );
+    if (!shouldContinue) {
+      return;
+    }
+
+    setChallengeBusy(true);
+    try {
+      await deleteSchoolChallenge(
+        context.managedAppId,
+        activeSchoolId,
+        selectedChallenge.challenge_uuid,
+      );
+      setSchoolChallenges((current) =>
+        current.filter(
+          (challenge) =>
+            challenge.challenge_uuid !== selectedChallenge.challenge_uuid,
+        ),
+      );
+      setChallengeParticipants([]);
+      setSelectedChallengeId("");
+      setChallengeDraft(createEmptyChallengeDraft());
+      setBanner({
+        tone: "success",
+        message: `Deleted challenge ${selectedChallenge.title}.`,
+      });
+    } catch (error) {
+      setBanner({
+        tone: "error",
+        message: getErrorMessage(error),
+      });
+    } finally {
+      setChallengeBusy(false);
     }
   }
 
@@ -3767,6 +4343,488 @@ function App() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {currentSection === "challenges" ? (
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Campaigns</p>
+                <h2>Manage school challenges</h2>
+              </div>
+              <div className="form-actions">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => {
+                    setSelectedChallengeId(newChallengeSelectionId);
+                    setChallengeDraft(createEmptyChallengeDraft());
+                    setChallengeParticipants([]);
+                  }}
+                  disabled={!activeSchoolId}
+                >
+                  New Challenge
+                </button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => void refreshSchoolChallenges()}
+                  disabled={challengeListBusy || !activeSchoolId}
+                >
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {!activeSchoolId ? (
+              <p className="empty-state">
+                This admin login is not scoped to a school.
+              </p>
+            ) : null}
+
+            {activeSchoolId ? (
+              <div className="challenge-layout">
+                <div className="challenge-editor">
+                  <form className="school-form" onSubmit={handleSaveChallenge}>
+                    <div className="panel-header">
+                      <div>
+                        <p className="eyebrow">Challenge Editor</p>
+                        <h3>
+                          {challengeDraft.challenge_uuid
+                            ? "Edit existing challenge"
+                            : "Create a new challenge"}
+                        </h3>
+                      </div>
+                      {challengeBusy ? (
+                        <span className="muted-text">Saving…</span>
+                      ) : null}
+                    </div>
+
+                    <div className="form-grid">
+                      <label className="field">
+                        <span>Title</span>
+                        <input
+                          value={challengeDraft.title}
+                          onChange={(event) =>
+                            setChallengeDraft((current) => ({
+                              ...current,
+                              title: event.target.value,
+                            }))
+                          }
+                          placeholder="Ride 25 miles in 7 days"
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Metric</span>
+                        <select
+                          value={challengeDraft.metric_type}
+                          onChange={(event) =>
+                            setChallengeDraft((current) => ({
+                              ...current,
+                              metric_type: event.target
+                                .value as ChallengeDraft["metric_type"],
+                              target_value:
+                                event.target.value === "points"
+                                  ? current.metric_type === "points"
+                                    ? current.target_value
+                                    : "100"
+                                  : current.metric_type === "distance_miles"
+                                    ? current.target_value
+                                    : "10",
+                            }))
+                          }
+                        >
+                          <option value="distance_miles">Distance in miles</option>
+                          <option value="points">Points</option>
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>
+                          Target{" "}
+                          {challengeDraft.metric_type === "points"
+                            ? "(points)"
+                            : "(miles)"}
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step={
+                            challengeDraft.metric_type === "points" ? "1" : "0.1"
+                          }
+                          value={challengeDraft.target_value}
+                          onChange={(event) =>
+                            setChallengeDraft((current) => ({
+                              ...current,
+                              target_value: event.target.value,
+                            }))
+                          }
+                          placeholder={
+                            challengeDraft.metric_type === "points"
+                              ? "100"
+                              : "10"
+                          }
+                        />
+                      </label>
+                      <label className="field checkbox-field">
+                        <span>Active</span>
+                        <input
+                          type="checkbox"
+                          checked={challengeDraft.active}
+                          onChange={(event) =>
+                            setChallengeDraft((current) => ({
+                              ...current,
+                              active: event.target.checked,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Start</span>
+                        <input
+                          type="datetime-local"
+                          value={challengeDraft.start_time}
+                          onChange={(event) =>
+                            setChallengeDraft((current) => ({
+                              ...current,
+                              start_time: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>End</span>
+                        <input
+                          type="datetime-local"
+                          value={challengeDraft.end_time}
+                          onChange={(event) =>
+                            setChallengeDraft((current) => ({
+                              ...current,
+                              end_time: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="field field-span-2">
+                        <span>Description</span>
+                        <textarea
+                          value={challengeDraft.description}
+                          onChange={(event) =>
+                            setChallengeDraft((current) => ({
+                              ...current,
+                              description: event.target.value,
+                            }))
+                          }
+                          placeholder="Invite students to participate and explain how they win."
+                          rows={5}
+                        />
+                      </label>
+                      <div className="field field-span-2">
+                        <span>Challenge Image</span>
+                        <div className="challenge-image-field">
+                          <ChallengeImagePreview
+                            imageUrl={challengeDraft.image_url}
+                            label={challengeDraft.title || "School"}
+                          />
+                          <div className="challenge-image-field-controls">
+                            <label className="field">
+                              <span>Image URL</span>
+                              <input
+                                value={challengeDraft.image_url}
+                                onChange={(event) =>
+                                  setChallengeDraft((current) => ({
+                                    ...current,
+                                    image_url: event.target.value,
+                                  }))
+                                }
+                                placeholder="https://example.com/challenge-cover.jpg"
+                              />
+                            </label>
+                            <div className="challenge-image-upload-row">
+                              <label className="secondary-button challenge-upload-button">
+                                <input
+                                  className="challenge-upload-input"
+                                  type="file"
+                                  accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                                  onChange={handleChallengeImageFileChange}
+                                  disabled={
+                                    challengeImageUploadBusy || !activeSchoolId
+                                  }
+                                />
+                                {challengeImageUploadBusy
+                                  ? "Uploading..."
+                                  : "Upload Image"}
+                              </label>
+                              {challengeDraft.image_url.trim() ? (
+                                <button
+                                  className="secondary-button"
+                                  type="button"
+                                  onClick={() =>
+                                    setChallengeDraft((current) => ({
+                                      ...current,
+                                      image_url: "",
+                                    }))
+                                  }
+                                  disabled={challengeImageUploadBusy}
+                                >
+                                  Clear Image
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="detail-grid">
+                      <DetailRow
+                        label="Goal"
+                        value={formatChallengeMetricValue(
+                          challengeDraft.metric_type,
+                          Number(challengeDraft.target_value),
+                        )}
+                      />
+                      <DetailRow
+                        label="Window"
+                        value={
+                          challengeDraft.start_time && challengeDraft.end_time
+                            ? `${challengeDraft.start_time.replace("T", " ")} to ${challengeDraft.end_time.replace("T", " ")}`
+                            : "Set a start and end time"
+                        }
+                      />
+                    </div>
+
+                    <div className="form-actions">
+                      {challengeDraft.challenge_uuid ? (
+                        <button
+                          className="danger-button"
+                          type="button"
+                          onClick={() => void handleDeleteSelectedChallenge()}
+                          disabled={challengeBusy}
+                        >
+                          Delete
+                        </button>
+                      ) : null}
+                      <button
+                        className="primary-button"
+                        type="submit"
+                        disabled={challengeBusy}
+                      >
+                        {challengeDraft.challenge_uuid
+                          ? "Save Challenge"
+                          : "Create Challenge"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                <div className="challenge-sidebar">
+                  <div className="data-section">
+                    <div className="data-section-header">
+                      <h4>Challenge library</h4>
+                      <span>{schoolChallenges.length}</span>
+                    </div>
+                    {challengeListBusy ? (
+                      <p className="muted-text">Loading challenges…</p>
+                    ) : null}
+                    {!challengeListBusy && schoolChallenges.length === 0 ? (
+                      <p className="empty-state">
+                        No challenges have been created for this school yet.
+                      </p>
+                    ) : null}
+                    <div className="challenge-list">
+                      {schoolChallenges.map((challenge) => {
+                        const status = resolveChallengeStatus(challenge);
+                        return (
+                          <button
+                            key={challenge.challenge_uuid}
+                            className={`challenge-card ${
+                              challenge.challenge_uuid === selectedChallengeId
+                                ? "challenge-card-active"
+                                : ""
+                            }`}
+                            type="button"
+                            onClick={() =>
+                              setSelectedChallengeId(challenge.challenge_uuid)
+                            }
+                          >
+                            {challenge.image_url.trim() ? (
+                              <img
+                                className="challenge-card-image"
+                                src={challenge.image_url}
+                                alt={`${challenge.title} challenge`}
+                              />
+                            ) : null}
+                            <div className="challenge-card-header">
+                              <strong>{challenge.title}</strong>
+                              <span className="student-badge">
+                                {status}
+                              </span>
+                            </div>
+                            <span>
+                              {formatChallengeMetricValue(
+                                challenge.metric_type,
+                                challenge.target_value,
+                              )}
+                            </span>
+                            <span>
+                              {formatDateTimeForDisplay(challenge.start_time)} -{" "}
+                              {formatDateTimeForDisplay(challenge.end_time)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="data-section">
+                    <div className="data-section-header">
+                      <h4>Student progress</h4>
+                      <span>{challengeParticipantSummary.joined}</span>
+                    </div>
+
+                    {!selectedChallenge ? (
+                      <p className="empty-state">
+                        Select a saved challenge to review student enrollment
+                        and progress.
+                      </p>
+                    ) : (
+                      <>
+                        <div className="detail-grid">
+                          <DetailRow
+                            label="Status"
+                            value={resolveChallengeStatus(selectedChallenge)}
+                          />
+                          <DetailRow
+                            label="Goal"
+                            value={formatChallengeMetricValue(
+                              selectedChallenge.metric_type,
+                              selectedChallenge.target_value,
+                            )}
+                          />
+                          <DetailRow
+                            label="Joined"
+                            value={String(challengeParticipantSummary.joined)}
+                          />
+                          <DetailRow
+                            label="Completed"
+                            value={String(
+                              challengeParticipantSummary.completed,
+                            )}
+                          />
+                        </div>
+
+                        {challengeParticipantsBusy ? (
+                          <p className="muted-text">
+                            Loading student challenge progress…
+                          </p>
+                        ) : null}
+                        {!challengeParticipantsBusy &&
+                        challengeParticipants.length === 0 ? (
+                          <p className="empty-state">
+                            No students have joined this challenge yet.
+                          </p>
+                        ) : null}
+
+                        <div className="participant-progress-list">
+                          {challengeParticipants.map((participant) => (
+                            <article
+                              className="participant-progress-card"
+                              key={participant.participation_uuid}
+                            >
+                              <div className="student-roster-header">
+                                <div>
+                                  <p className="eyebrow">Student</p>
+                                  <h3>
+                                    {formatNebulaUserName({
+                                      first_name: participant.first_name,
+                                      last_name: participant.last_name,
+                                      email: participant.email,
+                                      username: participant.username,
+                                    })}
+                                  </h3>
+                                </div>
+                                <div className="student-roster-badges">
+                                  <span className="student-badge">
+                                    {participant.completed
+                                      ? "Completed"
+                                      : participant.active
+                                        ? "In Progress"
+                                        : "Left"}
+                                  </span>
+                                  <span className="student-badge student-badge-muted">
+                                    {participant.student_id || "No student ID"}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="challenge-progress-meta">
+                                <div className="challenge-progress-copy">
+                                  <strong>
+                                    {formatChallengeMetricValue(
+                                      participant.metric_type,
+                                      participant.progress_value,
+                                    )}
+                                  </strong>
+                                  <span>
+                                    Goal{" "}
+                                    {formatChallengeMetricValue(
+                                      participant.metric_type,
+                                      participant.target_value,
+                                    )}
+                                  </span>
+                                </div>
+                                <span className="challenge-progress-percent">
+                                  {Math.round(
+                                    participant.completion_percent,
+                                  )}
+                                  %
+                                </span>
+                              </div>
+                              <div className="challenge-progress-bar">
+                                <span
+                                  className="challenge-progress-bar-fill"
+                                  style={{
+                                    width: `${Math.min(100, Math.max(0, participant.completion_percent))}%`,
+                                  }}
+                                />
+                              </div>
+
+                              <div className="detail-grid">
+                                <DetailRow
+                                  label="Username"
+                                  value={
+                                    participant.username ||
+                                    participant.email ||
+                                    participant.user_uuid
+                                  }
+                                />
+                                <DetailRow
+                                  label="Sessions"
+                                  value={String(participant.total_sessions)}
+                                />
+                                <DetailRow
+                                  label="Joined"
+                                  value={formatDateTimeForDisplay(
+                                    participant.joined_at,
+                                  )}
+                                />
+                                <DetailRow
+                                  label="Last Activity"
+                                  value={formatDateTimeForDisplay(
+                                    participant.last_activity_at ?? undefined,
+                                  )}
+                                />
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : null}
