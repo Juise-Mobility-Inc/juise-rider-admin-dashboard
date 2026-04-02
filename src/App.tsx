@@ -912,13 +912,9 @@ function ChallengeImagePreview(props: {
   imageUrl?: string;
   label: string;
 }) {
-  const [hasImageError, setHasImageError] = useState(false);
+  const [failedImageUrl, setFailedImageUrl] = useState("");
   const normalizedUrl = props.imageUrl?.trim() ?? "";
-  const showImage = normalizedUrl !== "" && !hasImageError;
-
-  useEffect(() => {
-    setHasImageError(false);
-  }, [normalizedUrl]);
+  const showImage = normalizedUrl !== "" && failedImageUrl !== normalizedUrl;
 
   return (
     <div className="challenge-image-preview">
@@ -927,7 +923,7 @@ function ChallengeImagePreview(props: {
           className="challenge-image-preview-image"
           src={normalizedUrl}
           alt={`${props.label} challenge`}
-          onError={() => setHasImageError(true)}
+          onError={() => setFailedImageUrl(normalizedUrl)}
         />
       ) : (
         <div className="challenge-image-preview-fallback" aria-hidden="true">
@@ -1144,6 +1140,20 @@ function App() {
         (challenge) => challenge.challenge_uuid === selectedChallengeId,
       ) ?? null,
     [schoolChallenges, selectedChallengeId],
+  );
+  const currentAndUpcomingChallenges = useMemo(
+    () =>
+      schoolChallenges.filter(
+        (challenge) => resolveChallengeStatus(challenge) !== "Ended",
+      ),
+    [schoolChallenges],
+  );
+  const pastChallenges = useMemo(
+    () =>
+      schoolChallenges.filter(
+        (challenge) => resolveChallengeStatus(challenge) === "Ended",
+      ),
+    [schoolChallenges],
   );
 
   const selectedPoiLocation = useMemo<PackMapPoint | null>(() => {
@@ -4625,18 +4635,20 @@ function App() {
                   <div className="data-section">
                     <div className="data-section-header">
                       <h4>Challenge library</h4>
-                      <span>{schoolChallenges.length}</span>
+                      <span>{currentAndUpcomingChallenges.length}</span>
                     </div>
                     {challengeListBusy ? (
                       <p className="muted-text">Loading challenges…</p>
                     ) : null}
-                    {!challengeListBusy && schoolChallenges.length === 0 ? (
+                    {!challengeListBusy &&
+                    currentAndUpcomingChallenges.length === 0 ? (
                       <p className="empty-state">
-                        No challenges have been created for this school yet.
+                        No live or upcoming challenges are in the library right
+                        now.
                       </p>
                     ) : null}
                     <div className="challenge-list">
-                      {schoolChallenges.map((challenge) => {
+                      {currentAndUpcomingChallenges.map((challenge) => {
                         const status = resolveChallengeStatus(challenge);
                         return (
                           <button
@@ -4663,6 +4675,60 @@ function App() {
                               <span className="student-badge">
                                 {status}
                               </span>
+                            </div>
+                            <span>
+                              {formatChallengeMetricValue(
+                                challenge.metric_type,
+                                challenge.target_value,
+                              )}
+                            </span>
+                            <span>
+                              {formatDateTimeForDisplay(challenge.start_time)} -{" "}
+                              {formatDateTimeForDisplay(challenge.end_time)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="data-section">
+                    <div className="data-section-header">
+                      <h4>Past challenges</h4>
+                      <span>{pastChallenges.length}</span>
+                    </div>
+                    {!challengeListBusy && pastChallenges.length === 0 ? (
+                      <p className="empty-state">
+                        Ended challenges will move here once their campaign
+                        window closes.
+                      </p>
+                    ) : null}
+                    <div className="challenge-list">
+                      {pastChallenges.map((challenge) => {
+                        const status = resolveChallengeStatus(challenge);
+                        return (
+                          <button
+                            key={challenge.challenge_uuid}
+                            className={`challenge-card ${
+                              challenge.challenge_uuid === selectedChallengeId
+                                ? "challenge-card-active"
+                                : ""
+                            }`}
+                            type="button"
+                            onClick={() =>
+                              setSelectedChallengeId(challenge.challenge_uuid)
+                            }
+                          >
+                            {challenge.image_url.trim() ? (
+                              <img
+                                className="challenge-card-image"
+                                src={challenge.image_url}
+                                alt={`${challenge.title} challenge`}
+                              />
+                            ) : null}
+                            <div className="challenge-card-header">
+                              <strong>{challenge.title}</strong>
+                              <span className="student-badge">{status}</span>
                             </div>
                             <span>
                               {formatChallengeMetricValue(
