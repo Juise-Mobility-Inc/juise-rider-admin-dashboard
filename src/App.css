@@ -1103,6 +1103,77 @@
   gap: 18px;
 }
 
+.pack-record-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.pack-record-summary {
+  display: grid;
+  grid-template-columns: minmax(140px, 160px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.pack-record-preview {
+  width: min(160px, 100%);
+}
+
+.pack-record-preview .challenge-image-preview,
+.pack-record-preview .challenge-image-preview-image,
+.pack-record-preview .challenge-image-preview-fallback {
+  min-height: 140px;
+  height: 140px;
+}
+
+.pack-record-copy {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pack-record-copy strong {
+  font-size: 1.02rem;
+}
+
+.pack-record-copy p {
+  margin: 0;
+}
+
+.pack-record-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pack-record-meta span {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: rgba(17, 45, 78, 0.08);
+  border: 1px solid rgba(22, 66, 91, 0.08);
+  color: var(--muted-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.pack-record-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.pack-edit-form {
+  gap: 16px;
+}
+
+.pack-edit-actions {
+  justify-content: flex-start;
+}
+
 .pack-spot-header {
   display: flex;
   justify-content: space-between;
@@ -1376,6 +1447,15 @@
 
   .pack-tab-button {
     width: 100%;
+  }
+
+  .pack-record-top,
+  .pack-record-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .pack-record-actions {
+    justify-content: flex-start;
   }
 
   .pack-spot-header {

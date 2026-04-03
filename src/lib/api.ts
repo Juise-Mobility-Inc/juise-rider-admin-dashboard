@@ -276,6 +276,15 @@ export interface PackSpot {
   updated: number;
 }
 
+export interface PackPhoto {
+  photo_uuid: string;
+  pack_uuid: string;
+  bucket_key: string;
+  path_do_spaces: string;
+  updated: number;
+  active: boolean;
+}
+
 export interface Pack {
   pack_uuid: string;
   name: string;
@@ -285,6 +294,7 @@ export interface Pack {
   spot_count: number;
   location?: PackLocationInput;
   school_owner?: PackSchoolOwnerInput;
+  photo?: PackPhoto;
   qr_code?: PackQrCode;
   spots: PackSpot[];
 }
@@ -295,6 +305,13 @@ export interface PackCreateForSchoolInput {
   number_of_spots: number;
   location: PackLocationInput;
   school_owner: PackSchoolOwnerInput;
+}
+
+export interface PackUpdateInput {
+  name?: string;
+  description?: string;
+  location?: PackLocationInput;
+  active?: boolean;
 }
 
 export interface PackSpotReservation {
@@ -516,7 +533,10 @@ async function request<T>(
   } = options;
 
   const headers = new Headers();
-  if (body !== undefined) {
+  const isFormDataBody =
+    typeof FormData !== "undefined" && body instanceof FormData;
+
+  if (body !== undefined && !isFormDataBody) {
     headers.set("Content-Type", "application/json");
   }
   if (appIdHeader) {
@@ -534,7 +554,11 @@ async function request<T>(
   const response = await fetch(`${serviceBase[service]}${path}`, {
     method,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: isFormDataBody
+      ? body
+      : body !== undefined
+        ? JSON.stringify(body)
+        : undefined,
   });
 
   if (response.status === 401 && authRequired && retryOnUnauthorized) {
@@ -965,15 +989,73 @@ export async function uploadFileToSignedUrl(
 export async function createSchoolPack(
   adminUser: string,
   input: PackCreateForSchoolInput,
+  photoFile?: File | null,
 ): Promise<Pack> {
+  const formData = new FormData();
+  if (input.name !== undefined) {
+    formData.append("name", input.name);
+  }
+  if (input.description !== undefined) {
+    formData.append("description", input.description);
+  }
+  formData.append("number_of_spots", String(input.number_of_spots));
+  formData.append("location_lat", String(input.location.lat));
+  formData.append("location_lng", String(input.location.lng));
+  formData.append("school_owner_app_id", input.school_owner.app_id);
+  formData.append("school_owner_school_id", input.school_owner.school_id);
+  if (input.school_owner.campus_id) {
+    formData.append("school_owner_campus_id", input.school_owner.campus_id);
+  }
+  if (photoFile) {
+    formData.append("photo", photoFile);
+  }
+
   return request<Pack>(
     "hubStore",
     `/api/v1/admin/${encodeURIComponent(adminUser)}/school-pack`,
     {
       method: "POST",
-      body: input,
+      body: formData,
       authRequired: false,
       appIdHeader: input.school_owner.app_id,
+      retryOnUnauthorized: false,
+    },
+  );
+}
+
+export async function updateSchoolPack(
+  adminUser: string,
+  managedAppId: string,
+  packUUID: string,
+  input: PackUpdateInput,
+  photoFile?: File | null,
+): Promise<Pack> {
+  const formData = new FormData();
+  if (input.name !== undefined) {
+    formData.append("name", input.name);
+  }
+  if (input.description !== undefined) {
+    formData.append("description", input.description);
+  }
+  if (input.active !== undefined) {
+    formData.append("active", String(input.active));
+  }
+  if (input.location) {
+    formData.append("location_lat", String(input.location.lat));
+    formData.append("location_lng", String(input.location.lng));
+  }
+  if (photoFile) {
+    formData.append("photo", photoFile);
+  }
+
+  return request<Pack>(
+    "hubStore",
+    `/api/v1/admin/${encodeURIComponent(adminUser)}/pack/${encodeURIComponent(packUUID)}`,
+    {
+      method: "PUT",
+      body: formData,
+      authRequired: false,
+      appIdHeader: managedAppId,
       retryOnUnauthorized: false,
     },
   );
