@@ -1149,6 +1149,9 @@ function App() {
     useState<StudentRosterPhotoKeyMap>({});
   const [schoolStudentRosterBusy, setSchoolStudentRosterBusy] = useState(false);
   const [schoolStudentRosterError, setSchoolStudentRosterError] = useState("");
+  const [selectedStudentMembershipId, setSelectedStudentMembershipId] =
+    useState<string | null>(null);
+  const [studentRosterSearch, setStudentRosterSearch] = useState("");
   const scopedSchoolId = session?.claims.school_id?.trim() ?? "";
   const activeSchoolId = scopedSchoolId;
   const currentSection =
@@ -1354,6 +1357,27 @@ function App() {
         );
       }),
     [schoolStudentRoster],
+  );
+
+  const filteredStudentRoster = useMemo(() => {
+    const q = studentRosterSearch.trim().toLowerCase();
+    if (!q) return sortedSchoolStudentRoster;
+    return sortedSchoolStudentRoster.filter((entry) => {
+      const name = formatNebulaUserName(entry.user).toLowerCase();
+      const id = entry.membership.student_id.toLowerCase();
+      const email = (entry.user.email ?? "").toLowerCase();
+      return name.includes(q) || id.includes(q) || email.includes(q);
+    });
+  }, [sortedSchoolStudentRoster, studentRosterSearch]);
+
+  const selectedStudentEntry = useMemo(
+    () =>
+      selectedStudentMembershipId
+        ? (sortedSchoolStudentRoster.find(
+            (e) => e.membership.membership_uuid === selectedStudentMembershipId,
+          ) ?? null)
+        : null,
+    [sortedSchoolStudentRoster, selectedStudentMembershipId],
   );
 
   const schoolReservationsByMembership = useMemo(() => {
@@ -2438,6 +2462,28 @@ function App() {
       setSchoolStudentRosterError(getErrorMessage(error));
     } finally {
       setSchoolStudentRosterBusy(false);
+    }
+  }
+
+  async function handleSelectStudentInRoster(membershipId: string) {
+    setSelectedStudentMembershipId(membershipId);
+    const entry = sortedSchoolStudentRoster.find(
+      (e) => e.membership.membership_uuid === membershipId,
+    );
+    if (!entry || !session || !context) return;
+    setStudentBusy(true);
+    setStudentError("");
+    try {
+      const profile = await fetchStudentProfile(
+        context.managedAppId,
+        entry.user.k_guid,
+      );
+      setStudentProfile(profile);
+    } catch (error) {
+      setStudentError(getErrorMessage(error));
+      setStudentProfile(null);
+    } finally {
+      setStudentBusy(false);
     }
   }
 
@@ -5107,7 +5153,7 @@ function App() {
         ) : null}
 
         {currentSection === "students" ? (
-          <section className="panel">
+          <section className="panel students-section">
             <div className="panel-header">
               <div>
                 <p className="eyebrow">School Roster</p>
@@ -5116,7 +5162,11 @@ function App() {
               <button
                 className="secondary-button"
                 type="button"
-                onClick={() => void refreshStudentRoster()}
+                onClick={() => {
+                  void refreshStudentRoster();
+                  setSelectedStudentMembershipId(null);
+                  setStudentProfile(null);
+                }}
                 disabled={schoolStudentRosterBusy || !activeSchoolId}
               >
                 Refresh
@@ -5128,120 +5178,298 @@ function App() {
                 This admin login is not scoped to a school.
               </p>
             ) : null}
-            {activeSchoolId && schoolStudentRosterBusy ? (
-              <p className="muted-text">Loading registered students…</p>
-            ) : null}
             {schoolStudentRosterError ? (
               <p className="error-text">{schoolStudentRosterError}</p>
             ) : null}
-            {activeSchoolId &&
-            !schoolStudentRosterBusy &&
-            !schoolStudentRosterError &&
-            sortedSchoolStudentRoster.length === 0 ? (
-              <p className="empty-state">
-                No registered students were found for this school yet.
-              </p>
-            ) : null}
 
-            <div className="student-roster-list">
-              {sortedSchoolStudentRoster.map((entry) => {
-                const membership = entry.membership;
-                const frontPhotoObjectKey = resolveStudentPhotoObjectKey(
-                  membership,
-                  schoolStudentPhotoKeys,
-                  "front",
-                );
-                const backPhotoObjectKey = resolveStudentPhotoObjectKey(
-                  membership,
-                  schoolStudentPhotoKeys,
-                  "back",
-                );
-                const frontPhotoUrl = frontPhotoObjectKey
-                  ? (schoolStudentMediaUrls[frontPhotoObjectKey] ?? "")
-                  : "";
-                const backPhotoUrl = backPhotoObjectKey
-                  ? (schoolStudentMediaUrls[backPhotoObjectKey] ?? "")
-                  : "";
-                const reservationsForMembership =
-                  schoolReservationsByMembership.get(
-                    membership.membership_uuid,
-                  ) ?? [];
+            {activeSchoolId ? (
+              <div className="students-layout">
+                {/* ── LEFT: Roster list ── */}
+                <div className="students-sidebar">
+                  <div className="students-search-row">
+                    <input
+                      className="students-search-input"
+                      type="search"
+                      placeholder="Search by name, ID or email…"
+                      value={studentRosterSearch}
+                      onChange={(e) => setStudentRosterSearch(e.target.value)}
+                    />
+                    <span className="students-count-badge">
+                      {filteredStudentRoster.length}
+                    </span>
+                  </div>
 
-                return (
-                  <article
-                    className="student-roster-card"
-                    key={membership.membership_uuid}
-                  >
-                    <div className="student-roster-header">
-                      <div>
-                        <p className="eyebrow">Student</p>
-                        <h3>{formatNebulaUserName(entry.user)}</h3>
-                      </div>
-                      <div className="student-roster-badges">
-                        <span className="student-badge">
-                          {membership.status || "active"}
-                        </span>
-                        <span className="student-badge student-badge-muted">
-                          {membership.student_id || "No student ID"}
-                        </span>
-                      </div>
+                  {schoolStudentRosterBusy ? (
+                    <p className="muted-text students-loading">
+                      Loading roster…
+                    </p>
+                  ) : filteredStudentRoster.length === 0 ? (
+                    <p className="empty-state">
+                      {studentRosterSearch
+                        ? "No students match your search."
+                        : "No registered students found yet."}
+                    </p>
+                  ) : (
+                    <div className="students-list">
+                      {filteredStudentRoster.map((entry) => {
+                        const membership = entry.membership;
+                        const isSelected =
+                          selectedStudentMembershipId ===
+                          membership.membership_uuid;
+                        const initials = formatNebulaUserName(entry.user)
+                          .split(" ")
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map((w) => w[0])
+                          .join("")
+                          .toUpperCase();
+                        return (
+                          <button
+                            key={membership.membership_uuid}
+                            type="button"
+                            className={`student-list-item${isSelected ? " student-list-item-active" : ""}`}
+                            onClick={() =>
+                              void handleSelectStudentInRoster(
+                                membership.membership_uuid,
+                              )
+                            }
+                          >
+                            <div className="student-list-avatar">{initials || "?"}</div>
+                            <div className="student-list-info">
+                              <strong>{formatNebulaUserName(entry.user)}</strong>
+                              <span>
+                                {membership.student_id || "No ID"} ·{" "}
+                                {membership.campus_id || "—"}
+                              </span>
+                            </div>
+                            <span
+                              className={`student-status-dot student-status-dot-${membership.status || "active"}`}
+                            />
+                          </button>
+                        );
+                      })}
                     </div>
+                  )}
+                </div>
 
-                    <div className="student-roster-content">
-                      <div className="student-roster-photos">
-                        <div className="student-photo-card">
-                          <span>Front of ID</span>
-                          {frontPhotoUrl ? (
-                            <img
-                              className="student-photo-image"
-                              src={frontPhotoUrl}
-                              alt={`${formatNebulaUserName(entry.user)} front ID`}
-                            />
-                          ) : (
-                            <div className="student-photo-placeholder">
-                              Front ID not available
+                {/* ── RIGHT: Detail panel ── */}
+                <div className="students-detail">
+                  {!selectedStudentEntry ? (
+                    <div className="students-detail-empty">
+                      <div className="students-detail-empty-icon">👤</div>
+                      <strong>Select a student</strong>
+                      <span>
+                        Choose a student from the list to view their full
+                        profile, ID photos, devices, and activity.
+                      </span>
+                    </div>
+                  ) : (() => {
+                    const entry = selectedStudentEntry;
+                    const membership = entry.membership;
+                    const frontPhotoObjectKey = resolveStudentPhotoObjectKey(
+                      membership,
+                      schoolStudentPhotoKeys,
+                      "front",
+                    );
+                    const backPhotoObjectKey = resolveStudentPhotoObjectKey(
+                      membership,
+                      schoolStudentPhotoKeys,
+                      "back",
+                    );
+                    const frontPhotoUrl = frontPhotoObjectKey
+                      ? (schoolStudentMediaUrls[frontPhotoObjectKey] ?? "")
+                      : "";
+                    const backPhotoUrl = backPhotoObjectKey
+                      ? (schoolStudentMediaUrls[backPhotoObjectKey] ?? "")
+                      : "";
+                    const reservationsForMembership =
+                      schoolReservationsByMembership.get(
+                        membership.membership_uuid,
+                      ) ?? [];
+                    const fullName = formatNebulaUserName(entry.user);
+                    const initials = fullName
+                      .split(" ")
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((w) => w[0])
+                      .join("")
+                      .toUpperCase();
+                    return (
+                      <>
+                        {/* Header */}
+                        <div className="student-detail-header">
+                          <div className="student-detail-avatar">
+                            {initials || "?"}
+                          </div>
+                          <div className="student-detail-header-info">
+                            <h3>{fullName}</h3>
+                            <div className="student-detail-header-meta">
+                              <span className="student-badge">
+                                {membership.status || "active"}
+                              </span>
+                              {membership.student_id ? (
+                                <span className="student-badge student-badge-muted">
+                                  ID: {membership.student_id}
+                                </span>
+                              ) : null}
+                              {membership.campus_id ? (
+                                <span className="student-badge student-badge-muted">
+                                  {membership.campus_id}
+                                </span>
+                              ) : null}
                             </div>
-                          )}
-                        </div>
-                        <div className="student-photo-card">
-                          <span>Back of ID</span>
-                          {backPhotoUrl ? (
-                            <img
-                              className="student-photo-image"
-                              src={backPhotoUrl}
-                              alt={`${formatNebulaUserName(entry.user)} back ID`}
-                            />
-                          ) : (
-                            <div className="student-photo-placeholder">
-                              Back ID not available
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="student-roster-data">
-                        <div className="detail-grid">
-                          <DetailRow
-                            label="Student ID"
-                            value={membership.student_id || "Not set"}
-                          />
-                          <DetailRow
-                            label="Campus"
-                            value={membership.campus_id || "Not set"}
-                          />
-                          <DetailRow
-                            label="Email"
-                            value={entry.user.email || "Not set"}
-                          />
-                          <DetailRow
-                            label="Phone"
-                            value={entry.user.phone || "Not set"}
-                          />
+                          </div>
+                          {studentBusy ? (
+                            <span className="muted-text">Loading…</span>
+                          ) : null}
                         </div>
 
+                        {studentError ? (
+                          <p className="error-text">{studentError}</p>
+                        ) : null}
+
+                        {/* Identity */}
                         <div className="data-section">
                           <div className="data-section-header">
-                            <h4>School terms</h4>
+                            <h4>Identity &amp; contact</h4>
+                          </div>
+                          <div className="detail-grid">
+                            <DetailRow
+                              label="Full name"
+                              value={fullName || "Not set"}
+                            />
+                            <DetailRow
+                              label="Username"
+                              value={entry.user.username || "Not set"}
+                            />
+                            <DetailRow
+                              label="Email"
+                              value={entry.user.email || "Not set"}
+                            />
+                            <DetailRow
+                              label="Phone"
+                              value={entry.user.phone || "Not set"}
+                            />
+                            <DetailRow
+                              label="Student ID"
+                              value={membership.student_id || "Not set"}
+                            />
+                            <DetailRow
+                              label="Campus"
+                              value={membership.campus_id || "Not set"}
+                            />
+                          </div>
+                          <div className="uuid-copy-stack">
+                            <UuidCopyField
+                              label="user_uuid"
+                              value={entry.user.k_guid}
+                              onCopy={handleCopyUuid}
+                            />
+                            <UuidCopyField
+                              label="membership_uuid"
+                              value={membership.membership_uuid}
+                              onCopy={handleCopyUuid}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Student ID Photos */}
+                        <div className="data-section">
+                          <div className="data-section-header">
+                            <h4>Student ID photos</h4>
+                          </div>
+                          <div className="student-photos-grid">
+                            <div className="student-photo-card">
+                              <span>Front of ID</span>
+                              {frontPhotoUrl ? (
+                                <img
+                                  className="student-photo-image"
+                                  src={frontPhotoUrl}
+                                  alt={`${fullName} front ID`}
+                                />
+                              ) : (
+                                <div className="student-photo-placeholder">
+                                  Front ID not available
+                                </div>
+                              )}
+                            </div>
+                            <div className="student-photo-card">
+                              <span>Back of ID</span>
+                              {backPhotoUrl ? (
+                                <img
+                                  className="student-photo-image"
+                                  src={backPhotoUrl}
+                                  alt={`${fullName} back ID`}
+                                />
+                              ) : (
+                                <div className="student-photo-placeholder">
+                                  Back ID not available
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Registered Devices */}
+                        <div className="data-section">
+                          <div className="data-section-header">
+                            <h4>Registered devices</h4>
+                            {studentProfile &&
+                            studentProfile.user.k_guid === entry.user.k_guid ? (
+                              <span>{studentProfile.devices.length}</span>
+                            ) : null}
+                          </div>
+                          {studentBusy ? (
+                            <p className="muted-text">Loading devices…</p>
+                          ) : studentProfile &&
+                            studentProfile.user.k_guid === entry.user.k_guid ? (
+                            studentProfile.devices.length === 0 ? (
+                              <p className="muted-text">
+                                No registered devices found.
+                              </p>
+                            ) : (
+                              <div className="devices-grid">
+                                {studentProfile.devices.map((device) => (
+                                  <div
+                                    className="device-card"
+                                    key={device.registered_device_uuid}
+                                  >
+                                    <div className="device-card-icon">🛴</div>
+                                    <div className="device-card-body">
+                                      <strong>
+                                        {device.nickname || device.device_type}
+                                      </strong>
+                                      <span>
+                                        {[device.make, device.model]
+                                          .filter(Boolean)
+                                          .join(" ") || "Unknown device"}
+                                      </span>
+                                      <span className="device-card-meta">
+                                        {device.color
+                                          ? `${device.color} · `
+                                          : ""}
+                                        Serial:{" "}
+                                        {device.serial_number || "Not set"}
+                                      </span>
+                                      <span className="device-card-meta">
+                                        {device.active ? "Active" : "Inactive"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          ) : (
+                            <p className="muted-text">
+                              Select a student to load device information.
+                            </p>
+                          )}
+                        </div>
+
+                        {/* School Terms */}
+                        <div className="data-section">
+                          <div className="data-section-header">
+                            <h4>Enrollment terms</h4>
                             <span>{membership.terms.length}</span>
                           </div>
                           {membership.terms.length === 0 ? (
@@ -5251,11 +5479,17 @@ function App() {
                           ) : (
                             <div className="stack-list">
                               {membership.terms.map((term) => (
-                                <div className="data-card" key={term.term_uuid}>
+                                <div
+                                  className="data-card"
+                                  key={term.term_uuid}
+                                >
                                   <strong>{term.name}</strong>
                                   <span>
-                                    {formatDateOnly(term.start_date)} -{" "}
+                                    {formatDateOnly(term.start_date)} –{" "}
                                     {formatDateOnly(term.end_date)}
+                                  </span>
+                                  <span>
+                                    {term.active ? "Active" : "Inactive"}
                                   </span>
                                 </div>
                               ))}
@@ -5263,15 +5497,15 @@ function App() {
                           )}
                         </div>
 
+                        {/* Parking Reservations */}
                         <div className="data-section">
                           <div className="data-section-header">
-                            <h4>Parking reservations by term</h4>
+                            <h4>Parking reservations</h4>
                             <span>{reservationsForMembership.length}</span>
                           </div>
                           {reservationsForMembership.length === 0 ? (
                             <p className="muted-text">
-                              No parking reservations have been submitted for
-                              this student.
+                              No parking reservations submitted.
                             </p>
                           ) : (
                             <div className="stack-list">
@@ -5280,12 +5514,24 @@ function App() {
                                   className="data-card"
                                   key={reservation.reservation_uuid}
                                 >
-                                  <strong>
-                                    {reservation.term_name || "School term"}
-                                  </strong>
+                                  <div className="reservation-card-top">
+                                    <strong>
+                                      {reservation.term_name || "School term"}
+                                    </strong>
+                                    <span className={`student-badge student-badge-status-${reservation.status}`}>
+                                      {reservation.status}
+                                    </span>
+                                  </div>
                                   <span>
                                     {reservation.pack_name || "Juise Pack"} ·
                                     Spot {reservation.spot_number || "TBD"}
+                                  </span>
+                                  <span>
+                                    {formatUnixTimestamp(
+                                      reservation.start_time,
+                                    )}{" "}
+                                    –{" "}
+                                    {formatUnixTimestamp(reservation.end_time)}
                                   </span>
                                   <div className="uuid-copy-stack">
                                     <UuidCopyField
@@ -5299,25 +5545,47 @@ function App() {
                                       onCopy={handleCopyUuid}
                                     />
                                   </div>
-                                  <span>
-                                    Status: {reservation.status} ·{" "}
-                                    {formatUnixTimestamp(
-                                      reservation.start_time,
-                                    )}{" "}
-                                    -{" "}
-                                    {formatUnixTimestamp(reservation.end_time)}
-                                  </span>
                                 </div>
                               ))}
                             </div>
                           )}
                         </div>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+
+                        {/* Violations (placeholder) */}
+                        <div className="data-section">
+                          <div className="data-section-header">
+                            <h4>Violations</h4>
+                          </div>
+                          <div className="placeholder-section">
+                            <span className="placeholder-section-icon">🚫</span>
+                            <strong>No violation data available</strong>
+                            <span>
+                              Violation history will appear here once the
+                              violations API is connected.
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* POI Visits (placeholder) */}
+                        <div className="data-section">
+                          <div className="data-section-header">
+                            <h4>Visited POIs</h4>
+                          </div>
+                          <div className="placeholder-section">
+                            <span className="placeholder-section-icon">📍</span>
+                            <strong>No POI visit data available</strong>
+                            <span>
+                              Point-of-interest visit history will appear here
+                              once the POI tracking API is connected.
+                            </span>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            ) : null}
           </section>
         ) : null}
 
