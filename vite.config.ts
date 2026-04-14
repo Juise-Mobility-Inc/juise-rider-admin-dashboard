@@ -7,7 +7,9 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     server: {
-      port: Number(env.VITE_PORT || 5174),
+      host: '0.0.0.0',
+      port: 5000,
+      allowedHosts: true,
       proxy: {
         '/auth-api': {
           target: env.VITE_AUTH_PROXY_TARGET || 'http://localhost:3864',
