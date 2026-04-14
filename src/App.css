@@ -1211,46 +1211,52 @@
   gap: 20px;
 }
 
+/* Segmented control tab switcher */
 .pack-tabs {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  gap: 0;
+  background: rgba(17, 45, 78, 0.06);
+  border-radius: 14px;
+  padding: 4px;
+  width: fit-content;
 }
 
 .pack-tab-button {
   appearance: none;
-  border: 1px solid rgba(22, 66, 91, 0.12);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.62);
-  color: var(--text-strong);
-  padding: 12px 18px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  padding: 10px 22px;
   font: inherit;
-  font-weight: 700;
+  font-weight: 600;
+  font-size: 0.9rem;
   cursor: pointer;
-  transition:
-    transform 140ms ease,
-    border-color 140ms ease,
-    background 140ms ease,
-    box-shadow 140ms ease;
+  transition: background 0.16s, color 0.16s, box-shadow 0.16s;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .pack-tab-button:hover {
-  transform: translateY(-1px);
-  border-color: rgba(246, 174, 45, 0.45);
-  background: rgba(246, 174, 45, 0.12);
+  color: var(--text-strong);
+  background: rgba(17, 45, 78, 0.05);
+  transform: none;
 }
 
 .pack-tab-button-active {
-  border-color: rgba(246, 174, 45, 0.58);
-  background:
-    linear-gradient(135deg, rgba(246, 174, 45, 0.22), rgba(22, 66, 91, 0.08)),
-    rgba(255, 255, 255, 0.82);
-  box-shadow: 0 10px 26px rgba(17, 45, 78, 0.12);
+  background: #fff;
+  color: var(--text-strong);
+  box-shadow: 0 1px 6px rgba(17, 45, 78, 0.12), 0 0 0 1px rgba(17, 45, 78, 0.07);
+}
+
+.pack-tab-button-active:hover {
+  background: #fff;
+  transform: none;
 }
 
 .pack-tab-panel {
   display: grid;
-  gap: 18px;
+  gap: 20px;
 }
 
 .pack-layout {
@@ -1259,15 +1265,35 @@
   gap: 20px;
 }
 
+/* Create form: fields left, map right */
+.pack-form-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.pack-form-fields {
+  display: grid;
+  gap: 20px;
+}
+
+.pack-form-map {
+  display: grid;
+  gap: 16px;
+  position: sticky;
+  top: 24px;
+}
+
 .pack-builder,
 .pack-preview-panel {
   display: grid;
-  gap: 18px;
+  gap: 20px;
 }
 
 .pack-inventory-layout {
   display: grid;
-  grid-template-columns: minmax(360px, 0.95fr) minmax(0, 1.05fr);
+  grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.15fr);
   gap: 20px;
   align-items: start;
 }
@@ -1361,7 +1387,201 @@
 }
 
 .pack-record-card {
+  gap: 0;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+/* ── PACK CARD HEADER ─────────────────────── */
+.pack-record-header {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  gap: 0;
+  align-items: stretch;
+}
+
+.pack-record-thumb {
+  width: 96px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.pack-record-thumb .challenge-image-preview,
+.pack-record-thumb .challenge-image-preview-image,
+.pack-record-thumb .challenge-image-preview-fallback {
+  width: 96px;
+  min-height: 96px;
+  height: 100%;
+  border-radius: 0;
+  border: none;
+}
+
+.pack-record-thumb .challenge-image-preview-fallback {
+  font-size: 1.5rem;
+  background: rgba(17, 45, 78, 0.06);
+}
+
+.pack-record-info {
+  padding: 18px 20px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pack-record-info strong {
+  font-size: 1.05rem;
+}
+
+.pack-record-info p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pack-record-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.pack-record-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: rgba(17, 45, 78, 0.07);
+  border: 1px solid rgba(22, 66, 91, 0.1);
+  color: var(--muted-strong);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pack-record-badge-active {
+  background: rgba(39, 160, 92, 0.12);
+  border-color: rgba(39, 160, 92, 0.2);
+  color: #1a6b3e;
+}
+
+.pack-record-badge-location {
+  background: rgba(22, 66, 91, 0.08);
+  border-color: rgba(22, 66, 91, 0.12);
+}
+
+.pack-record-badge-inactive {
+  background: rgba(179, 58, 58, 0.08);
+  border-color: rgba(179, 58, 58, 0.14);
+  color: #8a1f1f;
+}
+
+.pack-record-menu {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+  justify-content: flex-start;
+  border-left: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* ── PACK CARD BODY ───────────────────────── */
+.pack-record-body {
+  border-top: 1px solid var(--panel-border);
+  padding: 18px 20px;
+  display: grid;
   gap: 18px;
+}
+
+/* ── PACK SPOT CHIPS ──────────────────────── */
+.pack-spots-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.pack-spots-section-header h4 {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.pack-spots-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pack-spot-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.7);
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-strong);
+  cursor: default;
+  transition: background 0.14s;
+}
+
+.pack-spot-chip:hover {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.pack-spot-chip-num {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--text-strong);
+}
+
+.pack-spot-chip-qr {
+  font-size: 0.72rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pack-spot-chip-qr-ready {
+  color: #27a05c;
+}
+
+.pack-spot-qr-button {
+  appearance: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-decoration: underline;
+  padding: 0;
+  font: inherit;
+  transition: color 0.14s;
+}
+
+.pack-spot-qr-button:hover {
+  color: var(--text-strong);
+}
+
+/* ── PACK CARD ACTIONS ROW ────────────────── */
+.pack-record-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
 }
 
 .pack-record-top {
@@ -1445,6 +1665,40 @@
 .pack-spot-copy {
   display: grid;
   gap: 6px;
+}
+
+/* ── CREATE FORM STEP HEADERS ─────────────── */
+.pack-step-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.pack-step-number {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #112d4e, #1a5276);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pack-step-header h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.pack-step-header p {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin: 0;
 }
 
 .detail-grid {
@@ -1973,8 +2227,13 @@
   .challenge-layout,
   .zone-map-grid,
   .pack-layout,
-  .pack-inventory-layout {
+  .pack-inventory-layout,
+  .pack-form-layout {
     grid-template-columns: 1fr;
+  }
+
+  .pack-form-map {
+    position: static;
   }
 
   .sidebar {
@@ -2018,11 +2277,6 @@
     border-radius: 24px;
   }
 
-  .pack-tabs {
-    display: grid;
-    grid-template-columns: 1fr;
-  }
-
   .hero-grid,
   .form-grid,
   .detail-grid,
@@ -2056,8 +2310,12 @@
     justify-self: stretch;
   }
 
-  .pack-tab-button {
-    width: 100%;
+  .pack-record-header {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .pack-record-menu {
+    display: none;
   }
 
   .pack-record-top,

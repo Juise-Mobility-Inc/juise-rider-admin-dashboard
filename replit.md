@@ -35,6 +35,16 @@ Proxy targets can be overridden via environment variables:
 - **Host:** `0.0.0.0` (required for Replit preview proxy)
 - **All hosts allowed** for Replit iframe proxying
 
+## UI Design Improvements (iterative)
+- **Login/Signup:** Full-bleed split layout — dark navy hero left, white form panel right, segmented pill tab switcher for Create/Sign In
+- **Students screen:** Master-detail layout — searchable sidebar roster + rich detail panel (identity, ID photos, devices, terms, reservations)
+- **Juise Packs screen:**
+  - Tab switcher is now a segmented control (not two loose pill buttons)
+  - Default landing tab is "Existing Packs"; "Create New Pack" tab is accessible from both the segmented control and a "+ New Pack" button in the header
+  - Create form: side-by-side layout — form fields (numbered step sections) on left, sticky location map on right
+  - Existing pack cards: compact header row (thumbnail photo + name + status/spots/campus/location badges + quick menu), expandable body (spot chips grid with per-spot QR actions, actions row, inline edit form, collapsible spot UUIDs)
+  - Spot chips show QR status inline with "↓ QR" or "+ QR" micro-buttons
+
 ## Deployment
 - **Target:** Static site
 - **Build command:** `npm run build`

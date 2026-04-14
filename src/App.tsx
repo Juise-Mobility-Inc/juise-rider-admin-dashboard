@@ -1119,7 +1119,7 @@ function App() {
   const [packBusy, setPackBusy] = useState(false);
   const [schoolPacks, setSchoolPacks] = useState<Pack[]>([]);
   const [packsLoading, setPacksLoading] = useState(false);
-  const [activePackTab, setActivePackTab] = useState<PackTab>("create");
+  const [activePackTab, setActivePackTab] = useState<PackTab>("existing");
   const [editingPackId, setEditingPackId] = useState("");
   const [packEditDraft, setPackEditDraft] = useState<PackEditDraft | null>(
     null,
@@ -5594,13 +5594,34 @@ function App() {
             <div className="panel-header pack-tabs-header">
               <div>
                 <p className="eyebrow">Juise Packs</p>
-                <h2>Manage school-owned parking packs</h2>
+                <h2>School-owned parking packs</h2>
               </div>
-              {activePackTab === "create" && packBusy ? (
-                <span className="muted-text">Creating…</span>
-              ) : activePackTab === "existing" && packsLoading ? (
-                <span className="muted-text">Refreshing…</span>
-              ) : null}
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                {packBusy ? (
+                  <span className="muted-text">Creating…</span>
+                ) : packsLoading ? (
+                  <span className="muted-text">Refreshing…</span>
+                ) : null}
+                {activePackTab === "existing" ? (
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={() => setActivePackTab("create")}
+                  >
+                    + New Pack
+                  </button>
+                ) : null}
+                {activePackTab === "existing" ? (
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => void refreshSchoolPacks()}
+                    disabled={packsLoading || !activeSchoolId}
+                  >
+                    Refresh
+                  </button>
+                ) : null}
+              </div>
             </div>
 
             <div
@@ -5608,19 +5629,6 @@ function App() {
               role="tablist"
               aria-label="Juise pack sections"
             >
-              <button
-                className={`pack-tab-button ${
-                  activePackTab === "create" ? "pack-tab-button-active" : ""
-                }`}
-                type="button"
-                role="tab"
-                id="pack-tab-create"
-                aria-selected={activePackTab === "create"}
-                aria-controls="pack-tab-panel-create"
-                onClick={() => setActivePackTab("create")}
-              >
-                Create Juise Pack
-              </button>
               <button
                 className={`pack-tab-button ${
                   activePackTab === "existing" ? "pack-tab-button-active" : ""
@@ -5632,7 +5640,20 @@ function App() {
                 aria-controls="pack-tab-panel-existing"
                 onClick={() => setActivePackTab("existing")}
               >
-                Existing Juise Packs
+                Existing Packs
+              </button>
+              <button
+                className={`pack-tab-button ${
+                  activePackTab === "create" ? "pack-tab-button-active" : ""
+                }`}
+                type="button"
+                role="tab"
+                id="pack-tab-create"
+                aria-selected={activePackTab === "create"}
+                aria-controls="pack-tab-panel-create"
+                onClick={() => setActivePackTab("create")}
+              >
+                Create New Pack
               </button>
             </div>
 
@@ -5649,90 +5670,103 @@ function App() {
                 id="pack-tab-panel-create"
                 aria-labelledby="pack-tab-create"
               >
-                <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Juise Pack Builder</p>
-                    <h3>Create a school-owned parking pack</h3>
-                  </div>
-                </div>
+                <form className="pack-form-layout" onSubmit={handleCreatePack}>
+                  {/* ── LEFT: fields ── */}
+                  <div className="pack-form-fields">
+                    <div className="map-card">
+                      <div className="pack-step-header">
+                        <span className="pack-step-number">1</span>
+                        <div>
+                          <h3>Pack details</h3>
+                          <p>Name, capacity, and description</p>
+                        </div>
+                      </div>
+                      <div className="form-grid">
+                        <label className="field">
+                          <span>School ID</span>
+                          <input value={activeSchoolId} disabled />
+                        </label>
+                        <label className="field">
+                          <span>Campus ID</span>
+                          <input
+                            value={packDraft.campus_id}
+                            onChange={(event) =>
+                              setPackDraft((current) => ({
+                                ...current,
+                                campus_id: event.target.value,
+                              }))
+                            }
+                            placeholder={
+                              schoolDraft.default_campus_id || "main"
+                            }
+                            disabled={!activeSchoolId}
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Pack Name</span>
+                          <input
+                            value={packDraft.name}
+                            onChange={(event) =>
+                              setPackDraft((current) => ({
+                                ...current,
+                                name: event.target.value,
+                              }))
+                            }
+                            placeholder="North Garage Pack"
+                            disabled={!activeSchoolId}
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Number of Spots</span>
+                          <input
+                            type="number"
+                            min={1}
+                            value={packDraft.number_of_spots}
+                            onChange={(event) =>
+                              setPackDraft((current) => ({
+                                ...current,
+                                number_of_spots: event.target.value,
+                              }))
+                            }
+                            disabled={!activeSchoolId}
+                          />
+                        </label>
+                        <label className="field field-span-2">
+                          <span>Description</span>
+                          <textarea
+                            value={packDraft.description}
+                            onChange={(event) =>
+                              setPackDraft((current) => ({
+                                ...current,
+                                description: event.target.value,
+                              }))
+                            }
+                            placeholder="Covered student parking near the library entrance."
+                            rows={4}
+                            disabled={!activeSchoolId}
+                          />
+                        </label>
+                      </div>
+                    </div>
 
-                <form className="school-form" onSubmit={handleCreatePack}>
-                  <div className="form-grid">
-                    <label className="field">
-                      <span>School ID</span>
-                      <input value={activeSchoolId} disabled />
-                    </label>
-                    <label className="field">
-                      <span>Campus ID</span>
-                      <input
-                        value={packDraft.campus_id}
-                        onChange={(event) =>
-                          setPackDraft((current) => ({
-                            ...current,
-                            campus_id: event.target.value,
-                          }))
-                        }
-                        placeholder={schoolDraft.default_campus_id || "main"}
-                        disabled={!activeSchoolId}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Pack Name</span>
-                      <input
-                        value={packDraft.name}
-                        onChange={(event) =>
-                          setPackDraft((current) => ({
-                            ...current,
-                            name: event.target.value,
-                          }))
-                        }
-                        placeholder="North Garage Pack"
-                        disabled={!activeSchoolId}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Number of Spots</span>
-                      <input
-                        type="number"
-                        min={1}
-                        value={packDraft.number_of_spots}
-                        onChange={(event) =>
-                          setPackDraft((current) => ({
-                            ...current,
-                            number_of_spots: event.target.value,
-                          }))
-                        }
-                        disabled={!activeSchoolId}
-                      />
-                    </label>
-                    <label className="field field-span-2">
-                      <span>Description</span>
-                      <textarea
-                        value={packDraft.description}
-                        onChange={(event) =>
-                          setPackDraft((current) => ({
-                            ...current,
-                            description: event.target.value,
-                          }))
-                        }
-                        placeholder="Covered student parking near the library entrance."
-                        rows={5}
-                        disabled={!activeSchoolId}
-                      />
-                    </label>
-                    <div className="field field-span-2">
-                      <span>Pack Photo</span>
+                    <div className="map-card">
+                      <div className="pack-step-header">
+                        <span className="pack-step-number">2</span>
+                        <div>
+                          <h3>Cover photo</h3>
+                          <p>Optional image for the pack</p>
+                        </div>
+                      </div>
                       <div className="challenge-image-field">
                         <EntityImagePreview
                           imageUrl={packPhotoPreviewUrl}
                           label={packDraft.name || "Juise Pack"}
                           altSuffix="pack photo"
-                          fallbackLabel="Pack photo preview"
+                          fallbackLabel="Pack photo"
                         />
                         <div className="challenge-image-field-controls">
                           <p className="muted-text">
-                            Upload a cover image for this Juise Pack. The image
-                            will be saved with the pack record.
+                            Upload a cover image for this Juise Pack.
                           </p>
                           <div className="challenge-image-upload-row">
                             <label className="secondary-button challenge-upload-button">
@@ -5762,15 +5796,43 @@ function App() {
                         </div>
                       </div>
                     </div>
+
+                    <div className="form-actions">
+                      <button
+                        className="primary-button"
+                        type="submit"
+                        disabled={packBusy || !activeSchoolId}
+                      >
+                        {packBusy ? "Creating Pack…" : "Create Juise Pack"}
+                      </button>
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        disabled={packBusy}
+                        onClick={() =>
+                          resetPackCreateForm(
+                            schoolDraft.default_campus_id ?? "",
+                          )
+                        }
+                      >
+                        Reset Form
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="pack-map-grid">
+                  {/* ── RIGHT: location map ── */}
+                  <div className="pack-form-map">
                     <div className="map-card">
-                      <div className="data-section-header">
-                        <h3>Pack location</h3>
-                        <span>
-                          {selectedPackLocation ? "Pin placed" : "No pin yet"}
-                        </span>
+                      <div className="pack-step-header">
+                        <span className="pack-step-number">3</span>
+                        <div>
+                          <h3>Pack location</h3>
+                          <p>
+                            {selectedPackLocation
+                              ? "Pin placed — adjust if needed"
+                              : "Click the map to drop a pin"}
+                          </p>
+                        </div>
                       </div>
                       <PackLocationPicker
                         disabled={!activeSchoolId}
@@ -5815,32 +5877,10 @@ function App() {
                         </label>
                       </div>
                       <p className="muted-text">
-                        Click the map to drop a pin. The created pack is
-                        automatically assigned to{" "}
-                        <code>{activeSchoolId || "school-scope"}</code> for{" "}
-                        <code>{context.managedAppId}</code>.
+                        This pack will be assigned to{" "}
+                        <code>{activeSchoolId || "school-scope"}</code>.
                       </p>
                     </div>
-                  </div>
-
-                  <div className="form-actions">
-                    <button
-                      className="primary-button"
-                      type="submit"
-                      disabled={packBusy || !activeSchoolId}
-                    >
-                      {packBusy ? "Creating Pack…" : "Create Juise Pack"}
-                    </button>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      disabled={packBusy}
-                      onClick={() =>
-                        resetPackCreateForm(schoolDraft.default_campus_id ?? "")
-                      }
-                    >
-                      Reset Form
-                    </button>
                   </div>
                 </form>
               </div>
@@ -5851,21 +5891,6 @@ function App() {
                 id="pack-tab-panel-existing"
                 aria-labelledby="pack-tab-existing"
               >
-                <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">School Inventory</p>
-                    <h3>Existing Juise Packs</h3>
-                  </div>
-                  <button
-                    className="secondary-button"
-                    type="button"
-                    onClick={() => void refreshSchoolPacks()}
-                    disabled={packsLoading || !activeSchoolId}
-                  >
-                    Refresh
-                  </button>
-                </div>
-
                 {activeSchoolId && packsLoading && schoolPacks.length === 0 ? (
                   <p className="muted-text">Loading school packs…</p>
                 ) : null}
@@ -5911,36 +5936,64 @@ function App() {
                         const displayedPackPhoto = isEditingPack
                           ? packEditPhotoPreviewUrl || packPhotoUrl
                           : packPhotoUrl;
+                        const spotsWithQr = pack.spots.filter(
+                          (s) => s.qr_code,
+                        ).length;
 
                         return (
                           <article
                             className="data-card pack-record-card"
                             key={pack.pack_uuid}
                           >
-                            <div className="pack-record-top">
-                              <div className="pack-record-summary">
-                                <div className="pack-record-preview">
-                                  <EntityImagePreview
-                                    imageUrl={displayedPackPhoto}
-                                    label={pack.name || "Juise Pack"}
-                                    altSuffix="pack photo"
-                                    fallbackLabel="Pack photo preview"
-                                  />
-                                </div>
-                                <div className="pack-record-copy">
-                                  <strong>{pack.name || "Juise Pack"}</strong>
-                                  <p className="muted-text">
-                                    {pack.description || "No description set."}
-                                  </p>
-                                  <div className="pack-record-meta">
-                                    <span>{pack.spot_count} spots</span>
-                                    <span>
-                                      {packPhotoUrl ? "Photo saved" : "No photo yet"}
+                            {/* ── Card header row ── */}
+                            <div className="pack-record-header">
+                              <div className="pack-record-thumb">
+                                <EntityImagePreview
+                                  imageUrl={displayedPackPhoto}
+                                  label={pack.name || "Juise Pack"}
+                                  altSuffix="pack photo"
+                                  fallbackLabel="📦"
+                                />
+                              </div>
+
+                              <div className="pack-record-info">
+                                <strong>{pack.name || "Juise Pack"}</strong>
+                                <p>
+                                  {pack.description || "No description set."}
+                                </p>
+                                <div className="pack-record-badges">
+                                  <span
+                                    className={`pack-record-badge ${pack.active ? "pack-record-badge-active" : "pack-record-badge-inactive"}`}
+                                  >
+                                    {pack.active ? "✓ Active" : "Inactive"}
+                                  </span>
+                                  <span className="pack-record-badge">
+                                    {pack.spot_count}{" "}
+                                    {pack.spot_count === 1 ? "spot" : "spots"}
+                                  </span>
+                                  {pack.school_owner?.campus_id ? (
+                                    <span className="pack-record-badge pack-record-badge-location">
+                                      {pack.school_owner.campus_id}
                                     </span>
-                                  </div>
+                                  ) : null}
+                                  {pack.location ? (
+                                    <span className="pack-record-badge pack-record-badge-location">
+                                      📍 Located
+                                    </span>
+                                  ) : (
+                                    <span className="pack-record-badge pack-record-badge-inactive">
+                                      No location
+                                    </span>
+                                  )}
+                                  {pack.qr_code ? (
+                                    <span className="pack-record-badge pack-record-badge-active">
+                                      Pack QR ready
+                                    </span>
+                                  ) : null}
                                 </div>
                               </div>
-                              <div className="pack-record-actions">
+
+                              <div className="pack-record-menu">
                                 <button
                                   className="secondary-button"
                                   type="button"
@@ -5951,290 +6004,349 @@ function App() {
                                   }
                                   disabled={packEditBusy}
                                 >
-                                  {isEditingPack ? "Cancel Edit" : "Edit Details"}
+                                  {isEditingPack ? "Cancel" : "Edit"}
                                 </button>
-                              </div>
-                            </div>
-
-                            <div className="detail-grid">
-                              <DetailRow
-                                label="School ID"
-                                value={
-                                  pack.school_owner?.school_id || activeSchoolId
-                                }
-                              />
-                              <DetailRow
-                                label="Campus ID"
-                                value={pack.school_owner?.campus_id || "Not set"}
-                              />
-                              <DetailRow
-                                label="Latitude"
-                                value={
-                                  pack.location
-                                    ? formatCoordinateValue(pack.location.lat)
-                                    : "Not set"
-                                }
-                              />
-                              <DetailRow
-                                label="Longitude"
-                                value={
-                                  pack.location
-                                    ? formatCoordinateValue(pack.location.lng)
-                                    : "Not set"
-                                }
-                              />
-                            </div>
-
-                            {currentPackEditDraft ? (
-                              <form
-                                className="data-section pack-edit-form"
-                                onSubmit={(event) =>
-                                  void handleSavePackEdit(event, pack)
-                                }
-                              >
-                                <div className="data-section-header">
-                                  <div>
-                                    <h4>Edit pack details</h4>
-                                    <p className="muted-text">
-                                      Update the pack name, description, pin, and
-                                      photo.
-                                    </p>
-                                  </div>
-                                </div>
-
-                                <div className="form-grid">
-                                  <label className="field">
-                                    <span>Pack Name</span>
-                                    <input
-                                      value={currentPackEditDraft.name}
-                                      onChange={(event) =>
-                                        setPackEditDraft((current) =>
-                                          current
-                                            ? {
-                                                ...current,
-                                                name: event.target.value,
-                                              }
-                                            : current,
-                                        )
-                                      }
-                                      placeholder="North Garage Pack"
-                                      disabled={packEditBusy}
-                                    />
-                                  </label>
-                                  <label className="field">
-                                    <span>Latitude</span>
-                                    <input
-                                      value={currentPackEditDraft.lat}
-                                      onChange={(event) =>
-                                        setPackEditDraft((current) =>
-                                          current
-                                            ? {
-                                                ...current,
-                                                lat: event.target.value,
-                                              }
-                                            : current,
-                                        )
-                                      }
-                                      placeholder="42.678000"
-                                      disabled={packEditBusy}
-                                    />
-                                  </label>
-                                  <label className="field">
-                                    <span>Longitude</span>
-                                    <input
-                                      value={currentPackEditDraft.lng}
-                                      onChange={(event) =>
-                                        setPackEditDraft((current) =>
-                                          current
-                                            ? {
-                                                ...current,
-                                                lng: event.target.value,
-                                              }
-                                            : current,
-                                        )
-                                      }
-                                      placeholder="-83.195000"
-                                      disabled={packEditBusy}
-                                    />
-                                  </label>
-                                  <label className="field field-span-2">
-                                    <span>Description</span>
-                                    <textarea
-                                      value={currentPackEditDraft.description}
-                                      onChange={(event) =>
-                                        setPackEditDraft((current) =>
-                                          current
-                                            ? {
-                                                ...current,
-                                                description: event.target.value,
-                                              }
-                                            : current,
-                                        )
-                                      }
-                                      placeholder="Covered student parking near the library entrance."
-                                      rows={4}
-                                      disabled={packEditBusy}
-                                    />
-                                  </label>
-                                  <div className="field field-span-2">
-                                    <span>Pack Photo</span>
-                                    <div className="challenge-image-field">
-                                      <EntityImagePreview
-                                        imageUrl={displayedPackPhoto}
-                                        label={pack.name || "Juise Pack"}
-                                        altSuffix="pack photo"
-                                        fallbackLabel="Pack photo preview"
-                                      />
-                                      <div className="challenge-image-field-controls">
-                                        <p className="muted-text">
-                                          Upload a new pack photo to replace the
-                                          current image.
-                                        </p>
-                                        <div className="challenge-image-upload-row">
-                                          <label className="secondary-button challenge-upload-button">
-                                            <input
-                                              className="challenge-upload-input"
-                                              type="file"
-                                              accept="image/png,image/jpeg,image/webp,image/gif"
-                                              onChange={
-                                                handlePackEditPhotoFileChange
-                                              }
-                                              disabled={packEditBusy}
-                                            />
-                                            {packEditPhotoFile
-                                              ? "Replace Photo"
-                                              : "Upload Photo"}
-                                          </label>
-                                          {packEditPhotoFile ? (
-                                            <button
-                                              className="secondary-button"
-                                              type="button"
-                                              onClick={() => {
-                                                setPackEditPhotoFile(null);
-                                                setPackEditPhotoPreviewUrl("");
-                                              }}
-                                              disabled={packEditBusy}
-                                            >
-                                              Use Current Photo
-                                            </button>
-                                          ) : null}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="form-actions pack-edit-actions">
-                                  <button
-                                    className="primary-button"
-                                    type="submit"
-                                    disabled={packEditBusy}
-                                  >
-                                    {packEditBusy ? "Saving Changes…" : "Save Changes"}
-                                  </button>
+                                {pack.qr_code ? (
                                   <button
                                     className="secondary-button"
                                     type="button"
-                                    onClick={handleCancelPackEdit}
-                                    disabled={packEditBusy}
+                                    onClick={() =>
+                                      handleDownloadPackQrCode(pack)
+                                    }
                                   >
-                                    Cancel
+                                    QR
                                   </button>
-                                </div>
-                              </form>
-                            ) : null}
-
-                            <div className="uuid-copy-stack">
-                              <UuidCopyField
-                                label="pack_uuid"
-                                value={pack.pack_uuid}
-                                onCopy={handleCopyUuid}
-                              />
+                                ) : (
+                                  <button
+                                    className="secondary-button"
+                                    type="button"
+                                    onClick={() =>
+                                      void handleGeneratePackQrCode(pack)
+                                    }
+                                    disabled={
+                                      qrActionTarget ===
+                                      `pack:${pack.pack_uuid}`
+                                    }
+                                  >
+                                    {qrActionTarget ===
+                                    `pack:${pack.pack_uuid}`
+                                      ? "…"
+                                      : "Gen QR"}
+                                  </button>
+                                )}
+                              </div>
                             </div>
 
-                            <div className="form-actions pack-download-actions">
-                              {pack.qr_code ? (
-                                <button
-                                  className="secondary-button"
-                                  type="button"
-                                  onClick={() => handleDownloadPackQrCode(pack)}
-                                >
-                                  Download Pack QR
-                                </button>
-                              ) : (
+                            {/* ── Card body ── */}
+                            <div className="pack-record-body">
+                              {/* Spots chips */}
+                              {pack.spots.length > 0 ? (
+                                <div>
+                                  <div className="pack-spots-section-header">
+                                    <h4>
+                                      Spots — {pack.spots.length} total,{" "}
+                                      {spotsWithQr} with QR
+                                    </h4>
+                                  </div>
+                                  <div
+                                    className="pack-spots-chips"
+                                    style={{ marginTop: 10 }}
+                                  >
+                                    {pack.spots.map((spot) => (
+                                      <div
+                                        className="pack-spot-chip"
+                                        key={spot.spot_uuid}
+                                      >
+                                        <span className="pack-spot-chip-num">
+                                          #{spot.spot_number}
+                                        </span>
+                                        {spot.qr_code ? (
+                                          <button
+                                            className="pack-spot-qr-button pack-spot-chip-qr pack-spot-chip-qr-ready"
+                                            type="button"
+                                            onClick={() =>
+                                              handleDownloadPackSpotQrCode(spot)
+                                            }
+                                            title="Download QR for this spot"
+                                          >
+                                            ↓ QR
+                                          </button>
+                                        ) : (
+                                          <button
+                                            className="pack-spot-qr-button pack-spot-chip-qr"
+                                            type="button"
+                                            onClick={() =>
+                                              void handleGeneratePackSpotQrCode(
+                                                spot,
+                                              )
+                                            }
+                                            disabled={
+                                              qrActionTarget ===
+                                              `spot:${spot.spot_uuid}`
+                                            }
+                                            title="Generate QR for this spot"
+                                          >
+                                            {qrActionTarget ===
+                                            `spot:${spot.spot_uuid}`
+                                              ? "…"
+                                              : "+ QR"}
+                                          </button>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+
+                              {/* Actions row */}
+                              <div className="pack-record-actions-row">
                                 <button
                                   className="secondary-button"
                                   type="button"
                                   onClick={() =>
-                                    void handleGeneratePackQrCode(pack)
+                                    isEditingPack
+                                      ? handleCancelPackEdit()
+                                      : handleStartEditingPack(pack)
                                   }
-                                  disabled={
-                                    qrActionTarget === `pack:${pack.pack_uuid}`
+                                  disabled={packEditBusy}
+                                >
+                                  {isEditingPack
+                                    ? "Cancel Edit"
+                                    : "Edit Details"}
+                                </button>
+                                {pack.qr_code ? (
+                                  <button
+                                    className="secondary-button"
+                                    type="button"
+                                    onClick={() =>
+                                      handleDownloadPackQrCode(pack)
+                                    }
+                                  >
+                                    Download Pack QR
+                                  </button>
+                                ) : (
+                                  <button
+                                    className="secondary-button"
+                                    type="button"
+                                    onClick={() =>
+                                      void handleGeneratePackQrCode(pack)
+                                    }
+                                    disabled={
+                                      qrActionTarget ===
+                                      `pack:${pack.pack_uuid}`
+                                    }
+                                  >
+                                    {qrActionTarget ===
+                                    `pack:${pack.pack_uuid}`
+                                      ? "Generating Pack QR…"
+                                      : "Generate Pack QR"}
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Inline edit form */}
+                              {currentPackEditDraft ? (
+                                <form
+                                  className="data-section pack-edit-form"
+                                  onSubmit={(event) =>
+                                    void handleSavePackEdit(event, pack)
                                   }
                                 >
-                                  {qrActionTarget === `pack:${pack.pack_uuid}`
-                                    ? "Generating Pack QR…"
-                                    : "Generate Pack QR"}
-                                </button>
-                              )}
-                            </div>
-
-                            <div className="data-section">
-                              <div className="data-section-header">
-                                <h4>Spots</h4>
-                                <span>{pack.spots.length}</span>
-                              </div>
-                              <div className="stack-list">
-                                {pack.spots.map((spot) => (
-                                  <div
-                                    className="data-card pack-spot-card"
-                                    key={spot.spot_uuid}
-                                  >
-                                    <div className="pack-spot-header">
-                                      <div className="pack-spot-copy">
-                                        <strong>Spot {spot.spot_number}</strong>
-                                        <span>{pack.name || pack.pack_uuid}</span>
-                                      </div>
-                                      {spot.qr_code ? (
-                                        <button
-                                          className="secondary-button"
-                                          type="button"
-                                          onClick={() =>
-                                            handleDownloadPackSpotQrCode(spot)
-                                          }
-                                        >
-                                          Download Spot QR
-                                        </button>
-                                      ) : (
-                                        <button
-                                          className="secondary-button"
-                                          type="button"
-                                          onClick={() =>
-                                            void handleGeneratePackSpotQrCode(
-                                              spot,
-                                            )
-                                          }
-                                          disabled={
-                                            qrActionTarget ===
-                                            `spot:${spot.spot_uuid}`
-                                          }
-                                        >
-                                          {qrActionTarget ===
-                                          `spot:${spot.spot_uuid}`
-                                            ? "Generating Spot QR…"
-                                            : "Generate Spot QR"}
-                                        </button>
-                                      )}
+                                  <div className="data-section-header">
+                                    <div>
+                                      <h4>Edit pack details</h4>
+                                      <p className="muted-text">
+                                        Update name, description, location, and
+                                        photo.
+                                      </p>
                                     </div>
-
-                                    <UuidCopyField
-                                      label="pack_spot_uuid"
-                                      value={spot.spot_uuid}
-                                      onCopy={handleCopyUuid}
-                                    />
                                   </div>
-                                ))}
+
+                                  <div className="form-grid">
+                                    <label className="field">
+                                      <span>Pack Name</span>
+                                      <input
+                                        value={currentPackEditDraft.name}
+                                        onChange={(event) =>
+                                          setPackEditDraft((current) =>
+                                            current
+                                              ? {
+                                                  ...current,
+                                                  name: event.target.value,
+                                                }
+                                              : current,
+                                          )
+                                        }
+                                        placeholder="North Garage Pack"
+                                        disabled={packEditBusy}
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>Latitude</span>
+                                      <input
+                                        value={currentPackEditDraft.lat}
+                                        onChange={(event) =>
+                                          setPackEditDraft((current) =>
+                                            current
+                                              ? {
+                                                  ...current,
+                                                  lat: event.target.value,
+                                                }
+                                              : current,
+                                          )
+                                        }
+                                        placeholder="42.678000"
+                                        disabled={packEditBusy}
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>Longitude</span>
+                                      <input
+                                        value={currentPackEditDraft.lng}
+                                        onChange={(event) =>
+                                          setPackEditDraft((current) =>
+                                            current
+                                              ? {
+                                                  ...current,
+                                                  lng: event.target.value,
+                                                }
+                                              : current,
+                                          )
+                                        }
+                                        placeholder="-83.195000"
+                                        disabled={packEditBusy}
+                                      />
+                                    </label>
+                                    <label className="field field-span-2">
+                                      <span>Description</span>
+                                      <textarea
+                                        value={currentPackEditDraft.description}
+                                        onChange={(event) =>
+                                          setPackEditDraft((current) =>
+                                            current
+                                              ? {
+                                                  ...current,
+                                                  description:
+                                                    event.target.value,
+                                                }
+                                              : current,
+                                          )
+                                        }
+                                        placeholder="Covered student parking near the library entrance."
+                                        rows={4}
+                                        disabled={packEditBusy}
+                                      />
+                                    </label>
+                                    <div className="field field-span-2">
+                                      <span>Pack Photo</span>
+                                      <div className="challenge-image-field">
+                                        <EntityImagePreview
+                                          imageUrl={displayedPackPhoto}
+                                          label={pack.name || "Juise Pack"}
+                                          altSuffix="pack photo"
+                                          fallbackLabel="Pack photo preview"
+                                        />
+                                        <div className="challenge-image-field-controls">
+                                          <p className="muted-text">
+                                            Upload a new pack photo to replace
+                                            the current image.
+                                          </p>
+                                          <div className="challenge-image-upload-row">
+                                            <label className="secondary-button challenge-upload-button">
+                                              <input
+                                                className="challenge-upload-input"
+                                                type="file"
+                                                accept="image/png,image/jpeg,image/webp,image/gif"
+                                                onChange={
+                                                  handlePackEditPhotoFileChange
+                                                }
+                                                disabled={packEditBusy}
+                                              />
+                                              {packEditPhotoFile
+                                                ? "Replace Photo"
+                                                : "Upload Photo"}
+                                            </label>
+                                            {packEditPhotoFile ? (
+                                              <button
+                                                className="secondary-button"
+                                                type="button"
+                                                onClick={() => {
+                                                  setPackEditPhotoFile(null);
+                                                  setPackEditPhotoPreviewUrl(
+                                                    "",
+                                                  );
+                                                }}
+                                                disabled={packEditBusy}
+                                              >
+                                                Use Current Photo
+                                              </button>
+                                            ) : null}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="form-actions pack-edit-actions">
+                                    <button
+                                      className="primary-button"
+                                      type="submit"
+                                      disabled={packEditBusy}
+                                    >
+                                      {packEditBusy
+                                        ? "Saving Changes…"
+                                        : "Save Changes"}
+                                    </button>
+                                    <button
+                                      className="secondary-button"
+                                      type="button"
+                                      onClick={handleCancelPackEdit}
+                                      disabled={packEditBusy}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </form>
+                              ) : null}
+
+                              {/* UUID copy field */}
+                              <div className="uuid-copy-stack">
+                                <UuidCopyField
+                                  label="pack_uuid"
+                                  value={pack.pack_uuid}
+                                  onCopy={handleCopyUuid}
+                                />
                               </div>
+
+                              {/* Per-spot UUID copy fields */}
+                              {pack.spots.length > 0 ? (
+                                <details>
+                                  <summary
+                                    style={{
+                                      cursor: "pointer",
+                                      fontSize: "0.82rem",
+                                      color: "var(--muted)",
+                                      fontWeight: 600,
+                                      userSelect: "none",
+                                    }}
+                                  >
+                                    Spot UUIDs ({pack.spots.length})
+                                  </summary>
+                                  <div
+                                    className="uuid-copy-stack"
+                                    style={{ marginTop: 10 }}
+                                  >
+                                    {pack.spots.map((spot) => (
+                                      <UuidCopyField
+                                        key={spot.spot_uuid}
+                                        label={`spot_${spot.spot_number}`}
+                                        value={spot.spot_uuid}
+                                        onCopy={handleCopyUuid}
+                                      />
+                                    ))}
+                                  </div>
+                                </details>
+                              ) : null}
                             </div>
                           </article>
                         );
