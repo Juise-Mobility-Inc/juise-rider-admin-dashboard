@@ -563,11 +563,66 @@ interface RequestOptions {
   accessToken?: string;
 }
 
+function normalizeBaseUrl(value: string | undefined): string {
+  return (value?.trim() ?? "").replace(/\/+$/, "");
+}
+
+function isAbsoluteBaseUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
+}
+
+function resolveServiceBaseUrl(
+  developmentBase: string,
+  configuredBase: string | undefined,
+  productionFallback: string,
+): string {
+  const normalizedConfiguredBase = normalizeBaseUrl(configuredBase);
+  if (!normalizedConfiguredBase) {
+    return import.meta.env.PROD ? productionFallback : developmentBase;
+  }
+
+  if (!import.meta.env.PROD) {
+    return normalizedConfiguredBase;
+  }
+
+  return isAbsoluteBaseUrl(normalizedConfiguredBase)
+    ? normalizedConfiguredBase
+    : productionFallback;
+}
+
 const serviceBase: Record<ServiceName, string> = {
-  auth: import.meta.env.VITE_AUTH_API_BASE ?? "/auth-api",
-  nebula: import.meta.env.VITE_NEBULA_API_BASE ?? "/nebula-api",
-  hubStore: import.meta.env.VITE_HUB_STORE_API_BASE ?? "/hub-store-api",
-  kcaProxy: import.meta.env.VITE_KCA_PROXY_API_BASE ?? "/kca-api",
+  auth: resolveServiceBaseUrl(
+    "/auth-api",
+    import.meta.env.VITE_AUTH_API_BASE,
+    normalizeBaseUrl(
+      import.meta.env.VITE_AUTH_PROXY_TARGET ||
+        "https://global-auth-service.kuhmute.net",
+    ),
+  ),
+  nebula: resolveServiceBaseUrl(
+    "/nebula-api",
+    import.meta.env.VITE_NEBULA_API_BASE,
+    normalizeBaseUrl(
+      import.meta.env.VITE_NEBULA_PROXY_TARGET ||
+        "https://nebula-user-server.kuhmute.net",
+    ),
+  ),
+  hubStore: resolveServiceBaseUrl(
+    "/hub-store-api",
+    import.meta.env.VITE_HUB_STORE_API_BASE,
+    normalizeBaseUrl(
+      import.meta.env.VITE_HUB_STORE_PROXY_TARGET ||
+        "https://hub-store-service.kuhmute.net",
+    ),
+  ),
+  kcaProxy: resolveServiceBaseUrl(
+    "/kca-api",
+    import.meta.env.VITE_KCA_PROXY_API_BASE,
+    normalizeBaseUrl(
+      import.meta.env.VITE_KCA_PROXY_TARGET ||
+        "https://kca-proxy.kuhmute.net",
+    ),
+  ),
 };
 
 let currentSession: AdminSession | null = null;
