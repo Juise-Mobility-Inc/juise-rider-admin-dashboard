@@ -3267,215 +3267,238 @@ function App() {
     return (
       <div className="login-shell">
         <section className="login-panel login-hero">
-          <p className="eyebrow">Juise Rider Admin Dashboard</p>
-          <h1>Manage schools, terms, and parking approvals from one place.</h1>
-          <p className="hero-copy">
-            Sign in with an admin account from <code>{authAppId}</code> to
-            manage school-owned Juise Pack reservations and student
-            registrations.
-          </p>
-          <div className="hero-grid">
-            <div className="hero-card">
-              <span>School profile</span>
-              <strong>
-                Edit the Nebula school record and branding fields.
-              </strong>
+          <div className="login-hero-top">
+            <div className="login-hero-logo">
+              <div className="login-hero-logo-mark">J</div>
+              <span>Juise Rider Admin</span>
             </div>
-            <div className="hero-card">
-              <span>Academic calendar</span>
-              <strong>
-                Define reservable terms that drive pack term requests.
-              </strong>
-            </div>
-            <div className="hero-card">
-              <span>Pending queue</span>
-              <strong>
-                Approve or deny student requests with their device history
-                beside it.
-              </strong>
+          </div>
+          <div className="login-hero-bottom">
+            <h1>
+              Manage schools, terms, and{" "}
+              <em>parking approvals</em> from one place.
+            </h1>
+            <p className="hero-copy">
+              Sign in with an admin account from <code>{authAppId}</code> to
+              manage school-owned Juise Pack reservations and student
+              registrations.
+            </p>
+            <div className="hero-grid">
+              <div className="hero-card">
+                <div className="hero-card-icon">🏫</div>
+                <span>School profile</span>
+                <strong>
+                  Edit the Nebula school record and branding fields.
+                </strong>
+              </div>
+              <div className="hero-card">
+                <div className="hero-card-icon">📅</div>
+                <span>Academic calendar</span>
+                <strong>
+                  Define reservable terms that drive pack term requests.
+                </strong>
+              </div>
+              <div className="hero-card">
+                <div className="hero-card-icon">✅</div>
+                <span>Pending queue</span>
+                <strong>
+                  Approve or deny student requests with device history.
+                </strong>
+              </div>
             </div>
           </div>
         </section>
 
         <section className="login-panel login-form-panel">
-          <div className="auth-switcher">
-            <button
-              className={
-                authMode === "signup"
-                  ? "nav-button nav-button-active"
-                  : "nav-button"
-              }
-              type="button"
-              onClick={() => {
-                setAuthMode("signup");
-                setAuthError("");
-              }}
-            >
-              Create School Admin
-            </button>
-            <button
-              className={
-                authMode === "login"
-                  ? "nav-button nav-button-active"
-                  : "nav-button"
-              }
-              type="button"
-              onClick={() => {
-                setAuthMode("login");
-                setAuthError("");
-              }}
-            >
-              Login
-            </button>
-          </div>
+          <div className="login-form-panel-inner">
+            <div className="login-form-brand">
+              <div className="login-form-brand-mark">J</div>
+              <span>Juise Rider Admin</span>
+            </div>
 
-          {authMode === "signup" ? (
-            <form className="login-form" onSubmit={handleCreateSchoolAdmin}>
-              <p className="eyebrow">School Admin Signup</p>
-              <h2>Create a separate school dashboard account</h2>
-              <label className="field">
-                <span>School ID</span>
-                <input
-                  value={signupForm.school_id}
-                  onChange={(event) =>
-                    setSignupForm((current) => ({
-                      ...current,
-                      school_id: event.target.value,
-                    }))
-                  }
-                  placeholder="ou"
-                  required
-                />
-              </label>
-              <div className="form-grid">
+            <div className="auth-switcher">
+              <button
+                className={
+                  authMode === "signup"
+                    ? "nav-button nav-button-active"
+                    : "nav-button"
+                }
+                type="button"
+                onClick={() => {
+                  setAuthMode("signup");
+                  setAuthError("");
+                }}
+              >
+                Create Account
+              </button>
+              <button
+                className={
+                  authMode === "login"
+                    ? "nav-button nav-button-active"
+                    : "nav-button"
+                }
+                type="button"
+                onClick={() => {
+                  setAuthMode("login");
+                  setAuthError("");
+                }}
+              >
+                Sign In
+              </button>
+            </div>
+
+            {authMode === "signup" ? (
+              <form className="login-form" onSubmit={handleCreateSchoolAdmin}>
+                <div className="login-form-header">
+                  <p className="eyebrow">School Admin Signup</p>
+                  <h2>Create your dashboard account</h2>
+                </div>
                 <label className="field">
-                  <span>First name</span>
+                  <span>School ID</span>
                   <input
-                    value={signupForm.first}
+                    value={signupForm.school_id}
                     onChange={(event) =>
                       setSignupForm((current) => ({
                         ...current,
-                        first: event.target.value,
+                        school_id: event.target.value,
                       }))
                     }
-                    placeholder="Avery"
+                    placeholder="ou"
+                    required
                   />
                 </label>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>First name</span>
+                    <input
+                      value={signupForm.first}
+                      onChange={(event) =>
+                        setSignupForm((current) => ({
+                          ...current,
+                          first: event.target.value,
+                        }))
+                      }
+                      placeholder="Avery"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Last name</span>
+                    <input
+                      value={signupForm.last}
+                      onChange={(event) =>
+                        setSignupForm((current) => ({
+                          ...current,
+                          last: event.target.value,
+                        }))
+                      }
+                      placeholder="Morgan"
+                    />
+                  </label>
+                </div>
                 <label className="field">
-                  <span>Last name</span>
+                  <span>Username</span>
                   <input
-                    value={signupForm.last}
+                    value={signupForm.username}
                     onChange={(event) =>
                       setSignupForm((current) => ({
                         ...current,
-                        last: event.target.value,
+                        username: event.target.value,
                       }))
                     }
-                    placeholder="Morgan"
+                    placeholder="ou.parking"
+                    required
                   />
                 </label>
-              </div>
-              <label className="field">
-                <span>Username</span>
-                <input
-                  value={signupForm.username}
-                  onChange={(event) =>
-                    setSignupForm((current) => ({
-                      ...current,
-                      username: event.target.value,
-                    }))
-                  }
-                  placeholder="ou.parking"
-                  required
-                />
-              </label>
-              <label className="field">
-                <span>Email</span>
-                <input
-                  type="email"
-                  value={signupForm.email}
-                  onChange={(event) =>
-                    setSignupForm((current) => ({
-                      ...current,
-                      email: event.target.value,
-                    }))
-                  }
-                  placeholder="parking@school.edu"
-                  required
-                />
-              </label>
-              <label className="field">
-                <span>Phone (optional)</span>
-                <input
-                  value={signupForm.phone}
-                  onChange={(event) =>
-                    setSignupForm((current) => ({
-                      ...current,
-                      phone: event.target.value,
-                    }))
-                  }
-                  placeholder="+12485551212"
-                />
-              </label>
-              <label className="field">
-                <span>Password</span>
-                <input
-                  type="password"
-                  value={signupForm.password}
-                  onChange={(event) =>
-                    setSignupForm((current) => ({
-                      ...current,
-                      password: event.target.value,
-                    }))
-                  }
-                  placeholder="••••••••"
-                  required
-                />
-              </label>
-              {authError ? <p className="error-text">{authError}</p> : null}
-              <button
-                className="primary-button"
-                type="submit"
-                disabled={authBusy}
-              >
-                {authBusy ? "Creating account…" : "Create School Admin"}
-              </button>
-            </form>
-          ) : (
-            <form className="login-form" onSubmit={handleLogin}>
-              <p className="eyebrow">Admin Login</p>
-              <h2>Sign in</h2>
-              <label className="field">
-                <span>Username, email, or phone</span>
-                <input
-                  autoComplete="username"
-                  value={identifier}
-                  onChange={(event) => setIdentifier(event.target.value)}
-                  placeholder="admin@example.com"
-                  required
-                />
-              </label>
-              <label className="field">
-                <span>Password</span>
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="••••••••"
-                  required
-                />
-              </label>
-              {authError ? <p className="error-text">{authError}</p> : null}
-              <button
-                className="primary-button"
-                type="submit"
-                disabled={authBusy}
-              >
-                {authBusy ? "Signing in…" : "Enter Dashboard"}
-              </button>
-            </form>
-          )}
+                <label className="field">
+                  <span>Email</span>
+                  <input
+                    type="email"
+                    value={signupForm.email}
+                    onChange={(event) =>
+                      setSignupForm((current) => ({
+                        ...current,
+                        email: event.target.value,
+                      }))
+                    }
+                    placeholder="parking@school.edu"
+                    required
+                  />
+                </label>
+                <label className="field">
+                  <span>Phone (optional)</span>
+                  <input
+                    value={signupForm.phone}
+                    onChange={(event) =>
+                      setSignupForm((current) => ({
+                        ...current,
+                        phone: event.target.value,
+                      }))
+                    }
+                    placeholder="+12485551212"
+                  />
+                </label>
+                <label className="field">
+                  <span>Password</span>
+                  <input
+                    type="password"
+                    value={signupForm.password}
+                    onChange={(event) =>
+                      setSignupForm((current) => ({
+                        ...current,
+                        password: event.target.value,
+                      }))
+                    }
+                    placeholder="••••••••"
+                    required
+                  />
+                </label>
+                {authError ? <p className="error-text">{authError}</p> : null}
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={authBusy}
+                >
+                  {authBusy ? "Creating account…" : "Create School Admin"}
+                </button>
+              </form>
+            ) : (
+              <form className="login-form" onSubmit={handleLogin}>
+                <div className="login-form-header">
+                  <p className="eyebrow">Admin Login</p>
+                  <h2>Welcome back</h2>
+                </div>
+                <label className="field">
+                  <span>Username, email, or phone</span>
+                  <input
+                    autoComplete="username"
+                    value={identifier}
+                    onChange={(event) => setIdentifier(event.target.value)}
+                    placeholder="admin@example.com"
+                    required
+                  />
+                </label>
+                <label className="field">
+                  <span>Password</span>
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="••••••••"
+                    required
+                  />
+                </label>
+                {authError ? <p className="error-text">{authError}</p> : null}
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={authBusy}
+                >
+                  {authBusy ? "Signing in…" : "Enter Dashboard"}
+                </button>
+              </form>
+            )}
+          </div>
         </section>
       </div>
     );
