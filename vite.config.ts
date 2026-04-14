@@ -1,40 +1,46 @@
-import { defineConfig, loadEnv } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig, loadEnv } from "vite";
+import react from "@vitejs/plugin-react";
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
+  const env = loadEnv(mode, process.cwd(), "");
 
   return {
     plugins: [react()],
     server: {
-      host: '0.0.0.0',
+      host: "0.0.0.0",
       port: 5000,
       allowedHosts: true,
       proxy: {
-        '/auth-api': {
-          target: env.VITE_AUTH_PROXY_TARGET || 'http://localhost:3864',
+        "/auth-api": {
+          target:
+            env.VITE_AUTH_PROXY_TARGET ||
+            "https://global-auth-service.kuhmute.net",
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/auth-api/, ''),
+          rewrite: (path) => path.replace(/^\/auth-api/, ""),
         },
-        '/nebula-api': {
-          target: env.VITE_NEBULA_PROXY_TARGET || 'http://localhost:7893',
+        "/nebula-api": {
+          target:
+            env.VITE_NEBULA_PROXY_TARGET ||
+            "https://nebula-user-server.kuhmute.net",
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/nebula-api/, ''),
+          rewrite: (path) => path.replace(/^\/nebula-api/, ""),
         },
-        '/hub-store-api': {
-          target: env.VITE_HUB_STORE_PROXY_TARGET || 'http://localhost:9635',
+        "/hub-store-api": {
+          target:
+            env.VITE_HUB_STORE_PROXY_TARGET ||
+            "https://hub-store-service.kuhmute.net",
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/hub-store-api/, ''),
+          rewrite: (path) => path.replace(/^\/hub-store-api/, ""),
         },
-        '/kca-api': {
-          target: env.VITE_KCA_PROXY_TARGET || 'http://localhost:8088',
+        "/kca-api": {
+          target: env.VITE_KCA_PROXY_TARGET || "https://kca-proxy.kuhmute.net",
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/kca-api/, ''),
+          rewrite: (path) => path.replace(/^\/kca-api/, ""),
         },
       },
     },
     preview: {
       port: Number(env.VITE_PREVIEW_PORT || 4174),
     },
-  }
-})
+  };
+});
