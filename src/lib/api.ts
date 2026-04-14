@@ -399,6 +399,144 @@ export interface StudentProfileBundle {
   devices: RegisteredDevice[];
 }
 
+export interface StudentPublicUserSummary {
+  user_uuid: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  username: string;
+  school_id: string;
+  campus_id: string;
+  student_id: string;
+  profile_image_url?: string | null;
+  is_friend: boolean;
+  is_pending: boolean;
+  requested_by?: string;
+}
+
+export interface StudentPublicProfile {
+  user: StudentPublicUserSummary;
+  total_point_count: number;
+  active_challenges: unknown[];
+  posts: unknown[];
+}
+
+interface RouteHistorySummary {
+  total_sessions: number;
+  total_distance_meters: number;
+  total_duration_seconds: number;
+  total_bonus_points: number;
+  total_penalty_points: number;
+  total_point_count: number;
+}
+
+const sharedManagedAppIds = ["juise-admin-app", "juise-customer-app"] as const;
+
+function buildManagedAppCandidates(managedAppId: string): string[] {
+  return Array.from(
+    new Set(
+      [managedAppId.trim(), ...sharedManagedAppIds].filter(
+        (value): value is string => value !== "",
+      ),
+    ),
+  );
+}
+
+function dedupeMediaAssets(
+  assets: UserMediaAsset[],
+  appPriority: Map<string, number>,
+): UserMediaAsset[] {
+  return [...assets]
+    .sort((left, right) => {
+      const leftPriority = appPriority.get(left.app_id?.trim() ?? "") ?? 99;
+      const rightPriority = appPriority.get(right.app_id?.trim() ?? "") ?? 99;
+      if (leftPriority !== rightPriority) {
+        return leftPriority - rightPriority;
+      }
+      if (left.updated_at !== right.updated_at) {
+        return right.updated_at - left.updated_at;
+      }
+      return right.created_at - left.created_at;
+    })
+    .filter((asset, index, source) => {
+      const key =
+        asset.media_uuid?.trim() ||
+        `${asset.object_key?.trim() ?? ""}|${asset.entity_type}|${asset.entity_uuid}|${asset.slot}`;
+      return (
+        key !== "" &&
+        source.findIndex((candidate) => {
+          const candidateKey =
+            candidate.media_uuid?.trim() ||
+            `${candidate.object_key?.trim() ?? ""}|${candidate.entity_type}|${candidate.entity_uuid}|${candidate.slot}`;
+          return candidateKey === key;
+        }) === index
+      );
+    });
+}
+
+function dedupeRegisteredDevices(
+  devices: RegisteredDevice[],
+  appPriority: Map<string, number>,
+): RegisteredDevice[] {
+  return [...devices]
+    .sort((left, right) => {
+      const leftPriority = appPriority.get(left.app_id?.trim() ?? "") ?? 99;
+      const rightPriority = appPriority.get(right.app_id?.trim() ?? "") ?? 99;
+      if (leftPriority !== rightPriority) {
+        return leftPriority - rightPriority;
+      }
+      if (left.updated_at !== right.updated_at) {
+        return right.updated_at - left.updated_at;
+      }
+      return right.created_at - left.created_at;
+    })
+    .filter((device, index, source) => {
+      const key = device.registered_device_uuid?.trim() ?? "";
+      return (
+        key !== "" &&
+        source.findIndex(
+          (candidate) =>
+            candidate.registered_device_uuid?.trim() === key,
+        ) === index
+      );
+    });
+}
+
+function pickAvatarAsset(assets: UserMediaAsset[]): UserMediaAsset | null {
+  return (
+    [...assets]
+      .filter((asset) => asset.slot === "avatar" && asset.object_key?.trim())
+      .sort((left, right) => {
+        if (left.updated_at !== right.updated_at) {
+          return right.updated_at - left.updated_at;
+        }
+        return right.created_at - left.created_at;
+      })[0] ?? null
+  );
+}
+
+async function resolveSignedUserProfileImageUrl(
+  managedAppId: string,
+  schoolId: string,
+  targetUserUUID: string,
+): Promise<string | null> {
+  const mediaAssets = await fetchUserMediaAssets(
+    managedAppId,
+    targetUserUUID,
+    "user_profile",
+    targetUserUUID,
+  ).catch(() => [] as UserMediaAsset[]);
+  const avatarAsset = pickAvatarAsset(mediaAssets);
+  if (!avatarAsset?.object_key) {
+    return null;
+  }
+
+  const signedAvatarUrls = await signSchoolMedia(schoolId, [
+    avatarAsset.object_key,
+  ]).catch(() => ({} as Record<string, string>));
+  return signedAvatarUrls[avatarAsset.object_key] ?? null;
+}
+
 export interface SchoolStudentRosterEntry {
   user: NebulaUser;
   membership: UserSchoolMembership;
@@ -1185,14 +1323,38 @@ export async function fetchUserMediaAssets(
     entity_type: entityType,
     entity_uuid: entityUUID,
   });
-
-  return request<UserMediaAsset[]>(
-    "nebula",
-    `/api/v1/apps/${encodeURIComponent(managedAppId)}/user/${encodeURIComponent(userUUID)}/media?${search.toString()}`,
-    {
-      appIdHeader: managedAppId,
-    },
+  const appCandidates = buildManagedAppCandidates(managedAppId);
+  const appPriority = new Map(
+    appCandidates.map((value, index) => [value, index] as const),
   );
+
+  const results = await Promise.allSettled(
+    appCandidates.map((appId) =>
+      request<UserMediaAsset[]>(
+        "nebula",
+        `/api/v1/apps/${encodeURIComponent(appId)}/user/${encodeURIComponent(userUUID)}/media?${search.toString()}`,
+        {
+          appIdHeader: appId,
+        },
+      ),
+    ),
+  );
+
+  const mergedAssets = results.flatMap((result) =>
+    result.status === "fulfilled" ? result.value : [],
+  );
+  if (mergedAssets.length > 0) {
+    return dedupeMediaAssets(mergedAssets, appPriority);
+  }
+
+  const firstRejected = results.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  if (firstRejected) {
+    throw firstRejected.reason;
+  }
+
+  return [];
 }
 
 export async function signSchoolMedia(
@@ -1208,23 +1370,32 @@ export async function signSchoolMedia(
   if (uniqueObjectKeys.length === 0) {
     return {};
   }
+  const signedUrls: Record<string, string> = {};
 
-  const response = await request<{
-    items: SignedSchoolMediaItem[];
-  }>(
-    "kcaProxy",
-    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/media/sign`,
-    {
-      method: "POST",
-      body: {
-        object_keys: uniqueObjectKeys,
+  for (let index = 0; index < uniqueObjectKeys.length; index += 50) {
+    const chunk = uniqueObjectKeys.slice(index, index + 50);
+    const response = await request<{
+      items: SignedSchoolMediaItem[];
+    }>(
+      "kcaProxy",
+      `/api/v1/admin/school/${encodeURIComponent(schoolId)}/media/sign`,
+      {
+        method: "POST",
+        body: {
+          object_keys: chunk,
+        },
       },
-    },
-  );
+    );
 
-  return Object.fromEntries(
-    (response.items ?? []).map((item) => [item.object_key, item.get_url]),
-  );
+    Object.assign(
+      signedUrls,
+      Object.fromEntries(
+        (response.items ?? []).map((item) => [item.object_key, item.get_url]),
+      ),
+    );
+  }
+
+  return signedUrls;
 }
 
 export async function approveReservation(
@@ -1261,36 +1432,133 @@ export async function fetchStudentProfile(
   managedAppId: string,
   userUUID: string,
 ): Promise<StudentProfileBundle> {
-  const encodedAppId = encodeURIComponent(managedAppId);
+  const primaryAppId = managedAppId.trim();
+  const encodedAppId = encodeURIComponent(primaryAppId);
   const encodedUserUUID = encodeURIComponent(userUUID);
+  const appCandidates = buildManagedAppCandidates(primaryAppId);
+  const appPriority = new Map(
+    appCandidates.map((value, index) => [value, index] as const),
+  );
 
-  const [user, memberships, devices] = await Promise.all([
+  const [user, memberships, deviceResults] = await Promise.all([
     request<NebulaUser>(
       "nebula",
       `/api/v1/apps/${encodedAppId}/user/${encodedUserUUID}`,
       {
-        appIdHeader: managedAppId,
+        appIdHeader: primaryAppId,
       },
     ),
     request<UserSchoolMembership[]>(
       "nebula",
       `/api/v1/apps/${encodedAppId}/user/${encodedUserUUID}/school-memberships`,
       {
-        appIdHeader: managedAppId,
+        appIdHeader: primaryAppId,
       },
     ),
-    request<RegisteredDevice[]>(
-      "nebula",
-      `/api/v1/apps/${encodedAppId}/user/${encodedUserUUID}/registered-devices`,
-      {
-        appIdHeader: managedAppId,
-      },
+    Promise.allSettled(
+      appCandidates.map((appId) =>
+        request<RegisteredDevice[]>(
+          "nebula",
+          `/api/v1/apps/${encodeURIComponent(appId)}/user/${encodedUserUUID}/registered-devices`,
+          {
+            appIdHeader: appId,
+          },
+        ),
+      ),
     ),
   ]);
+
+  const mergedDevices = deviceResults.flatMap((result) =>
+    result.status === "fulfilled" ? result.value : [],
+  );
 
   return {
     user,
     memberships,
-    devices,
+    devices: dedupeRegisteredDevices(mergedDevices, appPriority),
   };
+}
+
+export async function fetchStudentPublicProfile(
+  managedAppId: string,
+  schoolId: string,
+  targetUserUUID: string,
+): Promise<StudentPublicProfile> {
+  const search = new URLSearchParams({
+    school_id: schoolId,
+    posts_limit: "1",
+  });
+  try {
+    const profile = await request<StudentPublicProfile>(
+      "kcaProxy",
+      `/api/v1/user/social/profiles/${encodeURIComponent(targetUserUUID)}?${search.toString()}`,
+      {
+        appIdHeader: managedAppId,
+      },
+    );
+    if (profile.user.profile_image_url?.trim()) {
+      return profile;
+    }
+
+    const signedAvatarUrl = await resolveSignedUserProfileImageUrl(
+      managedAppId,
+      schoolId,
+      targetUserUUID,
+    ).catch(() => null);
+    if (!signedAvatarUrl) {
+      return profile;
+    }
+
+    return {
+      ...profile,
+      user: {
+        ...profile.user,
+        profile_image_url: signedAvatarUrl,
+      },
+    };
+  } catch {
+    const [summary, mediaAssets] = await Promise.all([
+      request<RouteHistorySummary>(
+        "nebula",
+        `/api/v1/apps/${encodeURIComponent(managedAppId)}/user/${encodeURIComponent(targetUserUUID)}/route-history/summary?${new URLSearchParams({
+          school_id: schoolId,
+        }).toString()}`,
+        {
+          appIdHeader: managedAppId,
+        },
+      ),
+      fetchUserMediaAssets(managedAppId, targetUserUUID, "user_profile", targetUserUUID).catch(
+        () => [] as UserMediaAsset[],
+      ),
+    ]);
+
+    const avatarAsset = pickAvatarAsset(mediaAssets);
+    const signedAvatarUrls: Record<string, string> = avatarAsset?.object_key
+      ? await signSchoolMedia(schoolId, [avatarAsset.object_key]).catch(
+          () => ({} as Record<string, string>),
+        )
+      : {};
+    const signedAvatarUrl = avatarAsset?.object_key
+      ? signedAvatarUrls[avatarAsset.object_key] ?? null
+      : null;
+
+    return {
+      user: {
+        user_uuid: targetUserUUID,
+        first_name: "",
+        last_name: "",
+        email: "",
+        username: "",
+        school_id: schoolId,
+        campus_id: "",
+        student_id: "",
+        profile_image_url: signedAvatarUrl,
+        is_friend: false,
+        is_pending: false,
+      },
+      total_point_count: summary.total_point_count ?? 0,
+      active_challenges: [],
+      posts: [],
+    };
+  }
 }

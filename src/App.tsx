@@ -26,6 +26,7 @@ import {
   fetchSchoolStudentRoster,
   fetchSchoolTermReservations,
   fetchStudentProfile,
+  fetchStudentPublicProfile,
   fetchUserMediaAssets,
   generateAdminPackQrCode,
   generateAdminPackSpotQrCode,
@@ -51,7 +52,9 @@ import {
   type SchoolZone,
   type SchoolStudentRosterEntry,
   type SchoolTerm,
+  type RegisteredDevice,
   type StudentProfileBundle,
+  type StudentPublicProfile,
   updateSchoolChallenge,
   uploadSchoolChallengeImage,
   type UserMediaAsset,
@@ -59,14 +62,10 @@ import {
   updateSchoolPack,
 } from "./lib/api";
 import {
-  PackLocationPicker,
-  PackLocationsMap,
   type PackMapMarker,
   type PackMapPoint,
 } from "./components/PackLocationPicker";
 import {
-  SchoolZoneMapEditor,
-  SchoolZonesMap,
   type SchoolZoneMapPolygon,
 } from "./components/SchoolZoneMapEditor";
 import {
@@ -77,6 +76,14 @@ import {
   writeDashboardSession,
   type DashboardContext,
 } from "./lib/storage";
+import { ChallengesScreen } from "./screens/dashboard/ChallengesScreen";
+import { PacksScreen } from "./screens/dashboard/PacksScreen";
+import { PoisScreen } from "./screens/dashboard/PoisScreen";
+import { ReservationsScreen } from "./screens/dashboard/ReservationsScreen";
+import { SchoolProfileScreen } from "./screens/dashboard/SchoolProfileScreen";
+import { StudentsScreen } from "./screens/dashboard/StudentsScreen";
+import { TermsScreen } from "./screens/dashboard/TermsScreen";
+import { ZonesScreen } from "./screens/dashboard/ZonesScreen";
 
 type Section =
   | "school"
@@ -199,6 +206,7 @@ interface ChallengeDraft {
 type StudentIdPhotoSlot = "front" | "back";
 type StudentIdPhotoKeys = Partial<Record<StudentIdPhotoSlot, string>>;
 type StudentRosterPhotoKeyMap = Record<string, StudentIdPhotoKeys>;
+type StudentDevicePhotoMap = Record<string, string>;
 const newChallengeSelectionId = "__new_challenge__";
 
 const authAppId =
@@ -703,6 +711,202 @@ function collectStudentIdPhotoKeys(
   return photoKeys;
 }
 
+function resolveRegisteredDevicePhotoObjectKey(assets: UserMediaAsset[]): string {
+  const slotPriority: Record<string, number> = {
+    photo: 0,
+    overview: 1,
+    logo: 2,
+  };
+
+  return (
+    [...assets]
+      .filter((asset) => asset.object_key?.trim())
+      .sort((left, right) => {
+        const leftRank = slotPriority[left.slot?.trim() ?? ""] ?? 99;
+        const rightRank = slotPriority[right.slot?.trim() ?? ""] ?? 99;
+        if (leftRank !== rightRank) {
+          return leftRank - rightRank;
+        }
+        if (left.updated_at !== right.updated_at) {
+          return right.updated_at - left.updated_at;
+        }
+        return right.created_at - left.created_at;
+      })[0]?.object_key?.trim() ?? ""
+  );
+}
+
+async function resolveStudentDevicePhotoUrls(
+  managedAppId: string,
+  schoolId: string,
+  userUUID: string,
+  devices: RegisteredDevice[],
+): Promise<StudentDevicePhotoMap> {
+  if (!schoolId || !userUUID || devices.length === 0) {
+    return {};
+  }
+
+  const devicePhotoEntries = (
+    await Promise.allSettled(
+      devices.map(async (device) => {
+        const assets = await fetchUserMediaAssets(
+          managedAppId,
+          device.user_uuid || userUUID,
+          "registered_device",
+          device.registered_device_uuid,
+        );
+        const objectKey = resolveRegisteredDevicePhotoObjectKey(assets);
+        if (!objectKey) {
+          return null;
+        }
+
+        return {
+          registeredDeviceUUID: device.registered_device_uuid,
+          objectKey,
+        };
+      }),
+    )
+  ).flatMap((result) =>
+    result.status === "fulfilled" && result.value ? [result.value] : [],
+  );
+
+  if (devicePhotoEntries.length === 0) {
+    return {};
+  }
+
+  const signedUrls = await signSchoolMedia(
+    schoolId,
+    devicePhotoEntries.map((entry) => entry.objectKey),
+  ).catch(() => ({} as Record<string, string>));
+
+  return Object.fromEntries(
+    devicePhotoEntries.flatMap((entry) => {
+      const signedUrl = signedUrls[entry.objectKey] ?? "";
+      return signedUrl ? [[entry.registeredDeviceUUID, signedUrl]] : [];
+    }),
+  );
+}
+
+async function resolveSchoolStudentProfilePhotoUrls(
+  managedAppId: string,
+  schoolId: string,
+  roster: SchoolStudentRosterEntry[],
+): Promise<Record<string, string>> {
+  const uniqueUserUUIDs = Array.from(
+    new Set(
+      roster
+        .flatMap((entry) => [
+          entry.user.k_guid?.trim() ?? "",
+          entry.membership.user_uuid?.trim() ?? "",
+        ])
+        .filter(Boolean),
+    ),
+  );
+
+  if (uniqueUserUUIDs.length === 0) {
+    return {};
+  }
+
+  const avatarEntries = (
+    await Promise.all(
+      uniqueUserUUIDs.map(async (userUUID) => {
+        const assets = await fetchUserMediaAssets(
+          managedAppId,
+          userUUID,
+          "user_profile",
+          userUUID,
+        ).catch(() => [] as UserMediaAsset[]);
+
+        const avatarAsset =
+          [...assets]
+            .filter((asset) => asset.slot === "avatar" && asset.object_key.trim())
+            .sort((left, right) => right.updated_at - left.updated_at)[0] ?? null;
+        if (!avatarAsset?.object_key) {
+          return null;
+        }
+
+        return {
+          userUUID,
+          objectKey: avatarAsset.object_key,
+        };
+      }),
+    )
+  ).filter(
+    (
+      value,
+    ): value is {
+      userUUID: string;
+      objectKey: string;
+    } => value !== null,
+  );
+
+  const signedAvatarUrls =
+    avatarEntries.length > 0
+      ? await signSchoolMedia(
+          schoolId,
+          avatarEntries.map((entry) => entry.objectKey),
+        ).catch(() => ({} as Record<string, string>))
+      : {};
+
+  const resolvedUrls = Object.fromEntries(
+    avatarEntries.flatMap((entry) => {
+      const signedUrl = signedAvatarUrls[entry.objectKey] ?? "";
+      return signedUrl ? [[entry.userUUID, signedUrl]] : [];
+    }),
+  );
+
+  const missingUserUUIDs = uniqueUserUUIDs.filter(
+    (userUUID) => !resolvedUrls[userUUID],
+  );
+  if (missingUserUUIDs.length === 0) {
+    return resolvedUrls;
+  }
+
+  const publicProfileResults = await Promise.allSettled(
+    missingUserUUIDs.map(async (userUUID) => {
+      const profile = await fetchStudentPublicProfile(
+        managedAppId,
+        schoolId,
+        userUUID,
+      );
+      const profileImageUrl = profile.user.profile_image_url?.trim() ?? "";
+      if (!profileImageUrl) {
+        return null;
+      }
+
+      return {
+        userUUID,
+        profileImageUrl,
+      };
+    }),
+  );
+
+  for (const result of publicProfileResults) {
+    if (result.status !== "fulfilled" || !result.value) {
+      continue;
+    }
+    resolvedUrls[result.value.userUUID] = result.value.profileImageUrl;
+  }
+
+  for (const entry of roster) {
+    const rosterUserUUID = entry.user.k_guid?.trim() ?? "";
+    const membershipUserUUID = entry.membership.user_uuid?.trim() ?? "";
+    const sharedUrl =
+      (rosterUserUUID ? resolvedUrls[rosterUserUUID] : "") ||
+      (membershipUserUUID ? resolvedUrls[membershipUserUUID] : "");
+    if (!sharedUrl) {
+      continue;
+    }
+    if (rosterUserUUID) {
+      resolvedUrls[rosterUserUUID] = sharedUrl;
+    }
+    if (membershipUserUUID) {
+      resolvedUrls[membershipUserUUID] = sharedUrl;
+    }
+  }
+
+  return resolvedUrls;
+}
+
 async function resolveSchoolStudentPhotoState(
   managedAppId: string,
   schoolId: string,
@@ -922,21 +1126,39 @@ function SchoolLogoPreview(props: {
   logoUrl?: string;
   label: string;
   size?: "header" | "field";
+  onPreview?: (imageUrl: string, alt: string, label?: string) => void;
 }) {
   const [hasImageError, setHasImageError] = useState(false);
   const normalizedUrl = props.logoUrl?.trim() ?? "";
   const showImage = normalizedUrl !== "" && !hasImageError;
   const monogram = buildSchoolMonogram(props.label);
+  const alt = `${props.label} logo`;
 
   return (
     <div className={`school-logo school-logo-${props.size ?? "field"}`}>
       {showImage ? (
-        <img
-          className="school-logo-image"
-          src={normalizedUrl}
-          alt={`${props.label} logo`}
-          onError={() => setHasImageError(true)}
-        />
+        <div
+          className="image-preview-trigger"
+          role={props.onPreview ? "button" : undefined}
+          tabIndex={props.onPreview ? 0 : undefined}
+          onClick={() => props.onPreview?.(normalizedUrl, alt, props.label)}
+          onKeyDown={(event) => {
+            if (!props.onPreview) {
+              return;
+            }
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              props.onPreview(normalizedUrl, alt, props.label);
+            }
+          }}
+        >
+          <img
+            className="school-logo-image"
+            src={normalizedUrl}
+            alt={alt}
+            onError={() => setHasImageError(true)}
+          />
+        </div>
       ) : (
         <div className="school-logo-fallback" aria-hidden="true">
           {monogram}
@@ -951,20 +1173,38 @@ function EntityImagePreview(props: {
   label: string;
   altSuffix?: string;
   fallbackLabel?: string;
+  onPreview?: (imageUrl: string, alt: string, label?: string) => void;
 }) {
   const [failedImageUrl, setFailedImageUrl] = useState("");
   const normalizedUrl = props.imageUrl?.trim() ?? "";
   const showImage = normalizedUrl !== "" && failedImageUrl !== normalizedUrl;
+  const alt = `${props.label} ${props.altSuffix ?? "image"}`;
 
   return (
     <div className="challenge-image-preview">
       {showImage ? (
-        <img
-          className="challenge-image-preview-image"
-          src={normalizedUrl}
-          alt={`${props.label} ${props.altSuffix ?? "image"}`}
-          onError={() => setFailedImageUrl(normalizedUrl)}
-        />
+        <div
+          className="image-preview-trigger"
+          role={props.onPreview ? "button" : undefined}
+          tabIndex={props.onPreview ? 0 : undefined}
+          onClick={() => props.onPreview?.(normalizedUrl, alt, props.label)}
+          onKeyDown={(event) => {
+            if (!props.onPreview) {
+              return;
+            }
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              props.onPreview(normalizedUrl, alt, props.label);
+            }
+          }}
+        >
+          <img
+            className="challenge-image-preview-image"
+            src={normalizedUrl}
+            alt={alt}
+            onError={() => setFailedImageUrl(normalizedUrl)}
+          />
+        </div>
       ) : (
         <div className="challenge-image-preview-fallback" aria-hidden="true">
           {props.fallbackLabel ?? "Image preview"}
@@ -1109,6 +1349,11 @@ function App() {
   const [challengeParticipants, setChallengeParticipants] = useState<
     SchoolChallengeParticipantProgress[]
   >([]);
+  const [imagePreview, setImagePreview] = useState<{
+    imageUrl: string;
+    alt: string;
+    label?: string;
+  } | null>(null);
   const [challengeParticipantsBusy, setChallengeParticipantsBusy] =
     useState(false);
   const [packDraft, setPackDraft] = useState<PackDraft>(() =>
@@ -1134,8 +1379,14 @@ function App() {
   const [selectedReservationId, setSelectedReservationId] = useState("");
   const [studentProfile, setStudentProfile] =
     useState<StudentProfileBundle | null>(null);
+  const [studentPublicProfile, setStudentPublicProfile] =
+    useState<StudentPublicProfile | null>(null);
+  const [studentDevicePhotoUrls, setStudentDevicePhotoUrls] =
+    useState<StudentDevicePhotoMap>({});
   const [studentBusy, setStudentBusy] = useState(false);
   const [studentError, setStudentError] = useState("");
+  const [studentPublicProfileError, setStudentPublicProfileError] =
+    useState("");
   const [schoolStudentRoster, setSchoolStudentRoster] = useState<
     SchoolStudentRosterEntry[]
   >([]);
@@ -1145,6 +1396,8 @@ function App() {
   const [schoolStudentMediaUrls, setSchoolStudentMediaUrls] = useState<
     Record<string, string>
   >({});
+  const [schoolStudentProfilePhotoUrls, setSchoolStudentProfilePhotoUrls] =
+    useState<Record<string, string>>({});
   const [schoolStudentPhotoKeys, setSchoolStudentPhotoKeys] =
     useState<StudentRosterPhotoKeyMap>({});
   const [schoolStudentRosterBusy, setSchoolStudentRosterBusy] = useState(false);
@@ -1755,15 +2008,20 @@ function App() {
       setReservations([]);
       setSelectedReservationId("");
       setStudentProfile(null);
+      setStudentPublicProfile(null);
+      setStudentDevicePhotoUrls({});
+      setStudentPublicProfileError("");
       setSchoolPacks([]);
       setPoiDrafts([]);
       setActivePoiDraftId("");
       setSchoolStudentRoster([]);
       setSchoolStudentReservations([]);
       setSchoolStudentMediaUrls({});
+      setSchoolStudentProfilePhotoUrls({});
       setSchoolStudentRosterError("");
       setSchoolChallenges([]);
       setChallengeParticipants([]);
+      setImagePreview(null);
       setChallengeDraft(createEmptyChallengeDraft());
       setSelectedChallengeId("");
       setSchoolDraft(createEmptySchoolDraft());
@@ -1771,6 +2029,40 @@ function App() {
       return;
     }
   }, [session]);
+
+  useEffect(() => {
+    if (!imagePreview) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setImagePreview(null);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [imagePreview]);
+
+  function handleOpenImagePreview(
+    imageUrl: string,
+    alt: string,
+    label?: string,
+  ) {
+    const normalizedImageUrl = imageUrl.trim();
+    if (!normalizedImageUrl) {
+      return;
+    }
+
+    setImagePreview({
+      imageUrl: normalizedImageUrl,
+      alt: alt.trim() || label?.trim() || "Dashboard image",
+      label: label?.trim() || undefined,
+    });
+  }
 
   useEffect(() => {
     if (selectedChallengeId === newChallengeSelectionId) {
@@ -2095,6 +2387,7 @@ function App() {
   useEffect(() => {
     if (!session || !selectedReservation) {
       setStudentProfile(null);
+      setStudentDevicePhotoUrls({});
       setStudentError("");
       return;
     }
@@ -2115,9 +2408,20 @@ function App() {
         }
 
         setStudentProfile(nextProfile);
+        const nextDevicePhotoUrls = await resolveStudentDevicePhotoUrls(
+          context.managedAppId,
+          activeSchoolId,
+          studentUserUUID,
+          nextProfile.devices,
+        );
+        if (cancelled) {
+          return;
+        }
+        setStudentDevicePhotoUrls(nextDevicePhotoUrls);
       } catch (error) {
         if (!cancelled) {
           setStudentProfile(null);
+          setStudentDevicePhotoUrls({});
           setStudentError(getErrorMessage(error));
         }
       } finally {
@@ -2132,7 +2436,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [context.managedAppId, selectedReservation, session]);
+  }, [activeSchoolId, context.managedAppId, selectedReservation, session]);
 
   useEffect(() => {
     if (!session || currentSection !== "students" || !activeSchoolId) {
@@ -2182,12 +2486,28 @@ function App() {
             });
           }
         }
+
+        try {
+          const nextProfilePhotoUrls = await resolveSchoolStudentProfilePhotoUrls(
+            context.managedAppId,
+            activeSchoolId,
+            nextRoster,
+          );
+          if (!cancelled) {
+            setSchoolStudentProfilePhotoUrls(nextProfilePhotoUrls);
+          }
+        } catch {
+          if (!cancelled) {
+            setSchoolStudentProfilePhotoUrls({});
+          }
+        }
       } catch (error) {
         if (!cancelled) {
           setSchoolStudentRoster([]);
           setSchoolStudentReservations([]);
           setSchoolStudentPhotoKeys({});
           setSchoolStudentMediaUrls({});
+          setSchoolStudentProfilePhotoUrls({});
           setSchoolStudentRosterError(getErrorMessage(error));
         }
       } finally {
@@ -2454,11 +2774,23 @@ function App() {
           message: getErrorMessage(error),
         });
       }
+
+      try {
+        const nextProfilePhotoUrls = await resolveSchoolStudentProfilePhotoUrls(
+          context.managedAppId,
+          activeSchoolId,
+          nextRoster,
+        );
+        setSchoolStudentProfilePhotoUrls(nextProfilePhotoUrls);
+      } catch {
+        setSchoolStudentProfilePhotoUrls({});
+      }
     } catch (error) {
       setSchoolStudentRoster([]);
       setSchoolStudentReservations([]);
       setSchoolStudentPhotoKeys({});
       setSchoolStudentMediaUrls({});
+      setSchoolStudentProfilePhotoUrls({});
       setSchoolStudentRosterError(getErrorMessage(error));
     } finally {
       setSchoolStudentRosterBusy(false);
@@ -2473,15 +2805,50 @@ function App() {
     if (!entry || !session || !context) return;
     setStudentBusy(true);
     setStudentError("");
+    setStudentPublicProfileError("");
+    setStudentPublicProfile(null);
+    setStudentDevicePhotoUrls({});
     try {
-      const profile = await fetchStudentProfile(
-        context.managedAppId,
-        entry.user.k_guid,
-      );
-      setStudentProfile(profile);
-    } catch (error) {
-      setStudentError(getErrorMessage(error));
-      setStudentProfile(null);
+      const [profileResult, publicProfileResult] = await Promise.allSettled([
+        fetchStudentProfile(context.managedAppId, entry.user.k_guid),
+        fetchStudentPublicProfile(
+          context.managedAppId,
+          activeSchoolId,
+          entry.user.k_guid,
+        ),
+      ]);
+
+      if (profileResult.status === "fulfilled") {
+        setStudentProfile(profileResult.value);
+        const nextDevicePhotoUrls = await resolveStudentDevicePhotoUrls(
+          context.managedAppId,
+          activeSchoolId,
+          entry.user.k_guid,
+          profileResult.value.devices,
+        );
+        setStudentDevicePhotoUrls(nextDevicePhotoUrls);
+      } else {
+        setStudentError(getErrorMessage(profileResult.reason));
+        setStudentProfile(null);
+        setStudentDevicePhotoUrls({});
+      }
+
+      if (publicProfileResult.status === "fulfilled") {
+        setStudentPublicProfile(publicProfileResult.value);
+        const profileImageUrl =
+          publicProfileResult.value.user.profile_image_url?.trim() ?? "";
+        if (profileImageUrl) {
+          setSchoolStudentProfilePhotoUrls((current) => ({
+            ...current,
+            [entry.user.k_guid]: profileImageUrl,
+            [entry.membership.user_uuid]: profileImageUrl,
+          }));
+        }
+      } else {
+        setStudentPublicProfileError(
+          getErrorMessage(publicProfileResult.reason),
+        );
+      }
     } finally {
       setStudentBusy(false);
     }
@@ -3550,6 +3917,227 @@ function App() {
     );
   }
 
+  const sectionContent = (() => {
+    switch (currentSection) {
+      case "school":
+        return (
+          <SchoolProfileScreen
+            activeSchoolId={activeSchoolId}
+            schoolBusy={schoolBusy}
+            schoolDraft={schoolDraft}
+            setSchoolDraft={setSchoolDraft}
+            schoolColorFields={schoolColorFields}
+            handleSaveSchool={handleSaveSchool}
+            refreshActiveSchool={refreshActiveSchool}
+            handleSchoolColorChange={handleSchoolColorChange}
+            getColorPickerValue={getColorPickerValue}
+            defaultSchoolColorScheme={defaultSchoolColorScheme}
+            resolvedSchoolColors={resolvedSchoolColors}
+            SchoolLogoPreview={(props: Parameters<typeof SchoolLogoPreview>[0]) => (
+              <SchoolLogoPreview {...props} onPreview={handleOpenImagePreview} />
+            )}
+          />
+        );
+      case "terms":
+        return (
+          <TermsScreen
+            activeSchoolId={activeSchoolId}
+            schoolBusy={schoolBusy}
+            termDrafts={termDrafts}
+            setTermDrafts={setTermDrafts}
+            createEmptyTermDraft={createEmptyTermDraft}
+            handleSaveTerms={handleSaveTerms}
+          />
+        );
+      case "pois":
+        return (
+          <PoisScreen
+            activeSchoolId={activeSchoolId}
+            poiBusy={poiBusy}
+            poiDrafts={poiDrafts}
+            setPoiDrafts={setPoiDrafts}
+            activePoiDraftId={activePoiDraftId}
+            setActivePoiDraftId={setActivePoiDraftId}
+            selectedPoiDraft={selectedPoiDraft}
+            selectedPoiLocation={selectedPoiLocation}
+            poiMapMarkers={poiMapMarkers}
+            totalPOIBonusPoints={totalPOIBonusPoints}
+            createEmptyPOIDraft={createEmptyPOIDraft}
+            refreshSchoolPOIs={refreshSchoolPOIs}
+            handleSavePOIs={handleSavePOIs}
+            handlePoiLocationSelect={handlePoiLocationSelect}
+            DetailRow={DetailRow}
+          />
+        );
+      case "zones":
+        return (
+          <ZonesScreen
+            activeSchoolId={activeSchoolId}
+            zoneBusy={zoneBusy}
+            zoneDrafts={zoneDrafts}
+            setZoneDrafts={setZoneDrafts}
+            activeZoneDraftId={activeZoneDraftId}
+            setActiveZoneDraftId={setActiveZoneDraftId}
+            selectedZoneDraft={selectedZoneDraft}
+            zoneMapPolygons={zoneMapPolygons}
+            mappedZoneCount={mappedZoneCount}
+            createEmptyZoneDraft={createEmptyZoneDraft}
+            refreshSchoolZones={refreshSchoolZones}
+            handleSaveZones={handleSaveZones}
+            handleZonePointAdd={handleZonePointAdd}
+            handleZonePointInsert={handleZonePointInsert}
+            handleZonePointMove={handleZonePointMove}
+            DetailRow={DetailRow}
+          />
+        );
+      case "challenges":
+        return (
+          <ChallengesScreen
+            activeSchoolId={activeSchoolId}
+            challengeBusy={challengeBusy}
+            challengeListBusy={challengeListBusy}
+            challengeParticipantsBusy={challengeParticipantsBusy}
+            challengeImageUploadBusy={challengeImageUploadBusy}
+            selectedChallengeId={selectedChallengeId}
+            setSelectedChallengeId={setSelectedChallengeId}
+            challengeDraft={challengeDraft}
+            setChallengeDraft={setChallengeDraft}
+            createEmptyChallengeDraft={createEmptyChallengeDraft}
+            refreshSchoolChallenges={refreshSchoolChallenges}
+            handleSaveChallenge={handleSaveChallenge}
+            handleDeleteSelectedChallenge={handleDeleteSelectedChallenge}
+            handleChallengeImageFileChange={handleChallengeImageFileChange}
+            selectedChallenge={selectedChallenge}
+            schoolChallenges={schoolChallenges}
+            currentAndUpcomingChallenges={currentAndUpcomingChallenges}
+            pastChallenges={pastChallenges}
+            challengeParticipants={challengeParticipants}
+            challengeParticipantSummary={challengeParticipantSummary}
+            resolveChallengeStatus={resolveChallengeStatus}
+            formatChallengeMetricValue={formatChallengeMetricValue}
+            formatDateTimeForDisplay={formatDateTimeForDisplay}
+            formatNebulaUserName={formatNebulaUserName}
+            EntityImagePreview={(props: Parameters<typeof EntityImagePreview>[0]) => (
+              <EntityImagePreview {...props} onPreview={handleOpenImagePreview} />
+            )}
+            DetailRow={DetailRow}
+            newChallengeSelectionId={newChallengeSelectionId}
+            handleImagePreview={handleOpenImagePreview}
+          />
+        );
+      case "students":
+        return (
+          <StudentsScreen
+            activeSchoolId={activeSchoolId}
+            schoolStudentRosterBusy={schoolStudentRosterBusy}
+            schoolStudentRosterError={schoolStudentRosterError}
+            studentRosterSearch={studentRosterSearch}
+            setStudentRosterSearch={setStudentRosterSearch}
+            filteredStudentRoster={filteredStudentRoster}
+            selectedStudentMembershipId={selectedStudentMembershipId}
+            setSelectedStudentMembershipId={setSelectedStudentMembershipId}
+            selectedStudentEntry={selectedStudentEntry}
+            schoolStudentPhotoKeys={schoolStudentPhotoKeys}
+            schoolStudentMediaUrls={schoolStudentMediaUrls}
+            schoolStudentProfilePhotoUrls={schoolStudentProfilePhotoUrls}
+            studentDevicePhotoUrls={studentDevicePhotoUrls}
+            schoolReservationsByMembership={schoolReservationsByMembership}
+            studentBusy={studentBusy}
+            studentError={studentError}
+            studentProfile={studentProfile}
+            studentPublicProfile={studentPublicProfile}
+            studentPublicProfileError={studentPublicProfileError}
+            handleSelectStudentInRoster={handleSelectStudentInRoster}
+            refreshStudentRoster={refreshStudentRoster}
+            setStudentProfile={setStudentProfile}
+            setStudentPublicProfile={setStudentPublicProfile}
+            formatNebulaUserName={formatNebulaUserName}
+            resolveStudentPhotoObjectKey={resolveStudentPhotoObjectKey}
+            formatDateOnly={formatDateOnly}
+            formatUnixTimestamp={formatUnixTimestamp}
+            handleCopyUuid={handleCopyUuid}
+            DetailRow={DetailRow}
+            UuidCopyField={UuidCopyField}
+            handleImagePreview={handleOpenImagePreview}
+          />
+        );
+      case "packs":
+        return (
+          <PacksScreen
+            activeSchoolId={activeSchoolId}
+            packBusy={packBusy}
+            packsLoading={packsLoading}
+            activePackTab={activePackTab}
+            setActivePackTab={setActivePackTab}
+            refreshSchoolPacks={refreshSchoolPacks}
+            schoolPacks={schoolPacks}
+            existingPackMapMarkers={existingPackMapMarkers}
+            packsWithoutLocationsCount={packsWithoutLocationsCount}
+            handleCreatePack={handleCreatePack}
+            packDraft={packDraft}
+            setPackDraft={setPackDraft}
+            schoolDraft={schoolDraft}
+            packPhotoPreviewUrl={packPhotoPreviewUrl}
+            EntityImagePreview={(props: Parameters<typeof EntityImagePreview>[0]) => (
+              <EntityImagePreview {...props} onPreview={handleOpenImagePreview} />
+            )}
+            packPhotoFile={packPhotoFile}
+            handlePackPhotoFileChange={handlePackPhotoFileChange}
+            setPackPhotoFile={setPackPhotoFile}
+            setPackPhotoPreviewUrl={setPackPhotoPreviewUrl}
+            resetPackCreateForm={resetPackCreateForm}
+            selectedPackLocation={selectedPackLocation}
+            handlePackLocationSelect={handlePackLocationSelect}
+            editingPackId={editingPackId}
+            packEditDraft={packEditDraft}
+            getPackPhotoUrl={getPackPhotoUrl}
+            packEditPhotoPreviewUrl={packEditPhotoPreviewUrl}
+            handleCancelPackEdit={handleCancelPackEdit}
+            handleStartEditingPack={handleStartEditingPack}
+            packEditBusy={packEditBusy}
+            handleDownloadPackQrCode={handleDownloadPackQrCode}
+            qrActionTarget={qrActionTarget}
+            handleGeneratePackQrCode={handleGeneratePackQrCode}
+            handleDownloadPackSpotQrCode={handleDownloadPackSpotQrCode}
+            handleGeneratePackSpotQrCode={handleGeneratePackSpotQrCode}
+            handleSavePackEdit={handleSavePackEdit}
+            setPackEditDraft={setPackEditDraft}
+            packEditPhotoFile={packEditPhotoFile}
+            handlePackEditPhotoFileChange={handlePackEditPhotoFileChange}
+            setPackEditPhotoFile={setPackEditPhotoFile}
+            setPackEditPhotoPreviewUrl={setPackEditPhotoPreviewUrl}
+            UuidCopyField={UuidCopyField}
+            handleCopyUuid={handleCopyUuid}
+          />
+        );
+      case "reservations":
+        return (
+          <ReservationsScreen
+            activeSchoolId={activeSchoolId}
+            reservationsBusy={reservationsBusy}
+            reservations={reservations}
+            selectedReservationId={selectedReservationId}
+            setSelectedReservationId={setSelectedReservationId}
+            selectedReservation={selectedReservation}
+            refreshReservations={refreshReservations}
+            handleDenySelected={handleDenySelected}
+            handleApproveSelected={handleApproveSelected}
+            studentBusy={studentBusy}
+            studentError={studentError}
+            studentProfile={studentProfile}
+            studentDevicePhotoUrls={studentDevicePhotoUrls}
+            relevantMemberships={relevantMemberships}
+            formatUnixTimestamp={formatUnixTimestamp}
+            formatDateOnly={formatDateOnly}
+            DetailRow={DetailRow}
+            handleImagePreview={handleOpenImagePreview}
+          />
+        );
+      default:
+        return null;
+    }
+  })();
+
   return (
     <div className="app-shell">
       <aside className="sidebar" style={sidebarThemeStyle}>
@@ -3642,6 +4230,7 @@ function App() {
                 "Juise"
               }
               size="header"
+              onPreview={handleOpenImagePreview}
             />
             <div>
               <p className="eyebrow">Workspace</p>
@@ -3694,2930 +4283,38 @@ function App() {
           </div>
         ) : null}
 
-        {currentSection === "school" ? (
-          <section className="panel">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">School Identity</p>
-                <h2>Edit school profile</h2>
-              </div>
-              {schoolBusy ? <span className="muted-text">Saving…</span> : null}
-            </div>
-
-            {!activeSchoolId ? (
-              <p className="empty-state">
-                This admin login is not scoped to a school.
-              </p>
-            ) : null}
-
-            <form className="school-form" onSubmit={handleSaveSchool}>
-              <div className="form-grid">
-                <label className="field">
-                  <span>School ID</span>
-                  <input
-                    value={schoolDraft.school_id || activeSchoolId}
-                    onChange={(event) =>
-                      setSchoolDraft((current) => ({
-                        ...current,
-                        school_id: event.target.value,
-                      }))
-                    }
-                    disabled
-                    placeholder="ou"
-                  />
-                </label>
-                <label className="field">
-                  <span>Name</span>
-                  <input
-                    value={schoolDraft.name}
-                    onChange={(event) =>
-                      setSchoolDraft((current) => ({
-                        ...current,
-                        name: event.target.value,
-                      }))
-                    }
-                    placeholder="Oakland University"
-                  />
-                </label>
-                <label className="field">
-                  <span>Title</span>
-                  <input
-                    value={schoolDraft.title}
-                    onChange={(event) =>
-                      setSchoolDraft((current) => ({
-                        ...current,
-                        title: event.target.value,
-                      }))
-                    }
-                    placeholder="Oakland University"
-                  />
-                </label>
-                <label className="field">
-                  <span>Default Campus ID</span>
-                  <input
-                    value={schoolDraft.default_campus_id}
-                    onChange={(event) =>
-                      setSchoolDraft((current) => ({
-                        ...current,
-                        default_campus_id: event.target.value,
-                      }))
-                    }
-                    placeholder="main"
-                  />
-                </label>
-                <div className="logo-field-row field-span-2">
-                  <label className="field">
-                    <span>Logo URL</span>
-                    <input
-                      value={schoolDraft.logo_url}
-                      onChange={(event) =>
-                        setSchoolDraft((current) => ({
-                          ...current,
-                          logo_url: event.target.value,
-                        }))
-                      }
-                      placeholder="https://…"
-                    />
-                  </label>
-                  <div className="logo-field-preview">
-                    <span>Logo Preview</span>
-                    <SchoolLogoPreview
-                      key={`field-${schoolDraft.logo_url || "fallback"}`}
-                      logoUrl={schoolDraft.logo_url}
-                      label={
-                        schoolDraft.title ||
-                        schoolDraft.name ||
-                        activeSchoolId ||
-                        "Juise"
-                      }
-                      size="field"
-                    />
-                  </div>
-                </div>
-                <label className="field checkbox-field">
-                  <span>Active</span>
-                  <input
-                    type="checkbox"
-                    checked={schoolDraft.active}
-                    onChange={(event) =>
-                      setSchoolDraft((current) => ({
-                        ...current,
-                        active: event.target.checked,
-                      }))
-                    }
-                  />
-                </label>
-                <div className="field field-span-2">
-                  <span>Color Scheme</span>
-                  <div className="color-scheme-grid">
-                    {schoolColorFields.map((field) => (
-                      <div className="color-input-row" key={field.key}>
-                        <div className="color-input-copy">
-                          <strong>{field.label}</strong>
-                          <span>{field.key}</span>
-                        </div>
-                        <input
-                          type="text"
-                          value={schoolDraft.color_scheme[field.key] ?? ""}
-                          onChange={(event) =>
-                            handleSchoolColorChange(
-                              field.key,
-                              event.target.value,
-                            )
-                          }
-                          placeholder={field.fallback}
-                        />
-                        <input
-                          type="color"
-                          className="color-picker-input"
-                          value={getColorPickerValue(
-                            schoolDraft.color_scheme[field.key],
-                            field.key as keyof typeof defaultSchoolColorScheme,
-                          )}
-                          onChange={(event) =>
-                            handleSchoolColorChange(
-                              field.key,
-                              event.target.value,
-                            )
-                          }
-                          aria-label={`${field.label} color`}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  <div
-                    className="color-preview-card"
-                    style={{
-                      background: resolvedSchoolColors.background,
-                      color: resolvedSchoolColors.text,
-                      borderColor: resolvedSchoolColors.secondary,
-                    }}
-                  >
-                    <div className="color-preview-swatches" aria-hidden="true">
-                      <span
-                        style={{ background: resolvedSchoolColors.primary }}
-                      />
-                      <span
-                        style={{ background: resolvedSchoolColors.secondary }}
-                      />
-                      <span
-                        style={{ background: resolvedSchoolColors.accent }}
-                      />
-                      <span
-                        style={{ background: resolvedSchoolColors.background }}
-                      />
-                      <span style={{ background: resolvedSchoolColors.text }} />
-                    </div>
-                    <strong>
-                      {schoolDraft.title.trim() ||
-                        schoolDraft.name.trim() ||
-                        "Brand preview"}
-                    </strong>
-                    <p>
-                      Preview the school palette before saving. The admin
-                      dashboard sends this as the structured{" "}
-                      <code>SchoolColorScheme</code> object.
-                    </p>
-                    <button
-                      className="color-preview-button"
-                      type="button"
-                      style={{
-                        background: resolvedSchoolColors.primary,
-                        color: resolvedSchoolColors.background,
-                      }}
-                    >
-                      Sample Primary Action
-                    </button>
-                  </div>
-                </div>
-                <label className="field field-span-2">
-                  <span>Metadata JSON</span>
-                  <textarea
-                    value={schoolDraft.metadata}
-                    onChange={(event) =>
-                      setSchoolDraft((current) => ({
-                        ...current,
-                        metadata: event.target.value,
-                      }))
-                    }
-                    rows={8}
-                  />
-                </label>
-              </div>
-
-              <div className="form-actions">
-                <button
-                  className="primary-button"
-                  type="submit"
-                  disabled={schoolBusy || !activeSchoolId}
-                >
-                  Save School
-                </button>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => void refreshActiveSchool()}
-                  disabled={schoolBusy || !activeSchoolId}
-                >
-                  Reload
-                </button>
-              </div>
-            </form>
-          </section>
-        ) : null}
-
-        {currentSection === "terms" ? (
-          <section className="panel">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">Academic Calendar</p>
-                <h2>Reservable terms</h2>
-              </div>
-              <div className="form-actions">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() =>
-                    setTermDrafts((current) => [
-                      ...current,
-                      createEmptyTermDraft(),
-                    ])
-                  }
-                  disabled={!activeSchoolId}
-                >
-                  Add Term
-                </button>
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={() => void handleSaveTerms()}
-                  disabled={schoolBusy || !activeSchoolId}
-                >
-                  Save Terms
-                </button>
-              </div>
-            </div>
-
-            {!activeSchoolId ? (
-              <p className="empty-state">
-                This admin login is not scoped to a school.
-              </p>
-            ) : null}
-
-            {activeSchoolId ? (
-              <div className="term-list">
-                {termDrafts.length === 0 ? (
-                  <p className="empty-state">
-                    No terms configured yet for this school.
-                  </p>
-                ) : null}
-                {termDrafts.map((term, index) => (
-                  <div className="term-row" key={term.id}>
-                    <label className="field">
-                      <span>Term Name</span>
-                      <input
-                        value={term.name}
-                        onChange={(event) =>
-                          setTermDrafts((current) =>
-                            current.map((item) =>
-                              item.id === term.id
-                                ? { ...item, name: event.target.value }
-                                : item,
-                            ),
-                          )
-                        }
-                        placeholder={`Term ${index + 1}`}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Start Date</span>
-                      <input
-                        type="date"
-                        value={term.start_date}
-                        onChange={(event) =>
-                          setTermDrafts((current) =>
-                            current.map((item) =>
-                              item.id === term.id
-                                ? { ...item, start_date: event.target.value }
-                                : item,
-                            ),
-                          )
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>End Date</span>
-                      <input
-                        type="date"
-                        value={term.end_date}
-                        onChange={(event) =>
-                          setTermDrafts((current) =>
-                            current.map((item) =>
-                              item.id === term.id
-                                ? { ...item, end_date: event.target.value }
-                                : item,
-                            ),
-                          )
-                        }
-                      />
-                    </label>
-                    <button
-                      className="danger-button"
-                      type="button"
-                      onClick={() =>
-                        setTermDrafts((current) =>
-                          current.filter((item) => item.id !== term.id),
-                        )
-                      }
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </section>
-        ) : null}
-
-        {currentSection === "pois" ? (
-          <section className="panel">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">School Points of Interest</p>
-                <h2>Manage school ride bonus checkpoints</h2>
-              </div>
-              <div className="form-actions">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() =>
-                    setPoiDrafts((current) => [
-                      ...current,
-                      createEmptyPOIDraft(),
-                    ])
-                  }
-                  disabled={!activeSchoolId}
-                >
-                  Add POI
-                </button>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => void refreshSchoolPOIs()}
-                  disabled={poiBusy || !activeSchoolId}
-                >
-                  Reload
-                </button>
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={() => void handleSavePOIs()}
-                  disabled={poiBusy || !activeSchoolId}
-                >
-                  Save POIs
-                </button>
-              </div>
-            </div>
-
-            {poiBusy ? (
-              <p className="muted-text">Syncing school POIs…</p>
-            ) : null}
-
-            {!activeSchoolId ? (
-              <p className="empty-state">
-                This admin login is not scoped to a school.
-              </p>
-            ) : null}
-
-            {activeSchoolId ? (
-              <div className="poi-layout">
-                <div className="poi-map-grid">
-                  <div className="map-card">
-                    <div className="data-section-header">
-                      <h3>POI map editor</h3>
-                      <span>
-                        {selectedPoiDraft
-                          ? selectedPoiDraft.title.trim() || "Selected POI"
-                          : "No POI selected"}
-                      </span>
-                    </div>
-                    {poiDrafts.length === 0 ? (
-                      <p className="empty-state">
-                        Add a point of interest to place it on the map.
-                      </p>
-                    ) : (
-                      <>
-                        <PackLocationPicker
-                          disabled={!selectedPoiDraft}
-                          onChange={handlePoiLocationSelect}
-                          value={selectedPoiLocation}
-                        />
-                        <p className="muted-text">
-                          Choose a POI row, then click on the map to place or
-                          move its checkpoint pin.
-                        </p>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="map-card">
-                    <div className="data-section-header">
-                      <h3>School POI coverage</h3>
-                      <span>{poiMapMarkers.length} mapped pins</span>
-                    </div>
-                    <PackLocationsMap markers={poiMapMarkers} />
-                    <div className="detail-grid">
-                      <DetailRow
-                        label="Active POIs"
-                        value={String(poiDrafts.length)}
-                      />
-                      <DetailRow
-                        label="Mapped Pins"
-                        value={String(poiMapMarkers.length)}
-                      />
-                      <DetailRow
-                        label="Potential Bonus"
-                        value={`${totalPOIBonusPoints} pts`}
-                      />
-                      <DetailRow
-                        label="Unmapped"
-                        value={String(poiDrafts.length - poiMapMarkers.length)}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="poi-list">
-                  {poiDrafts.length === 0 ? (
-                    <p className="empty-state">
-                      No POIs configured yet for this school.
-                    </p>
-                  ) : null}
-                  {poiDrafts.map((poi, index) => (
-                    <div
-                      className={`poi-row ${
-                        poi.id === activePoiDraftId ? "poi-row-active" : ""
-                      }`}
-                      key={poi.id}
-                    >
-                      <div className="poi-row-header">
-                        <div>
-                          <p className="eyebrow">POI {index + 1}</p>
-                          <h3>{poi.title.trim() || "Untitled POI"}</h3>
-                        </div>
-                        <div className="poi-row-actions">
-                          <button
-                            className="secondary-button"
-                            type="button"
-                            onClick={() => setActivePoiDraftId(poi.id)}
-                          >
-                            {poi.id === activePoiDraftId
-                              ? "Editing on Map"
-                              : "Pick on Map"}
-                          </button>
-                          <button
-                            className="danger-button"
-                            type="button"
-                            onClick={() =>
-                              setPoiDrafts((current) =>
-                                current.filter((item) => item.id !== poi.id),
-                              )
-                            }
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="form-grid">
-                        <label className="field">
-                          <span>Title</span>
-                          <input
-                            value={poi.title}
-                            onChange={(event) =>
-                              setPoiDrafts((current) =>
-                                current.map((item) =>
-                                  item.id === poi.id
-                                    ? { ...item, title: event.target.value }
-                                    : item,
-                                ),
-                              )
-                            }
-                            placeholder="Main Tower"
-                          />
-                        </label>
-                        <label className="field">
-                          <span>Bonus Points</span>
-                          <input
-                            type="number"
-                            min={0}
-                            step={1}
-                            value={poi.bonus_points}
-                            onChange={(event) =>
-                              setPoiDrafts((current) =>
-                                current.map((item) =>
-                                  item.id === poi.id
-                                    ? {
-                                        ...item,
-                                        bonus_points: event.target.value,
-                                      }
-                                    : item,
-                                ),
-                              )
-                            }
-                            placeholder="25"
-                          />
-                        </label>
-                        <label className="field">
-                          <span>Latitude</span>
-                          <input
-                            value={poi.lat}
-                            onChange={(event) =>
-                              setPoiDrafts((current) =>
-                                current.map((item) =>
-                                  item.id === poi.id
-                                    ? { ...item, lat: event.target.value }
-                                    : item,
-                                ),
-                              )
-                            }
-                            placeholder="30.284900"
-                          />
-                        </label>
-                        <label className="field">
-                          <span>Longitude</span>
-                          <input
-                            value={poi.lng}
-                            onChange={(event) =>
-                              setPoiDrafts((current) =>
-                                current.map((item) =>
-                                  item.id === poi.id
-                                    ? { ...item, lng: event.target.value }
-                                    : item,
-                                ),
-                              )
-                            }
-                            placeholder="-97.734100"
-                          />
-                        </label>
-                        <label className="field field-span-2">
-                          <span>Description</span>
-                          <textarea
-                            value={poi.description}
-                            onChange={(event) =>
-                              setPoiDrafts((current) =>
-                                current.map((item) =>
-                                  item.id === poi.id
-                                    ? {
-                                        ...item,
-                                        description: event.target.value,
-                                      }
-                                    : item,
-                                ),
-                              )
-                            }
-                            placeholder="Give riders a quick reason this checkpoint matters."
-                            rows={4}
-                          />
-                        </label>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </section>
-        ) : null}
-
-        {currentSection === "zones" ? (
-          <section className="panel">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">School Zones</p>
-                <h2>Manage no-go and speed limit polygons</h2>
-              </div>
-              <div className="form-actions">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() =>
-                    setZoneDrafts((current) => [
-                      ...current,
-                      createEmptyZoneDraft("no_go"),
-                    ])
-                  }
-                  disabled={!activeSchoolId}
-                >
-                  Add No-Go Zone
-                </button>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() =>
-                    setZoneDrafts((current) => [
-                      ...current,
-                      createEmptyZoneDraft("speed_limit"),
-                    ])
-                  }
-                  disabled={!activeSchoolId}
-                >
-                  Add Speed Zone
-                </button>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => void refreshSchoolZones()}
-                  disabled={zoneBusy || !activeSchoolId}
-                >
-                  Reload
-                </button>
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={() => void handleSaveZones()}
-                  disabled={zoneBusy || !activeSchoolId}
-                >
-                  Save Zones
-                </button>
-              </div>
-            </div>
-
-            {zoneBusy ? (
-              <p className="muted-text">Syncing school zones…</p>
-            ) : null}
-
-            {!activeSchoolId ? (
-              <p className="empty-state">
-                This admin login is not scoped to a school.
-              </p>
-            ) : null}
-
-            {activeSchoolId ? (
-              <div className="zone-layout">
-                <div className="zone-map-grid">
-                  <div className="map-card">
-                    <div className="data-section-header">
-                      <h3>Zone polygon editor</h3>
-                      <span>
-                        {selectedZoneDraft
-                          ? selectedZoneDraft.title.trim() || "Selected zone"
-                          : "No zone selected"}
-                      </span>
-                    </div>
-                    {zoneDrafts.length === 0 ? (
-                      <p className="empty-state">
-                        Add a no-go or speed limit zone to begin drawing a
-                        polygon.
-                      </p>
-                    ) : (
-                      <>
-                        <SchoolZoneMapEditor
-                          disabled={!selectedZoneDraft}
-                          onAddPoint={handleZonePointAdd}
-                          onInsertPoint={handleZonePointInsert}
-                          onMovePoint={handleZonePointMove}
-                          polygons={zoneMapPolygons}
-                          selectedPolygon={
-                            selectedZoneDraft
-                              ? zoneMapPolygons.find(
-                                  (polygon) =>
-                                    polygon.id ===
-                                    (selectedZoneDraft.zone_uuid ||
-                                      selectedZoneDraft.id),
-                                ) ?? null
-                              : null
-                          }
-                        />
-                        <p className="muted-text">
-                          Choose a zone row, then click to add vertices, drag
-                          any existing point to reshape the outline, and tap
-                          midpoint handles to insert a new point without
-                          redrawing the whole zone.
-                        </p>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="map-card">
-                    <div className="data-section-header">
-                      <h3>School zone coverage</h3>
-                      <span>{mappedZoneCount} mapped polygons</span>
-                    </div>
-                    <SchoolZonesMap polygons={zoneMapPolygons} />
-                    <div className="detail-grid">
-                      <DetailRow
-                        label="Active Zones"
-                        value={String(zoneDrafts.length)}
-                      />
-                      <DetailRow
-                        label="Mapped Polygons"
-                        value={String(mappedZoneCount)}
-                      />
-                      <DetailRow
-                        label="No-Go Zones"
-                        value={String(
-                          zoneDrafts.filter((zone) => zone.zone_type === "no_go")
-                            .length,
-                        )}
-                      />
-                      <DetailRow
-                        label="Speed Zones"
-                        value={String(
-                          zoneDrafts.filter(
-                            (zone) => zone.zone_type === "speed_limit",
-                          ).length,
-                        )}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="zone-list">
-                  {zoneDrafts.length === 0 ? (
-                    <p className="empty-state">
-                      No school zones configured yet for this school.
-                    </p>
-                  ) : null}
-                  {zoneDrafts.map((zone, index) => (
-                    <div
-                      className={`zone-row ${
-                        zone.id === activeZoneDraftId ? "zone-row-active" : ""
-                      }`}
-                      key={zone.id}
-                    >
-                      <div className="zone-row-header">
-                        <div>
-                          <p className="eyebrow">Zone {index + 1}</p>
-                          <h3>{zone.title.trim() || "Untitled zone"}</h3>
-                        </div>
-                        <div className="zone-row-actions">
-                          <button
-                            className="secondary-button"
-                            type="button"
-                            onClick={() => setActiveZoneDraftId(zone.id)}
-                          >
-                            {zone.id === activeZoneDraftId
-                              ? "Editing on Map"
-                              : "Pick on Map"}
-                          </button>
-                          <button
-                            className="secondary-button"
-                            type="button"
-                            onClick={() =>
-                              setZoneDrafts((current) =>
-                                current.map((item) =>
-                                  item.id === zone.id
-                                    ? {
-                                        ...item,
-                                        polygon: item.polygon.slice(0, -1),
-                                      }
-                                    : item,
-                                ),
-                              )
-                            }
-                            disabled={zone.polygon.length === 0}
-                          >
-                            Undo Point
-                          </button>
-                          <button
-                            className="secondary-button"
-                            type="button"
-                            onClick={() =>
-                              setZoneDrafts((current) =>
-                                current.map((item) =>
-                                  item.id === zone.id
-                                    ? { ...item, polygon: [] }
-                                    : item,
-                                ),
-                              )
-                            }
-                            disabled={zone.polygon.length === 0}
-                          >
-                            Clear Shape
-                          </button>
-                          <button
-                            className="danger-button"
-                            type="button"
-                            onClick={() =>
-                              setZoneDrafts((current) =>
-                                current.filter((item) => item.id !== zone.id),
-                              )
-                            }
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="form-grid">
-                        <label className="field">
-                          <span>Title</span>
-                          <input
-                            value={zone.title}
-                            onChange={(event) =>
-                              setZoneDrafts((current) =>
-                                current.map((item) =>
-                                  item.id === zone.id
-                                    ? { ...item, title: event.target.value }
-                                    : item,
-                                ),
-                              )
-                            }
-                            placeholder="North Mall No-Go Zone"
-                          />
-                        </label>
-                        <label className="field">
-                          <span>Zone Type</span>
-                          <select
-                            value={zone.zone_type}
-                            onChange={(event) =>
-                              setZoneDrafts((current) =>
-                                current.map((item) =>
-                                  item.id === zone.id
-                                    ? {
-                                        ...item,
-                                        zone_type: event.target
-                                          .value as ZoneDraft["zone_type"],
-                                        speed_limit_mph:
-                                          event.target.value === "speed_limit"
-                                            ? item.speed_limit_mph || "15"
-                                            : "",
-                                      }
-                                    : item,
-                                ),
-                              )
-                            }
-                          >
-                            <option value="no_go">No-go zone</option>
-                            <option value="speed_limit">Speed limit zone</option>
-                          </select>
-                        </label>
-                        <label className="field">
-                          <span>Speed Limit (mph)</span>
-                          <input
-                            disabled={zone.zone_type !== "speed_limit"}
-                            min={1}
-                            step={1}
-                            type="number"
-                            value={zone.speed_limit_mph}
-                            onChange={(event) =>
-                              setZoneDrafts((current) =>
-                                current.map((item) =>
-                                  item.id === zone.id
-                                    ? {
-                                        ...item,
-                                        speed_limit_mph: event.target.value,
-                                      }
-                                    : item,
-                                ),
-                              )
-                            }
-                            placeholder="15"
-                          />
-                        </label>
-                        <label className="field">
-                          <span>Vertices</span>
-                          <input
-                            disabled
-                            value={String(zone.polygon.length)}
-                            placeholder="0"
-                          />
-                        </label>
-                        <label className="field field-span-2">
-                          <span>Description</span>
-                          <textarea
-                            value={zone.description}
-                            onChange={(event) =>
-                              setZoneDrafts((current) =>
-                                current.map((item) =>
-                                  item.id === zone.id
-                                    ? {
-                                        ...item,
-                                        description: event.target.value,
-                                      }
-                                    : item,
-                                ),
-                              )
-                            }
-                            placeholder="Explain why riders lose points here."
-                            rows={4}
-                          />
-                        </label>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </section>
-        ) : null}
-
-        {currentSection === "challenges" ? (
-          <section className="panel">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">Campaigns</p>
-                <h2>Manage school challenges</h2>
-              </div>
-              <div className="form-actions">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => {
-                    setSelectedChallengeId(newChallengeSelectionId);
-                    setChallengeDraft(createEmptyChallengeDraft());
-                    setChallengeParticipants([]);
-                  }}
-                  disabled={!activeSchoolId}
-                >
-                  New Challenge
-                </button>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => void refreshSchoolChallenges()}
-                  disabled={challengeListBusy || !activeSchoolId}
-                >
-                  Refresh
-                </button>
-              </div>
-            </div>
-
-            {!activeSchoolId ? (
-              <p className="empty-state">
-                This admin login is not scoped to a school.
-              </p>
-            ) : null}
-
-            {activeSchoolId ? (
-              <div className="challenge-layout">
-                <div className="challenge-editor">
-                  <form className="school-form" onSubmit={handleSaveChallenge}>
-                    <div className="panel-header">
-                      <div>
-                        <p className="eyebrow">Challenge Editor</p>
-                        <h3>
-                          {challengeDraft.challenge_uuid
-                            ? "Edit existing challenge"
-                            : "Create a new challenge"}
-                        </h3>
-                      </div>
-                      {challengeBusy ? (
-                        <span className="muted-text">Saving…</span>
-                      ) : null}
-                    </div>
-
-                    <div className="form-grid">
-                      <label className="field">
-                        <span>Title</span>
-                        <input
-                          value={challengeDraft.title}
-                          onChange={(event) =>
-                            setChallengeDraft((current) => ({
-                              ...current,
-                              title: event.target.value,
-                            }))
-                          }
-                          placeholder="Ride 25 miles in 7 days"
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Metric</span>
-                        <select
-                          value={challengeDraft.metric_type}
-                          onChange={(event) =>
-                            setChallengeDraft((current) => ({
-                              ...current,
-                              metric_type: event.target
-                                .value as ChallengeDraft["metric_type"],
-                              target_value:
-                                event.target.value === "points"
-                                  ? current.metric_type === "points"
-                                    ? current.target_value
-                                    : "100"
-                                  : current.metric_type === "distance_miles"
-                                    ? current.target_value
-                                    : "10",
-                            }))
-                          }
-                        >
-                          <option value="distance_miles">Distance in miles</option>
-                          <option value="points">Points</option>
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>
-                          Target{" "}
-                          {challengeDraft.metric_type === "points"
-                            ? "(points)"
-                            : "(miles)"}
-                        </span>
-                        <input
-                          type="number"
-                          min="0"
-                          step={
-                            challengeDraft.metric_type === "points" ? "1" : "0.1"
-                          }
-                          value={challengeDraft.target_value}
-                          onChange={(event) =>
-                            setChallengeDraft((current) => ({
-                              ...current,
-                              target_value: event.target.value,
-                            }))
-                          }
-                          placeholder={
-                            challengeDraft.metric_type === "points"
-                              ? "100"
-                              : "10"
-                          }
-                        />
-                      </label>
-                      <label className="field checkbox-field">
-                        <span>Active</span>
-                        <input
-                          type="checkbox"
-                          checked={challengeDraft.active}
-                          onChange={(event) =>
-                            setChallengeDraft((current) => ({
-                              ...current,
-                              active: event.target.checked,
-                            }))
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Start</span>
-                        <input
-                          type="datetime-local"
-                          value={challengeDraft.start_time}
-                          onChange={(event) =>
-                            setChallengeDraft((current) => ({
-                              ...current,
-                              start_time: event.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>End</span>
-                        <input
-                          type="datetime-local"
-                          value={challengeDraft.end_time}
-                          onChange={(event) =>
-                            setChallengeDraft((current) => ({
-                              ...current,
-                              end_time: event.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-                      <label className="field field-span-2">
-                        <span>Description</span>
-                        <textarea
-                          value={challengeDraft.description}
-                          onChange={(event) =>
-                            setChallengeDraft((current) => ({
-                              ...current,
-                              description: event.target.value,
-                            }))
-                          }
-                          placeholder="Invite students to participate and explain how they win."
-                          rows={5}
-                        />
-                      </label>
-                      <div className="field field-span-2">
-                        <span>Challenge Image</span>
-                        <div className="challenge-image-field">
-                          <EntityImagePreview
-                            imageUrl={challengeDraft.image_url}
-                            label={challengeDraft.title || "School"}
-                            altSuffix="challenge"
-                            fallbackLabel="Challenge image preview"
-                          />
-                          <div className="challenge-image-field-controls">
-                            <label className="field">
-                              <span>Image URL</span>
-                              <input
-                                value={challengeDraft.image_url}
-                                onChange={(event) =>
-                                  setChallengeDraft((current) => ({
-                                    ...current,
-                                    image_url: event.target.value,
-                                  }))
-                                }
-                                placeholder="https://example.com/challenge-cover.jpg"
-                              />
-                            </label>
-                            <div className="challenge-image-upload-row">
-                              <label className="secondary-button challenge-upload-button">
-                                <input
-                                  className="challenge-upload-input"
-                                  type="file"
-                                  accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
-                                  onChange={handleChallengeImageFileChange}
-                                  disabled={
-                                    challengeImageUploadBusy || !activeSchoolId
-                                  }
-                                />
-                                {challengeImageUploadBusy
-                                  ? "Uploading..."
-                                  : "Upload Image"}
-                              </label>
-                              {challengeDraft.image_url.trim() ? (
-                                <button
-                                  className="secondary-button"
-                                  type="button"
-                                  onClick={() =>
-                                    setChallengeDraft((current) => ({
-                                      ...current,
-                                      image_url: "",
-                                    }))
-                                  }
-                                  disabled={challengeImageUploadBusy}
-                                >
-                                  Clear Image
-                                </button>
-                              ) : null}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="detail-grid">
-                      <DetailRow
-                        label="Goal"
-                        value={formatChallengeMetricValue(
-                          challengeDraft.metric_type,
-                          Number(challengeDraft.target_value),
-                        )}
-                      />
-                      <DetailRow
-                        label="Window"
-                        value={
-                          challengeDraft.start_time && challengeDraft.end_time
-                            ? `${challengeDraft.start_time.replace("T", " ")} to ${challengeDraft.end_time.replace("T", " ")}`
-                            : "Set a start and end time"
-                        }
-                      />
-                    </div>
-
-                    <div className="form-actions">
-                      {challengeDraft.challenge_uuid ? (
-                        <button
-                          className="danger-button"
-                          type="button"
-                          onClick={() => void handleDeleteSelectedChallenge()}
-                          disabled={challengeBusy}
-                        >
-                          Delete
-                        </button>
-                      ) : null}
-                      <button
-                        className="primary-button"
-                        type="submit"
-                        disabled={challengeBusy}
-                      >
-                        {challengeDraft.challenge_uuid
-                          ? "Save Challenge"
-                          : "Create Challenge"}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-
-                <div className="challenge-sidebar">
-                  <div className="data-section">
-                    <div className="data-section-header">
-                      <h4>Challenge library</h4>
-                      <span>{currentAndUpcomingChallenges.length}</span>
-                    </div>
-                    {challengeListBusy ? (
-                      <p className="muted-text">Loading challenges…</p>
-                    ) : null}
-                    {!challengeListBusy &&
-                    currentAndUpcomingChallenges.length === 0 ? (
-                      <p className="empty-state">
-                        No live or upcoming challenges are in the library right
-                        now.
-                      </p>
-                    ) : null}
-                    <div className="challenge-list">
-                      {currentAndUpcomingChallenges.map((challenge) => {
-                        const status = resolveChallengeStatus(challenge);
-                        return (
-                          <button
-                            key={challenge.challenge_uuid}
-                            className={`challenge-card ${
-                              challenge.challenge_uuid === selectedChallengeId
-                                ? "challenge-card-active"
-                                : ""
-                            }`}
-                            type="button"
-                            onClick={() =>
-                              setSelectedChallengeId(challenge.challenge_uuid)
-                            }
-                          >
-                            {challenge.image_url.trim() ? (
-                              <img
-                                className="challenge-card-image"
-                                src={challenge.image_url}
-                                alt={`${challenge.title} challenge`}
-                              />
-                            ) : null}
-                            <div className="challenge-card-header">
-                              <strong>{challenge.title}</strong>
-                              <span className="student-badge">
-                                {status}
-                              </span>
-                            </div>
-                            <span>
-                              {formatChallengeMetricValue(
-                                challenge.metric_type,
-                                challenge.target_value,
-                              )}
-                            </span>
-                            <span>
-                              {formatDateTimeForDisplay(challenge.start_time)} -{" "}
-                              {formatDateTimeForDisplay(challenge.end_time)}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="data-section">
-                    <div className="data-section-header">
-                      <h4>Past challenges</h4>
-                      <span>{pastChallenges.length}</span>
-                    </div>
-                    {!challengeListBusy && pastChallenges.length === 0 ? (
-                      <p className="empty-state">
-                        Ended challenges will move here once their campaign
-                        window closes.
-                      </p>
-                    ) : null}
-                    <div className="challenge-list">
-                      {pastChallenges.map((challenge) => {
-                        const status = resolveChallengeStatus(challenge);
-                        return (
-                          <button
-                            key={challenge.challenge_uuid}
-                            className={`challenge-card ${
-                              challenge.challenge_uuid === selectedChallengeId
-                                ? "challenge-card-active"
-                                : ""
-                            }`}
-                            type="button"
-                            onClick={() =>
-                              setSelectedChallengeId(challenge.challenge_uuid)
-                            }
-                          >
-                            {challenge.image_url.trim() ? (
-                              <img
-                                className="challenge-card-image"
-                                src={challenge.image_url}
-                                alt={`${challenge.title} challenge`}
-                              />
-                            ) : null}
-                            <div className="challenge-card-header">
-                              <strong>{challenge.title}</strong>
-                              <span className="student-badge">{status}</span>
-                            </div>
-                            <span>
-                              {formatChallengeMetricValue(
-                                challenge.metric_type,
-                                challenge.target_value,
-                              )}
-                            </span>
-                            <span>
-                              {formatDateTimeForDisplay(challenge.start_time)} -{" "}
-                              {formatDateTimeForDisplay(challenge.end_time)}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="data-section">
-                    <div className="data-section-header">
-                      <h4>Student progress</h4>
-                      <span>{challengeParticipantSummary.joined}</span>
-                    </div>
-
-                    {!selectedChallenge ? (
-                      <p className="empty-state">
-                        Select a saved challenge to review student enrollment
-                        and progress.
-                      </p>
-                    ) : (
-                      <>
-                        <div className="detail-grid">
-                          <DetailRow
-                            label="Status"
-                            value={resolveChallengeStatus(selectedChallenge)}
-                          />
-                          <DetailRow
-                            label="Goal"
-                            value={formatChallengeMetricValue(
-                              selectedChallenge.metric_type,
-                              selectedChallenge.target_value,
-                            )}
-                          />
-                          <DetailRow
-                            label="Joined"
-                            value={String(challengeParticipantSummary.joined)}
-                          />
-                          <DetailRow
-                            label="Completed"
-                            value={String(
-                              challengeParticipantSummary.completed,
-                            )}
-                          />
-                        </div>
-
-                        {challengeParticipantsBusy ? (
-                          <p className="muted-text">
-                            Loading student challenge progress…
-                          </p>
-                        ) : null}
-                        {!challengeParticipantsBusy &&
-                        challengeParticipants.length === 0 ? (
-                          <p className="empty-state">
-                            No students have joined this challenge yet.
-                          </p>
-                        ) : null}
-
-                        <div className="participant-progress-list">
-                          {challengeParticipants.map((participant) => (
-                            <article
-                              className="participant-progress-card"
-                              key={participant.participation_uuid}
-                            >
-                              <div className="student-roster-header">
-                                <div>
-                                  <p className="eyebrow">Student</p>
-                                  <h3>
-                                    {formatNebulaUserName({
-                                      first_name: participant.first_name,
-                                      last_name: participant.last_name,
-                                      email: participant.email,
-                                      username: participant.username,
-                                    })}
-                                  </h3>
-                                </div>
-                                <div className="student-roster-badges">
-                                  <span className="student-badge">
-                                    {participant.completed
-                                      ? "Completed"
-                                      : participant.active
-                                        ? "In Progress"
-                                        : "Left"}
-                                  </span>
-                                  <span className="student-badge student-badge-muted">
-                                    {participant.student_id || "No student ID"}
-                                  </span>
-                                </div>
-                              </div>
-
-                              <div className="challenge-progress-meta">
-                                <div className="challenge-progress-copy">
-                                  <strong>
-                                    {formatChallengeMetricValue(
-                                      participant.metric_type,
-                                      participant.progress_value,
-                                    )}
-                                  </strong>
-                                  <span>
-                                    Goal{" "}
-                                    {formatChallengeMetricValue(
-                                      participant.metric_type,
-                                      participant.target_value,
-                                    )}
-                                  </span>
-                                </div>
-                                <span className="challenge-progress-percent">
-                                  {Math.round(
-                                    participant.completion_percent,
-                                  )}
-                                  %
-                                </span>
-                              </div>
-                              <div className="challenge-progress-bar">
-                                <span
-                                  className="challenge-progress-bar-fill"
-                                  style={{
-                                    width: `${Math.min(100, Math.max(0, participant.completion_percent))}%`,
-                                  }}
-                                />
-                              </div>
-
-                              <div className="detail-grid">
-                                <DetailRow
-                                  label="Username"
-                                  value={
-                                    participant.username ||
-                                    participant.email ||
-                                    participant.user_uuid
-                                  }
-                                />
-                                <DetailRow
-                                  label="Sessions"
-                                  value={String(participant.total_sessions)}
-                                />
-                                <DetailRow
-                                  label="Joined"
-                                  value={formatDateTimeForDisplay(
-                                    participant.joined_at,
-                                  )}
-                                />
-                                <DetailRow
-                                  label="Last Activity"
-                                  value={formatDateTimeForDisplay(
-                                    participant.last_activity_at ?? undefined,
-                                  )}
-                                />
-                              </div>
-                            </article>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-          </section>
-        ) : null}
-
-        {currentSection === "students" ? (
-          <section className="panel students-section">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">School Roster</p>
-                <h2>Registered students</h2>
-              </div>
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={() => {
-                  void refreshStudentRoster();
-                  setSelectedStudentMembershipId(null);
-                  setStudentProfile(null);
-                }}
-                disabled={schoolStudentRosterBusy || !activeSchoolId}
-              >
-                Refresh
-              </button>
-            </div>
-
-            {!activeSchoolId ? (
-              <p className="empty-state">
-                This admin login is not scoped to a school.
-              </p>
-            ) : null}
-            {schoolStudentRosterError ? (
-              <p className="error-text">{schoolStudentRosterError}</p>
-            ) : null}
-
-            {activeSchoolId ? (
-              <div className="students-layout">
-                {/* ── LEFT: Roster list ── */}
-                <div className="students-sidebar">
-                  <div className="students-search-row">
-                    <input
-                      className="students-search-input"
-                      type="search"
-                      placeholder="Search by name, ID or email…"
-                      value={studentRosterSearch}
-                      onChange={(e) => setStudentRosterSearch(e.target.value)}
-                    />
-                    <span className="students-count-badge">
-                      {filteredStudentRoster.length}
-                    </span>
-                  </div>
-
-                  {schoolStudentRosterBusy ? (
-                    <p className="muted-text students-loading">
-                      Loading roster…
-                    </p>
-                  ) : filteredStudentRoster.length === 0 ? (
-                    <p className="empty-state">
-                      {studentRosterSearch
-                        ? "No students match your search."
-                        : "No registered students found yet."}
-                    </p>
-                  ) : (
-                    <div className="students-list">
-                      {filteredStudentRoster.map((entry) => {
-                        const membership = entry.membership;
-                        const isSelected =
-                          selectedStudentMembershipId ===
-                          membership.membership_uuid;
-                        const initials = formatNebulaUserName(entry.user)
-                          .split(" ")
-                          .filter(Boolean)
-                          .slice(0, 2)
-                          .map((w) => w[0])
-                          .join("")
-                          .toUpperCase();
-                        return (
-                          <button
-                            key={membership.membership_uuid}
-                            type="button"
-                            className={`student-list-item${isSelected ? " student-list-item-active" : ""}`}
-                            onClick={() =>
-                              void handleSelectStudentInRoster(
-                                membership.membership_uuid,
-                              )
-                            }
-                          >
-                            <div className="student-list-avatar">{initials || "?"}</div>
-                            <div className="student-list-info">
-                              <strong>{formatNebulaUserName(entry.user)}</strong>
-                              <span>
-                                {membership.student_id || "No ID"} ·{" "}
-                                {membership.campus_id || "—"}
-                              </span>
-                            </div>
-                            <span
-                              className={`student-status-dot student-status-dot-${membership.status || "active"}`}
-                            />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* ── RIGHT: Detail panel ── */}
-                <div className="students-detail">
-                  {!selectedStudentEntry ? (
-                    <div className="students-detail-empty">
-                      <div className="students-detail-empty-icon">👤</div>
-                      <strong>Select a student</strong>
-                      <span>
-                        Choose a student from the list to view their full
-                        profile, ID photos, devices, and activity.
-                      </span>
-                    </div>
-                  ) : (() => {
-                    const entry = selectedStudentEntry;
-                    const membership = entry.membership;
-                    const frontPhotoObjectKey = resolveStudentPhotoObjectKey(
-                      membership,
-                      schoolStudentPhotoKeys,
-                      "front",
-                    );
-                    const backPhotoObjectKey = resolveStudentPhotoObjectKey(
-                      membership,
-                      schoolStudentPhotoKeys,
-                      "back",
-                    );
-                    const frontPhotoUrl = frontPhotoObjectKey
-                      ? (schoolStudentMediaUrls[frontPhotoObjectKey] ?? "")
-                      : "";
-                    const backPhotoUrl = backPhotoObjectKey
-                      ? (schoolStudentMediaUrls[backPhotoObjectKey] ?? "")
-                      : "";
-                    const reservationsForMembership =
-                      schoolReservationsByMembership.get(
-                        membership.membership_uuid,
-                      ) ?? [];
-                    const fullName = formatNebulaUserName(entry.user);
-                    const initials = fullName
-                      .split(" ")
-                      .filter(Boolean)
-                      .slice(0, 2)
-                      .map((w) => w[0])
-                      .join("")
-                      .toUpperCase();
-                    return (
-                      <>
-                        {/* Header */}
-                        <div className="student-detail-header">
-                          <div className="student-detail-avatar">
-                            {initials || "?"}
-                          </div>
-                          <div className="student-detail-header-info">
-                            <h3>{fullName}</h3>
-                            <div className="student-detail-header-meta">
-                              <span className="student-badge">
-                                {membership.status || "active"}
-                              </span>
-                              {membership.student_id ? (
-                                <span className="student-badge student-badge-muted">
-                                  ID: {membership.student_id}
-                                </span>
-                              ) : null}
-                              {membership.campus_id ? (
-                                <span className="student-badge student-badge-muted">
-                                  {membership.campus_id}
-                                </span>
-                              ) : null}
-                            </div>
-                          </div>
-                          {studentBusy ? (
-                            <span className="muted-text">Loading…</span>
-                          ) : null}
-                        </div>
-
-                        {studentError ? (
-                          <p className="error-text">{studentError}</p>
-                        ) : null}
-
-                        {/* Identity */}
-                        <div className="data-section">
-                          <div className="data-section-header">
-                            <h4>Identity &amp; contact</h4>
-                          </div>
-                          <div className="detail-grid">
-                            <DetailRow
-                              label="Full name"
-                              value={fullName || "Not set"}
-                            />
-                            <DetailRow
-                              label="Username"
-                              value={entry.user.username || "Not set"}
-                            />
-                            <DetailRow
-                              label="Email"
-                              value={entry.user.email || "Not set"}
-                            />
-                            <DetailRow
-                              label="Phone"
-                              value={entry.user.phone || "Not set"}
-                            />
-                            <DetailRow
-                              label="Student ID"
-                              value={membership.student_id || "Not set"}
-                            />
-                            <DetailRow
-                              label="Campus"
-                              value={membership.campus_id || "Not set"}
-                            />
-                          </div>
-                          <div className="uuid-copy-stack">
-                            <UuidCopyField
-                              label="user_uuid"
-                              value={entry.user.k_guid}
-                              onCopy={handleCopyUuid}
-                            />
-                            <UuidCopyField
-                              label="membership_uuid"
-                              value={membership.membership_uuid}
-                              onCopy={handleCopyUuid}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Student ID Photos */}
-                        <div className="data-section">
-                          <div className="data-section-header">
-                            <h4>Student ID photos</h4>
-                          </div>
-                          <div className="student-photos-grid">
-                            <div className="student-photo-card">
-                              <span>Front of ID</span>
-                              {frontPhotoUrl ? (
-                                <img
-                                  className="student-photo-image"
-                                  src={frontPhotoUrl}
-                                  alt={`${fullName} front ID`}
-                                />
-                              ) : (
-                                <div className="student-photo-placeholder">
-                                  Front ID not available
-                                </div>
-                              )}
-                            </div>
-                            <div className="student-photo-card">
-                              <span>Back of ID</span>
-                              {backPhotoUrl ? (
-                                <img
-                                  className="student-photo-image"
-                                  src={backPhotoUrl}
-                                  alt={`${fullName} back ID`}
-                                />
-                              ) : (
-                                <div className="student-photo-placeholder">
-                                  Back ID not available
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Registered Devices */}
-                        <div className="data-section">
-                          <div className="data-section-header">
-                            <h4>Registered devices</h4>
-                            {studentProfile &&
-                            studentProfile.user.k_guid === entry.user.k_guid ? (
-                              <span>{studentProfile.devices.length}</span>
-                            ) : null}
-                          </div>
-                          {studentBusy ? (
-                            <p className="muted-text">Loading devices…</p>
-                          ) : studentProfile &&
-                            studentProfile.user.k_guid === entry.user.k_guid ? (
-                            studentProfile.devices.length === 0 ? (
-                              <p className="muted-text">
-                                No registered devices found.
-                              </p>
-                            ) : (
-                              <div className="devices-grid">
-                                {studentProfile.devices.map((device) => (
-                                  <div
-                                    className="device-card"
-                                    key={device.registered_device_uuid}
-                                  >
-                                    <div className="device-card-icon">🛴</div>
-                                    <div className="device-card-body">
-                                      <strong>
-                                        {device.nickname || device.device_type}
-                                      </strong>
-                                      <span>
-                                        {[device.make, device.model]
-                                          .filter(Boolean)
-                                          .join(" ") || "Unknown device"}
-                                      </span>
-                                      <span className="device-card-meta">
-                                        {device.color
-                                          ? `${device.color} · `
-                                          : ""}
-                                        Serial:{" "}
-                                        {device.serial_number || "Not set"}
-                                      </span>
-                                      <span className="device-card-meta">
-                                        {device.active ? "Active" : "Inactive"}
-                                      </span>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )
-                          ) : (
-                            <p className="muted-text">
-                              Select a student to load device information.
-                            </p>
-                          )}
-                        </div>
-
-                        {/* School Terms */}
-                        <div className="data-section">
-                          <div className="data-section-header">
-                            <h4>Enrollment terms</h4>
-                            <span>{membership.terms.length}</span>
-                          </div>
-                          {membership.terms.length === 0 ? (
-                            <p className="muted-text">
-                              No membership terms assigned.
-                            </p>
-                          ) : (
-                            <div className="stack-list">
-                              {membership.terms.map((term) => (
-                                <div
-                                  className="data-card"
-                                  key={term.term_uuid}
-                                >
-                                  <strong>{term.name}</strong>
-                                  <span>
-                                    {formatDateOnly(term.start_date)} –{" "}
-                                    {formatDateOnly(term.end_date)}
-                                  </span>
-                                  <span>
-                                    {term.active ? "Active" : "Inactive"}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Parking Reservations */}
-                        <div className="data-section">
-                          <div className="data-section-header">
-                            <h4>Parking reservations</h4>
-                            <span>{reservationsForMembership.length}</span>
-                          </div>
-                          {reservationsForMembership.length === 0 ? (
-                            <p className="muted-text">
-                              No parking reservations submitted.
-                            </p>
-                          ) : (
-                            <div className="stack-list">
-                              {reservationsForMembership.map((reservation) => (
-                                <div
-                                  className="data-card"
-                                  key={reservation.reservation_uuid}
-                                >
-                                  <div className="reservation-card-top">
-                                    <strong>
-                                      {reservation.term_name || "School term"}
-                                    </strong>
-                                    <span className={`student-badge student-badge-status-${reservation.status}`}>
-                                      {reservation.status}
-                                    </span>
-                                  </div>
-                                  <span>
-                                    {reservation.pack_name || "Juise Pack"} ·
-                                    Spot {reservation.spot_number || "TBD"}
-                                  </span>
-                                  <span>
-                                    {formatUnixTimestamp(
-                                      reservation.start_time,
-                                    )}{" "}
-                                    –{" "}
-                                    {formatUnixTimestamp(reservation.end_time)}
-                                  </span>
-                                  <div className="uuid-copy-stack">
-                                    <UuidCopyField
-                                      label="pack_uuid"
-                                      value={reservation.pack_uuid}
-                                      onCopy={handleCopyUuid}
-                                    />
-                                    <UuidCopyField
-                                      label="pack_spot_uuid"
-                                      value={reservation.spot_uuid}
-                                      onCopy={handleCopyUuid}
-                                    />
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Violations (placeholder) */}
-                        <div className="data-section">
-                          <div className="data-section-header">
-                            <h4>Violations</h4>
-                          </div>
-                          <div className="placeholder-section">
-                            <span className="placeholder-section-icon">🚫</span>
-                            <strong>No violation data available</strong>
-                            <span>
-                              Violation history will appear here once the
-                              violations API is connected.
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* POI Visits (placeholder) */}
-                        <div className="data-section">
-                          <div className="data-section-header">
-                            <h4>Visited POIs</h4>
-                          </div>
-                          <div className="placeholder-section">
-                            <span className="placeholder-section-icon">📍</span>
-                            <strong>No POI visit data available</strong>
-                            <span>
-                              Point-of-interest visit history will appear here
-                              once the POI tracking API is connected.
-                            </span>
-                          </div>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
-            ) : null}
-          </section>
-        ) : null}
-
-        {currentSection === "packs" ? (
-          <section className="panel pack-tabs-panel">
-            <div className="panel-header pack-tabs-header">
-              <div>
-                <p className="eyebrow">Juise Packs</p>
-                <h2>School-owned parking packs</h2>
-              </div>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                {packBusy ? (
-                  <span className="muted-text">Creating…</span>
-                ) : packsLoading ? (
-                  <span className="muted-text">Refreshing…</span>
-                ) : null}
-                {activePackTab === "existing" ? (
-                  <button
-                    className="primary-button"
-                    type="button"
-                    onClick={() => setActivePackTab("create")}
-                  >
-                    + New Pack
-                  </button>
-                ) : null}
-                {activePackTab === "existing" ? (
-                  <button
-                    className="secondary-button"
-                    type="button"
-                    onClick={() => void refreshSchoolPacks()}
-                    disabled={packsLoading || !activeSchoolId}
-                  >
-                    Refresh
-                  </button>
-                ) : null}
-              </div>
-            </div>
-
-            <div
-              className="pack-tabs"
-              role="tablist"
-              aria-label="Juise pack sections"
-            >
-              <button
-                className={`pack-tab-button ${
-                  activePackTab === "existing" ? "pack-tab-button-active" : ""
-                }`}
-                type="button"
-                role="tab"
-                id="pack-tab-existing"
-                aria-selected={activePackTab === "existing"}
-                aria-controls="pack-tab-panel-existing"
-                onClick={() => setActivePackTab("existing")}
-              >
-                Existing Packs
-              </button>
-              <button
-                className={`pack-tab-button ${
-                  activePackTab === "create" ? "pack-tab-button-active" : ""
-                }`}
-                type="button"
-                role="tab"
-                id="pack-tab-create"
-                aria-selected={activePackTab === "create"}
-                aria-controls="pack-tab-panel-create"
-                onClick={() => setActivePackTab("create")}
-              >
-                Create New Pack
-              </button>
-            </div>
-
-            {!activeSchoolId ? (
-              <p className="empty-state">
-                This admin login is not scoped to a school.
-              </p>
-            ) : null}
-
-            {activePackTab === "create" ? (
-              <div
-                className="pack-tab-panel pack-builder"
-                role="tabpanel"
-                id="pack-tab-panel-create"
-                aria-labelledby="pack-tab-create"
-              >
-                <form className="pack-form-layout" onSubmit={handleCreatePack}>
-                  {/* ── LEFT: fields ── */}
-                  <div className="pack-form-fields">
-                    <div className="map-card">
-                      <div className="pack-step-header">
-                        <span className="pack-step-number">1</span>
-                        <div>
-                          <h3>Pack details</h3>
-                          <p>Name, capacity, and description</p>
-                        </div>
-                      </div>
-                      <div className="form-grid">
-                        <label className="field">
-                          <span>School ID</span>
-                          <input value={activeSchoolId} disabled />
-                        </label>
-                        <label className="field">
-                          <span>Campus ID</span>
-                          <input
-                            value={packDraft.campus_id}
-                            onChange={(event) =>
-                              setPackDraft((current) => ({
-                                ...current,
-                                campus_id: event.target.value,
-                              }))
-                            }
-                            placeholder={
-                              schoolDraft.default_campus_id || "main"
-                            }
-                            disabled={!activeSchoolId}
-                          />
-                        </label>
-                        <label className="field">
-                          <span>Pack Name</span>
-                          <input
-                            value={packDraft.name}
-                            onChange={(event) =>
-                              setPackDraft((current) => ({
-                                ...current,
-                                name: event.target.value,
-                              }))
-                            }
-                            placeholder="North Garage Pack"
-                            disabled={!activeSchoolId}
-                          />
-                        </label>
-                        <label className="field">
-                          <span>Number of Spots</span>
-                          <input
-                            type="number"
-                            min={1}
-                            value={packDraft.number_of_spots}
-                            onChange={(event) =>
-                              setPackDraft((current) => ({
-                                ...current,
-                                number_of_spots: event.target.value,
-                              }))
-                            }
-                            disabled={!activeSchoolId}
-                          />
-                        </label>
-                        <label className="field field-span-2">
-                          <span>Description</span>
-                          <textarea
-                            value={packDraft.description}
-                            onChange={(event) =>
-                              setPackDraft((current) => ({
-                                ...current,
-                                description: event.target.value,
-                              }))
-                            }
-                            placeholder="Covered student parking near the library entrance."
-                            rows={4}
-                            disabled={!activeSchoolId}
-                          />
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="map-card">
-                      <div className="pack-step-header">
-                        <span className="pack-step-number">2</span>
-                        <div>
-                          <h3>Cover photo</h3>
-                          <p>Optional image for the pack</p>
-                        </div>
-                      </div>
-                      <div className="challenge-image-field">
-                        <EntityImagePreview
-                          imageUrl={packPhotoPreviewUrl}
-                          label={packDraft.name || "Juise Pack"}
-                          altSuffix="pack photo"
-                          fallbackLabel="Pack photo"
-                        />
-                        <div className="challenge-image-field-controls">
-                          <p className="muted-text">
-                            Upload a cover image for this Juise Pack.
-                          </p>
-                          <div className="challenge-image-upload-row">
-                            <label className="secondary-button challenge-upload-button">
-                              <input
-                                className="challenge-upload-input"
-                                type="file"
-                                accept="image/png,image/jpeg,image/webp,image/gif"
-                                onChange={handlePackPhotoFileChange}
-                                disabled={packBusy || !activeSchoolId}
-                              />
-                              {packPhotoFile ? "Replace Photo" : "Upload Photo"}
-                            </label>
-                            {packPhotoFile ? (
-                              <button
-                                className="secondary-button"
-                                type="button"
-                                onClick={() => {
-                                  setPackPhotoFile(null);
-                                  setPackPhotoPreviewUrl("");
-                                }}
-                                disabled={packBusy}
-                              >
-                                Clear Photo
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="form-actions">
-                      <button
-                        className="primary-button"
-                        type="submit"
-                        disabled={packBusy || !activeSchoolId}
-                      >
-                        {packBusy ? "Creating Pack…" : "Create Juise Pack"}
-                      </button>
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        disabled={packBusy}
-                        onClick={() =>
-                          resetPackCreateForm(
-                            schoolDraft.default_campus_id ?? "",
-                          )
-                        }
-                      >
-                        Reset Form
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* ── RIGHT: location map ── */}
-                  <div className="pack-form-map">
-                    <div className="map-card">
-                      <div className="pack-step-header">
-                        <span className="pack-step-number">3</span>
-                        <div>
-                          <h3>Pack location</h3>
-                          <p>
-                            {selectedPackLocation
-                              ? "Pin placed — adjust if needed"
-                              : "Click the map to drop a pin"}
-                          </p>
-                        </div>
-                      </div>
-                      <PackLocationPicker
-                        disabled={!activeSchoolId}
-                        onChange={handlePackLocationSelect}
-                        value={selectedPackLocation}
-                      />
-                    </div>
-
-                    <div className="map-card">
-                      <div className="data-section-header">
-                        <h3>Coordinates</h3>
-                        <span>Fine tune manually</span>
-                      </div>
-                      <div className="coordinate-grid">
-                        <label className="field">
-                          <span>Latitude</span>
-                          <input
-                            value={packDraft.lat}
-                            onChange={(event) =>
-                              setPackDraft((current) => ({
-                                ...current,
-                                lat: event.target.value,
-                              }))
-                            }
-                            placeholder="42.678000"
-                            disabled={!activeSchoolId}
-                          />
-                        </label>
-                        <label className="field">
-                          <span>Longitude</span>
-                          <input
-                            value={packDraft.lng}
-                            onChange={(event) =>
-                              setPackDraft((current) => ({
-                                ...current,
-                                lng: event.target.value,
-                              }))
-                            }
-                            placeholder="-83.195000"
-                            disabled={!activeSchoolId}
-                          />
-                        </label>
-                      </div>
-                      <p className="muted-text">
-                        This pack will be assigned to{" "}
-                        <code>{activeSchoolId || "school-scope"}</code>.
-                      </p>
-                    </div>
-                  </div>
-                </form>
-              </div>
-            ) : (
-              <div
-                className="pack-tab-panel pack-preview-panel"
-                role="tabpanel"
-                id="pack-tab-panel-existing"
-                aria-labelledby="pack-tab-existing"
-              >
-                {activeSchoolId && packsLoading && schoolPacks.length === 0 ? (
-                  <p className="muted-text">Loading school packs…</p>
-                ) : null}
-
-                {activeSchoolId && !packsLoading && schoolPacks.length === 0 ? (
-                  <p className="empty-state">
-                    No school-owned Juise packs have been created for this
-                    school yet.
-                  </p>
-                ) : null}
-
-                {activeSchoolId && schoolPacks.length > 0 ? (
-                  <div className="pack-inventory-layout">
-                    <div className="map-card pack-map-card">
-                      <div className="data-section-header">
-                        <div>
-                          <h3>Pack pins</h3>
-                          <p className="muted-text">
-                            All saved Juise Pack locations for this school.
-                          </p>
-                        </div>
-                        <span>{existingPackMapMarkers.length} pins</span>
-                      </div>
-                      <PackLocationsMap markers={existingPackMapMarkers} />
-                      {packsWithoutLocationsCount > 0 ? (
-                        <p className="muted-text">
-                          {packsWithoutLocationsCount} pack
-                          {packsWithoutLocationsCount === 1 ? "" : "s"} do not
-                          have saved coordinates yet.
-                        </p>
-                      ) : null}
-                    </div>
-
-                    <div className="stack-list">
-                      {schoolPacks.map((pack) => {
-                        const isEditingPack =
-                          editingPackId === pack.pack_uuid &&
-                          packEditDraft !== null;
-                        const currentPackEditDraft = isEditingPack
-                          ? packEditDraft
-                          : null;
-                        const packPhotoUrl = getPackPhotoUrl(pack);
-                        const displayedPackPhoto = isEditingPack
-                          ? packEditPhotoPreviewUrl || packPhotoUrl
-                          : packPhotoUrl;
-                        const spotsWithQr = pack.spots.filter(
-                          (s) => s.qr_code,
-                        ).length;
-
-                        return (
-                          <article
-                            className="data-card pack-record-card"
-                            key={pack.pack_uuid}
-                          >
-                            {/* ── Card header row ── */}
-                            <div className="pack-record-header">
-                              <div className="pack-record-thumb">
-                                <EntityImagePreview
-                                  imageUrl={displayedPackPhoto}
-                                  label={pack.name || "Juise Pack"}
-                                  altSuffix="pack photo"
-                                  fallbackLabel="📦"
-                                />
-                              </div>
-
-                              <div className="pack-record-info">
-                                <strong>{pack.name || "Juise Pack"}</strong>
-                                <p>
-                                  {pack.description || "No description set."}
-                                </p>
-                                <div className="pack-record-badges">
-                                  <span
-                                    className={`pack-record-badge ${pack.active ? "pack-record-badge-active" : "pack-record-badge-inactive"}`}
-                                  >
-                                    {pack.active ? "✓ Active" : "Inactive"}
-                                  </span>
-                                  <span className="pack-record-badge">
-                                    {pack.spot_count}{" "}
-                                    {pack.spot_count === 1 ? "spot" : "spots"}
-                                  </span>
-                                  {pack.school_owner?.campus_id ? (
-                                    <span className="pack-record-badge pack-record-badge-location">
-                                      {pack.school_owner.campus_id}
-                                    </span>
-                                  ) : null}
-                                  {pack.location ? (
-                                    <span className="pack-record-badge pack-record-badge-location">
-                                      📍 Located
-                                    </span>
-                                  ) : (
-                                    <span className="pack-record-badge pack-record-badge-inactive">
-                                      No location
-                                    </span>
-                                  )}
-                                  {pack.qr_code ? (
-                                    <span className="pack-record-badge pack-record-badge-active">
-                                      Pack QR ready
-                                    </span>
-                                  ) : null}
-                                </div>
-                              </div>
-
-                              <div className="pack-record-menu">
-                                <button
-                                  className="secondary-button"
-                                  type="button"
-                                  onClick={() =>
-                                    isEditingPack
-                                      ? handleCancelPackEdit()
-                                      : handleStartEditingPack(pack)
-                                  }
-                                  disabled={packEditBusy}
-                                >
-                                  {isEditingPack ? "Cancel" : "Edit"}
-                                </button>
-                                {pack.qr_code ? (
-                                  <button
-                                    className="secondary-button"
-                                    type="button"
-                                    onClick={() =>
-                                      handleDownloadPackQrCode(pack)
-                                    }
-                                  >
-                                    QR
-                                  </button>
-                                ) : (
-                                  <button
-                                    className="secondary-button"
-                                    type="button"
-                                    onClick={() =>
-                                      void handleGeneratePackQrCode(pack)
-                                    }
-                                    disabled={
-                                      qrActionTarget ===
-                                      `pack:${pack.pack_uuid}`
-                                    }
-                                  >
-                                    {qrActionTarget ===
-                                    `pack:${pack.pack_uuid}`
-                                      ? "…"
-                                      : "Gen QR"}
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* ── Card body ── */}
-                            <div className="pack-record-body">
-                              {/* Spots chips */}
-                              {pack.spots.length > 0 ? (
-                                <div>
-                                  <div className="pack-spots-section-header">
-                                    <h4>
-                                      Spots — {pack.spots.length} total,{" "}
-                                      {spotsWithQr} with QR
-                                    </h4>
-                                  </div>
-                                  <div
-                                    className="pack-spots-chips"
-                                    style={{ marginTop: 10 }}
-                                  >
-                                    {pack.spots.map((spot) => (
-                                      <div
-                                        className="pack-spot-chip"
-                                        key={spot.spot_uuid}
-                                      >
-                                        <span className="pack-spot-chip-num">
-                                          #{spot.spot_number}
-                                        </span>
-                                        {spot.qr_code ? (
-                                          <button
-                                            className="pack-spot-qr-button pack-spot-chip-qr pack-spot-chip-qr-ready"
-                                            type="button"
-                                            onClick={() =>
-                                              handleDownloadPackSpotQrCode(spot)
-                                            }
-                                            title="Download QR for this spot"
-                                          >
-                                            ↓ QR
-                                          </button>
-                                        ) : (
-                                          <button
-                                            className="pack-spot-qr-button pack-spot-chip-qr"
-                                            type="button"
-                                            onClick={() =>
-                                              void handleGeneratePackSpotQrCode(
-                                                spot,
-                                              )
-                                            }
-                                            disabled={
-                                              qrActionTarget ===
-                                              `spot:${spot.spot_uuid}`
-                                            }
-                                            title="Generate QR for this spot"
-                                          >
-                                            {qrActionTarget ===
-                                            `spot:${spot.spot_uuid}`
-                                              ? "…"
-                                              : "+ QR"}
-                                          </button>
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              ) : null}
-
-                              {/* Actions row */}
-                              <div className="pack-record-actions-row">
-                                <button
-                                  className="secondary-button"
-                                  type="button"
-                                  onClick={() =>
-                                    isEditingPack
-                                      ? handleCancelPackEdit()
-                                      : handleStartEditingPack(pack)
-                                  }
-                                  disabled={packEditBusy}
-                                >
-                                  {isEditingPack
-                                    ? "Cancel Edit"
-                                    : "Edit Details"}
-                                </button>
-                                {pack.qr_code ? (
-                                  <button
-                                    className="secondary-button"
-                                    type="button"
-                                    onClick={() =>
-                                      handleDownloadPackQrCode(pack)
-                                    }
-                                  >
-                                    Download Pack QR
-                                  </button>
-                                ) : (
-                                  <button
-                                    className="secondary-button"
-                                    type="button"
-                                    onClick={() =>
-                                      void handleGeneratePackQrCode(pack)
-                                    }
-                                    disabled={
-                                      qrActionTarget ===
-                                      `pack:${pack.pack_uuid}`
-                                    }
-                                  >
-                                    {qrActionTarget ===
-                                    `pack:${pack.pack_uuid}`
-                                      ? "Generating Pack QR…"
-                                      : "Generate Pack QR"}
-                                  </button>
-                                )}
-                              </div>
-
-                              {/* Inline edit form */}
-                              {currentPackEditDraft ? (
-                                <form
-                                  className="data-section pack-edit-form"
-                                  onSubmit={(event) =>
-                                    void handleSavePackEdit(event, pack)
-                                  }
-                                >
-                                  <div className="data-section-header">
-                                    <div>
-                                      <h4>Edit pack details</h4>
-                                      <p className="muted-text">
-                                        Update name, description, location, and
-                                        photo.
-                                      </p>
-                                    </div>
-                                  </div>
-
-                                  <div className="form-grid">
-                                    <label className="field">
-                                      <span>Pack Name</span>
-                                      <input
-                                        value={currentPackEditDraft.name}
-                                        onChange={(event) =>
-                                          setPackEditDraft((current) =>
-                                            current
-                                              ? {
-                                                  ...current,
-                                                  name: event.target.value,
-                                                }
-                                              : current,
-                                          )
-                                        }
-                                        placeholder="North Garage Pack"
-                                        disabled={packEditBusy}
-                                      />
-                                    </label>
-                                    <label className="field">
-                                      <span>Latitude</span>
-                                      <input
-                                        value={currentPackEditDraft.lat}
-                                        onChange={(event) =>
-                                          setPackEditDraft((current) =>
-                                            current
-                                              ? {
-                                                  ...current,
-                                                  lat: event.target.value,
-                                                }
-                                              : current,
-                                          )
-                                        }
-                                        placeholder="42.678000"
-                                        disabled={packEditBusy}
-                                      />
-                                    </label>
-                                    <label className="field">
-                                      <span>Longitude</span>
-                                      <input
-                                        value={currentPackEditDraft.lng}
-                                        onChange={(event) =>
-                                          setPackEditDraft((current) =>
-                                            current
-                                              ? {
-                                                  ...current,
-                                                  lng: event.target.value,
-                                                }
-                                              : current,
-                                          )
-                                        }
-                                        placeholder="-83.195000"
-                                        disabled={packEditBusy}
-                                      />
-                                    </label>
-                                    <label className="field field-span-2">
-                                      <span>Description</span>
-                                      <textarea
-                                        value={currentPackEditDraft.description}
-                                        onChange={(event) =>
-                                          setPackEditDraft((current) =>
-                                            current
-                                              ? {
-                                                  ...current,
-                                                  description:
-                                                    event.target.value,
-                                                }
-                                              : current,
-                                          )
-                                        }
-                                        placeholder="Covered student parking near the library entrance."
-                                        rows={4}
-                                        disabled={packEditBusy}
-                                      />
-                                    </label>
-                                    <div className="field field-span-2">
-                                      <span>Pack Photo</span>
-                                      <div className="challenge-image-field">
-                                        <EntityImagePreview
-                                          imageUrl={displayedPackPhoto}
-                                          label={pack.name || "Juise Pack"}
-                                          altSuffix="pack photo"
-                                          fallbackLabel="Pack photo preview"
-                                        />
-                                        <div className="challenge-image-field-controls">
-                                          <p className="muted-text">
-                                            Upload a new pack photo to replace
-                                            the current image.
-                                          </p>
-                                          <div className="challenge-image-upload-row">
-                                            <label className="secondary-button challenge-upload-button">
-                                              <input
-                                                className="challenge-upload-input"
-                                                type="file"
-                                                accept="image/png,image/jpeg,image/webp,image/gif"
-                                                onChange={
-                                                  handlePackEditPhotoFileChange
-                                                }
-                                                disabled={packEditBusy}
-                                              />
-                                              {packEditPhotoFile
-                                                ? "Replace Photo"
-                                                : "Upload Photo"}
-                                            </label>
-                                            {packEditPhotoFile ? (
-                                              <button
-                                                className="secondary-button"
-                                                type="button"
-                                                onClick={() => {
-                                                  setPackEditPhotoFile(null);
-                                                  setPackEditPhotoPreviewUrl(
-                                                    "",
-                                                  );
-                                                }}
-                                                disabled={packEditBusy}
-                                              >
-                                                Use Current Photo
-                                              </button>
-                                            ) : null}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <div className="form-actions pack-edit-actions">
-                                    <button
-                                      className="primary-button"
-                                      type="submit"
-                                      disabled={packEditBusy}
-                                    >
-                                      {packEditBusy
-                                        ? "Saving Changes…"
-                                        : "Save Changes"}
-                                    </button>
-                                    <button
-                                      className="secondary-button"
-                                      type="button"
-                                      onClick={handleCancelPackEdit}
-                                      disabled={packEditBusy}
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                </form>
-                              ) : null}
-
-                              {/* UUID copy field */}
-                              <div className="uuid-copy-stack">
-                                <UuidCopyField
-                                  label="pack_uuid"
-                                  value={pack.pack_uuid}
-                                  onCopy={handleCopyUuid}
-                                />
-                              </div>
-
-                              {/* Per-spot UUID copy fields */}
-                              {pack.spots.length > 0 ? (
-                                <details>
-                                  <summary
-                                    style={{
-                                      cursor: "pointer",
-                                      fontSize: "0.82rem",
-                                      color: "var(--muted)",
-                                      fontWeight: 600,
-                                      userSelect: "none",
-                                    }}
-                                  >
-                                    Spot UUIDs ({pack.spots.length})
-                                  </summary>
-                                  <div
-                                    className="uuid-copy-stack"
-                                    style={{ marginTop: 10 }}
-                                  >
-                                    {pack.spots.map((spot) => (
-                                      <UuidCopyField
-                                        key={spot.spot_uuid}
-                                        label={`spot_${spot.spot_number}`}
-                                        value={spot.spot_uuid}
-                                        onCopy={handleCopyUuid}
-                                      />
-                                    ))}
-                                  </div>
-                                </details>
-                              ) : null}
-                            </div>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </section>
-        ) : null}
-
-        {currentSection === "reservations" ? (
-          <section className="reservation-layout">
-            <div className="panel">
-              <div className="panel-header">
-                <div>
-                  <p className="eyebrow">Pending Queue</p>
-                  <h2>Reservation requests</h2>
-                </div>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => void refreshReservations()}
-                  disabled={reservationsBusy || !activeSchoolId}
-                >
-                  Refresh
-                </button>
-              </div>
-
-              {!activeSchoolId ? (
-                <p className="empty-state">
-                  This admin login is not scoped to a school.
-                </p>
-              ) : null}
-              {activeSchoolId && reservationsBusy ? (
-                <p className="muted-text">Loading pending reservations…</p>
-              ) : null}
-              {activeSchoolId &&
-              !reservationsBusy &&
-              reservations.length === 0 ? (
-                <p className="empty-state">
-                  No pending term reservations for this school.
-                </p>
-              ) : null}
-
-              <div className="reservation-list">
-                {reservations.map((reservation) => (
-                  <button
-                    key={reservation.reservation_uuid}
-                    type="button"
-                    className={`reservation-card ${
-                      reservation.reservation_uuid === selectedReservationId
-                        ? "reservation-card-active"
-                        : ""
-                    }`}
-                    onClick={() =>
-                      setSelectedReservationId(reservation.reservation_uuid)
-                    }
-                  >
-                    <div>
-                      <strong>{reservation.pack_name || "Juise Pack"}</strong>
-                      <span>Spot {reservation.spot_number ?? "TBD"}</span>
-                    </div>
-                    <div>
-                      <span>{reservation.term_name || "Term request"}</span>
-                      <span>{reservation.user_uuid}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="panel">
-              <div className="panel-header">
-                <div>
-                  <p className="eyebrow">Reservation Detail</p>
-                  <h2>
-                    {selectedReservation?.reservation_uuid ||
-                      "Select a reservation"}
-                  </h2>
-                </div>
-                <div className="form-actions">
-                  <button
-                    className="danger-button"
-                    type="button"
-                    onClick={() => void handleDenySelected()}
-                    disabled={!selectedReservation || reservationsBusy}
-                  >
-                    Deny
-                  </button>
-                  <button
-                    className="primary-button"
-                    type="button"
-                    onClick={() => void handleApproveSelected()}
-                    disabled={!selectedReservation || reservationsBusy}
-                  >
-                    Approve
-                  </button>
-                </div>
-              </div>
-
-              {!selectedReservation ? (
-                <p className="empty-state">
-                  Select a request from the left to review it.
-                </p>
-              ) : null}
-
-              {selectedReservation ? (
-                <>
-                  <div className="detail-grid">
-                    <DetailRow
-                      label="Pack"
-                      value={
-                        selectedReservation.pack_name ||
-                        selectedReservation.pack_uuid
-                      }
-                    />
-                    <DetailRow
-                      label="Spot"
-                      value={
-                        selectedReservation.spot_number
-                          ? `Spot ${selectedReservation.spot_number}`
-                          : selectedReservation.spot_uuid
-                      }
-                    />
-                    <DetailRow
-                      label="Status"
-                      value={selectedReservation.status}
-                    />
-                    <DetailRow
-                      label="Term"
-                      value={selectedReservation.term_name || "Not set"}
-                    />
-                    <DetailRow
-                      label="Start"
-                      value={formatUnixTimestamp(
-                        selectedReservation.start_time,
-                      )}
-                    />
-                    <DetailRow
-                      label="End"
-                      value={formatUnixTimestamp(selectedReservation.end_time)}
-                    />
-                    <DetailRow
-                      label="Student UUID"
-                      value={selectedReservation.user_uuid}
-                    />
-                    <DetailRow
-                      label="Membership UUID"
-                      value={selectedReservation.membership_uuid || "Not set"}
-                    />
-                  </div>
-
-                  <div className="student-panel">
-                    <div className="student-panel-header">
-                      <div>
-                        <p className="eyebrow">Student</p>
-                        <h3>Registered information</h3>
-                      </div>
-                      {studentBusy ? (
-                        <span className="muted-text">Loading…</span>
-                      ) : null}
-                    </div>
-
-                    {studentError ? (
-                      <p className="error-text">{studentError}</p>
-                    ) : null}
-
-                    {studentProfile ? (
-                      <>
-                        <div className="detail-grid">
-                          <DetailRow
-                            label="Name"
-                            value={`${studentProfile.user.first_name} ${studentProfile.user.last_name}`.trim()}
-                          />
-                          <DetailRow
-                            label="Username"
-                            value={studentProfile.user.username}
-                          />
-                          <DetailRow
-                            label="Email"
-                            value={studentProfile.user.email}
-                          />
-                          <DetailRow
-                            label="Phone"
-                            value={studentProfile.user.phone || "Not set"}
-                          />
-                        </div>
-
-                        <div className="data-section">
-                          <div className="data-section-header">
-                            <h4>School memberships</h4>
-                            <span>{relevantMemberships.length}</span>
-                          </div>
-                          {relevantMemberships.length === 0 ? (
-                            <p className="muted-text">
-                              No memberships found for this school.
-                            </p>
-                          ) : (
-                            <div className="stack-list">
-                              {relevantMemberships.map((membership) => (
-                                <div
-                                  className="data-card"
-                                  key={membership.membership_uuid}
-                                >
-                                  <strong>
-                                    {membership.student_id ||
-                                      membership.membership_uuid}
-                                  </strong>
-                                  <span>
-                                    {membership.school_id} ·{" "}
-                                    {membership.campus_id} · {membership.status}
-                                  </span>
-                                  <span>
-                                    {membership.terms.length > 0
-                                      ? membership.terms
-                                          .map(
-                                            (term) =>
-                                              `${term.name} (${formatDateOnly(term.start_date)} - ${formatDateOnly(term.end_date)})`,
-                                          )
-                                          .join(", ")
-                                      : "No membership term records"}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="data-section">
-                          <div className="data-section-header">
-                            <h4>Registered devices</h4>
-                            <span>{studentProfile.devices.length}</span>
-                          </div>
-                          {studentProfile.devices.length === 0 ? (
-                            <p className="muted-text">
-                              No registered devices found.
-                            </p>
-                          ) : (
-                            <div className="stack-list">
-                              {studentProfile.devices.map((device) => (
-                                <div
-                                  className="data-card"
-                                  key={device.registered_device_uuid}
-                                >
-                                  <strong>
-                                    {device.nickname || device.device_type}
-                                  </strong>
-                                  <span>
-                                    {device.make || "Unknown make"} ·{" "}
-                                    {device.model || "Unknown model"}
-                                  </span>
-                                  <span>
-                                    Serial: {device.serial_number || "Not set"}{" "}
-                                    · Color: {device.color || "Not set"}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    ) : null}
-                  </div>
-                </>
-              ) : null}
-            </div>
-          </section>
-        ) : null}
+        {sectionContent}
       </main>
+      {imagePreview ? (
+        <div
+          className="image-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label={imagePreview.label || imagePreview.alt}
+          onClick={() => setImagePreview(null)}
+        >
+          <div
+            className="image-lightbox-sheet"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              className="image-lightbox-close"
+              type="button"
+              onClick={() => setImagePreview(null)}
+            >
+              Close
+            </button>
+            <img
+              className="image-lightbox-image"
+              src={imagePreview.imageUrl}
+              alt={imagePreview.alt}
+            />
+            {imagePreview.label ? (
+              <p className="image-lightbox-caption">{imagePreview.label}</p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
