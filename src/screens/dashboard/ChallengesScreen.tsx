@@ -77,6 +77,12 @@ type Props = {
   ) => void;
 };
 
+function statusClass(status: string): string {
+  if (status === "Live") return "challenge-status-live";
+  if (status === "Upcoming") return "challenge-status-upcoming";
+  return "challenge-status-ended";
+}
+
 export function ChallengesScreen(props: Props) {
   const {
     activeSchoolId,
@@ -103,29 +109,36 @@ export function ChallengesScreen(props: Props) {
     formatDateTimeForDisplay,
     formatNebulaUserName,
     EntityImagePreview,
-    DetailRow,
     newChallengeSelectionId,
     handleImagePreview,
   } = props;
 
+  const isCreating =
+    selectedChallengeId === newChallengeSelectionId && !challengeDraft.challenge_uuid;
+  const isEditing = Boolean(challengeDraft.challenge_uuid);
+  const nothingSelected = !selectedChallengeId || (selectedChallengeId !== newChallengeSelectionId && !selectedChallenge);
+
+  function handleSelectNew() {
+    setSelectedChallengeId(newChallengeSelectionId);
+    setChallengeDraft(createEmptyChallengeDraft());
+  }
+
   return (
-    <section className="panel">
+    <section className="panel challenge-master-panel">
+      {/* ── Page header ── */}
       <div className="panel-header">
         <div>
           <p className="eyebrow">Campaigns</p>
-          <h2>Manage school challenges</h2>
+          <h2>School challenges</h2>
         </div>
         <div className="form-actions">
           <button
-            className="secondary-button"
+            className="primary-button"
             type="button"
-            onClick={() => {
-              setSelectedChallengeId(newChallengeSelectionId);
-              setChallengeDraft(createEmptyChallengeDraft());
-            }}
+            onClick={handleSelectNew}
             disabled={!activeSchoolId}
           >
-            New Challenge
+            + New Challenge
           </button>
           <button
             className="secondary-button"
@@ -139,159 +152,326 @@ export function ChallengesScreen(props: Props) {
       </div>
 
       {!activeSchoolId ? (
-        <p className="empty-state">
-          This admin login is not scoped to a school.
-        </p>
+        <p className="empty-state">This admin login is not scoped to a school.</p>
       ) : null}
 
       {activeSchoolId ? (
         <div className="challenge-layout">
-          <div className="challenge-editor">
-            <form className="school-form" onSubmit={handleSaveChallenge}>
-              <div className="panel-header">
-                <div>
-                  <p className="eyebrow">Challenge Editor</p>
-                  <h3>
-                    {challengeDraft.challenge_uuid
-                      ? "Edit existing challenge"
-                      : "Create a new challenge"}
-                  </h3>
-                </div>
-                {challengeBusy ? <span className="muted-text">Saving…</span> : null}
+          {/* ══ LEFT: challenge list ══ */}
+          <div className="challenge-sidebar-list">
+            {/* Active & Upcoming */}
+            <div className="challenge-list-section">
+              <div className="challenge-list-section-header">
+                <span>Active &amp; Upcoming</span>
+                <span className="challenge-list-count">
+                  {currentAndUpcomingChallenges.length}
+                </span>
               </div>
 
-              <div className="form-grid">
-                <label className="field">
-                  <span>Title</span>
-                  <input
-                    value={challengeDraft.title}
-                    onChange={(event) =>
-                      setChallengeDraft((current) => ({
-                        ...current,
-                        title: event.target.value,
-                      }))
-                    }
-                    placeholder="Ride 25 miles in 7 days"
-                  />
-                </label>
-                <label className="field">
-                  <span>Metric</span>
-                  <select
-                    value={challengeDraft.metric_type}
-                    onChange={(event) =>
-                      setChallengeDraft((current) => ({
-                        ...current,
-                        metric_type: event.target.value as ChallengeDraft["metric_type"],
-                        target_value:
-                          event.target.value === "points"
-                            ? current.metric_type === "points"
-                              ? current.target_value
-                              : "100"
-                            : current.metric_type === "distance_miles"
-                              ? current.target_value
-                              : "10",
-                      }))
-                    }
-                  >
-                    <option value="distance_miles">Distance in miles</option>
-                    <option value="points">Points</option>
-                  </select>
-                </label>
-                <label className="field">
-                  <span>
-                    Target{" "}
-                    {challengeDraft.metric_type === "points"
-                      ? "(points)"
-                      : "(miles)"}
-                  </span>
-                  <input
-                    type="number"
-                    min="0"
-                    step={challengeDraft.metric_type === "points" ? "1" : "0.1"}
-                    value={challengeDraft.target_value}
-                    onChange={(event) =>
-                      setChallengeDraft((current) => ({
-                        ...current,
-                        target_value: event.target.value,
-                      }))
-                    }
-                    placeholder={challengeDraft.metric_type === "points" ? "100" : "10"}
-                  />
-                </label>
-                <label className="field checkbox-field">
-                  <span>Active</span>
-                  <input
-                    type="checkbox"
-                    checked={challengeDraft.active}
-                    onChange={(event) =>
-                      setChallengeDraft((current) => ({
-                        ...current,
-                        active: event.target.checked,
-                      }))
-                    }
-                  />
-                </label>
-                <label className="field">
-                  <span>Start</span>
-                  <input
-                    type="datetime-local"
-                    value={challengeDraft.start_time}
-                    onChange={(event) =>
-                      setChallengeDraft((current) => ({
-                        ...current,
-                        start_time: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <label className="field">
-                  <span>End</span>
-                  <input
-                    type="datetime-local"
-                    value={challengeDraft.end_time}
-                    onChange={(event) =>
-                      setChallengeDraft((current) => ({
-                        ...current,
-                        end_time: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <label className="field field-span-2">
-                  <span>Description</span>
-                  <textarea
-                    value={challengeDraft.description}
-                    onChange={(event) =>
-                      setChallengeDraft((current) => ({
-                        ...current,
-                        description: event.target.value,
-                      }))
-                    }
-                    placeholder="Invite students to participate and explain how they win."
-                    rows={5}
-                  />
-                </label>
-                <div className="field field-span-2">
-                  <span>Challenge Image</span>
+              {challengeListBusy ? (
+                <p className="muted-text" style={{ padding: "8px 0" }}>Loading…</p>
+              ) : currentAndUpcomingChallenges.length === 0 ? (
+                <p className="challenge-list-empty">
+                  No live or upcoming challenges yet.
+                </p>
+              ) : null}
+
+              <div className="challenge-roster">
+                {currentAndUpcomingChallenges.map((ch) => {
+                  const status = resolveChallengeStatus(ch);
+                  const isSelected = ch.challenge_uuid === selectedChallengeId;
+                  return (
+                    <button
+                      key={ch.challenge_uuid}
+                      className={`challenge-roster-item ${isSelected ? "challenge-roster-item-active" : ""}`}
+                      type="button"
+                      onClick={() => setSelectedChallengeId(ch.challenge_uuid)}
+                    >
+                      <div className="challenge-roster-thumb">
+                        {ch.image_url.trim() ? (
+                          <img
+                            src={ch.image_url}
+                            alt={ch.title}
+                            className="challenge-roster-img"
+                          />
+                        ) : (
+                          <span className="challenge-roster-img-fallback">🏆</span>
+                        )}
+                      </div>
+                      <div className="challenge-roster-info">
+                        <strong className="challenge-roster-title">{ch.title}</strong>
+                        <span className="challenge-roster-meta">
+                          {formatChallengeMetricValue(ch.metric_type, ch.target_value)}
+                        </span>
+                      </div>
+                      <span className={`challenge-status-badge ${statusClass(status)}`}>
+                        {status}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Past challenges */}
+            <div className="challenge-list-section">
+              <div className="challenge-list-section-header">
+                <span>Past</span>
+                <span className="challenge-list-count">{pastChallenges.length}</span>
+              </div>
+
+              {!challengeListBusy && pastChallenges.length === 0 ? (
+                <p className="challenge-list-empty">
+                  Ended challenges will appear here.
+                </p>
+              ) : null}
+
+              <div className="challenge-roster">
+                {pastChallenges.map((ch) => {
+                  const status = resolveChallengeStatus(ch);
+                  const isSelected = ch.challenge_uuid === selectedChallengeId;
+                  return (
+                    <button
+                      key={ch.challenge_uuid}
+                      className={`challenge-roster-item ${isSelected ? "challenge-roster-item-active" : ""}`}
+                      type="button"
+                      onClick={() => setSelectedChallengeId(ch.challenge_uuid)}
+                    >
+                      <div className="challenge-roster-thumb">
+                        {ch.image_url.trim() ? (
+                          <img
+                            src={ch.image_url}
+                            alt={ch.title}
+                            className="challenge-roster-img"
+                          />
+                        ) : (
+                          <span className="challenge-roster-img-fallback">🏆</span>
+                        )}
+                      </div>
+                      <div className="challenge-roster-info">
+                        <strong className="challenge-roster-title">{ch.title}</strong>
+                        <span className="challenge-roster-meta">
+                          {formatChallengeMetricValue(ch.metric_type, ch.target_value)}
+                        </span>
+                      </div>
+                      <span className={`challenge-status-badge ${statusClass(status)}`}>
+                        {status}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* ══ RIGHT: detail / create panel ══ */}
+          <div className="challenge-detail-panel">
+            {/* Empty state */}
+            {nothingSelected ? (
+              <div className="challenge-empty-detail">
+                <span className="challenge-empty-icon">🏆</span>
+                <h3>Select a challenge</h3>
+                <p>
+                  Choose a challenge from the list to view its details, student
+                  progress, and edit it — or create a new one.
+                </p>
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={handleSelectNew}
+                >
+                  + New Challenge
+                </button>
+              </div>
+            ) : null}
+
+            {/* Create / Edit form */}
+            {(isCreating || isEditing) ? (
+              <form className="challenge-editor-form" onSubmit={handleSaveChallenge}>
+                {/* Form header */}
+                <div className="challenge-form-header">
+                  <div>
+                    <p className="eyebrow">
+                      {isEditing ? "Editing challenge" : "New challenge"}
+                    </p>
+                    <h3>
+                      {challengeDraft.title.trim() || (isEditing ? "Untitled" : "Create a challenge")}
+                    </h3>
+                  </div>
+                  {challengeBusy ? <span className="muted-text">Saving…</span> : null}
+                </div>
+
+                {/* Live preview chip row */}
+                <div className="challenge-form-preview-row">
+                  {challengeDraft.image_url.trim() ? (
+                    <img
+                      src={challengeDraft.image_url}
+                      alt="Challenge cover"
+                      className="challenge-form-preview-img"
+                      onClick={() =>
+                        handleImagePreview(
+                          challengeDraft.image_url,
+                          challengeDraft.title || "Challenge",
+                        )
+                      }
+                    />
+                  ) : null}
+                  <div className="challenge-form-preview-chips">
+                    {challengeDraft.metric_type && challengeDraft.target_value ? (
+                      <span className="challenge-form-chip">
+                        🎯{" "}
+                        {formatChallengeMetricValue(
+                          challengeDraft.metric_type,
+                          Number(challengeDraft.target_value),
+                        )}
+                      </span>
+                    ) : null}
+                    {challengeDraft.start_time ? (
+                      <span className="challenge-form-chip">
+                        📅 {challengeDraft.start_time.replace("T", " ")}
+                        {challengeDraft.end_time
+                          ? ` → ${challengeDraft.end_time.replace("T", " ")}`
+                          : ""}
+                      </span>
+                    ) : null}
+                    <span
+                      className={`challenge-status-badge ${challengeDraft.active ? "challenge-status-live" : "challenge-status-ended"}`}
+                    >
+                      {challengeDraft.active ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Section: Details */}
+                <div className="challenge-form-section">
+                  <div className="challenge-form-section-label">Details</div>
+                  <div className="form-grid">
+                    <label className="field field-span-2">
+                      <span>Title</span>
+                      <input
+                        value={challengeDraft.title}
+                        onChange={(e) =>
+                          setChallengeDraft((c) => ({ ...c, title: e.target.value }))
+                        }
+                        placeholder="Ride 25 miles in 7 days"
+                      />
+                    </label>
+                    <label className="field field-span-2">
+                      <span>Description</span>
+                      <textarea
+                        value={challengeDraft.description}
+                        onChange={(e) =>
+                          setChallengeDraft((c) => ({ ...c, description: e.target.value }))
+                        }
+                        placeholder="Invite students to participate and explain how they win."
+                        rows={3}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Section: Goal */}
+                <div className="challenge-form-section">
+                  <div className="challenge-form-section-label">Goal</div>
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>Metric</span>
+                      <select
+                        value={challengeDraft.metric_type}
+                        onChange={(e) =>
+                          setChallengeDraft((c) => ({
+                            ...c,
+                            metric_type: e.target.value as ChallengeDraft["metric_type"],
+                            target_value:
+                              e.target.value === "points"
+                                ? c.metric_type === "points"
+                                  ? c.target_value
+                                  : "100"
+                                : c.metric_type === "distance_miles"
+                                  ? c.target_value
+                                  : "10",
+                          }))
+                        }
+                      >
+                        <option value="distance_miles">Distance (miles)</option>
+                        <option value="points">Points</option>
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>
+                        Target{" "}
+                        {challengeDraft.metric_type === "points" ? "(pts)" : "(mi)"}
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        step={challengeDraft.metric_type === "points" ? "1" : "0.1"}
+                        value={challengeDraft.target_value}
+                        onChange={(e) =>
+                          setChallengeDraft((c) => ({ ...c, target_value: e.target.value }))
+                        }
+                        placeholder={challengeDraft.metric_type === "points" ? "100" : "10"}
+                      />
+                    </label>
+                    <label className="field checkbox-field">
+                      <span>Active</span>
+                      <input
+                        type="checkbox"
+                        checked={challengeDraft.active}
+                        onChange={(e) =>
+                          setChallengeDraft((c) => ({ ...c, active: e.target.checked }))
+                        }
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Section: Schedule */}
+                <div className="challenge-form-section">
+                  <div className="challenge-form-section-label">Schedule</div>
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>Start</span>
+                      <input
+                        type="datetime-local"
+                        value={challengeDraft.start_time}
+                        onChange={(e) =>
+                          setChallengeDraft((c) => ({ ...c, start_time: e.target.value }))
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>End</span>
+                      <input
+                        type="datetime-local"
+                        value={challengeDraft.end_time}
+                        onChange={(e) =>
+                          setChallengeDraft((c) => ({ ...c, end_time: e.target.value }))
+                        }
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Section: Cover image */}
+                <div className="challenge-form-section">
+                  <div className="challenge-form-section-label">Cover image</div>
                   <div className="challenge-image-field">
                     <EntityImagePreview
                       imageUrl={challengeDraft.image_url}
-                      label={challengeDraft.title || "School"}
+                      label={challengeDraft.title || "Challenge"}
                       altSuffix="challenge"
-                      fallbackLabel="Challenge image preview"
+                      fallbackLabel="Cover image preview"
                     />
                     <div className="challenge-image-field-controls">
                       <label className="field">
                         <span>Image URL</span>
                         <input
                           value={challengeDraft.image_url}
-                          onChange={(event) =>
-                            setChallengeDraft((current) => ({
-                              ...current,
-                              image_url: event.target.value,
-                            }))
+                          onChange={(e) =>
+                            setChallengeDraft((c) => ({ ...c, image_url: e.target.value }))
                           }
-                          placeholder="https://example.com/challenge-cover.jpg"
+                          placeholder="https://example.com/cover.jpg"
                         />
                       </label>
                       <div className="challenge-image-upload-row">
@@ -303,17 +483,14 @@ export function ChallengesScreen(props: Props) {
                             onChange={handleChallengeImageFileChange}
                             disabled={challengeImageUploadBusy || !activeSchoolId}
                           />
-                          {challengeImageUploadBusy ? "Uploading..." : "Upload Image"}
+                          {challengeImageUploadBusy ? "Uploading…" : "Upload Image"}
                         </label>
                         {challengeDraft.image_url.trim() ? (
                           <button
                             className="secondary-button"
                             type="button"
                             onClick={() =>
-                              setChallengeDraft((current) => ({
-                                ...current,
-                                image_url: "",
-                              }))
+                              setChallengeDraft((c) => ({ ...c, image_url: "" }))
                             }
                             disabled={challengeImageUploadBusy}
                           >
@@ -324,206 +501,157 @@ export function ChallengesScreen(props: Props) {
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="detail-grid">
-                <DetailRow
-                  label="Goal"
-                  value={formatChallengeMetricValue(
-                    challengeDraft.metric_type,
-                    Number(challengeDraft.target_value),
-                  )}
-                />
-                <DetailRow
-                  label="Window"
-                  value={
-                    challengeDraft.start_time && challengeDraft.end_time
-                      ? `${challengeDraft.start_time.replace("T", " ")} to ${challengeDraft.end_time.replace("T", " ")}`
-                      : "Set a start and end time"
-                  }
-                />
-              </div>
-
-              <div className="form-actions">
-                {challengeDraft.challenge_uuid ? (
+                {/* Form actions */}
+                <div className="form-actions">
+                  {challengeDraft.challenge_uuid ? (
+                    <button
+                      className="danger-button"
+                      type="button"
+                      onClick={() => void handleDeleteSelectedChallenge()}
+                      disabled={challengeBusy}
+                    >
+                      Delete
+                    </button>
+                  ) : null}
                   <button
-                    className="danger-button"
-                    type="button"
-                    onClick={() => void handleDeleteSelectedChallenge()}
+                    className="primary-button"
+                    type="submit"
                     disabled={challengeBusy}
                   >
-                    Delete
+                    {challengeBusy
+                      ? "Saving…"
+                      : challengeDraft.challenge_uuid
+                        ? "Save Changes"
+                        : "Create Challenge"}
                   </button>
-                ) : null}
-                <button className="primary-button" type="submit" disabled={challengeBusy}>
-                  {challengeDraft.challenge_uuid ? "Save Challenge" : "Create Challenge"}
-                </button>
-              </div>
-            </form>
-          </div>
-
-          <div className="challenge-sidebar">
-            <div className="data-section">
-              <div className="data-section-header">
-                <h4>Challenge library</h4>
-                <span>{currentAndUpcomingChallenges.length}</span>
-              </div>
-              {challengeListBusy ? (
-                <p className="muted-text">Loading challenges…</p>
-              ) : null}
-              {!challengeListBusy && currentAndUpcomingChallenges.length === 0 ? (
-                <p className="empty-state">
-                  No live or upcoming challenges are in the library right now.
-                </p>
-              ) : null}
-              <div className="challenge-list">
-                {currentAndUpcomingChallenges.map((challenge) => {
-                  const status = resolveChallengeStatus(challenge);
-                  return (
+                  {isCreating ? (
                     <button
-                      key={challenge.challenge_uuid}
-                      className={`challenge-card ${
-                        challenge.challenge_uuid === selectedChallengeId
-                          ? "challenge-card-active"
-                          : ""
-                      }`}
+                      className="secondary-button"
                       type="button"
-                      onClick={() => setSelectedChallengeId(challenge.challenge_uuid)}
+                      onClick={() => setSelectedChallengeId("")}
                     >
-                      {challenge.image_url.trim() ? (
-                        <img
-                          className="challenge-card-image"
-                          src={challenge.image_url}
-                          alt={`${challenge.title} challenge`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleImagePreview(
-                              challenge.image_url,
-                              `${challenge.title} challenge`,
-                              challenge.title,
-                            );
-                          }}
-                        />
-                      ) : null}
-                      <div className="challenge-card-header">
-                        <strong>{challenge.title}</strong>
-                        <span className="student-badge">{status}</span>
-                      </div>
-                      <span>
-                        {formatChallengeMetricValue(
-                          challenge.metric_type,
-                          challenge.target_value,
-                        )}
-                      </span>
-                      <span>
-                        {formatDateTimeForDisplay(challenge.start_time)} -{" "}
-                        {formatDateTimeForDisplay(challenge.end_time)}
-                      </span>
+                      Cancel
                     </button>
-                  );
-                })}
-              </div>
-            </div>
+                  ) : null}
+                </div>
+              </form>
+            ) : null}
 
-            <div className="data-section">
-              <div className="data-section-header">
-                <h4>Past challenges</h4>
-                <span>{pastChallenges.length}</span>
-              </div>
-              {!challengeListBusy && pastChallenges.length === 0 ? (
-                <p className="empty-state">
-                  Ended challenges will move here once their campaign window
-                  closes.
-                </p>
-              ) : null}
-              <div className="challenge-list">
-                {pastChallenges.map((challenge) => {
-                  const status = resolveChallengeStatus(challenge);
-                  return (
-                    <button
-                      key={challenge.challenge_uuid}
-                      className={`challenge-card ${
-                        challenge.challenge_uuid === selectedChallengeId
-                          ? "challenge-card-active"
-                          : ""
-                      }`}
-                      type="button"
-                      onClick={() => setSelectedChallengeId(challenge.challenge_uuid)}
-                    >
-                      {challenge.image_url.trim() ? (
-                        <img
-                          className="challenge-card-image"
-                          src={challenge.image_url}
-                          alt={`${challenge.title} challenge`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleImagePreview(
-                              challenge.image_url,
-                              `${challenge.title} challenge`,
-                              challenge.title,
-                            );
-                          }}
-                        />
-                      ) : null}
-                      <div className="challenge-card-header">
-                        <strong>{challenge.title}</strong>
-                        <span className="student-badge">{status}</span>
-                      </div>
-                      <span>
-                        {formatChallengeMetricValue(
-                          challenge.metric_type,
-                          challenge.target_value,
-                        )}
-                      </span>
-                      <span>
-                        {formatDateTimeForDisplay(challenge.start_time)} -{" "}
-                        {formatDateTimeForDisplay(challenge.end_time)}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="data-section">
-              <div className="data-section-header">
-                <h4>Student progress</h4>
-                <span>{challengeParticipantSummary.joined}</span>
-              </div>
-
-              {!selectedChallenge ? (
-                <p className="empty-state">
-                  Select a saved challenge to review student enrollment and
-                  progress.
-                </p>
-              ) : (
-                <>
-                  <div className="detail-grid">
-                    <DetailRow
-                      label="Status"
-                      value={resolveChallengeStatus(selectedChallenge)}
+            {/* Selected existing challenge detail */}
+            {selectedChallenge && !isCreating ? (
+              <div className="challenge-detail-view">
+                {/* Cover + title hero */}
+                <div className="challenge-detail-hero">
+                  {selectedChallenge.image_url.trim() ? (
+                    <img
+                      className="challenge-detail-cover"
+                      src={selectedChallenge.image_url}
+                      alt={selectedChallenge.title}
+                      onClick={() =>
+                        handleImagePreview(
+                          selectedChallenge.image_url,
+                          selectedChallenge.title,
+                          selectedChallenge.title,
+                        )
+                      }
                     />
-                    <DetailRow
-                      label="Goal"
-                      value={formatChallengeMetricValue(
-                        selectedChallenge.metric_type,
-                        selectedChallenge.target_value,
+                  ) : null}
+                  <div className="challenge-detail-hero-info">
+                    <div className="challenge-detail-hero-badges">
+                      <span
+                        className={`challenge-status-badge ${statusClass(resolveChallengeStatus(selectedChallenge))}`}
+                      >
+                        {resolveChallengeStatus(selectedChallenge)}
+                      </span>
+                      {selectedChallenge.active ? null : (
+                        <span className="challenge-status-badge challenge-status-ended">
+                          Inactive
+                        </span>
                       )}
-                    />
-                    <DetailRow
-                      label="Joined"
-                      value={String(challengeParticipantSummary.joined)}
-                    />
-                    <DetailRow
-                      label="Completed"
-                      value={String(challengeParticipantSummary.completed)}
-                    />
+                    </div>
+                    <h3 className="challenge-detail-title">{selectedChallenge.title}</h3>
+                    {selectedChallenge.description ? (
+                      <p className="challenge-detail-desc">
+                        {selectedChallenge.description}
+                      </p>
+                    ) : null}
+                    <div className="challenge-detail-chips">
+                      <span className="challenge-form-chip">
+                        🎯{" "}
+                        {formatChallengeMetricValue(
+                          selectedChallenge.metric_type,
+                          selectedChallenge.target_value,
+                        )}
+                      </span>
+                      <span className="challenge-form-chip">
+                        📅 {formatDateTimeForDisplay(selectedChallenge.start_time)} →{" "}
+                        {formatDateTimeForDisplay(selectedChallenge.end_time)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Edit button */}
+                <div className="form-actions">
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() =>
+                      setChallengeDraft({
+                        challenge_uuid: selectedChallenge.challenge_uuid,
+                        title: selectedChallenge.title,
+                        description: selectedChallenge.description,
+                        image_url: selectedChallenge.image_url,
+                        metric_type: selectedChallenge.metric_type,
+                        target_value: String(selectedChallenge.target_value),
+                        start_time: selectedChallenge.start_time
+                          ? new Date(selectedChallenge.start_time)
+                              .toISOString()
+                              .slice(0, 16)
+                          : "",
+                        end_time: selectedChallenge.end_time
+                          ? new Date(selectedChallenge.end_time)
+                              .toISOString()
+                              .slice(0, 16)
+                          : "",
+                        active: selectedChallenge.active,
+                      })
+                    }
+                  >
+                    Edit Challenge
+                  </button>
+                </div>
+
+                {/* Participant stats */}
+                <div className="challenge-participants-section">
+                  <div className="challenge-participants-header">
+                    <h4>Student progress</h4>
+                    <div className="challenge-participant-stats">
+                      <span>
+                        <strong>{challengeParticipantSummary.joined}</strong> joined
+                      </span>
+                      <span>
+                        <strong>{challengeParticipantSummary.completed}</strong> completed
+                      </span>
+                      {challengeParticipantSummary.joined > 0 ? (
+                        <span>
+                          <strong>
+                            {Math.round(
+                              (challengeParticipantSummary.completed /
+                                challengeParticipantSummary.joined) *
+                                100,
+                            )}%
+                          </strong>{" "}
+                          completion rate
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
 
                   {challengeParticipantsBusy ? (
-                    <p className="muted-text">Loading student challenge progress…</p>
-                  ) : null}
-                  {!challengeParticipantsBusy && challengeParticipants.length === 0 ? (
+                    <p className="muted-text">Loading student progress…</p>
+                  ) : !challengeParticipantsBusy && challengeParticipants.length === 0 ? (
                     <p className="empty-state">
                       No students have joined this challenge yet.
                     </p>
@@ -535,30 +663,42 @@ export function ChallengesScreen(props: Props) {
                         className="participant-progress-card"
                         key={participant.participation_uuid}
                       >
-                        <div className="student-roster-header">
-                          <div>
-                            <p className="eyebrow">Student</p>
-                            <h3>
+                        <div className="participant-card-header">
+                          <div className="participant-avatar">
+                            {(
+                              participant.first_name?.[0] ||
+                              participant.username?.[0] ||
+                              "?"
+                            ).toUpperCase()}
+                          </div>
+                          <div className="participant-card-info">
+                            <strong>
                               {formatNebulaUserName({
                                 first_name: participant.first_name,
                                 last_name: participant.last_name,
                                 email: participant.email,
                                 username: participant.username,
                               })}
-                            </h3>
+                            </strong>
+                            <span className="muted-text">
+                              {participant.student_id || participant.username || participant.email}
+                            </span>
                           </div>
-                          <div className="student-roster-badges">
-                            <span className="student-badge">
-                              {participant.completed
-                                ? "Completed"
+                          <span
+                            className={`challenge-status-badge ${
+                              participant.completed
+                                ? "challenge-status-live"
                                 : participant.active
-                                  ? "In Progress"
-                                  : "Left"}
-                            </span>
-                            <span className="student-badge student-badge-muted">
-                              {participant.student_id || "No student ID"}
-                            </span>
-                          </div>
+                                  ? "challenge-status-upcoming"
+                                  : "challenge-status-ended"
+                            }`}
+                          >
+                            {participant.completed
+                              ? "Completed"
+                              : participant.active
+                                ? "In Progress"
+                                : "Left"}
+                          </span>
                         </div>
 
                         <div className="challenge-progress-meta">
@@ -570,7 +710,7 @@ export function ChallengesScreen(props: Props) {
                               )}
                             </strong>
                             <span>
-                              Goal{" "}
+                              of{" "}
                               {formatChallengeMetricValue(
                                 participant.metric_type,
                                 participant.target_value,
@@ -585,44 +725,34 @@ export function ChallengesScreen(props: Props) {
                           <span
                             className="challenge-progress-bar-fill"
                             style={{
-                              width: `${Math.min(
-                                100,
-                                Math.max(0, participant.completion_percent),
-                              )}%`,
+                              width: `${Math.min(100, Math.max(0, participant.completion_percent))}%`,
                             }}
                           />
                         </div>
 
-                        <div className="detail-grid">
-                          <DetailRow
-                            label="Username"
-                            value={
-                              participant.username ||
-                              participant.email ||
-                              participant.user_uuid
-                            }
-                          />
-                          <DetailRow
-                            label="Sessions"
-                            value={String(participant.total_sessions)}
-                          />
-                          <DetailRow
-                            label="Joined"
-                            value={formatDateTimeForDisplay(participant.joined_at)}
-                          />
-                          <DetailRow
-                            label="Last Activity"
-                            value={formatDateTimeForDisplay(
-                              participant.last_activity_at ?? undefined,
-                            )}
-                          />
+                        <div className="participant-card-meta">
+                          <span>
+                            {participant.total_sessions} session
+                            {participant.total_sessions !== 1 ? "s" : ""}
+                          </span>
+                          <span>
+                            Joined {formatDateTimeForDisplay(participant.joined_at)}
+                          </span>
+                          {participant.last_activity_at ? (
+                            <span>
+                              Last active{" "}
+                              {formatDateTimeForDisplay(
+                                participant.last_activity_at ?? undefined,
+                              )}
+                            </span>
+                          ) : null}
                         </div>
                       </article>
                     ))}
                   </div>
-                </>
-              )}
-            </div>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
