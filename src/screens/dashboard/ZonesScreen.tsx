@@ -2,7 +2,6 @@ import type { Dispatch, SetStateAction } from "react";
 
 import {
   SchoolZoneMapEditor,
-  SchoolZonesMap,
   type SchoolZoneMapPolygon,
 } from "../../components/SchoolZoneMapEditor";
 import type { PackMapPoint } from "../../components/PackLocationPicker";
@@ -16,11 +15,6 @@ type ZoneDraft = {
   speed_limit_mph: string;
   polygon: PackMapPoint[];
 };
-
-type DetailRowComponent = React.ComponentType<{
-  label: string;
-  value: string;
-}>;
 
 type Props = {
   activeSchoolId: string;
@@ -38,7 +32,12 @@ type Props = {
   handleZonePointAdd: (point: PackMapPoint) => void;
   handleZonePointInsert: (index: number, point: PackMapPoint) => void;
   handleZonePointMove: (index: number, point: PackMapPoint) => void;
-  DetailRow: DetailRowComponent;
+  DetailRow?: React.ComponentType<{ label: string; value: string }>;
+};
+
+const ZONE_TYPE_LABELS: Record<ZoneDraft["zone_type"], string> = {
+  no_go: "No-Go",
+  speed_limit: "Speed",
 };
 
 export function ZonesScreen(props: Props) {
@@ -58,43 +57,28 @@ export function ZonesScreen(props: Props) {
     handleZonePointAdd,
     handleZonePointInsert,
     handleZonePointMove,
-    DetailRow,
   } = props;
+
+  function addZone(type: ZoneDraft["zone_type"]) {
+    const draft = createEmptyZoneDraft(type);
+    setZoneDrafts((cur) => [...cur, draft]);
+    setActiveZoneDraftId(draft.id);
+  }
+
+  function patchZone(id: string, patch: Partial<ZoneDraft>) {
+    setZoneDrafts((cur) =>
+      cur.map((z) => (z.id === id ? { ...z, ...patch } : z)),
+    );
+  }
 
   return (
     <section className="panel">
       <div className="panel-header">
         <div>
           <p className="eyebrow">School Zones</p>
-          <h2>Manage no-go and speed limit polygons</h2>
+          <h2>No-go and speed limit zones</h2>
         </div>
         <div className="form-actions">
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() =>
-              setZoneDrafts((current) => [
-                ...current,
-                createEmptyZoneDraft("no_go"),
-              ])
-            }
-            disabled={!activeSchoolId}
-          >
-            Add No-Go Zone
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() =>
-              setZoneDrafts((current) => [
-                ...current,
-                createEmptyZoneDraft("speed_limit"),
-              ])
-            }
-            disabled={!activeSchoolId}
-          >
-            Add Speed Zone
-          </button>
           <button
             className="secondary-button"
             type="button"
@@ -109,37 +93,183 @@ export function ZonesScreen(props: Props) {
             onClick={() => void handleSaveZones()}
             disabled={zoneBusy || !activeSchoolId}
           >
-            Save Zones
+            {zoneBusy ? "Saving…" : "Save Zones"}
           </button>
         </div>
       </div>
-
-      {zoneBusy ? <p className="muted-text">Syncing school zones…</p> : null}
 
       {!activeSchoolId ? (
         <p className="empty-state">
           This admin login is not scoped to a school.
         </p>
-      ) : null}
-
-      {activeSchoolId ? (
-        <div className="zone-layout">
-          <div className="zone-map-grid">
-            <div className="map-card">
-              <div className="data-section-header">
-                <h3>Zone polygon editor</h3>
-                <span>
-                  {selectedZoneDraft
-                    ? selectedZoneDraft.title.trim() || "Selected zone"
-                    : "No zone selected"}
-                </span>
+      ) : (
+        <div className="zone-master-layout">
+          {/* ── LEFT: zone list ───────────────────── */}
+          <aside className="zone-sidebar">
+            <div className="zone-sidebar-header">
+              <span className="zone-sidebar-title">
+                Zones
+                {zoneDrafts.length > 0 && (
+                  <span className="zone-sidebar-count">{zoneDrafts.length}</span>
+                )}
+              </span>
+              <div className="zone-add-actions">
+                <button
+                  className="zone-add-btn"
+                  type="button"
+                  onClick={() => addZone("no_go")}
+                  title="Add No-Go Zone"
+                >
+                  + No-Go
+                </button>
+                <button
+                  className="zone-add-btn"
+                  type="button"
+                  onClick={() => addZone("speed_limit")}
+                  title="Add Speed Limit Zone"
+                >
+                  + Speed
+                </button>
               </div>
-              {zoneDrafts.length === 0 ? (
-                <p className="empty-state">
-                  Add a no-go or speed limit zone to begin drawing a polygon.
+            </div>
+
+            {zoneDrafts.length === 0 ? (
+              <div className="zone-sidebar-empty">
+                <p>No zones yet.</p>
+                <p className="muted-text">
+                  Add a no-go or speed limit zone to start drawing polygons on
+                  the map.
                 </p>
-              ) : (
-                <>
+              </div>
+            ) : (
+              <ul className="zone-sidebar-list">
+                {zoneDrafts.map((zone, index) => {
+                  const isActive = zone.id === activeZoneDraftId;
+                  const isMapped = zone.polygon.length >= 3;
+                  return (
+                    <li
+                      key={zone.id}
+                      className={`zone-list-item${isActive ? " zone-list-item-active" : ""}`}
+                      onClick={() => setActiveZoneDraftId(zone.id)}
+                    >
+                      <div className="zone-list-item-top">
+                        <span
+                          className={`zone-type-badge zone-type-badge-${zone.zone_type}`}
+                        >
+                          {ZONE_TYPE_LABELS[zone.zone_type]}
+                        </span>
+                        <span className="zone-vertex-chip">
+                          {zone.polygon.length} pts
+                        </span>
+                        {isMapped && (
+                          <span className="zone-mapped-chip">Mapped</span>
+                        )}
+                      </div>
+                      <p className="zone-list-item-name">
+                        {zone.title.trim() || `Zone ${index + 1}`}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            <div className="zone-sidebar-stats">
+              <div className="zone-stat">
+                <span className="zone-stat-value">{zoneDrafts.length}</span>
+                <span className="zone-stat-label">Total</span>
+              </div>
+              <div className="zone-stat">
+                <span className="zone-stat-value">{mappedZoneCount}</span>
+                <span className="zone-stat-label">Mapped</span>
+              </div>
+              <div className="zone-stat">
+                <span className="zone-stat-value">
+                  {zoneDrafts.filter((z) => z.zone_type === "no_go").length}
+                </span>
+                <span className="zone-stat-label">No-Go</span>
+              </div>
+              <div className="zone-stat">
+                <span className="zone-stat-value">
+                  {
+                    zoneDrafts.filter((z) => z.zone_type === "speed_limit")
+                      .length
+                  }
+                </span>
+                <span className="zone-stat-label">Speed</span>
+              </div>
+            </div>
+          </aside>
+
+          {/* ── RIGHT: map + selected zone form ───── */}
+          <div className="zone-detail-panel">
+            {zoneDrafts.length === 0 ? (
+              <div className="zone-detail-empty">
+                <span className="zone-detail-empty-icon">🗺️</span>
+                <p>No zones to display</p>
+                <p className="muted-text">
+                  Add a zone using the buttons on the left and then click on the
+                  map to draw its boundary polygon.
+                </p>
+                <div className="form-actions" style={{ justifyContent: "center" }}>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => addZone("no_go")}
+                  >
+                    + Add No-Go Zone
+                  </button>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => addZone("speed_limit")}
+                  >
+                    + Add Speed Zone
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Map always shows ALL zones */}
+                <div className="zone-map-card">
+                  <div className="zone-map-header">
+                    <div>
+                      <p className="eyebrow">Polygon editor</p>
+                      <h3>
+                        {selectedZoneDraft
+                          ? selectedZoneDraft.title.trim() ||
+                            "Editing selected zone"
+                          : "Select a zone from the list to edit it"}
+                      </h3>
+                    </div>
+                    {selectedZoneDraft && (
+                      <div className="form-actions">
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={() =>
+                            patchZone(selectedZoneDraft.id, {
+                              polygon: selectedZoneDraft.polygon.slice(0, -1),
+                            })
+                          }
+                          disabled={selectedZoneDraft.polygon.length === 0}
+                        >
+                          Undo Point
+                        </button>
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={() =>
+                            patchZone(selectedZoneDraft.id, { polygon: [] })
+                          }
+                          disabled={selectedZoneDraft.polygon.length === 0}
+                        >
+                          Clear Shape
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   <SchoolZoneMapEditor
                     disabled={!selectedZoneDraft}
                     onAddPoint={handleZonePointAdd}
@@ -148,220 +278,135 @@ export function ZonesScreen(props: Props) {
                     polygons={zoneMapPolygons}
                     selectedPolygon={
                       selectedZoneDraft
-                        ? zoneMapPolygons.find(
-                            (polygon) =>
-                              polygon.id ===
-                              (selectedZoneDraft.zone_uuid || selectedZoneDraft.id),
-                          ) ?? null
+                        ? (zoneMapPolygons.find(
+                            (p) =>
+                              p.id ===
+                              (selectedZoneDraft.zone_uuid ||
+                                selectedZoneDraft.id),
+                          ) ?? null)
                         : null
                     }
                   />
-                  <p className="muted-text">
-                    Choose a zone row, then click to add vertices, drag any
-                    existing point to reshape the outline, and tap midpoint
-                    handles to insert a new point without redrawing the whole
-                    zone.
+
+                  <p className="muted-text" style={{ marginTop: 8 }}>
+                    {selectedZoneDraft
+                      ? "Click to add vertices. Drag existing points to reshape. Tap midpoint handles to insert a new point."
+                      : "All existing zones are shown above. Select one from the list on the left to start editing."}
                   </p>
-                </>
-              )}
-            </div>
-
-            <div className="map-card">
-              <div className="data-section-header">
-                <h3>School zone coverage</h3>
-                <span>{mappedZoneCount} mapped polygons</span>
-              </div>
-              <SchoolZonesMap polygons={zoneMapPolygons} />
-              <div className="detail-grid">
-                <DetailRow label="Active Zones" value={String(zoneDrafts.length)} />
-                <DetailRow
-                  label="Mapped Polygons"
-                  value={String(mappedZoneCount)}
-                />
-                <DetailRow
-                  label="No-Go Zones"
-                  value={String(
-                    zoneDrafts.filter((zone) => zone.zone_type === "no_go").length,
-                  )}
-                />
-                <DetailRow
-                  label="Speed Zones"
-                  value={String(
-                    zoneDrafts.filter((zone) => zone.zone_type === "speed_limit")
-                      .length,
-                  )}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="zone-list">
-            {zoneDrafts.length === 0 ? (
-              <p className="empty-state">
-                No school zones configured yet for this school.
-              </p>
-            ) : null}
-            {zoneDrafts.map((zone, index) => (
-              <div
-                className={`zone-row ${
-                  zone.id === activeZoneDraftId ? "zone-row-active" : ""
-                }`}
-                key={zone.id}
-              >
-                <div className="zone-row-header">
-                  <div>
-                    <p className="eyebrow">Zone {index + 1}</p>
-                    <h3>{zone.title.trim() || "Untitled zone"}</h3>
-                  </div>
-                  <div className="zone-row-actions">
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={() => setActiveZoneDraftId(zone.id)}
-                    >
-                      {zone.id === activeZoneDraftId
-                        ? "Editing on Map"
-                        : "Pick on Map"}
-                    </button>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={() =>
-                        setZoneDrafts((current) =>
-                          current.map((item) =>
-                            item.id === zone.id
-                              ? { ...item, polygon: item.polygon.slice(0, -1) }
-                              : item,
-                          ),
-                        )
-                      }
-                      disabled={zone.polygon.length === 0}
-                    >
-                      Undo Point
-                    </button>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={() =>
-                        setZoneDrafts((current) =>
-                          current.map((item) =>
-                            item.id === zone.id ? { ...item, polygon: [] } : item,
-                          ),
-                        )
-                      }
-                      disabled={zone.polygon.length === 0}
-                    >
-                      Clear Shape
-                    </button>
-                    <button
-                      className="danger-button"
-                      type="button"
-                      onClick={() =>
-                        setZoneDrafts((current) =>
-                          current.filter((item) => item.id !== zone.id),
-                        )
-                      }
-                    >
-                      Remove
-                    </button>
-                  </div>
                 </div>
 
-                <div className="form-grid">
-                  <label className="field">
-                    <span>Title</span>
-                    <input
-                      value={zone.title}
-                      onChange={(event) =>
-                        setZoneDrafts((current) =>
-                          current.map((item) =>
-                            item.id === zone.id
-                              ? { ...item, title: event.target.value }
-                              : item,
-                          ),
-                        )
-                      }
-                      placeholder="North Mall No-Go Zone"
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Zone Type</span>
-                    <select
-                      value={zone.zone_type}
-                      onChange={(event) =>
-                        setZoneDrafts((current) =>
-                          current.map((item) =>
-                            item.id === zone.id
-                              ? {
-                                  ...item,
-                                  zone_type: event.target.value as ZoneDraft["zone_type"],
-                                  speed_limit_mph:
-                                    event.target.value === "speed_limit"
-                                      ? item.speed_limit_mph || "15"
-                                      : "",
-                                }
-                              : item,
-                          ),
-                        )
-                      }
-                    >
-                      <option value="no_go">No-go zone</option>
-                      <option value="speed_limit">Speed limit zone</option>
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Speed Limit (mph)</span>
-                    <input
-                      disabled={zone.zone_type !== "speed_limit"}
-                      min={1}
-                      step={1}
-                      type="number"
-                      value={zone.speed_limit_mph}
-                      onChange={(event) =>
-                        setZoneDrafts((current) =>
-                          current.map((item) =>
-                            item.id === zone.id
-                              ? {
-                                  ...item,
-                                  speed_limit_mph: event.target.value,
-                                }
-                              : item,
-                          ),
-                        )
-                      }
-                      placeholder="15"
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Vertices</span>
-                    <input disabled value={String(zone.polygon.length)} placeholder="0" />
-                  </label>
-                  <label className="field field-span-2">
-                    <span>Description</span>
-                    <textarea
-                      value={zone.description}
-                      onChange={(event) =>
-                        setZoneDrafts((current) =>
-                          current.map((item) =>
-                            item.id === zone.id
-                              ? {
-                                  ...item,
-                                  description: event.target.value,
-                                }
-                              : item,
-                          ),
-                        )
-                      }
-                      placeholder="Explain why riders lose points here."
-                      rows={4}
-                    />
-                  </label>
-                </div>
-              </div>
-            ))}
+                {/* Selected zone form */}
+                {selectedZoneDraft ? (
+                  <div className="zone-form-card">
+                    <div className="zone-form-header">
+                      <div>
+                        <p className="eyebrow">Zone details</p>
+                        <h3>
+                          {selectedZoneDraft.title.trim() || "Untitled zone"}
+                        </h3>
+                      </div>
+                      <button
+                        className="danger-button"
+                        type="button"
+                        onClick={() =>
+                          setZoneDrafts((cur) =>
+                            cur.filter((z) => z.id !== selectedZoneDraft.id),
+                          )
+                        }
+                      >
+                        Remove Zone
+                      </button>
+                    </div>
+
+                    <div className="form-grid">
+                      <label className="field">
+                        <span>Title</span>
+                        <input
+                          value={selectedZoneDraft.title}
+                          onChange={(e) =>
+                            patchZone(selectedZoneDraft.id, {
+                              title: e.target.value,
+                            })
+                          }
+                          placeholder="North Mall No-Go Zone"
+                        />
+                      </label>
+
+                      <label className="field">
+                        <span>Zone Type</span>
+                        <select
+                          value={selectedZoneDraft.zone_type}
+                          onChange={(e) =>
+                            patchZone(selectedZoneDraft.id, {
+                              zone_type: e.target.value as ZoneDraft["zone_type"],
+                              speed_limit_mph:
+                                e.target.value === "speed_limit"
+                                  ? selectedZoneDraft.speed_limit_mph || "15"
+                                  : "",
+                            })
+                          }
+                        >
+                          <option value="no_go">No-go zone</option>
+                          <option value="speed_limit">Speed limit zone</option>
+                        </select>
+                      </label>
+
+                      <label className="field">
+                        <span>Speed Limit (mph)</span>
+                        <input
+                          disabled={
+                            selectedZoneDraft.zone_type !== "speed_limit"
+                          }
+                          min={1}
+                          step={1}
+                          type="number"
+                          value={selectedZoneDraft.speed_limit_mph}
+                          onChange={(e) =>
+                            patchZone(selectedZoneDraft.id, {
+                              speed_limit_mph: e.target.value,
+                            })
+                          }
+                          placeholder="15"
+                        />
+                      </label>
+
+                      <label className="field">
+                        <span>Vertices</span>
+                        <input
+                          disabled
+                          value={String(selectedZoneDraft.polygon.length)}
+                          placeholder="0"
+                        />
+                      </label>
+
+                      <label className="field field-span-2">
+                        <span>Description</span>
+                        <textarea
+                          value={selectedZoneDraft.description}
+                          onChange={(e) =>
+                            patchZone(selectedZoneDraft.id, {
+                              description: e.target.value,
+                            })
+                          }
+                          placeholder="Explain why riders lose points or slow down here."
+                          rows={3}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="zone-select-prompt">
+                    <p>
+                      ← Select a zone from the list to edit its details and draw
+                      its boundary on the map above.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
-      ) : null}
+      )}
     </section>
   );
 }
