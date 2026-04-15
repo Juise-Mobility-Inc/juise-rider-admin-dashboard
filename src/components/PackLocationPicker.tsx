@@ -25,6 +25,7 @@ interface PackLocationPickerProps {
   value: PackMapPoint | null
   onChange: (nextValue: PackMapPoint) => void
   disabled?: boolean
+  otherMarkers?: PackMapMarker[]
 }
 
 interface PackLocationsMapProps {
@@ -125,11 +126,30 @@ export function PackLocationPicker(props: PackLocationPickerProps) {
       >
         <TileLayer attribution={TILE_LAYER_ATTRIBUTION} url={TILE_LAYER_URL} />
         <ClickToSelectPin {...props} />
+        {(props.otherMarkers ?? []).map((marker) => (
+          <CircleMarker
+            key={marker.id}
+            center={marker}
+            radius={7}
+            pathOptions={{
+              color: '#112d4e',
+              fillColor: '#9ca3af',
+              fillOpacity: 0.55,
+              weight: 2,
+            }}
+          >
+            <Popup>
+              <strong>{marker.label}</strong>
+              {marker.description ? <div>{marker.description}</div> : null}
+              <div>{marker.lat.toFixed(6)}, {marker.lng.toFixed(6)}</div>
+            </Popup>
+          </CircleMarker>
+        ))}
       </MapContainer>
       <div className="pack-map-caption">
         {props.disabled
-          ? 'Select a school first to place a pack pin.'
-          : 'Click anywhere on the map to drop or move the Juise Pack pin.'}
+          ? 'Select a POI from the list to place its pin.'
+          : 'Click anywhere on the map to drop or move this POI\'s pin.'}
       </div>
     </div>
   )
