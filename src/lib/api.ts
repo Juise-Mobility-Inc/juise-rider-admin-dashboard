@@ -567,27 +567,19 @@ function normalizeBaseUrl(value: string | undefined): string {
   return (value?.trim() ?? "").replace(/\/+$/, "");
 }
 
-function isAbsoluteBaseUrl(value: string): boolean {
-  return /^https?:\/\//i.test(value);
-}
-
 function resolveServiceBaseUrl(
   developmentBase: string,
   configuredBase: string | undefined,
-  productionFallback: string,
+  _productionFallback: string,
 ): string {
   const normalizedConfiguredBase = normalizeBaseUrl(configuredBase);
   if (!normalizedConfiguredBase) {
-    return import.meta.env.PROD ? productionFallback : developmentBase;
+    // Always use the proxy path — the Vite dev and preview servers both
+    // forward these paths to the real backends via the proxy config.
+    return developmentBase;
   }
 
-  if (!import.meta.env.PROD) {
-    return normalizedConfiguredBase;
-  }
-
-  return isAbsoluteBaseUrl(normalizedConfiguredBase)
-    ? normalizedConfiguredBase
-    : productionFallback;
+  return normalizedConfiguredBase;
 }
 
 const serviceBase: Record<ServiceName, string> = {
