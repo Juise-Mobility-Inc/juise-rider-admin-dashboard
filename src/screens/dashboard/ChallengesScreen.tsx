@@ -7,6 +7,7 @@ import type {
 
 type ChallengeDraft = {
   challenge_uuid: string;
+  audience_type: "user" | "campaign_group";
   title: string;
   description: string;
   image_url: string;
@@ -83,6 +84,12 @@ function statusClass(status: string): string {
   return "challenge-status-ended";
 }
 
+function formatChallengeAudienceLabel(
+  audienceType?: SchoolChallenge["audience_type"],
+): string {
+  return audienceType === "campaign_group" ? "Campaign" : "Student";
+}
+
 export function ChallengesScreen(props: Props) {
   const {
     activeSchoolId,
@@ -117,6 +124,8 @@ export function ChallengesScreen(props: Props) {
     selectedChallengeId === newChallengeSelectionId && !challengeDraft.challenge_uuid;
   const isEditing = Boolean(challengeDraft.challenge_uuid);
   const nothingSelected = !selectedChallengeId || (selectedChallengeId !== newChallengeSelectionId && !selectedChallenge);
+  const selectedChallengeIsCampaign =
+    selectedChallenge?.audience_type === "campaign_group";
 
   function handleSelectNew() {
     setSelectedChallengeId(newChallengeSelectionId);
@@ -201,6 +210,7 @@ export function ChallengesScreen(props: Props) {
                       <div className="challenge-roster-info">
                         <strong className="challenge-roster-title">{ch.title}</strong>
                         <span className="challenge-roster-meta">
+                          {formatChallengeAudienceLabel(ch.audience_type)} challenge ·{" "}
                           {formatChallengeMetricValue(ch.metric_type, ch.target_value)}
                         </span>
                       </div>
@@ -251,6 +261,7 @@ export function ChallengesScreen(props: Props) {
                       <div className="challenge-roster-info">
                         <strong className="challenge-roster-title">{ch.title}</strong>
                         <span className="challenge-roster-meta">
+                          {formatChallengeAudienceLabel(ch.audience_type)} challenge ·{" "}
                           {formatChallengeMetricValue(ch.metric_type, ch.target_value)}
                         </span>
                       </div>
@@ -317,6 +328,9 @@ export function ChallengesScreen(props: Props) {
                     />
                   ) : null}
                   <div className="challenge-form-preview-chips">
+                    <span className="challenge-form-chip">
+                      {formatChallengeAudienceLabel(challengeDraft.audience_type)} challenge
+                    </span>
                     {challengeDraft.metric_type && challengeDraft.target_value ? (
                       <span className="challenge-form-chip">
                         🎯{" "}
@@ -346,6 +360,21 @@ export function ChallengesScreen(props: Props) {
                 <div className="challenge-form-section">
                   <div className="challenge-form-section-label">Details</div>
                   <div className="form-grid">
+                    <label className="field">
+                      <span>Audience</span>
+                      <select
+                        value={challengeDraft.audience_type}
+                        onChange={(e) =>
+                          setChallengeDraft((c) => ({
+                            ...c,
+                            audience_type: e.target.value as ChallengeDraft["audience_type"],
+                          }))
+                        }
+                      >
+                        <option value="user">Student challenge</option>
+                        <option value="campaign_group">Campaign challenge</option>
+                      </select>
+                    </label>
                     <label className="field field-span-2">
                       <span>Title</span>
                       <input
@@ -578,6 +607,9 @@ export function ChallengesScreen(props: Props) {
                     ) : null}
                     <div className="challenge-detail-chips">
                       <span className="challenge-form-chip">
+                        {formatChallengeAudienceLabel(selectedChallenge.audience_type)} challenge
+                      </span>
+                      <span className="challenge-form-chip">
                         🎯{" "}
                         {formatChallengeMetricValue(
                           selectedChallenge.metric_type,
@@ -600,6 +632,7 @@ export function ChallengesScreen(props: Props) {
                     onClick={() =>
                       setChallengeDraft({
                         challenge_uuid: selectedChallenge.challenge_uuid,
+                        audience_type: selectedChallenge.audience_type,
                         title: selectedChallenge.title,
                         description: selectedChallenge.description,
                         image_url: selectedChallenge.image_url,
@@ -626,7 +659,11 @@ export function ChallengesScreen(props: Props) {
                 {/* Participant stats */}
                 <div className="challenge-participants-section">
                   <div className="challenge-participants-header">
-                    <h4>Student progress</h4>
+                    <h4>
+                      {selectedChallengeIsCampaign
+                        ? "Campaign progress"
+                        : "Student progress"}
+                    </h4>
                     <div className="challenge-participant-stats">
                       <span>
                         <strong>{challengeParticipantSummary.joined}</strong> joined
@@ -650,105 +687,123 @@ export function ChallengesScreen(props: Props) {
                   </div>
 
                   {challengeParticipantsBusy ? (
-                    <p className="muted-text">Loading student progress…</p>
+                    <p className="muted-text">
+                      Loading {selectedChallengeIsCampaign ? "campaign" : "student"} progress…
+                    </p>
                   ) : !challengeParticipantsBusy && challengeParticipants.length === 0 ? (
                     <p className="empty-state">
-                      No students have joined this challenge yet.
+                      {selectedChallengeIsCampaign
+                        ? "No campaign groups have joined this challenge yet."
+                        : "No students have joined this challenge yet."}
                     </p>
                   ) : null}
 
                   <div className="participant-progress-list">
-                    {challengeParticipants.map((participant) => (
-                      <article
-                        className="participant-progress-card"
-                        key={participant.participation_uuid}
-                      >
-                        <div className="participant-card-header">
-                          <div className="participant-avatar">
-                            {(
-                              participant.first_name?.[0] ||
-                              participant.username?.[0] ||
-                              "?"
-                            ).toUpperCase()}
-                          </div>
-                          <div className="participant-card-info">
-                            <strong>
-                              {formatNebulaUserName({
-                                first_name: participant.first_name,
-                                last_name: participant.last_name,
-                                email: participant.email,
-                                username: participant.username,
-                              })}
-                            </strong>
-                            <span className="muted-text">
-                              {participant.student_id || participant.username || participant.email}
-                            </span>
-                          </div>
-                          <span
-                            className={`challenge-status-badge ${
-                              participant.completed
-                                ? "challenge-status-live"
+                    {challengeParticipants.map((participant) => {
+                      const isCampaignParticipant =
+                        participant.participant_type === "campaign_group";
+                      const participantName = isCampaignParticipant
+                        ? participant.campaign_group_name?.trim() || "Campaign group"
+                        : formatNebulaUserName({
+                            first_name: participant.first_name,
+                            last_name: participant.last_name,
+                            email: participant.email,
+                            username: participant.username,
+                          });
+                      const participantSubcopy = isCampaignParticipant
+                        ? `${participant.member_count ?? 0} rider${
+                            participant.member_count === 1 ? "" : "s"
+                          }`
+                        : participant.student_id || participant.username || participant.email;
+                      const avatarSeed = isCampaignParticipant
+                        ? participant.campaign_group_name?.[0]
+                        : participant.first_name?.[0] || participant.username?.[0];
+
+                      return (
+                        <article
+                          className="participant-progress-card"
+                          key={participant.participation_uuid}
+                        >
+                          <div className="participant-card-header">
+                            <div className="participant-avatar">
+                              {(avatarSeed || "?").toUpperCase()}
+                            </div>
+                            <div className="participant-card-info">
+                              <strong>{participantName}</strong>
+                              <span className="muted-text">{participantSubcopy}</span>
+                            </div>
+                            <span
+                              className={`challenge-status-badge ${
+                                participant.completed
+                                  ? "challenge-status-live"
+                                  : participant.active
+                                    ? "challenge-status-upcoming"
+                                    : "challenge-status-ended"
+                              }`}
+                            >
+                              {participant.completed
+                                ? "Completed"
                                 : participant.active
-                                  ? "challenge-status-upcoming"
-                                  : "challenge-status-ended"
-                            }`}
-                          >
-                            {participant.completed
-                              ? "Completed"
-                              : participant.active
-                                ? "In Progress"
-                                : "Left"}
-                          </span>
-                        </div>
-
-                        <div className="challenge-progress-meta">
-                          <div className="challenge-progress-copy">
-                            <strong>
-                              {formatChallengeMetricValue(
-                                participant.metric_type,
-                                participant.progress_value,
-                              )}
-                            </strong>
-                            <span>
-                              of{" "}
-                              {formatChallengeMetricValue(
-                                participant.metric_type,
-                                participant.target_value,
-                              )}
+                                  ? "In Progress"
+                                  : "Left"}
                             </span>
                           </div>
-                          <span className="challenge-progress-percent">
-                            {Math.round(participant.completion_percent)}%
-                          </span>
-                        </div>
-                        <div className="challenge-progress-bar">
-                          <span
-                            className="challenge-progress-bar-fill"
-                            style={{
-                              width: `${Math.min(100, Math.max(0, participant.completion_percent))}%`,
-                            }}
-                          />
-                        </div>
 
-                        <div className="participant-card-meta">
-                          <span>
-                            {participant.total_sessions} session
-                            {participant.total_sessions !== 1 ? "s" : ""}
-                          </span>
-                          <span>
-                            Joined {formatDateTimeForDisplay(participant.joined_at)}
-                          </span>
-                          {participant.last_activity_at ? (
-                            <span>
-                              Last active{" "}
-                              {formatDateTimeForDisplay(
-                                participant.last_activity_at ?? undefined,
-                              )}
+                          <div className="challenge-progress-meta">
+                            <div className="challenge-progress-copy">
+                              <strong>
+                                {formatChallengeMetricValue(
+                                  participant.metric_type,
+                                  participant.progress_value,
+                                )}
+                              </strong>
+                              <span>
+                                of{" "}
+                                {formatChallengeMetricValue(
+                                  participant.metric_type,
+                                  participant.target_value,
+                                )}
+                              </span>
+                            </div>
+                            <span className="challenge-progress-percent">
+                              {Math.round(participant.completion_percent)}%
                             </span>
-                          ) : null}
-                        </div>
-                      </article>
-                    ))}
+                          </div>
+                          <div className="challenge-progress-bar">
+                            <span
+                              className="challenge-progress-bar-fill"
+                              style={{
+                                width: `${Math.min(100, Math.max(0, participant.completion_percent))}%`,
+                              }}
+                            />
+                          </div>
+
+                          <div className="participant-card-meta">
+                            {isCampaignParticipant ? (
+                              <span>
+                                {participant.member_count ?? 0} rider
+                                {(participant.member_count ?? 0) === 1 ? "" : "s"}
+                              </span>
+                            ) : null}
+                            <span>
+                              {participant.total_sessions} session
+                              {participant.total_sessions !== 1 ? "s" : ""}
+                            </span>
+                            <span>
+                              Joined {formatDateTimeForDisplay(participant.joined_at)}
+                            </span>
+                            {participant.last_activity_at ? (
+                              <span>
+                                Last active{" "}
+                                {formatDateTimeForDisplay(
+                                  participant.last_activity_at ?? undefined,
+                                )}
+                              </span>
+                            ) : null}
+                          </div>
+                        </article>
+                      );
+                    })}
                   </div>
                 </div>
               </div>

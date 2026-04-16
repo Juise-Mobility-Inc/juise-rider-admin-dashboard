@@ -92,6 +92,7 @@ export interface SchoolChallenge {
   challenge_uuid: string;
   app_id: string;
   school_id: string;
+  audience_type: "user" | "campaign_group";
   title: string;
   description: string;
   image_url: string;
@@ -105,6 +106,7 @@ export interface SchoolChallenge {
 }
 
 export interface SchoolChallengeWriteInput {
+  audience_type: "user" | "campaign_group";
   title: string;
   description: string;
   image_url: string;
@@ -149,8 +151,14 @@ export interface SchoolChallengeParticipation {
 export interface SchoolChallengeParticipantProgress {
   participation_uuid: string;
   challenge_uuid: string;
+  participant_type?: "user" | "campaign_group";
   user_uuid: string;
   membership_uuid: string;
+  campaign_group_uuid?: string;
+  campaign_group_name?: string;
+  campaign_group_image_url?: string;
+  owner_user_uuid?: string;
+  member_count?: number;
   student_id: string;
   first_name: string;
   last_name: string;

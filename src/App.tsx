@@ -193,6 +193,7 @@ interface PackEditDraft {
 
 interface ChallengeDraft {
   challenge_uuid: string;
+  audience_type: "user" | "campaign_group";
   title: string;
   description: string;
   image_url: string;
@@ -504,6 +505,7 @@ function createEmptyChallengeDraft(): ChallengeDraft {
 
   return {
     challenge_uuid: "",
+    audience_type: "user",
     title: "",
     description: "",
     image_url: "",
@@ -518,6 +520,7 @@ function createEmptyChallengeDraft(): ChallengeDraft {
 function challengeToDraft(challenge: SchoolChallenge): ChallengeDraft {
   return {
     challenge_uuid: challenge.challenge_uuid,
+    audience_type: challenge.audience_type,
     title: challenge.title,
     description: challenge.description,
     image_url: challenge.image_url,
@@ -3459,6 +3462,7 @@ function App() {
     setChallengeBusy(true);
     try {
       const payload = {
+        audience_type: challengeDraft.audience_type,
         title: challengeDraft.title.trim(),
         description: challengeDraft.description.trim(),
         image_url: challengeDraft.image_url.trim(),
@@ -3506,7 +3510,7 @@ function App() {
     }
 
     const shouldContinue = window.confirm(
-      `Delete challenge "${selectedChallenge.title}"? Students will no longer see or join it.`,
+      `Delete challenge "${selectedChallenge.title}"? Riders will no longer be able to join it.`,
     );
     if (!shouldContinue) {
       return;
