@@ -3,14 +3,17 @@ import type { ComponentType, Dispatch, SetStateAction } from "react";
 import type {
 	PackSpotReservation,
 	SchoolStudentRosterEntry,
+	StudentParkingViolation,
 	StudentProfileBundle,
 	StudentPublicProfile,
+	UserMediaAsset,
 	UserSchoolMembership,
 } from "../../lib/api";
 
 type StudentIdPhotoSlot = "front" | "back";
 type StudentIdPhotoKeys = Partial<Record<StudentIdPhotoSlot, string>>;
 type StudentRosterPhotoKeyMap = Record<string, StudentIdPhotoKeys>;
+type StudentViolationMediaAssetMap = Record<string, UserMediaAsset[]>;
 
 type DetailRowComponent = ComponentType<{
 	label: string;
@@ -33,24 +36,25 @@ type Props = {
 	setStudentRosterSearch: Dispatch<SetStateAction<string>>;
 	filteredStudentRoster: SchoolStudentRosterEntry[];
 	selectedStudentMembershipId: string | null;
-	setSelectedStudentMembershipId: Dispatch<SetStateAction<string | null>>;
 	selectedStudentEntry: SchoolStudentRosterEntry | null;
 	schoolStudentPhotoKeys: StudentRosterPhotoKeyMap;
 	schoolStudentMediaUrls: Record<string, string>;
 	schoolStudentProfilePhotoUrls: Record<string, string>;
 	studentDevicePhotoUrls: Record<string, string>;
 	schoolReservationsByMembership: Map<string, PackSpotReservation[]>;
-  studentBusy: boolean;
-  studentError: string;
-  studentProfile: StudentProfileBundle | null;
-  studentPublicProfile: StudentPublicProfile | null;
-  studentPublicProfileError: string;
-  handleSelectStudentInRoster: (membershipUUID: string) => Promise<void>;
+	studentBusy: boolean;
+	studentError: string;
+	studentProfile: StudentProfileBundle | null;
+	studentPublicProfile: StudentPublicProfile | null;
+	studentPublicProfileError: string;
+	studentViolations: StudentParkingViolation[];
+	studentViolationMediaByViolation: StudentViolationMediaAssetMap;
+	studentViolationSignedMediaUrls: Record<string, string>;
+	studentViolationError: string;
+	handleSelectStudentInRoster: (membershipUUID: string) => Promise<void>;
 	refreshStudentRoster: () => Promise<void>;
-	setStudentProfile: Dispatch<SetStateAction<StudentProfileBundle | null>>;
-	setStudentPublicProfile: Dispatch<
-		SetStateAction<StudentPublicProfile | null>
-	>;
+	resetSelectedStudentState: () => void;
+	handleOpenStudentDevice: (deviceUUID: string) => void;
 	formatNebulaUserName: (profile: {
 		first_name?: string;
 		last_name?: string;
@@ -74,6 +78,17 @@ type Props = {
 	UuidCopyField: UuidCopyFieldComponent;
 };
 
+function formatViolationSlotLabel(slot: string, index: number) {
+	const normalized = slot.trim();
+	if (!normalized) {
+		return `Photo ${index + 1}`;
+	}
+
+	return normalized
+		.replace(/_/g, " ")
+		.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 export function StudentsScreen(props: Props) {
 	const {
 		activeSchoolId,
@@ -83,7 +98,6 @@ export function StudentsScreen(props: Props) {
 		setStudentRosterSearch,
 		filteredStudentRoster,
 		selectedStudentMembershipId,
-		setSelectedStudentMembershipId,
 		selectedStudentEntry,
 		schoolStudentPhotoKeys,
 		schoolStudentMediaUrls,
@@ -95,10 +109,14 @@ export function StudentsScreen(props: Props) {
 		studentProfile,
 		studentPublicProfile,
 		studentPublicProfileError,
+		studentViolations,
+		studentViolationMediaByViolation,
+		studentViolationSignedMediaUrls,
+		studentViolationError,
 		handleSelectStudentInRoster,
 		refreshStudentRoster,
-		setStudentProfile,
-		setStudentPublicProfile,
+		resetSelectedStudentState,
+		handleOpenStudentDevice,
 		formatNebulaUserName,
 		resolveStudentPhotoObjectKey,
 		formatDateOnly,
@@ -121,9 +139,7 @@ export function StudentsScreen(props: Props) {
 					type="button"
 					onClick={() => {
 						void refreshStudentRoster();
-						setSelectedStudentMembershipId(null);
-						setStudentProfile(null);
-						setStudentPublicProfile(null);
+						resetSelectedStudentState();
 					}}
 					disabled={schoolStudentRosterBusy || !activeSchoolId}>
 					Refresh
@@ -458,22 +474,29 @@ export function StudentsScreen(props: Props) {
 																] ?? "";
 
 															return (
-																<div
-																	className="device-card"
-																	key={device.registered_device_uuid}>
+																<button
+																	className="device-card device-card-button"
+																	key={device.registered_device_uuid}
+																	type="button"
+																	onClick={() =>
+																		handleOpenStudentDevice(
+																			device.registered_device_uuid,
+																		)
+																	}>
 																	{devicePhotoUrl ? (
 																		<img
 																			className="device-card-photo"
 																			src={devicePhotoUrl}
 																			alt={`${device.nickname || device.device_type} device`}
-																			onClick={() =>
-																				handleImagePreview(
-																					devicePhotoUrl,
-																					`${device.nickname || device.device_type} device`,
-																					device.nickname ||
-																						device.device_type,
-																				)
-																			}
+																			onClick={(event) => {
+																			event.stopPropagation();
+																			handleImagePreview(
+																				devicePhotoUrl,
+																				`${device.nickname || device.device_type} device`,
+																				device.nickname ||
+																					device.device_type,
+																			);
+																		}}
 																		/>
 																	) : (
 																		<div className="device-card-icon">🛴</div>
@@ -495,8 +518,11 @@ export function StudentsScreen(props: Props) {
 																		<span className="device-card-meta">
 																			{device.active ? "Active" : "Inactive"}
 																		</span>
+																		<span className="device-card-open">
+																			View device details
+																		</span>
 																	</div>
-																</div>
+																</button>
 															);
 														})}
 													</div>
@@ -586,15 +612,93 @@ export function StudentsScreen(props: Props) {
 										<div className="data-section">
 											<div className="data-section-header">
 												<h4>Violations</h4>
+												<span>{studentViolations.length}</span>
 											</div>
-											<div className="placeholder-section">
-												<span className="placeholder-section-icon">🚫</span>
-												<strong>No violation data available</strong>
-												<span>
-													Violation history will appear here once the violations
-													API is connected.
-												</span>
-											</div>
+											{studentBusy ? (
+												<p className="muted-text">Loading violations…</p>
+											) : studentViolationError ? (
+												<p className="muted-text">
+													Violation history unavailable right now: {studentViolationError}
+												</p>
+											) : studentViolations.length === 0 ? (
+												<p className="muted-text">
+													No parking violations reported for this student.
+												</p>
+											) : (
+												<div className="stack-list">
+													{studentViolations.map((violation) => {
+														const violationMediaAssets =
+															studentViolationMediaByViolation[
+																violation.violation_uuid
+															] ?? [];
+
+														return (
+															<div className="data-card" key={violation.violation_uuid}>
+																<div className="reservation-card-top">
+																	<strong>
+																		{formatUnixTimestamp(violation.created_at)}
+																	</strong>
+																	<span className="student-badge student-badge-muted">
+																		{violation.status || "reported"}
+																	</span>
+																</div>
+																<span>
+																	{violation.description || "No description provided."}
+																</span>
+																<span>
+																	Device: {violation.registered_device_uuid || "Not linked"}
+																</span>
+																<div className="uuid-copy-stack">
+																	<UuidCopyField
+																		label="violation_uuid"
+																		value={violation.violation_uuid}
+																		onCopy={handleCopyUuid}
+																	/>
+																	<UuidCopyField
+																		label="registered_device_uuid"
+																		value={violation.registered_device_uuid ?? undefined}
+																		onCopy={handleCopyUuid}
+																	/>
+																</div>
+																{violationMediaAssets.length > 0 ? (
+																	<div className="student-photos-grid">
+																		{violationMediaAssets.map((asset, index) => {
+																			const violationPhotoUrl =
+																				studentViolationSignedMediaUrls[asset.object_key] ??
+																				"";
+																			if (!violationPhotoUrl) {
+																				return null;
+																			}
+
+																			return (
+																				<div className="student-photo-card" key={asset.media_uuid}>
+																					<span>
+																						{formatViolationSlotLabel(asset.slot, index)}
+																					</span>
+																					<img
+																						className="student-photo-image"
+																						src={violationPhotoUrl}
+																						alt={`${fullName} violation photo ${index + 1}`}
+																						onClick={() =>
+																							handleImagePreview(
+																								violationPhotoUrl,
+																								`${fullName} violation photo ${index + 1}`,
+																								`${fullName} violation photo ${index + 1}`,
+																							)
+																						}
+																					/>
+																				</div>
+																			);
+																		})}
+																	</div>
+																) : (
+																	<p className="muted-text">No violation photos attached.</p>
+																)}
+															</div>
+														);
+													})}
+												</div>
+											)}
 										</div>
 
 										<div className="data-section">

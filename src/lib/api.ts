@@ -1617,3 +1617,37 @@ export async function fetchStudentPublicProfile(
     };
   }
 }
+
+export interface StudentParkingViolation {
+  violation_uuid: string;
+  app_id: string;
+  school_id: string;
+  user_uuid: string;
+  membership_uuid?: string | null;
+  registered_device_uuid?: string | null;
+  reported_by_user_uuid: string;
+  description: string;
+  status: string;
+  active: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+export async function fetchStudentParkingViolations(
+  managedAppId: string,
+  schoolId: string,
+  targetUserUUID: string,
+): Promise<StudentParkingViolation[]> {
+  const search = new URLSearchParams({
+    managed_app_id: managedAppId,
+    user_uuid: targetUserUUID,
+  });
+
+  return request<StudentParkingViolation[]>(
+    'kcaProxy',
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violations?${search.toString()}`,
+    {
+      appIdHeader: managedAppId,
+    },
+  );
+}
