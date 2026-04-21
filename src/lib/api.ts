@@ -429,6 +429,67 @@ export interface StudentPublicProfile {
   posts: unknown[];
 }
 
+export interface StudentRouteHistoryVisitedPOI {
+  poi_uuid: string;
+  school_id: string;
+  title: string;
+  description: string;
+  lat: number;
+  lng: number;
+  bonus_points: number;
+  visited_at: number;
+}
+
+export interface StudentRouteHistoryPenaltyEvent {
+  zone_uuid: string;
+  school_id: string;
+  title: string;
+  description: string;
+  zone_type: "no_go" | "speed_limit" | string;
+  reason: string;
+  lat: number;
+  lng: number;
+  speed_limit_mph?: number | null;
+  duration_ms: number;
+  points_lost: number;
+  occurred_at: number;
+}
+
+export interface StudentRouteHistoryPoint {
+  id: string;
+  latitude: number;
+  longitude: number;
+  speed_mps?: number | null;
+  altitude?: number | null;
+  accuracy?: number | null;
+  heading?: number | null;
+  timestamp: number;
+}
+
+export interface StudentRouteHistorySession {
+  session_id: string;
+  user_uuid: string;
+  app_id: string;
+  school_id: string;
+  tracking_source: string;
+  trip_mode: string;
+  started_at: number;
+  ended_at?: number | null;
+  distance_meters: number;
+  duration_seconds: number;
+  top_speed_mps: number;
+  average_speed_mps: number;
+  bonus_points: number;
+  penalty_points: number;
+  shared_to_friends: boolean;
+  visited_pois: StudentRouteHistoryVisitedPOI[];
+  penalty_events: StudentRouteHistoryPenaltyEvent[];
+  school_zones?: SchoolZone[];
+  points: StudentRouteHistoryPoint[];
+  created_at: number;
+  updated_at: number;
+}
+
 interface RouteHistorySummary {
   total_sessions: number;
   total_distance_meters: number;
@@ -644,20 +705,24 @@ async function parseResponse<T>(response: Response): Promise<T> {
 
 async function parseErrorMessage(response: Response): Promise<string> {
   const contentType = response.headers.get("content-type") ?? "";
-  if (contentType.includes("application/json")) {
-    const payload = (await response.json()) as {
-      message?: string;
-      error?: string;
-    };
-    if (payload.message) {
-      return payload.message;
-    }
-    if (payload.error) {
-      return payload.error;
+  const text = await response.text();
+  if (contentType.includes("application/json") && text.trim() !== "") {
+    try {
+      const payload = JSON.parse(text) as {
+        message?: string;
+        error?: string;
+      };
+      if (payload.message) {
+        return payload.message;
+      }
+      if (payload.error) {
+        return payload.error;
+      }
+    } catch {
+      // Fall through to raw text handling.
     }
   }
 
-  const text = await response.text();
   if (text.trim() !== "") {
     return text;
   }
@@ -1618,6 +1683,24 @@ export async function fetchStudentPublicProfile(
   }
 }
 
+export async function fetchStudentRouteHistory(
+  managedAppId: string,
+  schoolId: string,
+  targetUserUUID: string,
+): Promise<StudentRouteHistorySession[]> {
+  const search = new URLSearchParams({
+    school_id: schoolId,
+  });
+
+  return request<StudentRouteHistorySession[]>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/user/${encodeURIComponent(targetUserUUID)}/route-history?${search.toString()}`,
+    {
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
 export interface StudentParkingViolation {
   violation_uuid: string;
   app_id: string;
@@ -1647,7 +1730,7 @@ export async function fetchStudentParkingViolations(
     'kcaProxy',
     `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violations?${search.toString()}`,
     {
-      appIdHeader: managedAppId,
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
     },
   );
 }

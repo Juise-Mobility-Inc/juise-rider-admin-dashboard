@@ -28,6 +28,7 @@ import {
   fetchStudentProfile,
   fetchStudentParkingViolations,
   fetchStudentPublicProfile,
+  fetchStudentRouteHistory,
   fetchUserMediaAssets,
   generateAdminPackQrCode,
   generateAdminPackSpotQrCode,
@@ -57,6 +58,7 @@ import {
   type StudentProfileBundle,
   type StudentPublicProfile,
   type StudentParkingViolation,
+  type StudentRouteHistorySession,
   updateSchoolChallenge,
   uploadSchoolChallengeImage,
   type UserMediaAsset,
@@ -1463,6 +1465,10 @@ function App() {
     useState<SignedMediaUrlMap>({});
   const [studentViolations, setStudentViolations] =
     useState<StudentParkingViolation[]>([]);
+  const [studentRouteHistory, setStudentRouteHistory] =
+    useState<StudentRouteHistorySession[]>([]);
+  const [studentSchoolZones, setStudentSchoolZones] = useState<SchoolZone[]>([]);
+  const [studentReservationPacks, setStudentReservationPacks] = useState<Pack[]>([]);
   const [studentViolationMediaByViolation, setStudentViolationMediaByViolation] =
     useState<StudentViolationMediaAssetMap>({});
   const [studentViolationSignedMediaUrls, setStudentViolationSignedMediaUrls] =
@@ -1473,6 +1479,8 @@ function App() {
   const [studentBusy, setStudentBusy] = useState(false);
   const [studentError, setStudentError] = useState("");
   const [studentPublicProfileError, setStudentPublicProfileError] =
+    useState("");
+  const [studentRouteHistoryError, setStudentRouteHistoryError] =
     useState("");
   const [studentViolationError, setStudentViolationError] = useState("");
   const [schoolStudentRoster, setSchoolStudentRoster] = useState<
@@ -2132,10 +2140,14 @@ function App() {
       setStudentDeviceMediaByDevice({});
       setStudentDeviceSignedMediaUrls({});
       setStudentViolations([]);
+      setStudentRouteHistory([]);
+      setStudentSchoolZones([]);
+      setStudentReservationPacks([]);
       setStudentViolationMediaByViolation({});
       setStudentViolationSignedMediaUrls({});
       setSelectedStudentDeviceUUID(null);
       setStudentPublicProfileError("");
+      setStudentRouteHistoryError("");
       setStudentViolationError("");
       setSchoolPacks([]);
       setPoiDrafts([]);
@@ -2225,11 +2237,15 @@ function App() {
     setStudentDeviceMediaByDevice({});
     setStudentDeviceSignedMediaUrls({});
     setStudentViolations([]);
+    setStudentRouteHistory([]);
+    setStudentSchoolZones([]);
+    setStudentReservationPacks([]);
     setStudentViolationMediaByViolation({});
     setStudentViolationSignedMediaUrls({});
     setSelectedStudentDeviceUUID(null);
     setStudentError("");
     setStudentPublicProfileError("");
+    setStudentRouteHistoryError("");
     setStudentViolationError("");
   }
 
@@ -2979,30 +2995,54 @@ function App() {
       (e) => e.membership.membership_uuid === membershipId,
     );
     if (!entry || !session || !context) return;
+    const studentUserUUID =
+      entry.membership.user_uuid?.trim() || entry.user.k_guid;
     setStudentBusy(true);
     setStudentError('');
     setStudentPublicProfileError('');
+    setStudentRouteHistoryError('');
     setStudentViolationError('');
     setStudentPublicProfile(null);
     setStudentDevicePhotoUrls({});
     setStudentDeviceMediaByDevice({});
     setStudentDeviceSignedMediaUrls({});
     setStudentViolations([]);
+    setStudentRouteHistory([]);
+    setStudentSchoolZones([]);
+    setStudentReservationPacks([]);
     setStudentViolationMediaByViolation({});
     setStudentViolationSignedMediaUrls({});
     setSelectedStudentDeviceUUID(null);
     try {
-      const [profileResult, publicProfileResult, violationsResult] = await Promise.allSettled([
-        fetchStudentProfile(context.managedAppId, entry.user.k_guid),
+      const [
+        profileResult,
+        publicProfileResult,
+        routeHistoryResult,
+        schoolZonesResult,
+        schoolPacksResult,
+        violationsResult,
+      ] = await Promise.allSettled([
+        fetchStudentProfile(context.managedAppId, studentUserUUID),
         fetchStudentPublicProfile(
           context.managedAppId,
           activeSchoolId,
-          entry.user.k_guid,
+          studentUserUUID,
+        ),
+        fetchStudentRouteHistory(
+          context.managedAppId,
+          activeSchoolId,
+          studentUserUUID,
+        ),
+        fetchSchoolZones(context.managedAppId, activeSchoolId),
+        fetchAdminSchoolPacks(
+          session.claims.user_uuid,
+          context.managedAppId,
+          activeSchoolId,
         ),
         fetchStudentParkingViolations(
           context.managedAppId,
           activeSchoolId,
-          entry.user.k_guid,
+          studentUserUUID,
         ),
       ]);
 
@@ -3011,7 +3051,7 @@ function App() {
         const nextDeviceMediaState = await resolveStudentDeviceMediaState(
           context.managedAppId,
           activeSchoolId,
-          entry.user.k_guid,
+          studentUserUUID,
           profileResult.value.devices,
         );
         setStudentDevicePhotoUrls(nextDeviceMediaState.photoUrls);
@@ -3033,7 +3073,7 @@ function App() {
           setSchoolStudentProfilePhotoUrls((current) => ({
             ...current,
             [entry.user.k_guid]: profileImageUrl,
-            [entry.membership.user_uuid]: profileImageUrl,
+            [studentUserUUID]: profileImageUrl,
           }));
         }
       } else {
@@ -3042,12 +3082,31 @@ function App() {
         );
       }
 
+      if (routeHistoryResult.status === 'fulfilled') {
+        setStudentRouteHistory(routeHistoryResult.value);
+      } else {
+        setStudentRouteHistoryError(getErrorMessage(routeHistoryResult.reason));
+        setStudentRouteHistory([]);
+      }
+
+      if (schoolZonesResult.status === 'fulfilled') {
+        setStudentSchoolZones(schoolZonesResult.value);
+      } else {
+        setStudentSchoolZones([]);
+      }
+
+      if (schoolPacksResult.status === 'fulfilled') {
+        setStudentReservationPacks(sortPacksForDisplay(schoolPacksResult.value));
+      } else {
+        setStudentReservationPacks([]);
+      }
+
       if (violationsResult.status === 'fulfilled') {
         setStudentViolations(violationsResult.value);
         const nextViolationMediaState = await resolveStudentViolationMediaState(
           context.managedAppId,
           activeSchoolId,
-          entry.user.k_guid,
+          studentUserUUID,
           violationsResult.value,
         );
         setStudentViolationMediaByViolation(
@@ -4259,6 +4318,10 @@ function App() {
             studentPublicProfile={studentPublicProfile}
             studentPublicProfileError={studentPublicProfileError}
             studentViolations={studentViolations}
+            studentRouteHistory={studentRouteHistory}
+            studentSchoolZones={studentSchoolZones}
+            studentReservationPacks={studentReservationPacks}
+            studentRouteHistoryError={studentRouteHistoryError}
             studentViolationMediaByViolation={studentViolationMediaByViolation}
             studentViolationSignedMediaUrls={studentViolationSignedMediaUrls}
             studentViolationError={studentViolationError}

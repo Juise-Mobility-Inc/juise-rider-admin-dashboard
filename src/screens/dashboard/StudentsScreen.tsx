@@ -1,11 +1,15 @@
 import type { ComponentType, Dispatch, SetStateAction } from "react";
+import { StudentEventMiniMap } from "../../components/StudentEventMiniMap";
 
 import type {
+	Pack,
 	PackSpotReservation,
+	SchoolZone,
 	SchoolStudentRosterEntry,
 	StudentParkingViolation,
 	StudentProfileBundle,
 	StudentPublicProfile,
+	StudentRouteHistorySession,
 	UserMediaAsset,
 	UserSchoolMembership,
 } from "../../lib/api";
@@ -48,6 +52,10 @@ type Props = {
 	studentPublicProfile: StudentPublicProfile | null;
 	studentPublicProfileError: string;
 	studentViolations: StudentParkingViolation[];
+	studentRouteHistory: StudentRouteHistorySession[];
+	studentSchoolZones: SchoolZone[];
+	studentReservationPacks: Pack[];
+	studentRouteHistoryError: string;
 	studentViolationMediaByViolation: StudentViolationMediaAssetMap;
 	studentViolationSignedMediaUrls: Record<string, string>;
 	studentViolationError: string;
@@ -89,6 +97,78 @@ function formatViolationSlotLabel(slot: string, index: number) {
 		.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function formatPenaltyZoneType(zoneType: string) {
+	switch (zoneType.trim()) {
+		case "no_go":
+			return "No-go zone";
+		case "speed_limit":
+			return "Speed zone";
+		default:
+			return zoneType.trim() || "Penalty zone";
+	}
+}
+
+function formatSpeedMph(value: number) {
+	return `${value.toFixed(1)} mph`;
+}
+
+function resolvePenaltyZone(
+	session: StudentRouteHistorySession,
+	schoolZones: SchoolZone[],
+	zoneUUID: string,
+): SchoolZone | null {
+	const normalizedZoneUUID = zoneUUID.trim();
+	if (!normalizedZoneUUID) {
+		return null;
+	}
+
+	return (
+		session.school_zones?.find(
+			(zone) => zone.zone_uuid.trim() === normalizedZoneUUID,
+		) ??
+		schoolZones.find(
+			(zone) => zone.zone_uuid.trim() === normalizedZoneUUID,
+		) ??
+		null
+	);
+}
+
+function estimatePenaltySpeedMph(
+	session: StudentRouteHistorySession,
+	event: StudentRouteHistorySession["penalty_events"][number],
+): number | null {
+	const candidates = (session.points ?? []).filter(
+		(point) =>
+			typeof point.speed_mps === "number" &&
+			Number.isFinite(point.speed_mps) &&
+			Number.isFinite(point.latitude) &&
+			Number.isFinite(point.longitude),
+	);
+
+	if (candidates.length === 0) {
+		return null;
+	}
+
+	const bestPoint = candidates.reduce((best, point) => {
+		const bestTimeDiff = Math.abs(best.timestamp - event.occurred_at);
+		const pointTimeDiff = Math.abs(point.timestamp - event.occurred_at);
+		if (pointTimeDiff !== bestTimeDiff) {
+			return pointTimeDiff < bestTimeDiff ? point : best;
+		}
+
+		const bestCoordDiff =
+			Math.abs(best.latitude - event.lat) + Math.abs(best.longitude - event.lng);
+		const pointCoordDiff =
+			Math.abs(point.latitude - event.lat) +
+			Math.abs(point.longitude - event.lng);
+		return pointCoordDiff < bestCoordDiff ? point : best;
+	});
+
+	return typeof bestPoint.speed_mps === "number"
+		? bestPoint.speed_mps * 2.2369362920544
+		: null;
+}
+
 export function StudentsScreen(props: Props) {
 	const {
 		activeSchoolId,
@@ -110,6 +190,10 @@ export function StudentsScreen(props: Props) {
 		studentPublicProfile,
 		studentPublicProfileError,
 		studentViolations,
+		studentRouteHistory,
+		studentSchoolZones,
+		studentReservationPacks,
+		studentRouteHistoryError,
 		studentViolationMediaByViolation,
 		studentViolationSignedMediaUrls,
 		studentViolationError,
@@ -286,14 +370,51 @@ export function StudentsScreen(props: Props) {
 									.map((w) => w[0])
 									.join("")
 									.toUpperCase();
+								const selectedStudentUserUUID =
+									membership.user_uuid || entry.user.k_guid;
 								const matchedPublicProfile =
-									studentPublicProfile?.user.user_uuid === entry.user.k_guid
+									studentPublicProfile &&
+									(studentPublicProfile.user.user_uuid ===
+										selectedStudentUserUUID ||
+										studentPublicProfile.user.user_uuid === entry.user.k_guid)
 										? studentPublicProfile
+										: null;
+								const matchedStudentProfile =
+									studentProfile &&
+									(studentProfile.user.k_guid === selectedStudentUserUUID ||
+										studentProfile.user.k_guid === entry.user.k_guid)
+										? studentProfile
 										: null;
 								const profileImageUrl =
 									matchedPublicProfile?.user.profile_image_url?.trim() ||
+									schoolStudentProfilePhotoUrls[selectedStudentUserUUID] ||
 									schoolStudentProfilePhotoUrls[entry.user.k_guid] ||
 									"";
+								const studentReservationPackByUUID = new Map(
+									studentReservationPacks.map((pack) => [pack.pack_uuid, pack]),
+								);
+								const visitedPoiVisits = studentRouteHistory
+									.flatMap((session) =>
+										session.visited_pois.map((poi) => ({
+											poi,
+											session,
+										})),
+									)
+									.sort(
+										(left, right) =>
+											right.poi.visited_at - left.poi.visited_at,
+									);
+								const penaltyEvents = studentRouteHistory
+									.flatMap((session) =>
+										session.penalty_events.map((event) => ({
+											event,
+											session,
+										})),
+									)
+									.sort(
+										(left, right) =>
+											right.event.occurred_at - left.event.occurred_at,
+									);
 
 								return (
 									<>
@@ -452,22 +573,20 @@ export function StudentsScreen(props: Props) {
 										<div className="data-section">
 											<div className="data-section-header">
 												<h4>Registered devices</h4>
-												{studentProfile &&
-												studentProfile.user.k_guid === entry.user.k_guid ? (
-													<span>{studentProfile.devices.length}</span>
+												{matchedStudentProfile ? (
+													<span>{matchedStudentProfile.devices.length}</span>
 												) : null}
 											</div>
 											{studentBusy ? (
 												<p className="muted-text">Loading devices…</p>
-											) : studentProfile &&
-											  studentProfile.user.k_guid === entry.user.k_guid ? (
-												studentProfile.devices.length === 0 ? (
+											) : matchedStudentProfile ? (
+												matchedStudentProfile.devices.length === 0 ? (
 													<p className="muted-text">
 														No registered devices found.
 													</p>
 												) : (
 													<div className="devices-grid">
-														{studentProfile.devices.map((device) => {
+														{matchedStudentProfile.devices.map((device) => {
 															const devicePhotoUrl =
 																studentDevicePhotoUrls[
 																	device.registered_device_uuid
@@ -570,37 +689,164 @@ export function StudentsScreen(props: Props) {
 												</p>
 											) : (
 												<div className="stack-list">
-													{reservationsForMembership.map((reservation) => (
+													{reservationsForMembership.map((reservation) => {
+														const matchingPack =
+															studentReservationPackByUUID.get(
+																reservation.pack_uuid,
+															) ?? null;
+														const packPhotoUrl =
+															matchingPack?.photo?.path_do_spaces?.trim() ?? "";
+
+														return (
+															<div
+																className="data-card"
+																key={reservation.reservation_uuid}>
+																<div className="reservation-card-top">
+																	<strong>
+																		{reservation.term_name || "School term"}
+																	</strong>
+																	<span
+																		className={`student-badge student-badge-status-${reservation.status}`}>
+																		{reservation.status}
+																	</span>
+																</div>
+																<span>
+																	{reservation.pack_name ||
+																		matchingPack?.name ||
+																		"Juise Pack"}{" "}
+																	· Spot {reservation.spot_number || "TBD"}
+																</span>
+																<span>
+																	{formatUnixTimestamp(reservation.start_time)} –{" "}
+																	{formatUnixTimestamp(reservation.end_time)}
+																</span>
+																<div className="student-reservation-media-grid">
+																	<div className="student-photo-card">
+																		<span>Juise Pack Photo</span>
+																		{packPhotoUrl ? (
+																			<img
+																				className="student-photo-image"
+																				src={packPhotoUrl}
+																				alt={`${
+																					matchingPack?.name ||
+																					reservation.pack_name ||
+																					"Juise Pack"
+																				} photo`}
+																				onClick={() =>
+																					handleImagePreview(
+																						packPhotoUrl,
+																						`${
+																							matchingPack?.name ||
+																							reservation.pack_name ||
+																							"Juise Pack"
+																						} photo`,
+																						matchingPack?.name ||
+																							reservation.pack_name ||
+																							"Juise Pack",
+																					)
+																				}
+																			/>
+																		) : (
+																			<div className="student-photo-placeholder">
+																				Juise Pack photo unavailable
+																			</div>
+																		)}
+																	</div>
+																	<div className="student-photo-card">
+																		<span>Juise Pack Location</span>
+																		{matchingPack?.location ? (
+																			<StudentEventMiniMap
+																				label={
+																					matchingPack?.name ||
+																					reservation.pack_name ||
+																					"Juise Pack"
+																				}
+																				lat={matchingPack.location.lat}
+																				lng={matchingPack.location.lng}
+																				tone="poi"
+																			/>
+																		) : (
+																			<div className="student-photo-placeholder">
+																				Juise Pack location unavailable
+																			</div>
+																		)}
+																	</div>
+																</div>
+																<div className="uuid-copy-stack">
+																	<UuidCopyField
+																		label="pack_uuid"
+																		value={reservation.pack_uuid}
+																		onCopy={handleCopyUuid}
+																	/>
+																	<UuidCopyField
+																		label="pack_spot_uuid"
+																		value={reservation.spot_uuid}
+																		onCopy={handleCopyUuid}
+																	/>
+																</div>
+															</div>
+														);
+													})}
+												</div>
+											)}
+										</div>
+
+										<div className="data-section">
+											<div className="data-section-header">
+												<h4>Visited POIs</h4>
+												<span>{visitedPoiVisits.length}</span>
+											</div>
+											{studentBusy ? (
+												<p className="muted-text">Loading route history…</p>
+											) : studentRouteHistoryError ? (
+												<p className="muted-text">
+													Visited POIs unavailable right now:{" "}
+													{studentRouteHistoryError}
+												</p>
+											) : visitedPoiVisits.length === 0 ? (
+												<p className="muted-text">
+													No visited POIs recorded for this student yet.
+												</p>
+											) : (
+												<div className="stack-list">
+													{visitedPoiVisits.map(({ poi, session }, index) => (
 														<div
 															className="data-card"
-															key={reservation.reservation_uuid}>
-															<div className="reservation-card-top">
-																<strong>
-																	{reservation.term_name || "School term"}
-																</strong>
-																<span
-																	className={`student-badge student-badge-status-${reservation.status}`}>
-																	{reservation.status}
-																</span>
-															</div>
-															<span>
-																{reservation.pack_name || "Juise Pack"} · Spot{" "}
-																{reservation.spot_number || "TBD"}
-															</span>
-															<span>
-																{formatUnixTimestamp(reservation.start_time)} –{" "}
-																{formatUnixTimestamp(reservation.end_time)}
-															</span>
-															<div className="uuid-copy-stack">
-																<UuidCopyField
-																	label="pack_uuid"
-																	value={reservation.pack_uuid}
-																	onCopy={handleCopyUuid}
-																/>
-																<UuidCopyField
-																	label="pack_spot_uuid"
-																	value={reservation.spot_uuid}
-																	onCopy={handleCopyUuid}
+															key={`${session.session_id}-${poi.poi_uuid}-${poi.visited_at}-${index}`}>
+															<div className="student-event-card">
+																<div className="student-event-copy">
+																	<div className="reservation-card-top">
+																		<strong>{poi.title || "Visited POI"}</strong>
+																		<span className="student-badge student-badge-highlight">
+																			+{poi.bonus_points} pts
+																		</span>
+																	</div>
+																	<span>{formatUnixTimestamp(poi.visited_at)}</span>
+																	<span>
+																		Trip: {session.trip_mode || "Unknown"} · Session{" "}
+																		{formatUnixTimestamp(session.started_at)}
+																	</span>
+																	<span>
+																		{poi.description || "No POI description provided."}
+																	</span>
+																	<div className="uuid-copy-stack">
+																		<UuidCopyField
+																			label="poi_uuid"
+																			value={poi.poi_uuid}
+																			onCopy={handleCopyUuid}
+																		/>
+																		<UuidCopyField
+																			label="session_id"
+																			value={session.session_id}
+																			onCopy={handleCopyUuid}
+																		/>
+																	</div>
+																</div>
+																<StudentEventMiniMap
+																	label={poi.title || "Visited POI"}
+																	lat={poi.lat}
+																	lng={poi.lng}
+																	tone="poi"
 																/>
 															</div>
 														</div>
@@ -611,7 +857,107 @@ export function StudentsScreen(props: Props) {
 
 										<div className="data-section">
 											<div className="data-section-header">
-												<h4>Violations</h4>
+												<h4>Route penalties</h4>
+												<span>{penaltyEvents.length}</span>
+											</div>
+											{studentBusy ? (
+												<p className="muted-text">Loading route history…</p>
+											) : studentRouteHistoryError ? (
+												<p className="muted-text">
+													Penalty events unavailable right now:{" "}
+													{studentRouteHistoryError}
+												</p>
+											) : penaltyEvents.length === 0 ? (
+												<p className="muted-text">
+													No route penalty events recorded for this student.
+												</p>
+											) : (
+												<div className="stack-list">
+													{penaltyEvents.map(({ event, session }, index) => (
+														(() => {
+															const matchingZone = resolvePenaltyZone(
+																session,
+																studentSchoolZones,
+																event.zone_uuid,
+															);
+															const estimatedSpeedMph =
+																event.zone_type === "speed_limit"
+																	? estimatePenaltySpeedMph(session, event)
+																	: null;
+
+															return (
+																<div
+																	className="data-card"
+																	key={`${session.session_id}-${event.zone_uuid}-${event.occurred_at}-${index}`}>
+																	<div className="student-event-card">
+																		<div className="student-event-copy">
+																			<div className="reservation-card-top">
+																				<strong>
+																					{event.title ||
+																						formatPenaltyZoneType(event.zone_type)}
+																				</strong>
+																				<span className="student-badge student-badge-status-denied">
+																					-{event.points_lost} pts
+																				</span>
+																			</div>
+																			<span>{formatUnixTimestamp(event.occurred_at)}</span>
+																			<span>
+																				Type: {formatPenaltyZoneType(event.zone_type)}
+																				{event.speed_limit_mph
+																					? ` · Limit ${event.speed_limit_mph} mph`
+																					: ""}
+																			</span>
+																			{event.zone_type === "speed_limit" ? (
+																				<span>
+																					Student speed:{" "}
+																					{estimatedSpeedMph
+																						? formatSpeedMph(estimatedSpeedMph)
+																						: "Unavailable from route points"}
+																				</span>
+																			) : null}
+																			<span>
+																				Reason:{" "}
+																				{event.reason || "No penalty reason provided."}
+																			</span>
+																			<span>
+																				{event.description ||
+																					"No penalty description provided."}
+																			</span>
+																			<div className="uuid-copy-stack">
+																				<UuidCopyField
+																					label="zone_uuid"
+																					value={event.zone_uuid}
+																					onCopy={handleCopyUuid}
+																				/>
+																				<UuidCopyField
+																					label="session_id"
+																					value={session.session_id}
+																					onCopy={handleCopyUuid}
+																				/>
+																			</div>
+																		</div>
+																		<StudentEventMiniMap
+																			label={
+																				event.title ||
+																				formatPenaltyZoneType(event.zone_type)
+																			}
+																			lat={event.lat}
+																			lng={event.lng}
+																			polygon={matchingZone?.polygon}
+																			tone="penalty"
+																		/>
+																	</div>
+																</div>
+															);
+														})()
+													))}
+												</div>
+											)}
+										</div>
+
+										<div className="data-section">
+											<div className="data-section-header">
+												<h4>Parking violations</h4>
 												<span>{studentViolations.length}</span>
 											</div>
 											{studentBusy ? (
@@ -699,20 +1045,6 @@ export function StudentsScreen(props: Props) {
 													})}
 												</div>
 											)}
-										</div>
-
-										<div className="data-section">
-											<div className="data-section-header">
-												<h4>Visited POIs</h4>
-											</div>
-											<div className="placeholder-section">
-												<span className="placeholder-section-icon">📍</span>
-												<strong>No POI visit data available</strong>
-												<span>
-													Point-of-interest visit history will appear here once
-													the POI tracking API is connected.
-												</span>
-											</div>
 										</div>
 									</>
 								);

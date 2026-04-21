@@ -3449,6 +3449,107 @@
   font-size: 0.88rem;
 }
 
+.student-reservation-media-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.student-event-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 16px;
+  align-items: start;
+}
+
+.student-event-copy {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.student-event-map-shell {
+  display: grid;
+  gap: 8px;
+}
+
+.student-event-map,
+.student-event-map-placeholder {
+  width: 100%;
+  min-height: 132px;
+  border-radius: 16px;
+  border: 1px solid var(--panel-border);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.student-event-map-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--muted-strong);
+  font-size: 0.84rem;
+  text-align: center;
+  padding: 16px;
+}
+
+.student-event-map-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.student-event-map-action {
+  appearance: none;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--text-strong);
+  border-radius: 12px;
+  min-height: 34px;
+  min-width: 34px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    transform 0.14s ease;
+}
+
+.student-event-map-action:hover {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(17, 45, 78, 0.2);
+  transform: translateY(-1px);
+}
+
+.student-event-map-action-wide {
+  padding-inline: 14px;
+}
+
+.student-event-map-action-link {
+  color: #1a5276;
+}
+
+.student-event-map-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.student-event-map-caption span:first-child {
+  color: var(--text-strong);
+  font-weight: 700;
+}
+
 .student-public-stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -4109,6 +4210,14 @@
   }
 
   .student-photos-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .student-reservation-media-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .student-event-card {
     grid-template-columns: 1fr;
   }
 
