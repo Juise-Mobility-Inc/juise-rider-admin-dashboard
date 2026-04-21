@@ -3278,11 +3278,94 @@
 
 /* ── DETAIL PANEL ─────────────────────────── */
 .students-detail {
-  padding: 28px;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 0;
   overflow-y: auto;
+  min-height: 0;
+}
+
+/* ── STUDENT DETAIL TABS ──────────────────── */
+.student-tabs-bar {
+  display: flex;
+  gap: 2px;
+  padding: 10px 20px 0;
+  border-bottom: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.3);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  backdrop-filter: blur(8px);
+}
+
+.student-tab-btn {
+  appearance: none;
+  border: none;
+  border-bottom: 2.5px solid transparent;
+  background: none;
+  padding: 9px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease;
+  white-space: nowrap;
+}
+
+.student-tab-btn:hover {
+  color: var(--navy);
+}
+
+.student-tab-btn-active {
+  color: var(--navy);
+  border-bottom-color: var(--gold);
+}
+
+.student-tab-count {
+  display: inline-block;
+  background: rgba(17, 45, 78, 0.08);
+  color: var(--navy);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 0 6px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.student-tab-panel {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* roster header with export */
+.student-roster-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 0 0;
+}
+
+.student-export-btn {
+  appearance: none;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: background 120ms ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.student-export-btn:hover {
+  background: rgba(255, 255, 255, 0.9);
 }
 
 .students-detail-empty {
@@ -3318,6 +3401,14 @@
   display: flex;
   align-items: flex-start;
   gap: 18px;
+  padding: 22px 24px 0;
+}
+
+.student-detail-errors {
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .student-detail-avatar {
@@ -3428,7 +3519,8 @@
 .student-photo-image,
 .student-photo-placeholder {
   width: 100%;
-  border-radius: 16px;
+  max-height: 160px;
+  border-radius: 14px;
   border: 1px solid var(--panel-border);
   background: rgba(255, 255, 255, 0.74);
 }
@@ -3436,17 +3528,18 @@
 .student-photo-image {
   display: block;
   object-fit: cover;
-  aspect-ratio: 1.58 / 1;
+  height: 160px;
   cursor: zoom-in;
 }
 
 .student-photo-placeholder {
   display: grid;
   place-items: center;
-  aspect-ratio: 1.58 / 1;
+  height: 120px;
   color: var(--muted-strong);
   text-align: center;
   font-size: 0.88rem;
+  padding: 16px;
 }
 
 .student-reservation-media-grid {
