@@ -4,6 +4,12 @@ import type {
   SchoolChallenge,
   SchoolChallengeParticipantProgress,
 } from "../../lib/api";
+import {
+  csvObjectRow,
+  downloadCsv,
+  sanitizeCsvFilename,
+  type CsvCell,
+} from "../../lib/csv";
 
 type ChallengeDraft = {
   challenge_uuid: string;
@@ -29,6 +35,52 @@ type EntityImagePreviewProps = {
   altSuffix?: string;
   fallbackLabel?: string;
 };
+
+const challengeExportColumns = [
+  "row_type",
+  "challenge_uuid",
+  "challenge_title",
+  "challenge_description",
+  "challenge_image_url",
+  "challenge_audience_type",
+  "challenge_audience_label",
+  "challenge_status",
+  "challenge_active",
+  "challenge_metric_type",
+  "challenge_target_value",
+  "challenge_target_label",
+  "challenge_start_time",
+  "challenge_end_time",
+  "summary_joined_count",
+  "summary_completed_count",
+  "summary_completion_rate_percent",
+  "participant_type",
+  "participant_name",
+  "participant_identifier",
+  "participant_status",
+  "participation_uuid",
+  "user_uuid",
+  "membership_uuid",
+  "student_id",
+  "username",
+  "email",
+  "campaign_group_uuid",
+  "campaign_group_name",
+  "campaign_group_owner_user_uuid",
+  "campaign_group_member_count",
+  "participant_joined_at",
+  "participant_left_at",
+  "participant_active",
+  "participant_progress_value",
+  "participant_progress_label",
+  "participant_completion_percent",
+  "participant_completed",
+  "participant_total_sessions",
+  "participant_last_activity_at",
+] as const;
+
+type ChallengeExportColumn = (typeof challengeExportColumns)[number];
+type ChallengeExportRow = Partial<Record<ChallengeExportColumn, CsvCell>>;
 
 type Props = {
   activeSchoolId: string;
@@ -88,6 +140,139 @@ function formatChallengeAudienceLabel(
   audienceType?: SchoolChallenge["audience_type"],
 ): string {
   return audienceType === "campaign_group" ? "Campaign" : "Student";
+}
+
+type ChallengeExportParams = {
+  challenge: SchoolChallenge;
+  participants: SchoolChallengeParticipantProgress[];
+  participantSummary: Props["challengeParticipantSummary"];
+  resolveChallengeStatus: Props["resolveChallengeStatus"];
+  formatChallengeMetricValue: Props["formatChallengeMetricValue"];
+  formatDateTimeForDisplay: Props["formatDateTimeForDisplay"];
+  formatNebulaUserName: Props["formatNebulaUserName"];
+};
+
+function formatChallengeParticipantStatus(
+  participant: SchoolChallengeParticipantProgress,
+): string {
+  if (participant.completed) {
+    return "Completed";
+  }
+
+  if (participant.active) {
+    return "In Progress";
+  }
+
+  return "Left";
+}
+
+function downloadChallengeCSV({
+  challenge,
+  participants,
+  participantSummary,
+  resolveChallengeStatus,
+  formatChallengeMetricValue,
+  formatDateTimeForDisplay,
+  formatNebulaUserName,
+}: ChallengeExportParams) {
+  const completionRate =
+    participantSummary.joined > 0
+      ? Math.round(
+          (participantSummary.completed / participantSummary.joined) * 100,
+        )
+      : "";
+  const challengeStatus = resolveChallengeStatus(challenge);
+  const targetLabel = formatChallengeMetricValue(
+    challenge.metric_type,
+    challenge.target_value,
+  );
+  const baseRow: ChallengeExportRow = {
+    challenge_uuid: challenge.challenge_uuid,
+    challenge_title: challenge.title,
+    challenge_description: challenge.description,
+    challenge_image_url: challenge.image_url,
+    challenge_audience_type: challenge.audience_type,
+    challenge_audience_label: formatChallengeAudienceLabel(challenge.audience_type),
+    challenge_status: challengeStatus,
+    challenge_active: challenge.active,
+    challenge_metric_type: challenge.metric_type,
+    challenge_target_value: challenge.target_value,
+    challenge_target_label: targetLabel,
+    challenge_start_time: formatDateTimeForDisplay(challenge.start_time),
+    challenge_end_time: formatDateTimeForDisplay(challenge.end_time),
+    summary_joined_count: participantSummary.joined,
+    summary_completed_count: participantSummary.completed,
+    summary_completion_rate_percent: completionRate,
+  };
+  const rows: ChallengeExportRow[] = [
+    {
+      ...baseRow,
+      row_type: "challenge_summary",
+    },
+  ];
+
+  participants.forEach((participant) => {
+    const isCampaignParticipant = participant.participant_type === "campaign_group";
+    const participantName = isCampaignParticipant
+      ? participant.campaign_group_name?.trim() || "Campaign group"
+      : formatNebulaUserName({
+          first_name: participant.first_name,
+          last_name: participant.last_name,
+          email: participant.email,
+          username: participant.username,
+        });
+    const participantIdentifier = isCampaignParticipant
+      ? `${participant.member_count ?? 0} rider${
+          participant.member_count === 1 ? "" : "s"
+        }`
+      : participant.student_id || participant.username || participant.email;
+
+    rows.push({
+      ...baseRow,
+      row_type: "participant_progress",
+      participant_type: participant.participant_type ?? challenge.audience_type,
+      participant_name: participantName,
+      participant_identifier: participantIdentifier,
+      participant_status: formatChallengeParticipantStatus(participant),
+      participation_uuid: participant.participation_uuid,
+      user_uuid: participant.user_uuid,
+      membership_uuid: participant.membership_uuid,
+      student_id: participant.student_id,
+      username: participant.username,
+      email: participant.email,
+      campaign_group_uuid: participant.campaign_group_uuid ?? "",
+      campaign_group_name: participant.campaign_group_name ?? "",
+      campaign_group_owner_user_uuid: participant.owner_user_uuid ?? "",
+      campaign_group_member_count: participant.member_count ?? "",
+      participant_joined_at: formatDateTimeForDisplay(participant.joined_at),
+      participant_left_at: participant.left_at
+        ? formatDateTimeForDisplay(participant.left_at)
+        : "",
+      participant_active: participant.active,
+      participant_progress_value: participant.progress_value,
+      participant_progress_label: formatChallengeMetricValue(
+        participant.metric_type,
+        participant.progress_value,
+      ),
+      participant_completion_percent: Math.round(participant.completion_percent),
+      participant_completed: participant.completed,
+      participant_total_sessions: participant.total_sessions,
+      participant_last_activity_at: participant.last_activity_at
+        ? formatDateTimeForDisplay(participant.last_activity_at)
+        : "",
+    });
+  });
+
+  downloadCsv(
+    sanitizeCsvFilename(
+      `${challenge.title || "challenge"}-progress-export`,
+      "challenge-progress-export",
+    ),
+    [
+      challengeExportColumns,
+      ...rows.map((row) => csvObjectRow(challengeExportColumns, row)),
+    ],
+  );
 }
 
 export function ChallengesScreen(props: Props) {
@@ -664,25 +849,46 @@ export function ChallengesScreen(props: Props) {
                         ? "Campaign progress"
                         : "Student progress"}
                     </h4>
-                    <div className="challenge-participant-stats">
-                      <span>
-                        <strong>{challengeParticipantSummary.joined}</strong> joined
-                      </span>
-                      <span>
-                        <strong>{challengeParticipantSummary.completed}</strong> completed
-                      </span>
-                      {challengeParticipantSummary.joined > 0 ? (
+                    <div className="challenge-participants-header-actions">
+                      <div className="challenge-participant-stats">
                         <span>
-                          <strong>
-                            {Math.round(
-                              (challengeParticipantSummary.completed /
-                                challengeParticipantSummary.joined) *
-                                100,
-                            )}%
-                          </strong>{" "}
-                          completion rate
+                          <strong>{challengeParticipantSummary.joined}</strong> joined
                         </span>
-                      ) : null}
+                        <span>
+                          <strong>{challengeParticipantSummary.completed}</strong> completed
+                        </span>
+                        {challengeParticipantSummary.joined > 0 ? (
+                          <span>
+                            <strong>
+                              {Math.round(
+                                (challengeParticipantSummary.completed /
+                                  challengeParticipantSummary.joined) *
+                                  100,
+                              )}%
+                            </strong>{" "}
+                            completion rate
+                          </span>
+                        ) : null}
+                      </div>
+                      <button
+                        className="student-export-btn"
+                        type="button"
+                        onClick={() =>
+                          downloadChallengeCSV({
+                            challenge: selectedChallenge,
+                            participants: challengeParticipants,
+                            participantSummary: challengeParticipantSummary,
+                            resolveChallengeStatus,
+                            formatChallengeMetricValue,
+                            formatDateTimeForDisplay,
+                            formatNebulaUserName,
+                          })
+                        }
+                        disabled={challengeParticipantsBusy}
+                        title={`Download ${selectedChallenge.title} progress as CSV`}
+                      >
+                        Download CSV
+                      </button>
                     </div>
                   </div>
 

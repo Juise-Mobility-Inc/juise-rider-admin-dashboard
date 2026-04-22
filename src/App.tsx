@@ -3,6 +3,7 @@ import {
   type CSSProperties,
   type FormEvent,
   useEffect,
+  useDeferredValue,
   useMemo,
   useState,
 } from "react";
@@ -23,12 +24,8 @@ import {
   fetchSchoolChallenges,
   fetchSchoolPOIs,
   fetchSchoolZones,
-  fetchSchoolStudentRoster,
-  fetchSchoolTermReservations,
   fetchStudentProfile,
-  fetchStudentParkingViolations,
   fetchStudentPublicProfile,
-  fetchStudentRouteHistory,
   fetchUserMediaAssets,
   generateAdminPackQrCode,
   generateAdminPackSpotQrCode,
@@ -56,9 +53,7 @@ import {
   type SchoolTerm,
   type RegisteredDevice,
   type StudentProfileBundle,
-  type StudentPublicProfile,
   type StudentParkingViolation,
-  type StudentRouteHistorySession,
   updateSchoolChallenge,
   uploadSchoolChallengeImage,
   type UserMediaAsset,
@@ -89,6 +84,15 @@ import { StudentVehicleDetailModal } from "./screens/dashboard/StudentVehicleDet
 import { StudentsScreen } from "./screens/dashboard/StudentsScreen";
 import { TermsScreen } from "./screens/dashboard/TermsScreen";
 import { ZonesScreen } from "./screens/dashboard/ZonesScreen";
+import {
+  loadSelectedStudentDetail,
+  loadStudentRoster,
+  resetSelectedStudentState as resetStudentsSelectionState,
+  resetStudentsState,
+  selectStudentsState,
+  setStudentsScope,
+} from "./features/students/studentsSlice";
+import { useAppDispatch, useAppSelector } from "./store/hooks";
 
 type Section =
   | "school"
@@ -1453,58 +1457,48 @@ function App() {
   const [reservations, setReservations] = useState<PackSpotReservation[]>([]);
   const [reservationsBusy, setReservationsBusy] = useState(false);
   const [selectedReservationId, setSelectedReservationId] = useState("");
-  const [studentProfile, setStudentProfile] =
+  const [reservationStudentProfile, setReservationStudentProfile] =
     useState<StudentProfileBundle | null>(null);
-  const [studentPublicProfile, setStudentPublicProfile] =
-    useState<StudentPublicProfile | null>(null);
-  const [studentDevicePhotoUrls, setStudentDevicePhotoUrls] =
+  const [reservationStudentDevicePhotoUrls, setReservationStudentDevicePhotoUrls] =
     useState<StudentDevicePhotoMap>({});
-  const [studentDeviceMediaByDevice, setStudentDeviceMediaByDevice] =
-    useState<StudentDeviceMediaAssetMap>({});
-  const [studentDeviceSignedMediaUrls, setStudentDeviceSignedMediaUrls] =
-    useState<SignedMediaUrlMap>({});
-  const [studentViolations, setStudentViolations] =
-    useState<StudentParkingViolation[]>([]);
-  const [studentRouteHistory, setStudentRouteHistory] =
-    useState<StudentRouteHistorySession[]>([]);
-  const [studentSchoolZones, setStudentSchoolZones] = useState<SchoolZone[]>([]);
-  const [studentReservationPacks, setStudentReservationPacks] = useState<Pack[]>([]);
-  const [studentViolationMediaByViolation, setStudentViolationMediaByViolation] =
-    useState<StudentViolationMediaAssetMap>({});
-  const [studentViolationSignedMediaUrls, setStudentViolationSignedMediaUrls] =
-    useState<SignedMediaUrlMap>({});
   const [selectedStudentDeviceUUID, setSelectedStudentDeviceUUID] = useState<
     string | null
   >(null);
-  const [studentBusy, setStudentBusy] = useState(false);
-  const [studentError, setStudentError] = useState("");
-  const [studentPublicProfileError, setStudentPublicProfileError] =
-    useState("");
-  const [studentRouteHistoryError, setStudentRouteHistoryError] =
-    useState("");
-  const [studentViolationError, setStudentViolationError] = useState("");
-  const [schoolStudentRoster, setSchoolStudentRoster] = useState<
-    SchoolStudentRosterEntry[]
-  >([]);
-  const [schoolStudentReservations, setSchoolStudentReservations] = useState<
-    PackSpotReservation[]
-  >([]);
-  const [schoolStudentMediaUrls, setSchoolStudentMediaUrls] = useState<
-    Record<string, string>
-  >({});
-  const [schoolStudentProfilePhotoUrls, setSchoolStudentProfilePhotoUrls] =
-    useState<Record<string, string>>({});
-  const [schoolStudentPhotoKeys, setSchoolStudentPhotoKeys] =
-    useState<StudentRosterPhotoKeyMap>({});
-  const [schoolStudentRosterBusy, setSchoolStudentRosterBusy] = useState(false);
-  const [schoolStudentRosterError, setSchoolStudentRosterError] = useState("");
-  const [selectedStudentMembershipId, setSelectedStudentMembershipId] =
-    useState<string | null>(null);
+  const [reservationStudentBusy, setReservationStudentBusy] = useState(false);
+  const [reservationStudentError, setReservationStudentError] = useState("");
   const [studentRosterSearch, setStudentRosterSearch] = useState("");
   const scopedSchoolId = session?.claims.school_id?.trim() ?? "";
   const activeSchoolId = scopedSchoolId;
   const currentSection =
     resolveSectionFromPathname(location.pathname) ?? "school";
+  const deferredStudentRosterSearch = useDeferredValue(studentRosterSearch);
+  const studentsDispatch = useAppDispatch();
+  const {
+    schoolStudentMediaUrls,
+    schoolStudentPhotoKeys,
+    schoolStudentProfilePhotoUrls,
+    schoolStudentReservations,
+    schoolStudentRoster,
+    schoolStudentRosterBusy,
+    schoolStudentRosterError,
+    selectedStudentMembershipId,
+    studentBusy,
+    studentDeviceMediaByDevice,
+    studentDevicePhotoUrls,
+    studentDeviceSignedMediaUrls,
+    studentError,
+    studentProfile,
+    studentPublicProfile,
+    studentPublicProfileError,
+    studentReservationPacks,
+    studentRouteHistory,
+    studentRouteHistoryError,
+    studentSchoolZones,
+    studentViolationError,
+    studentViolationMediaByViolation,
+    studentViolationSignedMediaUrls,
+    studentViolations,
+  } = useAppSelector(selectStudentsState);
 
   const selectedPackLocation = useMemo<PackMapPoint | null>(() => {
     const lat = packDraft.lat.trim();
@@ -1684,14 +1678,14 @@ function App() {
     schoolPacks.length - existingPackMapMarkers.length;
 
   const relevantMemberships = useMemo(() => {
-    if (!studentProfile) {
+    if (!reservationStudentProfile) {
       return [];
     }
 
-    return studentProfile.memberships.filter(
+    return reservationStudentProfile.memberships.filter(
       (membership) => membership.school_id === activeSchoolId,
     );
-  }, [activeSchoolId, studentProfile]);
+  }, [activeSchoolId, reservationStudentProfile]);
 
   const sortedSchoolStudentRoster = useMemo(
     () =>
@@ -1709,7 +1703,7 @@ function App() {
   );
 
   const filteredStudentRoster = useMemo(() => {
-    const q = studentRosterSearch.trim().toLowerCase();
+    const q = deferredStudentRosterSearch.trim().toLowerCase();
     if (!q) return sortedSchoolStudentRoster;
     return sortedSchoolStudentRoster.filter((entry) => {
       const name = formatNebulaUserName(entry.user).toLowerCase();
@@ -1717,7 +1711,7 @@ function App() {
       const email = (entry.user.email ?? "").toLowerCase();
       return name.includes(q) || id.includes(q) || email.includes(q);
     });
-  }, [sortedSchoolStudentRoster, studentRosterSearch]);
+  }, [deferredStudentRosterSearch, sortedSchoolStudentRoster]);
 
   const selectedStudentEntry = useMemo(
     () =>
@@ -2131,32 +2125,38 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!session || !activeSchoolId) {
+      studentsDispatch(resetStudentsState());
+      return;
+    }
+
+    studentsDispatch(
+      setStudentsScope({
+        scopeKey: `${context.managedAppId}:${activeSchoolId}:${session.claims.user_uuid}`,
+        managedAppId: context.managedAppId,
+        schoolId: activeSchoolId,
+        adminUserUUID: session.claims.user_uuid,
+      }),
+    );
+  }, [
+    activeSchoolId,
+    context.managedAppId,
+    session,
+    studentsDispatch,
+  ]);
+
+  useEffect(() => {
     if (!session) {
       setReservations([]);
       setSelectedReservationId("");
-      setStudentProfile(null);
-      setStudentPublicProfile(null);
-      setStudentDevicePhotoUrls({});
-      setStudentDeviceMediaByDevice({});
-      setStudentDeviceSignedMediaUrls({});
-      setStudentViolations([]);
-      setStudentRouteHistory([]);
-      setStudentSchoolZones([]);
-      setStudentReservationPacks([]);
-      setStudentViolationMediaByViolation({});
-      setStudentViolationSignedMediaUrls({});
+      setReservationStudentProfile(null);
+      setReservationStudentDevicePhotoUrls({});
+      setReservationStudentBusy(false);
+      setReservationStudentError("");
       setSelectedStudentDeviceUUID(null);
-      setStudentPublicProfileError("");
-      setStudentRouteHistoryError("");
-      setStudentViolationError("");
       setSchoolPacks([]);
       setPoiDrafts([]);
       setActivePoiDraftId("");
-      setSchoolStudentRoster([]);
-      setSchoolStudentReservations([]);
-      setSchoolStudentMediaUrls({});
-      setSchoolStudentProfilePhotoUrls({});
-      setSchoolStudentRosterError("");
       setSchoolChallenges([]);
       setChallengeParticipants([]);
       setImagePreview(null);
@@ -2167,6 +2167,27 @@ function App() {
       return;
     }
   }, [session]);
+
+  useEffect(() => {
+    if (!session || currentSection !== "students" || !activeSchoolId) {
+      return;
+    }
+
+    void studentsDispatch(
+      loadStudentRoster({
+        scopeKey: `${context.managedAppId}:${activeSchoolId}:${session.claims.user_uuid}`,
+        managedAppId: context.managedAppId,
+        schoolId: activeSchoolId,
+        adminUserUUID: session.claims.user_uuid,
+      }),
+    );
+  }, [
+    activeSchoolId,
+    context.managedAppId,
+    currentSection,
+    session,
+    studentsDispatch,
+  ]);
 
   useEffect(() => {
     if (!imagePreview && !selectedStudentDeviceUUID) {
@@ -2230,23 +2251,8 @@ function App() {
   }
 
   function resetSelectedStudentState() {
-    setSelectedStudentMembershipId(null);
-    setStudentProfile(null);
-    setStudentPublicProfile(null);
-    setStudentDevicePhotoUrls({});
-    setStudentDeviceMediaByDevice({});
-    setStudentDeviceSignedMediaUrls({});
-    setStudentViolations([]);
-    setStudentRouteHistory([]);
-    setStudentSchoolZones([]);
-    setStudentReservationPacks([]);
-    setStudentViolationMediaByViolation({});
-    setStudentViolationSignedMediaUrls({});
     setSelectedStudentDeviceUUID(null);
-    setStudentError("");
-    setStudentPublicProfileError("");
-    setStudentRouteHistoryError("");
-    setStudentViolationError("");
+    studentsDispatch(resetStudentsSelectionState());
   }
 
   function handleOpenStudentDevice(deviceUUID: string) {
@@ -2578,9 +2584,9 @@ function App() {
 
   useEffect(() => {
     if (!session || !selectedReservation) {
-      setStudentProfile(null);
-      setStudentDevicePhotoUrls({});
-      setStudentError("");
+      setReservationStudentProfile(null);
+      setReservationStudentDevicePhotoUrls({});
+      setReservationStudentError("");
       return;
     }
 
@@ -2588,8 +2594,8 @@ function App() {
     let cancelled = false;
 
     async function loadStudentProfile() {
-      setStudentBusy(true);
-      setStudentError("");
+      setReservationStudentBusy(true);
+      setReservationStudentError("");
       try {
         const nextProfile = await fetchStudentProfile(
           context.managedAppId,
@@ -2599,7 +2605,7 @@ function App() {
           return;
         }
 
-        setStudentProfile(nextProfile);
+        setReservationStudentProfile(nextProfile);
         const nextDevicePhotoUrls = await resolveStudentDevicePhotoUrls(
           context.managedAppId,
           activeSchoolId,
@@ -2609,16 +2615,16 @@ function App() {
         if (cancelled) {
           return;
         }
-        setStudentDevicePhotoUrls(nextDevicePhotoUrls);
+        setReservationStudentDevicePhotoUrls(nextDevicePhotoUrls);
       } catch (error) {
         if (!cancelled) {
-          setStudentProfile(null);
-          setStudentDevicePhotoUrls({});
-          setStudentError(getErrorMessage(error));
+          setReservationStudentProfile(null);
+          setReservationStudentDevicePhotoUrls({});
+          setReservationStudentError(getErrorMessage(error));
         }
       } finally {
         if (!cancelled) {
-          setStudentBusy(false);
+          setReservationStudentBusy(false);
         }
       }
     }
@@ -2629,92 +2635,6 @@ function App() {
       cancelled = true;
     };
   }, [activeSchoolId, context.managedAppId, selectedReservation, session]);
-
-  useEffect(() => {
-    if (!session || currentSection !== "students" || !activeSchoolId) {
-      return;
-    }
-
-    let cancelled = false;
-    const adminUserUUID = session.claims.user_uuid;
-
-    async function loadSchoolStudentRoster() {
-      setSchoolStudentRosterBusy(true);
-      setSchoolStudentRosterError("");
-      try {
-        const [nextRoster, nextReservations] = await Promise.all([
-          fetchSchoolStudentRoster(context.managedAppId, activeSchoolId),
-          fetchSchoolTermReservations(
-            adminUserUUID,
-            context.managedAppId,
-            activeSchoolId,
-          ),
-        ]);
-        if (cancelled) {
-          return;
-        }
-
-        setSchoolStudentRoster(nextRoster);
-        setSchoolStudentReservations(nextReservations);
-
-        try {
-          const { photoKeysByMembership, signedUrls } =
-            await resolveSchoolStudentPhotoState(
-              context.managedAppId,
-              activeSchoolId,
-              nextRoster,
-            );
-          if (!cancelled) {
-            setSchoolStudentPhotoKeys(photoKeysByMembership);
-            setSchoolStudentMediaUrls(signedUrls);
-          }
-        } catch (error) {
-          if (!cancelled) {
-            setSchoolStudentPhotoKeys({});
-            setSchoolStudentMediaUrls({});
-            setBanner({
-              tone: "error",
-              message: getErrorMessage(error),
-            });
-          }
-        }
-
-        try {
-          const nextProfilePhotoUrls = await resolveSchoolStudentProfilePhotoUrls(
-            context.managedAppId,
-            activeSchoolId,
-            nextRoster,
-          );
-          if (!cancelled) {
-            setSchoolStudentProfilePhotoUrls(nextProfilePhotoUrls);
-          }
-        } catch {
-          if (!cancelled) {
-            setSchoolStudentProfilePhotoUrls({});
-          }
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setSchoolStudentRoster([]);
-          setSchoolStudentReservations([]);
-          setSchoolStudentPhotoKeys({});
-          setSchoolStudentMediaUrls({});
-          setSchoolStudentProfilePhotoUrls({});
-          setSchoolStudentRosterError(getErrorMessage(error));
-        }
-      } finally {
-        if (!cancelled) {
-          setSchoolStudentRosterBusy(false);
-        }
-      }
-    }
-
-    void loadSchoolStudentRoster();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeSchoolId, context.managedAppId, currentSection, session]);
 
   useEffect(() => {
     if (!session || currentSection !== "packs" || !activeSchoolId) {
@@ -2936,192 +2856,33 @@ function App() {
       return;
     }
 
-    setSchoolStudentRosterBusy(true);
-    setSchoolStudentRosterError("");
-    try {
-      const [nextRoster, nextReservations] = await Promise.all([
-        fetchSchoolStudentRoster(context.managedAppId, activeSchoolId),
-        fetchSchoolTermReservations(
-          session.claims.user_uuid,
-          context.managedAppId,
-          activeSchoolId,
-        ),
-      ]);
-      setSchoolStudentRoster(nextRoster);
-      setSchoolStudentReservations(nextReservations);
-      try {
-        const { photoKeysByMembership, signedUrls } =
-          await resolveSchoolStudentPhotoState(
-            context.managedAppId,
-            activeSchoolId,
-            nextRoster,
-          );
-        setSchoolStudentPhotoKeys(photoKeysByMembership);
-        setSchoolStudentMediaUrls(signedUrls);
-      } catch (error) {
-        setSchoolStudentPhotoKeys({});
-        setSchoolStudentMediaUrls({});
-        setBanner({
-          tone: "error",
-          message: getErrorMessage(error),
-        });
-      }
-
-      try {
-        const nextProfilePhotoUrls = await resolveSchoolStudentProfilePhotoUrls(
-          context.managedAppId,
-          activeSchoolId,
-          nextRoster,
-        );
-        setSchoolStudentProfilePhotoUrls(nextProfilePhotoUrls);
-      } catch {
-        setSchoolStudentProfilePhotoUrls({});
-      }
-    } catch (error) {
-      setSchoolStudentRoster([]);
-      setSchoolStudentReservations([]);
-      setSchoolStudentPhotoKeys({});
-      setSchoolStudentMediaUrls({});
-      setSchoolStudentProfilePhotoUrls({});
-      setSchoolStudentRosterError(getErrorMessage(error));
-    } finally {
-      setSchoolStudentRosterBusy(false);
-    }
+    await studentsDispatch(
+      loadStudentRoster({
+        scopeKey: `${context.managedAppId}:${activeSchoolId}:${session.claims.user_uuid}`,
+        managedAppId: context.managedAppId,
+        schoolId: activeSchoolId,
+        adminUserUUID: session.claims.user_uuid,
+        force: true,
+      }),
+    );
   }
 
   async function handleSelectStudentInRoster(membershipId: string) {
-    setSelectedStudentMembershipId(membershipId);
-    const entry = sortedSchoolStudentRoster.find(
-      (e) => e.membership.membership_uuid === membershipId,
-    );
-    if (!entry || !session || !context) return;
-    const studentUserUUID =
-      entry.membership.user_uuid?.trim() || entry.user.k_guid;
-    setStudentBusy(true);
-    setStudentError('');
-    setStudentPublicProfileError('');
-    setStudentRouteHistoryError('');
-    setStudentViolationError('');
-    setStudentPublicProfile(null);
-    setStudentDevicePhotoUrls({});
-    setStudentDeviceMediaByDevice({});
-    setStudentDeviceSignedMediaUrls({});
-    setStudentViolations([]);
-    setStudentRouteHistory([]);
-    setStudentSchoolZones([]);
-    setStudentReservationPacks([]);
-    setStudentViolationMediaByViolation({});
-    setStudentViolationSignedMediaUrls({});
-    setSelectedStudentDeviceUUID(null);
-    try {
-      const [
-        profileResult,
-        publicProfileResult,
-        routeHistoryResult,
-        schoolZonesResult,
-        schoolPacksResult,
-        violationsResult,
-      ] = await Promise.allSettled([
-        fetchStudentProfile(context.managedAppId, studentUserUUID),
-        fetchStudentPublicProfile(
-          context.managedAppId,
-          activeSchoolId,
-          studentUserUUID,
-        ),
-        fetchStudentRouteHistory(
-          context.managedAppId,
-          activeSchoolId,
-          studentUserUUID,
-        ),
-        fetchSchoolZones(context.managedAppId, activeSchoolId),
-        fetchAdminSchoolPacks(
-          session.claims.user_uuid,
-          context.managedAppId,
-          activeSchoolId,
-        ),
-        fetchStudentParkingViolations(
-          context.managedAppId,
-          activeSchoolId,
-          studentUserUUID,
-        ),
-      ]);
-
-      if (profileResult.status === 'fulfilled') {
-        setStudentProfile(profileResult.value);
-        const nextDeviceMediaState = await resolveStudentDeviceMediaState(
-          context.managedAppId,
-          activeSchoolId,
-          studentUserUUID,
-          profileResult.value.devices,
-        );
-        setStudentDevicePhotoUrls(nextDeviceMediaState.photoUrls);
-        setStudentDeviceMediaByDevice(nextDeviceMediaState.mediaByDevice);
-        setStudentDeviceSignedMediaUrls(nextDeviceMediaState.signedUrls);
-      } else {
-        setStudentError(getErrorMessage(profileResult.reason));
-        setStudentProfile(null);
-        setStudentDevicePhotoUrls({});
-        setStudentDeviceMediaByDevice({});
-        setStudentDeviceSignedMediaUrls({});
-      }
-
-      if (publicProfileResult.status === 'fulfilled') {
-        setStudentPublicProfile(publicProfileResult.value);
-        const profileImageUrl =
-          publicProfileResult.value.user.profile_image_url?.trim() ?? '';
-        if (profileImageUrl) {
-          setSchoolStudentProfilePhotoUrls((current) => ({
-            ...current,
-            [entry.user.k_guid]: profileImageUrl,
-            [studentUserUUID]: profileImageUrl,
-          }));
-        }
-      } else {
-        setStudentPublicProfileError(
-          getErrorMessage(publicProfileResult.reason),
-        );
-      }
-
-      if (routeHistoryResult.status === 'fulfilled') {
-        setStudentRouteHistory(routeHistoryResult.value);
-      } else {
-        setStudentRouteHistoryError(getErrorMessage(routeHistoryResult.reason));
-        setStudentRouteHistory([]);
-      }
-
-      if (schoolZonesResult.status === 'fulfilled') {
-        setStudentSchoolZones(schoolZonesResult.value);
-      } else {
-        setStudentSchoolZones([]);
-      }
-
-      if (schoolPacksResult.status === 'fulfilled') {
-        setStudentReservationPacks(sortPacksForDisplay(schoolPacksResult.value));
-      } else {
-        setStudentReservationPacks([]);
-      }
-
-      if (violationsResult.status === 'fulfilled') {
-        setStudentViolations(violationsResult.value);
-        const nextViolationMediaState = await resolveStudentViolationMediaState(
-          context.managedAppId,
-          activeSchoolId,
-          studentUserUUID,
-          violationsResult.value,
-        );
-        setStudentViolationMediaByViolation(
-          nextViolationMediaState.mediaByViolation,
-        );
-        setStudentViolationSignedMediaUrls(nextViolationMediaState.signedUrls);
-      } else {
-        setStudentViolationError(getErrorMessage(violationsResult.reason));
-        setStudentViolations([]);
-        setStudentViolationMediaByViolation({});
-        setStudentViolationSignedMediaUrls({});
-      }
-    } finally {
-      setStudentBusy(false);
+    if (!session || !activeSchoolId) {
+      return;
     }
+
+    setSelectedStudentDeviceUUID(null);
+
+    await studentsDispatch(
+      loadSelectedStudentDetail({
+        scopeKey: `${context.managedAppId}:${activeSchoolId}:${session.claims.user_uuid}`,
+        managedAppId: context.managedAppId,
+        schoolId: activeSchoolId,
+        adminUserUUID: session.claims.user_uuid,
+        membershipId,
+      }),
+    );
   }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -4400,10 +4161,10 @@ function App() {
             refreshReservations={refreshReservations}
             handleDenySelected={handleDenySelected}
             handleApproveSelected={handleApproveSelected}
-            studentBusy={studentBusy}
-            studentError={studentError}
-            studentProfile={studentProfile}
-            studentDevicePhotoUrls={studentDevicePhotoUrls}
+            studentBusy={reservationStudentBusy}
+            studentError={reservationStudentError}
+            studentProfile={reservationStudentProfile}
+            studentDevicePhotoUrls={reservationStudentDevicePhotoUrls}
             relevantMemberships={relevantMemberships}
             formatUnixTimestamp={formatUnixTimestamp}
             formatDateOnly={formatDateOnly}

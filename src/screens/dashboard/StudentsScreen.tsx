@@ -1,5 +1,11 @@
 import { useState, type ComponentType, type Dispatch, type SetStateAction } from "react";
 import { StudentEventMiniMap } from "../../components/StudentEventMiniMap";
+import {
+        csvObjectRow,
+        downloadCsv,
+        sanitizeCsvFilename,
+        type CsvCell,
+} from "../../lib/csv";
 
 import type {
         Pack,
@@ -18,6 +24,109 @@ type StudentIdPhotoSlot = "front" | "back";
 type StudentIdPhotoKeys = Partial<Record<StudentIdPhotoSlot, string>>;
 type StudentRosterPhotoKeyMap = Record<string, StudentIdPhotoKeys>;
 type StudentViolationMediaAssetMap = Record<string, UserMediaAsset[]>;
+const studentExportColumns = [
+        "row_type",
+        "full_name",
+        "username",
+        "email",
+        "phone",
+        "student_id",
+        "campus_id",
+        "user_uuid",
+        "membership_uuid",
+        "membership_status",
+        "membership_active",
+        "public_total_points",
+        "profile_error",
+        "public_profile_error",
+        "route_history_error",
+        "violation_error",
+        "summary_total_route_sessions",
+        "summary_total_route_points",
+        "summary_total_poi_visits",
+        "summary_total_penalty_events",
+        "summary_total_violations",
+        "summary_total_reservations",
+        "summary_total_devices",
+        "summary_total_membership_terms",
+        "summary_total_bonus_points",
+        "summary_total_penalty_points",
+        "summary_total_distance_miles",
+        "summary_total_duration_minutes",
+        "term_uuid",
+        "term_name",
+        "term_start_date",
+        "term_end_date",
+        "term_active",
+        "device_uuid",
+        "device_nickname",
+        "device_type",
+        "device_make",
+        "device_model",
+        "device_color",
+        "device_serial_number",
+        "device_active",
+        "session_id",
+        "session_trip_mode",
+        "session_tracking_source",
+        "session_started_at",
+        "session_ended_at",
+        "session_distance_miles",
+        "session_duration_minutes",
+        "session_top_speed_mph",
+        "session_average_speed_mph",
+        "session_bonus_points",
+        "session_penalty_points",
+        "session_total_point_delta",
+        "session_point_count",
+        "poi_uuid",
+        "poi_title",
+        "poi_description",
+        "poi_bonus_points",
+        "poi_visited_at",
+        "poi_latitude",
+        "poi_longitude",
+        "penalty_zone_uuid",
+        "penalty_title",
+        "penalty_description",
+        "penalty_reason",
+        "penalty_zone_type",
+        "penalty_speed_limit_mph",
+        "penalty_estimated_speed_mph",
+        "penalty_points_lost",
+        "penalty_duration_minutes",
+        "penalty_occurred_at",
+        "route_point_id",
+        "route_point_recorded_at",
+        "route_point_latitude",
+        "route_point_longitude",
+        "route_point_speed_mph",
+        "route_point_altitude",
+        "route_point_accuracy",
+        "route_point_heading",
+        "reservation_uuid",
+        "reservation_status",
+        "reservation_kind",
+        "reservation_term_name",
+        "reservation_start_time",
+        "reservation_end_time",
+        "reservation_approved_at",
+        "reservation_pack_uuid",
+        "reservation_pack_name",
+        "reservation_spot_uuid",
+        "reservation_spot_number",
+        "reservation_pack_location_latitude",
+        "reservation_pack_location_longitude",
+        "violation_uuid",
+        "violation_status",
+        "violation_description",
+        "violation_created_at",
+        "violation_device_uuid",
+        "violation_media_count",
+] as const;
+
+type StudentExportColumn = (typeof studentExportColumns)[number];
+type StudentExportRow = Partial<Record<StudentExportColumn, CsvCell>>;
 
 type DetailRowComponent = ComponentType<{
         label: string;
@@ -171,17 +280,62 @@ function estimatePenaltySpeedMph(
 
 type DetailTab = "profile" | "activity" | "records";
 
-function csvRow(cells: (string | undefined | null)[]): string {
-        return cells
-                .map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`)
-                .join(",");
+type StudentExportParams = {
+        entry: SchoolStudentRosterEntry;
+        profile: StudentProfileBundle | null;
+        publicProfile: StudentPublicProfile | null;
+        routeHistory: StudentRouteHistorySession[];
+        schoolZones: SchoolZone[];
+        reservations: PackSpotReservation[];
+        reservationPacks: Pack[];
+        violations: StudentParkingViolation[];
+        violationMediaByViolation: StudentViolationMediaAssetMap;
+        studentError: string;
+        studentPublicProfileError: string;
+        studentRouteHistoryError: string;
+        studentViolationError: string;
+        formatNebulaUserName: Props["formatNebulaUserName"];
+        formatDateOnly: Props["formatDateOnly"];
+        formatUnixTimestamp: Props["formatUnixTimestamp"];
+};
+
+function roundCsvNumber(value: number, fractionDigits: number): number | "" {
+        if (!Number.isFinite(value)) {
+                return "";
+        }
+
+        return Number(value.toFixed(fractionDigits));
+}
+
+function milesFromMeters(value: number): number | "" {
+        return roundCsvNumber(value / 1609.344, 2);
+}
+
+function minutesFromSeconds(value: number): number | "" {
+        return roundCsvNumber(value / 60, 1);
+}
+
+function minutesFromMilliseconds(value: number): number | "" {
+        return roundCsvNumber(value / 60000, 1);
+}
+
+function mphFromMetersPerSecond(value?: number | null): number | "" {
+        if (typeof value !== "number" || !Number.isFinite(value)) {
+                return "";
+        }
+
+        return roundCsvNumber(value * 2.2369362920544, 1);
+}
+
+function resolveStudentUserUUID(entry: SchoolStudentRosterEntry): string {
+        return (entry.membership.user_uuid || "").trim() || entry.user.k_guid;
 }
 
 function downloadRosterCSV(
         roster: import("../../lib/api").SchoolStudentRosterEntry[],
         formatDateOnly: (v: string) => string,
 ) {
-        const header = csvRow([
+        const header = [
                 "Full Name",
                 "Username",
                 "Email",
@@ -192,9 +346,9 @@ function downloadRosterCSV(
                 "Status",
                 "Active",
                 "Terms",
-        ]);
+        ] satisfies CsvCell[];
         const rows = roster.map((entry) =>
-                csvRow([
+                [
                         `${entry.user.first_name} ${entry.user.last_name}`.trim(),
                         entry.user.username,
                         entry.user.email,
@@ -210,16 +364,298 @@ function downloadRosterCSV(
                                                 `${t.name} (${formatDateOnly(t.start_date)} - ${formatDateOnly(t.end_date)})`,
                                 )
                                 .join("; "),
-                ]),
+                ] satisfies CsvCell[],
         );
-        const csv = [header, ...rows].join("\n");
-        const blob = new Blob([csv], { type: "text/csv" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "student-roster.csv";
-        a.click();
-        URL.revokeObjectURL(url);
+        downloadCsv("student-roster.csv", [header, ...rows]);
+}
+
+function downloadStudentCSV({
+        entry,
+        profile,
+        publicProfile,
+        routeHistory,
+        schoolZones,
+        reservations,
+        reservationPacks,
+        violations,
+        violationMediaByViolation,
+        studentError,
+        studentPublicProfileError,
+        studentRouteHistoryError,
+        studentViolationError,
+        formatNebulaUserName,
+        formatDateOnly,
+        formatUnixTimestamp,
+}: StudentExportParams) {
+        const fullName = formatNebulaUserName(entry.user) || "Unnamed student";
+        const userUUID = resolveStudentUserUUID(entry);
+        const totalRoutePoints = routeHistory.reduce(
+                (sum, session) => sum + session.points.length,
+                0,
+        );
+        const totalPoiVisits = routeHistory.reduce(
+                (sum, session) => sum + session.visited_pois.length,
+                0,
+        );
+        const totalPenaltyEvents = routeHistory.reduce(
+                (sum, session) => sum + session.penalty_events.length,
+                0,
+        );
+        const totalBonusPoints = routeHistory.reduce(
+                (sum, session) => sum + session.bonus_points,
+                0,
+        );
+        const totalPenaltyPoints = routeHistory.reduce(
+                (sum, session) => sum + session.penalty_points,
+                0,
+        );
+        const totalDistanceMeters = routeHistory.reduce(
+                (sum, session) => sum + session.distance_meters,
+                0,
+        );
+        const totalDurationSeconds = routeHistory.reduce(
+                (sum, session) => sum + session.duration_seconds,
+                0,
+        );
+        const reservationPackByUUID = new Map(
+                reservationPacks.map((pack) => [pack.pack_uuid, pack]),
+        );
+        const baseRow: StudentExportRow = {
+                full_name: fullName,
+                username: entry.user.username,
+                email: entry.user.email,
+                phone: entry.user.phone ?? "",
+                student_id: entry.membership.student_id,
+                campus_id: entry.membership.campus_id,
+                user_uuid: userUUID,
+                membership_uuid: entry.membership.membership_uuid,
+                membership_status: entry.membership.status,
+                membership_active: entry.membership.active,
+                public_total_points: publicProfile?.total_point_count ?? "",
+                profile_error: studentError,
+                public_profile_error: studentPublicProfileError,
+                route_history_error: studentRouteHistoryError,
+                violation_error: studentViolationError,
+        };
+        const rows: StudentExportRow[] = [
+                {
+                        ...baseRow,
+                        row_type: "student_summary",
+                        summary_total_route_sessions: routeHistory.length,
+                        summary_total_route_points: totalRoutePoints,
+                        summary_total_poi_visits: totalPoiVisits,
+                        summary_total_penalty_events: totalPenaltyEvents,
+                        summary_total_violations: violations.length,
+                        summary_total_reservations: reservations.length,
+                        summary_total_devices: profile?.devices.length ?? 0,
+                        summary_total_membership_terms: entry.membership.terms.length,
+                        summary_total_bonus_points: totalBonusPoints,
+                        summary_total_penalty_points: totalPenaltyPoints,
+                        summary_total_distance_miles: milesFromMeters(totalDistanceMeters),
+                        summary_total_duration_minutes: minutesFromSeconds(totalDurationSeconds),
+                },
+        ];
+
+        entry.membership.terms.forEach((term) => {
+                rows.push({
+                        ...baseRow,
+                        row_type: "membership_term",
+                        term_uuid: term.term_uuid,
+                        term_name: term.name,
+                        term_start_date: formatDateOnly(term.start_date),
+                        term_end_date: formatDateOnly(term.end_date),
+                        term_active: term.active,
+                });
+        });
+
+        profile?.devices.forEach((device) => {
+                rows.push({
+                        ...baseRow,
+                        row_type: "registered_device",
+                        device_uuid: device.registered_device_uuid,
+                        device_nickname: device.nickname,
+                        device_type: device.device_type,
+                        device_make: device.make,
+                        device_model: device.model,
+                        device_color: device.color,
+                        device_serial_number: device.serial_number,
+                        device_active: device.active,
+                });
+        });
+
+        routeHistory.forEach((session) => {
+                rows.push({
+                        ...baseRow,
+                        row_type: "route_session",
+                        session_id: session.session_id,
+                        session_trip_mode: session.trip_mode,
+                        session_tracking_source: session.tracking_source,
+                        session_started_at: formatUnixTimestamp(session.started_at),
+                        session_ended_at: session.ended_at
+                                ? formatUnixTimestamp(session.ended_at)
+                                : "",
+                        session_distance_miles: milesFromMeters(session.distance_meters),
+                        session_duration_minutes: minutesFromSeconds(
+                                session.duration_seconds,
+                        ),
+                        session_top_speed_mph: mphFromMetersPerSecond(session.top_speed_mps),
+                        session_average_speed_mph: mphFromMetersPerSecond(
+                                session.average_speed_mps,
+                        ),
+                        session_bonus_points: session.bonus_points,
+                        session_penalty_points: session.penalty_points,
+                        session_total_point_delta:
+                                session.bonus_points - session.penalty_points,
+                        session_point_count: session.points.length,
+                });
+
+                session.points.forEach((point) => {
+                        rows.push({
+                                ...baseRow,
+                                row_type: "route_point",
+                                session_id: session.session_id,
+                                session_trip_mode: session.trip_mode,
+                                route_point_id: point.id,
+                                route_point_recorded_at: formatUnixTimestamp(
+                                        point.timestamp,
+                                ),
+                                route_point_latitude: point.latitude,
+                                route_point_longitude: point.longitude,
+                                route_point_speed_mph: mphFromMetersPerSecond(
+                                        point.speed_mps,
+                                ),
+                                route_point_altitude: point.altitude ?? "",
+                                route_point_accuracy: point.accuracy ?? "",
+                                route_point_heading: point.heading ?? "",
+                        });
+                });
+
+                session.visited_pois.forEach((poi) => {
+                        rows.push({
+                                ...baseRow,
+                                row_type: "poi_visit",
+                                session_id: session.session_id,
+                                session_trip_mode: session.trip_mode,
+                                session_started_at: formatUnixTimestamp(
+                                        session.started_at,
+                                ),
+                                poi_uuid: poi.poi_uuid,
+                                poi_title: poi.title,
+                                poi_description: poi.description,
+                                poi_bonus_points: poi.bonus_points,
+                                poi_visited_at: formatUnixTimestamp(poi.visited_at),
+                                poi_latitude: poi.lat,
+                                poi_longitude: poi.lng,
+                        });
+                });
+
+                session.penalty_events.forEach((event) => {
+                        const matchingZone = resolvePenaltyZone(
+                                session,
+                                schoolZones,
+                                event.zone_uuid,
+                        );
+                        const estimatedSpeedMph =
+                                event.zone_type === "speed_limit"
+                                        ? estimatePenaltySpeedMph(session, event)
+                                        : null;
+
+                        rows.push({
+                                ...baseRow,
+                                row_type: "penalty_event",
+                                session_id: session.session_id,
+                                session_trip_mode: session.trip_mode,
+                                session_started_at: formatUnixTimestamp(
+                                        session.started_at,
+                                ),
+                                penalty_zone_uuid: event.zone_uuid,
+                                penalty_title:
+                                        event.title ||
+                                        matchingZone?.title ||
+                                        formatPenaltyZoneType(event.zone_type),
+                                penalty_description: event.description,
+                                penalty_reason: event.reason,
+                                penalty_zone_type: formatPenaltyZoneType(event.zone_type),
+                                penalty_speed_limit_mph: event.speed_limit_mph ?? "",
+                                penalty_estimated_speed_mph:
+                                        estimatedSpeedMph == null
+                                                ? ""
+                                                : roundCsvNumber(estimatedSpeedMph, 1),
+                                penalty_points_lost: event.points_lost,
+                                penalty_duration_minutes: minutesFromMilliseconds(
+                                        event.duration_ms,
+                                ),
+                                penalty_occurred_at: formatUnixTimestamp(
+                                        event.occurred_at,
+                                ),
+                        });
+                });
+        });
+
+        reservations.forEach((reservation) => {
+                const matchingPack =
+                        reservationPackByUUID.get(reservation.pack_uuid) ?? null;
+
+                rows.push({
+                        ...baseRow,
+                        row_type: "parking_reservation",
+                        reservation_uuid: reservation.reservation_uuid,
+                        reservation_status: reservation.status,
+                        reservation_kind: reservation.reservation_kind,
+                        reservation_term_name: reservation.term_name,
+                        reservation_start_time: formatUnixTimestamp(
+                                reservation.start_time,
+                        ),
+                        reservation_end_time: formatUnixTimestamp(
+                                reservation.end_time,
+                        ),
+                        reservation_approved_at: reservation.approved_at
+                                ? formatUnixTimestamp(reservation.approved_at)
+                                : "",
+                        reservation_pack_uuid: reservation.pack_uuid,
+                        reservation_pack_name:
+                                reservation.pack_name ||
+                                matchingPack?.name ||
+                                "Juise Pack",
+                        reservation_spot_uuid: reservation.spot_uuid,
+                        reservation_spot_number: reservation.spot_number ?? "",
+                        reservation_pack_location_latitude:
+                                matchingPack?.location?.lat ?? "",
+                        reservation_pack_location_longitude:
+                                matchingPack?.location?.lng ?? "",
+                });
+        });
+
+        violations.forEach((violation) => {
+                rows.push({
+                        ...baseRow,
+                        row_type: "parking_violation",
+                        violation_uuid: violation.violation_uuid,
+                        violation_status: violation.status,
+                        violation_description: violation.description,
+                        violation_created_at: formatUnixTimestamp(
+                                violation.created_at,
+                        ),
+                        violation_device_uuid:
+                                violation.registered_device_uuid ?? "",
+                        violation_media_count:
+                                violationMediaByViolation[violation.violation_uuid]
+                                        ?.length ?? 0,
+                });
+        });
+
+        downloadCsv(
+                sanitizeCsvFilename(
+                        `${fullName || entry.membership.student_id || "student"}-detail-export`,
+                        "student-detail-export",
+                ),
+                [
+                        studentExportColumns,
+                        ...rows.map((row) =>
+                                csvObjectRow(studentExportColumns, row),
+                        ),
+                ],
+        );
 }
 
 export function StudentsScreen(props: Props) {
@@ -532,9 +968,39 @@ export function StudentsScreen(props: Props) {
                                                                                                         ) : null}
                                                                                                 </div>
                                                                                         </div>
-                                                                                        {studentBusy ? (
-                                                                                                <span className="muted-text">Loading…</span>
-                                                                                        ) : null}
+                                                                                        <div className="student-detail-header-actions">
+                                                                                                <button
+                                                                                                        className="student-export-btn"
+                                                                                                        type="button"
+                                                                                                        onClick={() =>
+                                                                                                                downloadStudentCSV({
+                                                                                                                        entry,
+                                                                                                                        profile: matchedStudentProfile,
+                                                                                                                        publicProfile: matchedPublicProfile,
+                                                                                                                        routeHistory: studentRouteHistory,
+                                                                                                                        schoolZones: studentSchoolZones,
+                                                                                                                        reservations: reservationsForMembership,
+                                                                                                                        reservationPacks: studentReservationPacks,
+                                                                                                                        violations: studentViolations,
+                                                                                                                        violationMediaByViolation:
+                                                                                                                                studentViolationMediaByViolation,
+                                                                                                                        studentError,
+                                                                                                                        studentPublicProfileError,
+                                                                                                                        studentRouteHistoryError,
+                                                                                                                        studentViolationError,
+                                                                                                                        formatNebulaUserName,
+                                                                                                                        formatDateOnly,
+                                                                                                                        formatUnixTimestamp,
+                                                                                                                })
+                                                                                                        }
+                                                                                                        disabled={studentBusy}
+                                                                                                        title={`Download ${fullName} as CSV`}>
+                                                                                                        Download CSV
+                                                                                                </button>
+                                                                                                {studentBusy ? (
+                                                                                                        <span className="muted-text">Loading…</span>
+                                                                                                ) : null}
+                                                                                        </div>
                                                                                 </div>
 
                                                                                 {(studentError || studentPublicProfileError) && (
