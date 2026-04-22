@@ -336,16 +336,54 @@ function mixHexColors(base: string, tint: string, weight: number): string {
   return `#${[r, g, b].map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }
 
-function getReadableTextColor(background: string): string {
-  const { r, g, b } = hexToRgb(background);
+function getRelativeLuminance(color: string): number {
+  const { r, g, b } = hexToRgb(color);
   const [sr, sg, sb] = [r, g, b].map((channel) => {
     const normalized = channel / 255;
     return normalized <= 0.03928
       ? normalized / 12.92
       : ((normalized + 0.055) / 1.055) ** 2.4;
   });
-  const luminance = 0.2126 * sr + 0.7152 * sg + 0.0722 * sb;
-  return luminance > 0.52 ? juiseColors.darkGrey : juiseColors.text;
+  return 0.2126 * sr + 0.7152 * sg + 0.0722 * sb;
+}
+
+function getContrastRatio(foreground: string, background: string): number {
+  const foregroundLuminance = getRelativeLuminance(foreground);
+  const backgroundLuminance = getRelativeLuminance(background);
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function getReadableTextColor(
+  background: string,
+  options: {
+    preferred?: string | null;
+    light?: string;
+    dark?: string;
+    minimumContrast?: number;
+  } = {},
+): string {
+  const preferredColor = resolveOptionalHexColor(options.preferred ?? undefined);
+  const lightColor = resolveHexColor(options.light, juiseColors.text);
+  const darkColor = resolveHexColor(options.dark, juiseColors.darkGrey);
+  const minimumContrast = options.minimumContrast ?? 4.5;
+  const candidates = Array.from(
+    new Set([preferredColor, darkColor, lightColor].filter(Boolean)),
+  ) as string[];
+
+  const preferredContrast = preferredColor
+    ? getContrastRatio(preferredColor, background)
+    : 0;
+  if (preferredColor && preferredContrast >= minimumContrast) {
+    return preferredColor;
+  }
+
+  return candidates.sort((left, right) => {
+    const leftContrast = getContrastRatio(left, background);
+    const rightContrast = getContrastRatio(right, background);
+    return rightContrast - leftContrast;
+  })[0];
 }
 
 function normalizeSchoolColorScheme(
@@ -400,12 +438,12 @@ function buildDashboardThemeColors(
     colorScheme?.background,
     defaultSchoolColorScheme.background,
   );
-  const text =
-    resolveOptionalHexColor(colorScheme?.text) ??
-    getReadableTextColor(background, {
-      light: defaultSchoolColorScheme.text,
-      dark: juiseColors.darkGrey,
-    });
+  const text = getReadableTextColor(background, {
+    preferred: colorScheme?.text,
+    light: defaultSchoolColorScheme.text,
+    dark: juiseColors.darkGrey,
+    minimumContrast: 4.5,
+  });
   const secondary =
     resolveOptionalHexColor(colorScheme?.secondary) ??
     mixHexColors(primary, background, 0.34);
@@ -432,10 +470,12 @@ function buildDashboardThemeColors(
     onPrimary: getReadableTextColor(primary, {
       light: defaultSchoolColorScheme.text,
       dark: background,
+      minimumContrast: 4.5,
     }),
     onAccent: getReadableTextColor(accent, {
       light: defaultSchoolColorScheme.text,
       dark: background,
+      minimumContrast: 4.5,
     }),
     surface,
     surfaceElevated,
