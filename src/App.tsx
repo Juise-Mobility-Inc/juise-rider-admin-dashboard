@@ -25,7 +25,6 @@ import {
   fetchSchoolPOIs,
   fetchSchoolZones,
   fetchStudentProfile,
-  fetchStudentPublicProfile,
   fetchUserMediaAssets,
   generateAdminPackQrCode,
   generateAdminPackSpotQrCode,
@@ -49,11 +48,9 @@ import {
   type SchoolChallengeParticipantProgress,
   type SchoolPOI,
   type SchoolZone,
-  type SchoolStudentRosterEntry,
   type SchoolTerm,
   type RegisteredDevice,
   type StudentProfileBundle,
-  type StudentParkingViolation,
   updateSchoolChallenge,
   uploadSchoolChallengeImage,
   uploadSchoolLogoImage,
@@ -221,9 +218,6 @@ type StudentIdPhotoSlot = "front" | "back";
 type StudentIdPhotoKeys = Partial<Record<StudentIdPhotoSlot, string>>;
 type StudentRosterPhotoKeyMap = Record<string, StudentIdPhotoKeys>;
 type StudentDevicePhotoMap = Record<string, string>;
-type StudentDeviceMediaAssetMap = Record<string, UserMediaAsset[]>;
-type StudentViolationMediaAssetMap = Record<string, UserMediaAsset[]>;
-type SignedMediaUrlMap = Record<string, string>;
 const newChallengeSelectionId = "__new_challenge__";
 
 const authAppId =
@@ -801,10 +795,6 @@ function triggerFileDownload(url: string): void {
   document.body.removeChild(link);
 }
 
-function buildStudentIdEntityUUID(schoolId: string, campusId: string): string {
-  return `${schoolId.trim()}.${campusId.trim()}`;
-}
-
 function resolveMediaObjectKey(
   asset?: Pick<UserMediaAsset, "object_key">,
 ): string {
@@ -829,22 +819,6 @@ function resolveStudentPhotoObjectKey(
     photoKeysByMembership[membership.membership_uuid]?.back?.trim() ||
     ""
   );
-}
-
-function collectStudentIdPhotoKeys(
-  assets: UserMediaAsset[],
-): StudentIdPhotoKeys {
-  const photoKeys: StudentIdPhotoKeys = {};
-  for (const asset of assets) {
-    const slot = asset.slot?.trim();
-    if ((slot === "front" || slot === "back") && !photoKeys[slot]) {
-      const objectKey = asset.object_key?.trim() ?? "";
-      if (objectKey) {
-        photoKeys[slot] = objectKey;
-      }
-    }
-  }
-  return photoKeys;
 }
 
 function resolveRegisteredDevicePhotoObjectKey(assets: UserMediaAsset[]): string {
@@ -920,252 +894,6 @@ async function resolveStudentDevicePhotoUrls(
       return signedUrl ? [[entry.registeredDeviceUUID, signedUrl]] : [];
     }),
   );
-}
-
-async function resolveStudentDeviceMediaState(
-  managedAppId: string,
-  schoolId: string,
-  userUUID: string,
-  devices: RegisteredDevice[],
-): Promise<{
-  photoUrls: StudentDevicePhotoMap;
-  mediaByDevice: StudentDeviceMediaAssetMap;
-  signedUrls: SignedMediaUrlMap;
-}> {
-  if (!schoolId || !userUUID || devices.length === 0) {
-    return {
-      photoUrls: {},
-      mediaByDevice: {},
-      signedUrls: {},
-    };
-  }
-
-  const mediaEntries = (
-    await Promise.allSettled(
-      devices.map(async (device) => {
-        const assets = await fetchUserMediaAssets(
-          managedAppId,
-          device.user_uuid || userUUID,
-          "registered_device",
-          device.registered_device_uuid,
-        );
-        return {
-          registeredDeviceUUID: device.registered_device_uuid,
-          assets,
-        };
-      }),
-    )
-  ).flatMap((result) =>
-    result.status === "fulfilled" ? [result.value] : [],
-  );
-
-  const mediaByDevice = Object.fromEntries(
-    mediaEntries.map((entry) => [entry.registeredDeviceUUID, entry.assets]),
-  );
-
-  const signedUrls = await signSchoolMedia(
-    schoolId,
-    mediaEntries.flatMap((entry) =>
-      entry.assets
-        .map((asset) => asset.object_key?.trim() ?? "")
-        .filter((value) => value !== ""),
-    ),
-  ).catch(() => ({} as SignedMediaUrlMap));
-
-  const photoUrls = Object.fromEntries(
-    mediaEntries.flatMap((entry) => {
-      const objectKey = resolveRegisteredDevicePhotoObjectKey(entry.assets);
-      const signedUrl = signedUrls[objectKey] ?? "";
-      return signedUrl ? [[entry.registeredDeviceUUID, signedUrl]] : [];
-    }),
-  );
-
-  return {
-    photoUrls,
-    mediaByDevice,
-    signedUrls,
-  };
-}
-
-async function resolveSchoolStudentProfilePhotoUrls(
-  managedAppId: string,
-  schoolId: string,
-  roster: SchoolStudentRosterEntry[],
-): Promise<Record<string, string>> {
-  const uniqueUserUUIDs = Array.from(
-    new Set(
-      roster
-        .flatMap((entry) => [
-          entry.user.k_guid?.trim() ?? "",
-          entry.membership.user_uuid?.trim() ?? "",
-        ])
-        .filter(Boolean),
-    ),
-  );
-
-  if (uniqueUserUUIDs.length === 0) {
-    return {};
-  }
-
-  const avatarEntries = (
-    await Promise.all(
-      uniqueUserUUIDs.map(async (userUUID) => {
-        const assets = await fetchUserMediaAssets(
-          managedAppId,
-          userUUID,
-          "user_profile",
-          userUUID,
-        ).catch(() => [] as UserMediaAsset[]);
-
-        const avatarAsset =
-          [...assets]
-            .filter((asset) => asset.slot === "avatar" && asset.object_key.trim())
-            .sort((left, right) => right.updated_at - left.updated_at)[0] ?? null;
-        if (!avatarAsset?.object_key) {
-          return null;
-        }
-
-        return {
-          userUUID,
-          objectKey: avatarAsset.object_key,
-        };
-      }),
-    )
-  ).filter(
-    (
-      value,
-    ): value is {
-      userUUID: string;
-      objectKey: string;
-    } => value !== null,
-  );
-
-  const signedAvatarUrls =
-    avatarEntries.length > 0
-      ? await signSchoolMedia(
-          schoolId,
-          avatarEntries.map((entry) => entry.objectKey),
-        ).catch(() => ({} as Record<string, string>))
-      : {};
-
-  const resolvedUrls = Object.fromEntries(
-    avatarEntries.flatMap((entry) => {
-      const signedUrl = signedAvatarUrls[entry.objectKey] ?? "";
-      return signedUrl ? [[entry.userUUID, signedUrl]] : [];
-    }),
-  );
-
-  const missingUserUUIDs = uniqueUserUUIDs.filter(
-    (userUUID) => !resolvedUrls[userUUID],
-  );
-  if (missingUserUUIDs.length === 0) {
-    return resolvedUrls;
-  }
-
-  const publicProfileResults = await Promise.allSettled(
-    missingUserUUIDs.map(async (userUUID) => {
-      const profile = await fetchStudentPublicProfile(
-        managedAppId,
-        schoolId,
-        userUUID,
-      );
-      const profileImageUrl = profile.user.profile_image_url?.trim() ?? "";
-      if (!profileImageUrl) {
-        return null;
-      }
-
-      return {
-        userUUID,
-        profileImageUrl,
-      };
-    }),
-  );
-
-  for (const result of publicProfileResults) {
-    if (result.status !== "fulfilled" || !result.value) {
-      continue;
-    }
-    resolvedUrls[result.value.userUUID] = result.value.profileImageUrl;
-  }
-
-  for (const entry of roster) {
-    const rosterUserUUID = entry.user.k_guid?.trim() ?? "";
-    const membershipUserUUID = entry.membership.user_uuid?.trim() ?? "";
-    const sharedUrl =
-      (rosterUserUUID ? resolvedUrls[rosterUserUUID] : "") ||
-      (membershipUserUUID ? resolvedUrls[membershipUserUUID] : "");
-    if (!sharedUrl) {
-      continue;
-    }
-    if (rosterUserUUID) {
-      resolvedUrls[rosterUserUUID] = sharedUrl;
-    }
-    if (membershipUserUUID) {
-      resolvedUrls[membershipUserUUID] = sharedUrl;
-    }
-  }
-
-  return resolvedUrls;
-}
-
-async function resolveSchoolStudentPhotoState(
-  managedAppId: string,
-  schoolId: string,
-  roster: SchoolStudentRosterEntry[],
-): Promise<{
-  photoKeysByMembership: StudentRosterPhotoKeyMap;
-  signedUrls: Record<string, string>;
-}> {
-  const photoKeysByMembership: StudentRosterPhotoKeyMap = {};
-  const fallbackMediaEntries = roster.filter((entry) => {
-    const membership = entry.membership;
-    return (
-      !resolveMediaObjectKey(membership.front_photo) ||
-      !resolveMediaObjectKey(membership.back_photo)
-    );
-  });
-
-  const fallbackMediaResults = await Promise.allSettled(
-    fallbackMediaEntries.map(async (entry) => {
-      const membership = entry.membership;
-      const assets = await fetchUserMediaAssets(
-        managedAppId,
-        entry.user.k_guid || membership.user_uuid,
-        "student_id",
-        buildStudentIdEntityUUID(membership.school_id, membership.campus_id),
-      );
-      return {
-        membershipUUID: membership.membership_uuid,
-        photoKeys: collectStudentIdPhotoKeys(assets),
-      };
-    }),
-  );
-
-  for (const result of fallbackMediaResults) {
-    if (result.status !== "fulfilled") {
-      continue;
-    }
-    const { membershipUUID, photoKeys } = result.value;
-    if (photoKeys.front || photoKeys.back) {
-      photoKeysByMembership[membershipUUID] = photoKeys;
-    }
-  }
-
-  const objectKeys = roster.flatMap((entry) => {
-    const membership = entry.membership;
-    return [
-      resolveStudentPhotoObjectKey(membership, photoKeysByMembership, "front"),
-      resolveStudentPhotoObjectKey(membership, photoKeysByMembership, "back"),
-    ].filter((value): value is string => value !== "");
-  });
-
-  const signedUrls =
-    objectKeys.length > 0 ? await signSchoolMedia(schoolId, objectKeys) : {};
-
-  return {
-    photoKeysByMembership,
-    signedUrls,
-  };
 }
 
 function formatUnixTimestamp(value?: number): string {
@@ -4634,56 +4362,3 @@ function App() {
 
 export default App;
 
-async function resolveStudentViolationMediaState(
-  managedAppId: string,
-  schoolId: string,
-  userUUID: string,
-  violations: StudentParkingViolation[],
-): Promise<{
-  mediaByViolation: StudentViolationMediaAssetMap;
-  signedUrls: SignedMediaUrlMap;
-}> {
-  if (!schoolId || !userUUID || violations.length === 0) {
-    return {
-      mediaByViolation: {},
-      signedUrls: {},
-    };
-  }
-
-  const mediaEntries = (
-    await Promise.allSettled(
-      violations.map(async (violation) => {
-        const assets = await fetchUserMediaAssets(
-          managedAppId,
-          violation.user_uuid || userUUID,
-          'parking_violation',
-          violation.violation_uuid,
-        );
-        return {
-          violationUUID: violation.violation_uuid,
-          assets,
-        };
-      }),
-    )
-  ).flatMap((result) =>
-    result.status === 'fulfilled' ? [result.value] : [],
-  );
-
-  const mediaByViolation = Object.fromEntries(
-    mediaEntries.map((entry) => [entry.violationUUID, entry.assets]),
-  );
-
-  const signedUrls = await signSchoolMedia(
-    schoolId,
-    mediaEntries.flatMap((entry) =>
-      entry.assets
-        .map((asset) => asset.object_key?.trim() ?? '')
-        .filter((value) => value !== ''),
-    ),
-  ).catch(() => ({} as SignedMediaUrlMap));
-
-  return {
-    mediaByViolation,
-    signedUrls,
-  };
-}
