@@ -56,6 +56,7 @@ import {
   type StudentParkingViolation,
   updateSchoolChallenge,
   uploadSchoolChallengeImage,
+  uploadSchoolLogoImage,
   type UserMediaAsset,
   type UserSchoolMembership,
   updateSchoolPack,
@@ -82,7 +83,6 @@ import { ReservationsScreen } from "./screens/dashboard/ReservationsScreen";
 import { SchoolProfileScreen } from "./screens/dashboard/SchoolProfileScreen";
 import { StudentVehicleDetailModal } from "./screens/dashboard/StudentVehicleDetailModal";
 import { StudentsScreen } from "./screens/dashboard/StudentsScreen";
-import { TermsScreen } from "./screens/dashboard/TermsScreen";
 import { ZonesScreen } from "./screens/dashboard/ZonesScreen";
 import {
   loadSelectedStudentDetail,
@@ -125,6 +125,10 @@ const dashboardSections: Array<{
     path: "/reservations",
   },
 ];
+
+const visibleDashboardSections = dashboardSections.filter(
+  ({ section }) => section !== "terms",
+);
 
 const sectionPathByName: Record<Section, string> = Object.fromEntries(
   dashboardSections.map(({ section, path }) => [section, path]),
@@ -270,7 +274,7 @@ const schoolColorFields: Array<{
   },
   { key: "text", label: "Text", fallback: defaultSchoolColorScheme.text },
 ];
-type SidebarThemeStyle = CSSProperties & Record<string, string>;
+type CssVariableStyle = CSSProperties & Record<string, string>;
 
 function makeDraftId(): string {
   if (
@@ -367,6 +371,83 @@ function getColorPickerValue(
   fallback: keyof typeof defaultSchoolColorScheme,
 ): string {
   return resolveHexColor(value, defaultSchoolColorScheme[fallback]);
+}
+
+function resolveOptionalHexColor(value?: string): string | null {
+  const trimmed = value?.trim() ?? "";
+  return schoolColorHexPattern.test(trimmed) ? trimmed.toLowerCase() : null;
+}
+
+function buildDashboardThemeColors(
+  colorScheme?: SchoolColorScheme,
+): Required<SchoolColorScheme> & {
+  fadedText: string;
+  disabledText: string;
+  onPrimary: string;
+  onAccent: string;
+  surface: string;
+  surfaceElevated: string;
+  surfaceAccent: string;
+  borderMuted: string;
+  borderAccent: string;
+  selectedSurface: string;
+} {
+  const primary = resolveHexColor(
+    colorScheme?.primary,
+    defaultSchoolColorScheme.primary,
+  );
+  const background = resolveHexColor(
+    colorScheme?.background,
+    defaultSchoolColorScheme.background,
+  );
+  const text =
+    resolveOptionalHexColor(colorScheme?.text) ??
+    getReadableTextColor(background, {
+      light: defaultSchoolColorScheme.text,
+      dark: juiseColors.darkGrey,
+    });
+  const secondary =
+    resolveOptionalHexColor(colorScheme?.secondary) ??
+    mixHexColors(primary, background, 0.34);
+  const accent =
+    resolveOptionalHexColor(colorScheme?.accent) ??
+    defaultSchoolColorScheme.accent;
+  const fadedText = mixHexColors(background, text, 0.68);
+  const disabledText = mixHexColors(background, text, 0.52);
+  const surface = mixHexColors(background, text, 0.08);
+  const surfaceElevated = mixHexColors(background, text, 0.14);
+  const surfaceAccent = mixHexColors(background, primary, 0.18);
+  const borderMuted = mixHexColors(background, text, 0.24);
+  const borderAccent = mixHexColors(background, primary, 0.42);
+  const selectedSurface = mixHexColors(background, primary, 0.24);
+
+  return {
+    primary,
+    secondary,
+    accent,
+    background,
+    text,
+    fadedText,
+    disabledText,
+    onPrimary: getReadableTextColor(primary, {
+      light: defaultSchoolColorScheme.text,
+      dark: background,
+    }),
+    onAccent: getReadableTextColor(accent, {
+      light: defaultSchoolColorScheme.text,
+      dark: background,
+    }),
+    surface,
+    surfaceElevated,
+    surfaceAccent,
+    borderMuted,
+    borderAccent,
+    selectedSurface,
+  };
+}
+
+function isSignedMediaObjectKey(value: string | undefined): boolean {
+  return (value?.trim() ?? "").startsWith("accounts/");
 }
 
 function createEmptySchoolDraft(): SchoolDraft {
@@ -1205,7 +1286,7 @@ function buildSchoolMonogram(label: string): string {
 function SchoolLogoPreview(props: {
   logoUrl?: string;
   label: string;
-  size?: "header" | "field";
+  size?: "header" | "field" | "tiny";
   onPreview?: (imageUrl: string, alt: string, label?: string) => void;
 }) {
   const [hasImageError, setHasImageError] = useState(false);
@@ -1405,9 +1486,11 @@ function App() {
   });
 
   const [schoolBusy, setSchoolBusy] = useState(false);
+  const [schoolLogoUploadBusy, setSchoolLogoUploadBusy] = useState(false);
   const [schoolDraft, setSchoolDraft] = useState<SchoolDraft>(() =>
     createEmptySchoolDraft(),
   );
+  const [resolvedSchoolLogoUrl, setResolvedSchoolLogoUrl] = useState("");
   const [termDrafts, setTermDrafts] = useState<TermDraft[]>([]);
   const [poiDrafts, setPoiDrafts] = useState<POIDraft[]>([]);
   const [poiBusy, setPoiBusy] = useState(false);
@@ -1792,64 +1875,156 @@ function App() {
     [challengeParticipants],
   );
 
-  const resolvedSchoolColors = useMemo(
-    () => normalizeSchoolColorScheme(schoolDraft.color_scheme),
+  const dashboardThemeColors = useMemo(
+    () => buildDashboardThemeColors(schoolDraft.color_scheme),
     [schoolDraft.color_scheme],
   );
 
-  const sidebarThemeStyle = useMemo<SidebarThemeStyle>(() => {
-    const primary =
-      resolvedSchoolColors.primary || defaultSchoolColorScheme.primary;
-    const secondary =
-      resolvedSchoolColors.secondary || defaultSchoolColorScheme.secondary;
-    const accent =
-      resolvedSchoolColors.accent || defaultSchoolColorScheme.accent;
-    const background =
-      resolvedSchoolColors.background || defaultSchoolColorScheme.background;
-    const text = resolvedSchoolColors.text || defaultSchoolColorScheme.text;
-    const sidebarBgStart = mixHexColors(background, primary, 0.16);
-    const sidebarBgEnd = mixHexColors(juiseColors.darkGrey, background, 0.7);
-    const surface = hexToRgba(mixHexColors(background, secondary, 0.42), 0.88);
-    const surfaceStrong = hexToRgba(
-      mixHexColors(background, primary, 0.18),
-      0.98,
-    );
-    const itemBg = hexToRgba(mixHexColors(background, secondary, 0.58), 0.54);
-    const itemHoverBg = hexToRgba(
-      mixHexColors(background, primary, 0.28),
-      0.74,
-    );
-    const activeBase = mixHexColors(primary, accent, 0.26);
-    const activeBg = `linear-gradient(135deg, ${activeBase}, ${accent})`;
+  const resolvedSchoolColors = useMemo(
+    () => ({
+      primary: dashboardThemeColors.primary,
+      secondary: dashboardThemeColors.secondary,
+      accent: dashboardThemeColors.accent,
+      background: dashboardThemeColors.background,
+      text: dashboardThemeColors.text,
+    }),
+    [dashboardThemeColors],
+  );
+
+  useEffect(() => {
+    const rawLogoValue = schoolDraft.logo_url.trim();
+    if (!rawLogoValue) {
+      setResolvedSchoolLogoUrl("");
+      return;
+    }
+
+    if (!isSignedMediaObjectKey(rawLogoValue)) {
+      setResolvedSchoolLogoUrl(rawLogoValue);
+      return;
+    }
+
+    if (!activeSchoolId) {
+      setResolvedSchoolLogoUrl("");
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadSignedSchoolLogo() {
+      const signedUrls = await signSchoolMedia(activeSchoolId, [rawLogoValue]);
+      if (!cancelled) {
+        setResolvedSchoolLogoUrl(signedUrls[rawLogoValue] ?? "");
+      }
+    }
+
+    void loadSignedSchoolLogo().catch(() => {
+      if (!cancelled) {
+        setResolvedSchoolLogoUrl("");
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSchoolId, schoolDraft.logo_url]);
+
+  const appThemeStyle = useMemo<CssVariableStyle>(() => {
+    const primary = dashboardThemeColors.primary;
+    const secondary = dashboardThemeColors.secondary;
+    const accent = dashboardThemeColors.accent;
+    const background = dashboardThemeColors.background;
+    const text = dashboardThemeColors.text;
+    const mutedText = dashboardThemeColors.fadedText;
+    const surface = dashboardThemeColors.surface;
+    const surfaceElevated = dashboardThemeColors.surfaceElevated;
+    const surfaceAccent = dashboardThemeColors.surfaceAccent;
+    const borderMuted = dashboardThemeColors.borderMuted;
+    const borderAccent = dashboardThemeColors.borderAccent;
+    const selectedSurface = dashboardThemeColors.selectedSurface;
 
     return {
-      "--sidebar-bg-start": sidebarBgStart,
-      "--sidebar-bg-end": sidebarBgEnd,
-      "--sidebar-glow-primary": hexToRgba(primary, 0.24),
-      "--sidebar-glow-accent": hexToRgba(accent, 0.18),
+      "--bg": background,
+      "--bg-accent": mixHexColors(background, accent, 0.06),
+      "--app-glow-primary": hexToRgba(primary, 0.16),
+      "--app-glow-accent": hexToRgba(accent, 0.14),
+      "--panel-bg": hexToRgba(surface, 0.96),
+      "--panel-bg-elevated": hexToRgba(surfaceElevated, 0.98),
+      "--panel-bg-accent": hexToRgba(surfaceAccent, 0.98),
+      "--selected-surface": hexToRgba(selectedSurface, 0.98),
+      "--panel-border": hexToRgba(borderMuted, 0.96),
+      "--panel-border-accent": hexToRgba(borderAccent, 0.96),
+      "--panel-shadow": `0 28px 54px ${hexToRgba(
+        mixHexColors(background, juiseColors.darkGrey, 0.34),
+        0.18,
+      )}, 0 10px 24px ${hexToRgba(background, 0.12)}`,
+      "--text": text,
+      "--text-strong": text,
+      "--muted": mutedText,
+      "--muted-strong": mixHexColors(mutedText, text, 0.34),
+      "--input-border": hexToRgba(borderMuted, 0.96),
+      "--field-bg": hexToRgba(surface, 0.98),
+      "--field-focus-ring": hexToRgba(primary, 0.18),
+      "--button-primary-bg": primary,
+      "--button-primary-text": dashboardThemeColors.onPrimary,
+      "--button-secondary-bg": hexToRgba(surfaceElevated, 0.98),
+      "--button-secondary-border": hexToRgba(borderMuted, 0.96),
+      "--button-secondary-text": text,
+      "--button-danger-bg": hexToRgba("#b33a3a", 0.12),
+      "--button-danger-border": hexToRgba("#b33a3a", 0.24),
+      "--button-danger-text": "#8a1f1f",
+      "--stat-card-bg": `linear-gradient(180deg, ${hexToRgba(
+        surfaceElevated,
+        0.98,
+      )}, ${hexToRgba(surface, 0.98)})`,
+      "--stat-card-border": hexToRgba(borderAccent, 0.96),
+      "--brand-primary": primary,
+      "--brand-secondary": secondary,
+      "--brand-accent": accent,
+      "--brand-on-accent": dashboardThemeColors.onAccent,
+      "--brand-background": background,
+      "--brand-text": text,
+      "--brand-surface": `linear-gradient(155deg, ${surfaceAccent}, ${surfaceElevated})`,
+    };
+  }, [dashboardThemeColors]);
+
+  const sidebarThemeStyle = useMemo<CssVariableStyle>(() => {
+    const primary = dashboardThemeColors.primary;
+    const secondary = dashboardThemeColors.secondary;
+    const accent = dashboardThemeColors.accent;
+    const background = dashboardThemeColors.background;
+    const text = dashboardThemeColors.text;
+    const surface = dashboardThemeColors.surface;
+    const surfaceElevated = dashboardThemeColors.surfaceElevated;
+    const surfaceAccent = dashboardThemeColors.surfaceAccent;
+    const borderMuted = dashboardThemeColors.borderMuted;
+    const borderAccent = dashboardThemeColors.borderAccent;
+    const selectedSurface = dashboardThemeColors.selectedSurface;
+
+    return {
+      "--sidebar-bg-start": background,
+      "--sidebar-bg-end": mixHexColors(background, text, 0.04),
+      "--sidebar-glow-primary": hexToRgba(primary, 0.14),
+      "--sidebar-glow-accent": hexToRgba(accent, 0.12),
       "--sidebar-text": text,
-      "--sidebar-muted": hexToRgba(text, 0.76),
-      "--sidebar-soft-text": hexToRgba(text, 0.58),
-      "--sidebar-border": hexToRgba(text, 0.12),
-      "--sidebar-accent-border": hexToRgba(accent, 0.32),
-      "--sidebar-surface": surface,
-      "--sidebar-surface-strong": surfaceStrong,
-      "--sidebar-item-bg": itemBg,
-      "--sidebar-item-hover-bg": itemHoverBg,
-      "--sidebar-item-active-bg": activeBg,
-      "--sidebar-item-active-text": getReadableTextColor(activeBase),
-      "--sidebar-form-bg": hexToRgba(
-        mixHexColors(background, secondary, 0.68),
-        0.92,
-      ),
-      "--sidebar-form-border": hexToRgba(accent, 0.16),
-      "--sidebar-chip-bg": hexToRgba(accent, 0.2),
-      "--sidebar-chip-text": getReadableTextColor(accent),
+      "--sidebar-muted": hexToRgba(dashboardThemeColors.fadedText, 0.94),
+      "--sidebar-soft-text": hexToRgba(dashboardThemeColors.disabledText, 0.92),
+      "--sidebar-border": hexToRgba(borderMuted, 0.96),
+      "--sidebar-accent-border": hexToRgba(borderAccent, 0.96),
+      "--sidebar-surface": hexToRgba(surface, 0.98),
+      "--sidebar-surface-strong": hexToRgba(surfaceElevated, 0.98),
+      "--sidebar-item-bg": hexToRgba(surfaceElevated, 0.98),
+      "--sidebar-item-hover-bg": hexToRgba(selectedSurface, 0.98),
+      "--sidebar-item-active-bg": selectedSurface,
+      "--sidebar-item-active-text": text,
+      "--sidebar-form-bg": hexToRgba(surface, 0.98),
+      "--sidebar-form-border": hexToRgba(borderMuted, 0.96),
+      "--sidebar-chip-bg": hexToRgba(surfaceAccent, 0.98),
+      "--sidebar-chip-text": text,
       "--sidebar-primary": primary,
       "--sidebar-secondary": secondary,
       "--sidebar-accent": accent,
     };
-  }, [resolvedSchoolColors]);
+  }, [dashboardThemeColors]);
 
   async function handleCopyUuid(label: string, value: string) {
     try {
@@ -2981,6 +3156,49 @@ function App() {
     }));
   }
 
+  async function handleSchoolLogoFileChange(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+    if (!activeSchoolId) {
+      setBanner({
+        tone: "error",
+        message: "Save the school profile first before uploading a logo.",
+      });
+      return;
+    }
+
+    setSchoolLogoUploadBusy(true);
+    try {
+      const upload = await uploadSchoolLogoImage(
+        context.managedAppId,
+        activeSchoolId,
+        file,
+      );
+
+      setSchoolDraft((current) => ({
+        ...current,
+        logo_url: upload.logo_url,
+      }));
+      setBanner({
+        tone: "success",
+        message: "Uploaded school logo.",
+      });
+    } catch (error) {
+      setBanner({
+        tone: "error",
+        message: getErrorMessage(error),
+      });
+    } finally {
+      setSchoolLogoUploadBusy(false);
+    }
+  }
+
   async function handleSaveSchool(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -3949,38 +4167,38 @@ function App() {
     );
   }
 
+  const schoolProfileContent = (
+    <SchoolProfileScreen
+      activeSchoolId={activeSchoolId}
+      schoolBusy={schoolBusy}
+      schoolLogoUploadBusy={schoolLogoUploadBusy}
+      schoolDraft={schoolDraft}
+      setSchoolDraft={setSchoolDraft}
+      schoolColorFields={schoolColorFields}
+      handleSaveSchool={handleSaveSchool}
+      refreshActiveSchool={refreshActiveSchool}
+      handleSchoolColorChange={handleSchoolColorChange}
+      handleSchoolLogoFileChange={handleSchoolLogoFileChange}
+      getColorPickerValue={getColorPickerValue}
+      defaultSchoolColorScheme={defaultSchoolColorScheme}
+      resolvedSchoolColors={resolvedSchoolColors}
+      resolvedSchoolLogoUrl={resolvedSchoolLogoUrl}
+      termDrafts={termDrafts}
+      setTermDrafts={setTermDrafts}
+      createEmptyTermDraft={createEmptyTermDraft}
+      handleSaveTerms={handleSaveTerms}
+      SchoolLogoPreview={(props: Parameters<typeof SchoolLogoPreview>[0]) => (
+        <SchoolLogoPreview {...props} onPreview={handleOpenImagePreview} />
+      )}
+    />
+  );
+
   const sectionContent = (() => {
     switch (currentSection) {
       case "school":
-        return (
-          <SchoolProfileScreen
-            activeSchoolId={activeSchoolId}
-            schoolBusy={schoolBusy}
-            schoolDraft={schoolDraft}
-            setSchoolDraft={setSchoolDraft}
-            schoolColorFields={schoolColorFields}
-            handleSaveSchool={handleSaveSchool}
-            refreshActiveSchool={refreshActiveSchool}
-            handleSchoolColorChange={handleSchoolColorChange}
-            getColorPickerValue={getColorPickerValue}
-            defaultSchoolColorScheme={defaultSchoolColorScheme}
-            resolvedSchoolColors={resolvedSchoolColors}
-            SchoolLogoPreview={(props: Parameters<typeof SchoolLogoPreview>[0]) => (
-              <SchoolLogoPreview {...props} onPreview={handleOpenImagePreview} />
-            )}
-          />
-        );
+        return schoolProfileContent;
       case "terms":
-        return (
-          <TermsScreen
-            activeSchoolId={activeSchoolId}
-            schoolBusy={schoolBusy}
-            termDrafts={termDrafts}
-            setTermDrafts={setTermDrafts}
-            createEmptyTermDraft={createEmptyTermDraft}
-            handleSaveTerms={handleSaveTerms}
-          />
-        );
+        return schoolProfileContent;
       case "pois":
         return (
           <PoisScreen
@@ -4178,7 +4396,7 @@ function App() {
   })();
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" style={appThemeStyle}>
       <aside className="sidebar" style={sidebarThemeStyle}>
         <div className="brand-card sidebar-brand-card">
           <div className="sidebar-brand-top">
@@ -4232,7 +4450,7 @@ function App() {
         </div>
 
         <nav className="section-nav">
-          {dashboardSections.map(({ section, label, path }) => (
+          {visibleDashboardSections.map(({ section, label, path }) => (
             <NavLink
               key={section}
               to={path}
@@ -4260,8 +4478,8 @@ function App() {
         <header className="workspace-header">
           <div className="workspace-title-block">
             <SchoolLogoPreview
-              key={`header-${schoolDraft.logo_url || "fallback"}`}
-              logoUrl={schoolDraft.logo_url}
+              key={`header-${resolvedSchoolLogoUrl || schoolDraft.logo_url || "fallback"}`}
+              logoUrl={resolvedSchoolLogoUrl || schoolDraft.logo_url}
               label={
                 schoolDraft.title ||
                 schoolDraft.name ||

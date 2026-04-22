@@ -134,6 +134,33 @@ export interface SchoolChallengeImageUploadResponse {
   size: number;
 }
 
+export interface UserEntityMediaUploadInitResponse {
+  object_key: string;
+  put_url: string;
+  content_type: string;
+  public_url?: string;
+  expires_in: number;
+}
+
+export interface UploadedEntityMedia {
+  media: {
+    media_uuid: string;
+    entity_type: string;
+    entity_uuid: string;
+    slot: string;
+    object_key: string;
+    content_type: string;
+    size: number;
+    storage_provider: string;
+    created_at: number;
+    updated_at: number;
+    get_url: string;
+    public_url?: string;
+  };
+  expires_in: number;
+  public_url?: string;
+}
+
 export interface SchoolChallengeParticipation {
   participation_uuid: string;
   challenge_uuid: string;
@@ -1222,15 +1249,156 @@ export async function uploadSchoolChallengeImage(
   return parseResponse<SchoolChallengeImageUploadResponse>(response);
 }
 
+function normalizeEntityMediaSegment(
+  value: string,
+  fallback: string,
+): string {
+  const normalized = value
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return normalized || fallback;
+}
+
+function buildSchoolLogoEntityUUID(
+  managedAppId: string,
+  schoolId: string,
+): string {
+  const appSegment = normalizeEntityMediaSegment(managedAppId, "app");
+  const schoolSegment = normalizeEntityMediaSegment(schoolId, "school");
+  return `school_logo.${appSegment}.${schoolSegment}`.slice(0, 128);
+}
+
+export async function initUserEntityMediaUpload(
+  managedAppId: string,
+  input: {
+    entity_type: string;
+    entity_uuid: string;
+    slot: string;
+    file_ext?: string;
+    content_type?: string;
+  },
+): Promise<UserEntityMediaUploadInitResponse> {
+  return request<UserEntityMediaUploadInitResponse>(
+    "kcaProxy",
+    "/api/v1/user/media/entity/upload/init",
+    {
+      method: "POST",
+      body: input,
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
+export async function completeUserEntityMediaUpload(
+  managedAppId: string,
+  input: {
+    object_key: string;
+    entity_type: string;
+    entity_uuid: string;
+    slot: string;
+    content_type?: string;
+    storage_provider?: string;
+  },
+): Promise<UploadedEntityMedia> {
+  return request<UploadedEntityMedia>(
+    "kcaProxy",
+    "/api/v1/user/media/entity/upload/complete",
+    {
+      method: "POST",
+      body: input,
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
+export async function uploadUserEntityMedia(
+  managedAppId: string,
+  input: {
+    entityType: string;
+    entityUUID: string;
+    slot: string;
+    file: File;
+  },
+): Promise<UploadedEntityMedia> {
+  const fileExt = input.file.name.split(".").pop()?.trim() ?? "";
+  const contentType = input.file.type?.trim() ?? "";
+  const initUpload = await initUserEntityMediaUpload(managedAppId, {
+    entity_type: input.entityType,
+    entity_uuid: input.entityUUID,
+    slot: input.slot,
+    file_ext: fileExt,
+    content_type: contentType,
+  });
+
+  await uploadFileToSignedUrl(
+    initUpload.put_url,
+    input.file,
+    initUpload.content_type || contentType,
+    {
+      "x-amz-acl":
+        input.entityType.trim().toLowerCase() === "campaign_group"
+          ? "public-read"
+          : "private",
+    },
+  );
+
+  return completeUserEntityMediaUpload(managedAppId, {
+    object_key: initUpload.object_key,
+    entity_type: input.entityType,
+    entity_uuid: input.entityUUID,
+    slot: input.slot,
+    content_type: initUpload.content_type || contentType,
+    storage_provider: "do_spaces",
+  });
+}
+
+export async function uploadSchoolLogoImage(
+  managedAppId: string,
+  schoolId: string,
+  file: File,
+): Promise<{
+  logo_url: string;
+  media: UploadedEntityMedia["media"];
+}> {
+  // The shared KCA proxy currently emits durable public URLs for
+  // campaign-group entity uploads, so school logos use a dedicated
+  // school_logo.* namespace within that public helper path.
+  const uploaded = await uploadUserEntityMedia(managedAppId, {
+    entityType: "campaign_group",
+    entityUUID: buildSchoolLogoEntityUUID(managedAppId, schoolId),
+    slot: "logo",
+    file,
+  });
+
+  const publicUrl =
+    uploaded.public_url?.trim() || uploaded.media.public_url?.trim() || "";
+  if (!publicUrl) {
+    throw new Error("School logo upload did not return a public URL.");
+  }
+
+  return {
+    logo_url: publicUrl,
+    media: uploaded.media,
+  };
+}
+
 export async function uploadFileToSignedUrl(
   putUrl: string,
   file: Blob,
   contentType?: string,
+  extraHeaders?: Record<string, string>,
 ): Promise<void> {
   const headers = new Headers();
   if (contentType) {
     headers.set("Content-Type", contentType);
   }
+  Object.entries(extraHeaders ?? {}).forEach(([key, value]) => {
+    const normalizedValue = value.trim();
+    if (normalizedValue) {
+      headers.set(key, normalizedValue);
+    }
+  });
 
   const response = await fetch(putUrl, {
     method: "PUT",
