@@ -468,7 +468,10 @@ function buildRidePenaltyStudents(
 		if (current) {
 			current.count += 1;
 			current.pointsLost += event.points_lost;
-			current.lastOccurredAt = Math.max(current.lastOccurredAt, event.occurred_at);
+			current.lastOccurredAt = Math.max(
+				current.lastOccurredAt,
+				event.occurred_at,
+			);
 		} else {
 			summaryByStudent.set(userUUID, {
 				userUUID,
@@ -638,7 +641,9 @@ function buildDashboardVisuals(dataset: DashboardDataset): DashboardVisuals {
 			0,
 		),
 		ridePenaltyStudentCount: new Set(
-			ridePenaltyRecords.map(({ bundle }) => resolveStudentUserUUID(bundle.entry)),
+			ridePenaltyRecords.map(({ bundle }) =>
+				resolveStudentUserUUID(bundle.entry),
+			),
 		).size,
 		ridePenaltyTypes: buildRidePenaltyTypes(ridePenaltyRecords),
 		ridePenaltyStudents: buildRidePenaltyStudents(ridePenaltyRecords),
@@ -657,8 +662,9 @@ function buildDashboardVisuals(dataset: DashboardDataset): DashboardVisuals {
 				.map((bundle) => resolveStudentUserUUID(bundle.entry)),
 		).size,
 		activePenaltyReports: buildActivePenaltyReports(dataset.students),
-		activePenaltyReportStudents:
-			buildActivePenaltyReportStudents(dataset.students),
+		activePenaltyReportStudents: buildActivePenaltyReportStudents(
+			dataset.students,
+		),
 		studentsLoadedWithErrors: dataset.students.filter((bundle) => bundle.error)
 			.length,
 	};
@@ -683,7 +689,10 @@ function PoiRankings({ rankings }: { rankings: PoiRankingEntry[] }) {
 				<p className="reports-visual-empty">No POIs configured yet.</p>
 			) : (
 				rankings.map((point, index) => {
-					const width = Math.max(4, Math.round((point.visits / maxVisits) * 100));
+					const width = Math.max(
+						4,
+						Math.round((point.visits / maxVisits) * 100),
+					);
 
 					return (
 						<div className="dashboard-poi-ranking-row" key={point.key}>
@@ -783,7 +792,9 @@ function RidePenaltySection({ visuals }: { visuals: DashboardVisuals }) {
 					<h4>Penalty type mix</h4>
 					<div className="dashboard-penalty-list">
 						{visuals.ridePenaltyTypes.length === 0 ? (
-							<p className="reports-visual-empty">No ride penalties recorded.</p>
+							<p className="reports-visual-empty">
+								No ride penalties recorded.
+							</p>
 						) : (
 							visuals.ridePenaltyTypes.map((type) => (
 								<div className="dashboard-penalty-row" key={type.key}>
@@ -876,7 +887,9 @@ function ActivePenaltyReportsSection({
 					<h4>Students with active reports</h4>
 					<div className="dashboard-penalty-list">
 						{visuals.activePenaltyReportStudents.length === 0 ? (
-							<p className="reports-visual-empty">No active reports right now.</p>
+							<p className="reports-visual-empty">
+								No active reports right now.
+							</p>
 						) : (
 							visuals.activePenaltyReportStudents.map((student) => (
 								<div className="dashboard-penalty-row" key={student.userUUID}>
@@ -884,7 +897,8 @@ function ActivePenaltyReportsSection({
 										<strong>{student.name}</strong>
 										<span>{student.detail}</span>
 										<small>
-											Last report {formatDashboardTimestamp(student.lastCreatedAt)}
+											Last report{" "}
+											{formatDashboardTimestamp(student.lastCreatedAt)}
 										</small>
 									</div>
 									<div className="dashboard-penalty-score">
@@ -1089,7 +1103,7 @@ export function DashboardScreen({ activeSchoolId, managedAppId }: Props) {
 			});
 			setLoadState({
 				status: "ready",
-				message: `Dashboard ready for ${roster.length.toLocaleString()} students.`,
+				message: `Dashboard ready`,
 				completed: roster.length,
 				total: roster.length,
 			});
