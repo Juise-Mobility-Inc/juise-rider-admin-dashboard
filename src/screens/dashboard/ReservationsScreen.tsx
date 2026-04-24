@@ -1,10 +1,23 @@
-import type { ComponentType, Dispatch, SetStateAction } from "react";
+import type {
+  ComponentType,
+  CSSProperties,
+  Dispatch,
+  SetStateAction,
+} from "react";
 
 import type {
   PackSpotReservation,
+  SchoolColorScheme,
   StudentProfileBundle,
   UserSchoolMembership,
 } from "../../lib/api";
+import {
+  defaultSchoolColorScheme,
+  getReadableTextColor,
+  hexToRgba,
+  juiseColors,
+  mixHexColors,
+} from "../../lib/colors";
 
 type Props = {
   activeSchoolId: string;
@@ -23,31 +36,91 @@ type Props = {
   relevantMemberships: UserSchoolMembership[];
   formatUnixTimestamp: (value?: number) => string;
   formatDateOnly: (value: string) => string;
+  resolvedSchoolColors: SchoolColorScheme;
   DetailRow: ComponentType<{ label: string; value: string }>;
   handleImagePreview: (imageUrl: string, alt: string, label?: string) => void;
 };
 
-function StatusBadge({ status }: { status: string }) {
-  const normalized = status.toLowerCase();
-  let cls = "res-status-badge";
-  if (normalized === "pending") cls += " res-status-pending";
-  else if (normalized === "approved") cls += " res-status-approved";
-  else if (normalized === "denied") cls += " res-status-denied";
-  else cls += " res-status-other";
-  return <span className={cls}>{status}</span>;
+function getReadableSurfaceStyle(
+  surfaceColor: string,
+  options: {
+    preferredTextColor?: string;
+    borderColor?: string;
+  } = {},
+): CSSProperties {
+  return {
+    background: surfaceColor,
+    color: getReadableTextColor(surfaceColor, {
+      preferred: options.preferredTextColor,
+      light: defaultSchoolColorScheme.text,
+      dark: juiseColors.darkGrey,
+      minimumContrast: 4.5,
+    }),
+    ...(options.borderColor ? { borderColor: options.borderColor } : {}),
+  };
 }
 
-function AvatarInitials({ name }: { name: string }) {
+function getReservationStatusBaseColor(status: string): string {
+  const normalized = status.toLowerCase();
+  if (normalized === "pending") {
+    return "#f6ae2d";
+  }
+  if (normalized === "approved") {
+    return "#27a05c";
+  }
+  if (normalized === "denied") {
+    return "#b33a3a";
+  }
+  return defaultSchoolColorScheme.secondary;
+}
+
+function StatusBadge({
+  status,
+  backgroundColor,
+  preferredTextColor,
+}: {
+  status: string;
+  backgroundColor: string;
+  preferredTextColor?: string;
+}) {
+  const normalized = status.toLowerCase();
+  const baseColor = getReservationStatusBaseColor(status);
+  const surfaceColor = mixHexColors(
+    backgroundColor,
+    baseColor,
+    normalized === "pending" ? 0.34 : 0.26,
+  );
+  const borderColor = hexToRgba(
+    mixHexColors(backgroundColor, baseColor, 0.52),
+    0.96,
+  );
+
+  return (
+    <span
+      className="res-status-badge"
+      style={getReadableSurfaceStyle(surfaceColor, {
+        preferredTextColor,
+        borderColor,
+      })}
+    >
+      {status}
+    </span>
+  );
+}
+
+function AvatarInitials({
+  name,
+  style,
+}: {
+  name: string;
+  style?: CSSProperties;
+}) {
   const parts = name.trim().split(" ");
   const initials =
     parts.length >= 2
       ? `${parts[0][0]}${parts[parts.length - 1][0]}`
       : (name[0] ?? "?");
-  return (
-    <div className="res-avatar">
-      {initials.toUpperCase()}
-    </div>
-  );
+  return <div className="res-avatar" style={style}>{initials.toUpperCase()}</div>;
 }
 
 export function ReservationsScreen(props: Props) {
@@ -68,9 +141,66 @@ export function ReservationsScreen(props: Props) {
     relevantMemberships,
     formatUnixTimestamp,
     formatDateOnly,
+    resolvedSchoolColors,
     handleImagePreview,
   } = props;
 
+  const primaryColor =
+    resolvedSchoolColors.primary ?? defaultSchoolColorScheme.primary;
+  const secondaryColor =
+    resolvedSchoolColors.secondary ?? defaultSchoolColorScheme.secondary;
+  const accentColor =
+    resolvedSchoolColors.accent ?? defaultSchoolColorScheme.accent;
+  const backgroundColor =
+    resolvedSchoolColors.background ?? defaultSchoolColorScheme.background;
+  const preferredTextColor =
+    resolvedSchoolColors.text ?? defaultSchoolColorScheme.text;
+  const queueCountStyle = getReadableSurfaceStyle(accentColor, {
+    preferredTextColor,
+  });
+  const activeQueueCardStyle: CSSProperties = {
+    borderColor: hexToRgba(accentColor, 0.84),
+    background: hexToRgba(mixHexColors(backgroundColor, accentColor, 0.22), 0.96),
+  };
+  const spotBadgeStyle = getReadableSurfaceStyle(primaryColor, {
+    preferredTextColor,
+  });
+  const heroChipSurface = mixHexColors(backgroundColor, secondaryColor, 0.42);
+  const heroChipStyle = getReadableSurfaceStyle(heroChipSurface, {
+    preferredTextColor,
+  });
+  const approveButtonStyle = getReadableSurfaceStyle(primaryColor, {
+    preferredTextColor,
+    borderColor: hexToRgba(mixHexColors(backgroundColor, primaryColor, 0.62), 0.96),
+  });
+  const denyBaseColor = "#b33a3a";
+  const denyButtonStyle = getReadableSurfaceStyle(denyBaseColor, {
+    preferredTextColor,
+    borderColor: hexToRgba(mixHexColors(backgroundColor, denyBaseColor, 0.64), 0.96),
+  });
+  const avatarSurface = mixHexColors(primaryColor, secondaryColor, 0.34);
+  const avatarStyle = getReadableSurfaceStyle(avatarSurface, {
+    preferredTextColor,
+  });
+  const membershipActiveSurface = mixHexColors(backgroundColor, "#27a05c", 0.28);
+  const membershipInactiveSurface = mixHexColors(
+    backgroundColor,
+    secondaryColor,
+    0.26,
+  );
+  const termChipSurface = mixHexColors(backgroundColor, secondaryColor, 0.34);
+  const termChipTextColor = getReadableTextColor(termChipSurface, {
+    preferred: preferredTextColor,
+    light: defaultSchoolColorScheme.text,
+    dark: juiseColors.darkGrey,
+    minimumContrast: 4.5,
+  });
+  const termChipStyle = getReadableSurfaceStyle(termChipSurface, {
+    preferredTextColor,
+  });
+  const termDatesStyle: CSSProperties = {
+    color: mixHexColors(termChipSurface, termChipTextColor, 0.64),
+  };
   const studentName = studentProfile
     ? `${studentProfile.user.first_name} ${studentProfile.user.last_name}`.trim()
     : "";
@@ -85,7 +215,9 @@ export function ReservationsScreen(props: Props) {
             <h2>
               Requests
               {reservations.length > 0 && (
-                <span className="res-queue-count">{reservations.length}</span>
+                <span className="res-queue-count" style={queueCountStyle}>
+                  {reservations.length}
+                </span>
               )}
             </h2>
           </div>
@@ -125,12 +257,15 @@ export function ReservationsScreen(props: Props) {
                   <button
                     type="button"
                     className={`res-queue-card${isActive ? " res-queue-card-active" : ""}`}
+                    style={isActive ? activeQueueCardStyle : undefined}
                     onClick={() =>
                       setSelectedReservationId(r.reservation_uuid)
                     }
                   >
                     <div className="res-queue-card-spot">
-                      <span className="res-spot-badge">{spotLabel}</span>
+                      <span className="res-spot-badge" style={spotBadgeStyle}>
+                        {spotLabel}
+                      </span>
                     </div>
                     <div className="res-queue-card-body">
                       <span className="res-queue-card-pack">{packLabel}</span>
@@ -141,7 +276,11 @@ export function ReservationsScreen(props: Props) {
                         {formatUnixTimestamp(r.updated)}
                       </span>
                     </div>
-                    <StatusBadge status={r.status} />
+                    <StatusBadge
+                      status={r.status}
+                      backgroundColor={backgroundColor}
+                      preferredTextColor={preferredTextColor}
+                    />
                   </button>
                 </li>
               );
@@ -170,20 +309,24 @@ export function ReservationsScreen(props: Props) {
                 <h2 className="res-hero-title">
                   {selectedReservation.pack_name || "Juise Pack"}
                   {selectedReservation.spot_number != null && (
-                    <span className="res-hero-spot">
+                    <span className="res-hero-spot" style={spotBadgeStyle}>
                       Spot {selectedReservation.spot_number}
                     </span>
                   )}
                 </h2>
                 <div className="res-hero-meta">
-                  <StatusBadge status={selectedReservation.status} />
+                  <StatusBadge
+                    status={selectedReservation.status}
+                    backgroundColor={backgroundColor}
+                    preferredTextColor={preferredTextColor}
+                  />
                   {selectedReservation.term_name && (
-                    <span className="res-hero-term">
+                    <span className="res-hero-term" style={heroChipStyle}>
                       {selectedReservation.term_name}
                     </span>
                   )}
                   {selectedReservation.reservation_kind && (
-                    <span className="res-hero-kind">
+                    <span className="res-hero-kind" style={heroChipStyle}>
                       {selectedReservation.reservation_kind}
                     </span>
                   )}
@@ -195,6 +338,7 @@ export function ReservationsScreen(props: Props) {
                 <button
                   className="res-deny-btn"
                   type="button"
+                  style={denyButtonStyle}
                   onClick={() => void handleDenySelected()}
                   disabled={reservationsBusy}
                 >
@@ -203,6 +347,7 @@ export function ReservationsScreen(props: Props) {
                 <button
                   className="res-approve-btn"
                   type="button"
+                  style={approveButtonStyle}
                   onClick={() => void handleApproveSelected()}
                   disabled={reservationsBusy}
                 >
@@ -271,7 +416,7 @@ export function ReservationsScreen(props: Props) {
                 <>
                   {/* Student identity card */}
                   <div className="res-student-card">
-                    <AvatarInitials name={studentName || "?"} />
+                    <AvatarInitials name={studentName || "?"} style={avatarStyle} />
                     <div className="res-student-identity">
                       <strong className="res-student-name">
                         {studentName || "Name not available"}
@@ -304,6 +449,14 @@ export function ReservationsScreen(props: Props) {
                               </span>
                               <span
                                 className={`res-membership-status ${m.active ? "res-mem-active" : "res-mem-inactive"}`}
+                                style={getReadableSurfaceStyle(
+                                  m.active
+                                    ? membershipActiveSurface
+                                    : membershipInactiveSurface,
+                                  {
+                                    preferredTextColor,
+                                  },
+                                )}
                               >
                                 {m.status}
                               </span>
@@ -318,9 +471,13 @@ export function ReservationsScreen(props: Props) {
                                   <span
                                     key={term.term_uuid}
                                     className="res-term-chip"
+                                    style={termChipStyle}
                                   >
                                     {term.name}
-                                    <span className="res-term-dates">
+                                    <span
+                                      className="res-term-dates"
+                                      style={termDatesStyle}
+                                    >
                                       {formatDateOnly(term.start_date)} –{" "}
                                       {formatDateOnly(term.end_date)}
                                     </span>
