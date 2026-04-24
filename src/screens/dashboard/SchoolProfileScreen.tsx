@@ -7,11 +7,6 @@ import type {
 } from "react";
 
 import type { SchoolColorScheme } from "../../lib/api";
-import {
-	getReadableTextColor,
-	juiseColors,
-	mixHexColors,
-} from "../../lib/colors";
 
 type SchoolColorField = {
 	key: keyof SchoolColorScheme;
@@ -87,7 +82,6 @@ export function SchoolProfileScreen(props: Props) {
 		handleSchoolColorChange,
 		handleSchoolLogoFileChange,
 		getColorPickerValue,
-		defaultSchoolColorScheme,
 		resolvedSchoolColors,
 		resolvedSchoolLogoUrl,
 		termDrafts,
@@ -394,7 +388,7 @@ export function SchoolProfileScreen(props: Props) {
 											className="color-picker-input"
 											value={getColorPickerValue(
 												schoolDraft.color_scheme[field.key],
-												field.key as keyof typeof defaultSchoolColorScheme,
+												field.key as keyof Required<SchoolColorScheme>,
 											)}
 											onChange={(event) =>
 												handleSchoolColorChange(field.key, event.target.value)

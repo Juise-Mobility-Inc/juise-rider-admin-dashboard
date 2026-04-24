@@ -85,6 +85,7 @@ import {
 import { ChallengesScreen } from "./screens/dashboard/ChallengesScreen";
 import { PacksScreen } from "./screens/dashboard/PacksScreen";
 import { PoisScreen } from "./screens/dashboard/PoisScreen";
+import { ReportsScreen } from "./screens/dashboard/ReportsScreen";
 import { ReservationsScreen } from "./screens/dashboard/ReservationsScreen";
 import { SchoolProfileScreen } from "./screens/dashboard/SchoolProfileScreen";
 import { StudentVehicleDetailModal } from "./screens/dashboard/StudentVehicleDetailModal";
@@ -107,6 +108,7 @@ type Section =
   | "zones"
   | "challenges"
   | "students"
+  | "reports"
   | "packs"
   | "reservations";
 type PackTab = "create" | "existing";
@@ -124,6 +126,7 @@ const dashboardSections: Array<{
   { section: "zones", label: "School Zones", path: "/zones" },
   { section: "challenges", label: "Challenges", path: "/challenges" },
   { section: "students", label: "Students", path: "/students" },
+  { section: "reports", label: "Reports", path: "/reports" },
   { section: "packs", label: "Juise Packs", path: "/packs" },
   {
     section: "reservations",
@@ -233,6 +236,7 @@ const authAppId =
   import.meta.env.VITE_AUTH_APP_ID ?? "juise_rider_admin_dashboard";
 const defaultManagedAppId =
   import.meta.env.VITE_DEFAULT_MANAGED_APP_ID ?? "juise-customer-app";
+const schoolColorHexPattern = /^#(?:[0-9a-fA-F]{6})$/;
 const schoolColorFields: Array<{
   key: keyof SchoolColorScheme;
   label: string;
@@ -3892,6 +3896,14 @@ function App() {
             handleImagePreview={handleOpenImagePreview}
           />
         );
+      case "reports":
+        return (
+          <ReportsScreen
+            activeSchoolId={activeSchoolId}
+            managedAppId={context.managedAppId}
+            adminUserUUID={session?.claims.user_uuid ?? ""}
+          />
+        );
       case "packs":
         return (
           <PacksScreen
@@ -4168,4 +4180,3 @@ function App() {
 }
 
 export default App;
-
