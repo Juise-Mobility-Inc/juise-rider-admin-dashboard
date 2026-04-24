@@ -108,33 +108,6 @@ export function SchoolProfileScreen(props: Props) {
 			? "Saving changes…"
 			: "";
 	const previewLogoUrl = resolvedSchoolLogoUrl || schoolDraft.logo_url;
-	const hasConfiguredLogo = schoolDraft.logo_url.trim() !== "";
-	const brandPreviewSurface = mixHexColors(
-		resolvedSchoolColors.secondary ?? defaultSchoolColorScheme.secondary,
-		resolvedSchoolColors.background ?? defaultSchoolColorScheme.background,
-		0.5,
-	);
-	const brandPreviewTextColor = getReadableTextColor(brandPreviewSurface, {
-		preferred: resolvedSchoolColors.text,
-		light: defaultSchoolColorScheme.text,
-		dark: juiseColors.darkGrey,
-	});
-	const previewCardTextColor = getReadableTextColor(
-		resolvedSchoolColors.background ?? defaultSchoolColorScheme.background,
-		{
-			preferred: resolvedSchoolColors.text,
-			light: defaultSchoolColorScheme.text,
-			dark: juiseColors.darkGrey,
-		},
-	);
-	const previewButtonTextColor = getReadableTextColor(
-		resolvedSchoolColors.primary ?? defaultSchoolColorScheme.primary,
-		{
-			preferred: resolvedSchoolColors.text,
-			light: defaultSchoolColorScheme.text,
-			dark: juiseColors.darkGrey,
-		},
-	);
 	const profileStats = [
 		{
 			label: "School ID",
@@ -215,7 +188,7 @@ export function SchoolProfileScreen(props: Props) {
 									className="school-profile-brand-preview"
 									style={{
 										background: `radial-gradient(circle at top right, ${resolvedSchoolColors.primary} 0%, transparent 34%), linear-gradient(155deg, ${resolvedSchoolColors.secondary}, ${resolvedSchoolColors.background})`,
-										color: brandPreviewTextColor,
+										color: resolvedSchoolColors.text,
 										borderColor: resolvedSchoolColors.secondary,
 									}}>
 									<SchoolLogoPreview
@@ -342,7 +315,9 @@ export function SchoolProfileScreen(props: Props) {
 												<label
 													className={`secondary-button upload-button${schoolLogoUploadBusy ? " upload-button-busy" : ""}`}
 													aria-disabled={
-														schoolBusy || schoolLogoUploadBusy || !activeSchoolId
+														schoolBusy ||
+														schoolLogoUploadBusy ||
+														!activeSchoolId
 													}>
 													<input
 														type="file"
@@ -434,7 +409,7 @@ export function SchoolProfileScreen(props: Props) {
 								className="color-preview-card"
 								style={{
 									background: resolvedSchoolColors.background,
-									color: previewCardTextColor,
+									color: resolvedSchoolColors.text,
 									borderColor: resolvedSchoolColors.secondary,
 								}}>
 								<div className="color-preview-swatches" aria-hidden="true">
@@ -458,7 +433,7 @@ export function SchoolProfileScreen(props: Props) {
 									type="button"
 									style={{
 										background: resolvedSchoolColors.primary,
-										color: previewButtonTextColor,
+										color: resolvedSchoolColors.text,
 									}}>
 									Primary action
 								</button>
