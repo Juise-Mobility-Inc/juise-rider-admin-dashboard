@@ -6,6 +6,78 @@ export function csvRow(cells: readonly CsvCell[]): string {
     .join(",");
 }
 
+export function parseCsvRows(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const nextChar = text[index + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && nextChar === "\n") {
+        index += 1;
+      }
+      row.push(cell);
+      if (row.some((value) => value.trim() !== "")) {
+        rows.push(row);
+      }
+      row = [];
+      cell = "";
+      continue;
+    }
+
+    cell += char;
+  }
+
+  row.push(cell);
+  if (row.some((value) => value.trim() !== "")) {
+    rows.push(row);
+  }
+
+  return rows;
+}
+
+export function csvRowsToObjects(
+  rows: string[][],
+): Array<Record<string, string>> {
+  const [headers, ...bodyRows] = rows;
+  if (!headers) {
+    return [];
+  }
+
+  const normalizedHeaders = headers.map((header) =>
+    header.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_"),
+  );
+
+  return bodyRows.map((bodyRow) =>
+    Object.fromEntries(
+      normalizedHeaders.map((header, index) => [
+        header,
+        bodyRow[index]?.trim() ?? "",
+      ]),
+    ),
+  );
+}
+
 export function csvObjectRow<Column extends string>(
   columns: readonly Column[],
   row: Partial<Record<Column, CsvCell>>,

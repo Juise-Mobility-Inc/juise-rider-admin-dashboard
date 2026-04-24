@@ -3066,13 +3066,13 @@ function App() {
     );
   }
 
-  async function handleSavePOIs() {
+  async function handleSavePOIs(nextPoiDrafts = poiDrafts): Promise<boolean> {
     if (!activeSchoolId) {
       setBanner({
         tone: "error",
         message: "Save the school profile first before managing POIs.",
       });
-      return;
+      return false;
     }
 
     setPoiBusy(true);
@@ -3080,7 +3080,7 @@ function App() {
       const savedPOIs = await saveSchoolPOIs(
         context.managedAppId,
         activeSchoolId,
-        poiDrafts.map((poi, index) => {
+        nextPoiDrafts.map((poi, index) => {
           const title = poi.title.trim();
           if (!title) {
             throw new Error(`POI ${index + 1} title is required.`);
@@ -3117,23 +3117,25 @@ function App() {
         tone: "success",
         message: `Updated ${savedPOIs.length} school point${savedPOIs.length === 1 ? "" : "s"} of interest.`,
       });
+      return true;
     } catch (error) {
       setBanner({
         tone: "error",
         message: getErrorMessage(error),
       });
+      return false;
     } finally {
       setPoiBusy(false);
     }
   }
 
-  async function handleSaveZones() {
+  async function handleSaveZones(nextZoneDrafts = zoneDrafts): Promise<boolean> {
     if (!activeSchoolId) {
       setBanner({
         tone: "error",
         message: "Save the school profile first before managing zones.",
       });
-      return;
+      return false;
     }
 
     setZoneBusy(true);
@@ -3141,7 +3143,7 @@ function App() {
       const savedZones = await saveSchoolZones(
         context.managedAppId,
         activeSchoolId,
-        zoneDrafts.map((zone, index) => {
+        nextZoneDrafts.map((zone, index) => {
           const title = zone.title.trim();
           if (!title) {
             throw new Error(`Zone ${index + 1} title is required.`);
@@ -3193,11 +3195,13 @@ function App() {
         tone: "success",
         message: `Updated ${savedZones.length} school zone${savedZones.length === 1 ? "" : "s"}.`,
       });
+      return true;
     } catch (error) {
       setBanner({
         tone: "error",
         message: getErrorMessage(error),
       });
+      return false;
     } finally {
       setZoneBusy(false);
     }
@@ -3370,18 +3374,19 @@ function App() {
     }
   }
 
-  async function handleCreatePack(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  async function createPackFromDraft(
+    draft: PackDraft,
+    photoFile: File | null = null,
+  ): Promise<boolean> {
     if (!session) {
-      return;
+      return false;
     }
     if (!activeSchoolId) {
       setBanner({
         tone: "error",
         message: "This admin login is not scoped to a school.",
       });
-      return;
+      return false;
     }
 
     let parsedLat = 0;
@@ -3389,9 +3394,9 @@ function App() {
     let parsedSpotCount = 0;
 
     try {
-      parsedLat = parseCoordinateInput(packDraft.lat, "Latitude");
-      parsedLng = parseCoordinateInput(packDraft.lng, "Longitude");
-      parsedSpotCount = Number.parseInt(packDraft.number_of_spots.trim(), 10);
+      parsedLat = parseCoordinateInput(draft.lat, "Latitude");
+      parsedLng = parseCoordinateInput(draft.lng, "Longitude");
+      parsedSpotCount = Number.parseInt(draft.number_of_spots.trim(), 10);
       if (!Number.isFinite(parsedSpotCount) || parsedSpotCount < 1) {
         throw new Error("Number of spots must be greater than 0.");
       }
@@ -3400,18 +3405,18 @@ function App() {
         tone: "error",
         message: getErrorMessage(error),
       });
-      return;
+      return false;
     }
 
     setPackBusy(true);
     try {
       const campusId =
-        packDraft.campus_id.trim() ||
+        draft.campus_id.trim() ||
         schoolDraft.default_campus_id.trim() ||
         undefined;
       const created = await createSchoolPack(session.claims.user_uuid, {
-        name: packDraft.name.trim() || undefined,
-        description: packDraft.description.trim() || undefined,
+        name: draft.name.trim() || undefined,
+        description: draft.description.trim() || undefined,
         number_of_spots: parsedSpotCount,
         location: {
           lat: parsedLat,
@@ -3422,7 +3427,7 @@ function App() {
           school_id: activeSchoolId,
           campus_id: campusId,
         },
-      }, packPhotoFile);
+      }, photoFile);
 
       setSchoolPacks((current) =>
         sortPacksForDisplay([
@@ -3435,14 +3440,21 @@ function App() {
         tone: "success",
         message: `Created Juise Pack ${created.name || created.pack_uuid} for school ${activeSchoolId}.`,
       });
+      return true;
     } catch (error) {
       setBanner({
         tone: "error",
         message: getErrorMessage(error),
       });
+      return false;
     } finally {
       setPackBusy(false);
     }
+  }
+
+  async function handleCreatePack(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await createPackFromDraft(packDraft, packPhotoFile);
   }
 
   async function handleApproveSelected() {
@@ -3857,10 +3869,13 @@ function App() {
         return (
           <StudentsScreen
             activeSchoolId={activeSchoolId}
+            managedAppId={context.managedAppId}
+            adminUserUUID={session?.claims.user_uuid ?? ""}
             schoolStudentRosterBusy={schoolStudentRosterBusy}
             schoolStudentRosterError={schoolStudentRosterError}
             studentRosterSearch={studentRosterSearch}
             setStudentRosterSearch={setStudentRosterSearch}
+            allStudentRoster={sortedSchoolStudentRoster}
             filteredStudentRoster={filteredStudentRoster}
             selectedStudentMembershipId={selectedStudentMembershipId}
             selectedStudentEntry={selectedStudentEntry}
@@ -3917,6 +3932,7 @@ function App() {
             existingPackMapMarkers={existingPackMapMarkers}
             packsWithoutLocationsCount={packsWithoutLocationsCount}
             handleCreatePack={handleCreatePack}
+            handleCreatePackDraft={createPackFromDraft}
             packDraft={packDraft}
             setPackDraft={setPackDraft}
             schoolDraft={schoolDraft}

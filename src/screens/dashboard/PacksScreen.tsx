@@ -1,6 +1,46 @@
-import { PackLocationPicker, PackLocationsMap } from "../../components/PackLocationPicker";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+
+import {
+  PackLocationPicker,
+  PackLocationsMap,
+  type PackMapMarker,
+  type PackMapPoint,
+} from "../../components/PackLocationPicker";
+import {
+  csvRowsToObjects,
+  downloadCsv,
+  parseCsvRows,
+  sanitizeCsvFilename,
+  type CsvCell,
+} from "../../lib/csv";
 
 type Props = any;
+
+const packCsvColumns = [
+  "pack_uuid",
+  "name",
+  "description",
+  "active",
+  "spot_count",
+  "latitude",
+  "longitude",
+  "campus_id",
+  "spots_with_qr",
+] as const;
+
+function parseMapPoint(lat: string, lng: string): PackMapPoint | null {
+  const parsedLat = Number(lat.trim());
+  const parsedLng = Number(lng.trim());
+  if (!Number.isFinite(parsedLat) || !Number.isFinite(parsedLng)) {
+    return null;
+  }
+
+  return {
+    lat: parsedLat,
+    lng: parsedLng,
+  };
+}
 
 export function PacksScreen(props: Props) {
   const {
@@ -14,6 +54,7 @@ export function PacksScreen(props: Props) {
     existingPackMapMarkers,
     packsWithoutLocationsCount,
     handleCreatePack,
+    handleCreatePackDraft,
     packDraft,
     setPackDraft,
     schoolDraft,
@@ -47,69 +88,188 @@ export function PacksScreen(props: Props) {
     UuidCopyField,
     handleCopyUuid,
   } = props;
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [pendingImportedPacks, setPendingImportedPacks] = useState<any[]>([]);
+  const [importMessage, setImportMessage] = useState("");
+
+  const editingPack = useMemo(
+    () =>
+      editingPackId
+        ? (schoolPacks.find((pack: any) => pack.pack_uuid === editingPackId) ??
+          null)
+        : null,
+    [editingPackId, schoolPacks],
+  );
+  const editPackLocation = packEditDraft
+    ? parseMapPoint(packEditDraft.lat, packEditDraft.lng)
+    : null;
+  const editOtherMarkers: PackMapMarker[] = editingPack
+    ? existingPackMapMarkers.filter(
+        (marker: PackMapMarker) => marker.id !== editingPack.pack_uuid,
+      )
+    : existingPackMapMarkers;
+
+  function openCreateModal() {
+    setActivePackTab("create");
+  }
+
+  function closeCreateModal() {
+    setActivePackTab("existing");
+  }
+
+  function downloadPacksCsv() {
+    const rows = schoolPacks.map((pack: any) => {
+      const spotsWithQr = pack.spots.filter((spot: any) => spot.qr_code).length;
+      return [
+        pack.pack_uuid,
+        pack.name,
+        pack.description,
+        pack.active,
+        pack.spot_count,
+        pack.location?.lat ?? "",
+        pack.location?.lng ?? "",
+        pack.school_owner?.campus_id ?? "",
+        spotsWithQr,
+      ] satisfies CsvCell[];
+    });
+
+    downloadCsv(
+      sanitizeCsvFilename(`${activeSchoolId || "school"}-juise-packs`, "juise-packs"),
+      [packCsvColumns, ...rows],
+    );
+  }
+
+  function buildPackDraftFromCsvRow(row: Record<string, string>) {
+    return {
+      ...packDraft,
+      name: row.name ?? row.pack_name ?? "",
+      description: row.description ?? "",
+      number_of_spots:
+        row.number_of_spots ?? row.spot_count ?? packDraft.number_of_spots,
+      campus_id:
+        row.campus_id ??
+        row.campus ??
+        schoolDraft.default_campus_id ??
+        packDraft.campus_id,
+      lat: row.latitude ?? row.lat ?? "",
+      lng: row.longitude ?? row.lng ?? "",
+    };
+  }
+
+  function openImportModal() {
+    setPendingImportedPacks([]);
+    setImportMessage("");
+    setIsImportModalOpen(true);
+  }
+
+  async function handlePackCsvUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+
+    const imported = csvRowsToObjects(parseCsvRows(await file.text()))
+      .map(buildPackDraftFromCsvRow)
+      .filter(
+        (draft) =>
+          draft.name.trim() ||
+          draft.description.trim() ||
+          draft.lat.trim() ||
+          draft.lng.trim(),
+      );
+    if (imported.length === 0) {
+      setImportMessage("No pack rows were found in that CSV.");
+      setPendingImportedPacks([]);
+      return;
+    }
+
+    setPendingImportedPacks(imported);
+    setImportMessage(
+      `Loaded ${imported.length} pack${imported.length === 1 ? "" : "s"} from the CSV.`,
+    );
+  }
+
+  async function applyPackImport() {
+    if (pendingImportedPacks.length === 0) {
+      setImportMessage("Choose a CSV with at least one valid pack row first.");
+      return;
+    }
+
+    for (const draft of pendingImportedPacks) {
+      const didCreate = await handleCreatePackDraft(draft, null);
+      if (!didCreate) {
+        return;
+      }
+    }
+
+    setPendingImportedPacks([]);
+    setImportMessage("");
+    setIsImportModalOpen(false);
+  }
+
+  function handleEditLocationSelect(point: PackMapPoint) {
+    setPackEditDraft((current: any) =>
+      current
+        ? {
+            ...current,
+            lat: point.lat.toFixed(6),
+            lng: point.lng.toFixed(6),
+          }
+        : current,
+    );
+  }
+
+  function submitCreatePack(event: FormEvent<HTMLFormElement>) {
+    void handleCreatePack(event);
+  }
+
+  function submitEditPack(event: FormEvent<HTMLFormElement>, pack: any) {
+    void handleSavePackEdit(event, pack);
+  }
 
   return (
-    <section className="panel pack-tabs-panel">
-      <div className="panel-header pack-tabs-header">
+    <section className="panel management-page">
+      <div className="panel-header">
         <div>
           <p className="eyebrow">Juise Packs</p>
           <h2>School-owned parking packs</h2>
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          {packBusy ? (
-            <span className="muted-text">Creating…</span>
-          ) : packsLoading ? (
-            <span className="muted-text">Refreshing…</span>
-          ) : null}
-          {activePackTab === "existing" ? (
-            <button
-              className="primary-button"
-              type="button"
-              onClick={() => setActivePackTab("create")}
-            >
-              + New Pack
-            </button>
-          ) : null}
-          {activePackTab === "existing" ? (
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={() => void refreshSchoolPacks()}
-              disabled={packsLoading || !activeSchoolId}
-            >
-              Refresh
-            </button>
-          ) : null}
+        <div className="management-actions">
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={downloadPacksCsv}
+            disabled={schoolPacks.length === 0}
+          >
+            Download CSV
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={openImportModal}
+            disabled={!activeSchoolId || packBusy}
+          >
+            Upload CSV
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void refreshSchoolPacks()}
+            disabled={packsLoading || !activeSchoolId}
+          >
+            Reload
+          </button>
+          <button
+            className="primary-button"
+            type="button"
+            onClick={openCreateModal}
+            disabled={!activeSchoolId}
+            aria-label="Add Juise Pack"
+          >
+            +
+          </button>
         </div>
-      </div>
-
-      <div className="pack-tabs" role="tablist" aria-label="Juise pack sections">
-        <button
-          className={`pack-tab-button ${
-            activePackTab === "existing" ? "pack-tab-button-active" : ""
-          }`}
-          type="button"
-          role="tab"
-          id="pack-tab-existing"
-          aria-selected={activePackTab === "existing"}
-          aria-controls="pack-tab-panel-existing"
-          onClick={() => setActivePackTab("existing")}
-        >
-          Existing Packs
-        </button>
-        <button
-          className={`pack-tab-button ${
-            activePackTab === "create" ? "pack-tab-button-active" : ""
-          }`}
-          type="button"
-          role="tab"
-          id="pack-tab-create"
-          aria-selected={activePackTab === "create"}
-          aria-controls="pack-tab-panel-create"
-          onClick={() => setActivePackTab("create")}
-        >
-          Create New Pack
-        </button>
       </div>
 
       {!activeSchoolId ? (
@@ -118,33 +278,295 @@ export function PacksScreen(props: Props) {
         </p>
       ) : null}
 
+      {importMessage ? <p className="empty-state">{importMessage}</p> : null}
+
+      {activeSchoolId ? (
+        <>
+          <div className="management-summary-grid">
+            <div className="reports-kpi">
+              <span>Total Packs</span>
+              <strong>{schoolPacks.length}</strong>
+            </div>
+            <div className="reports-kpi">
+              <span>Located</span>
+              <strong>{existingPackMapMarkers.length}</strong>
+            </div>
+            <div className="reports-kpi">
+              <span>No Location</span>
+              <strong>{packsWithoutLocationsCount}</strong>
+            </div>
+          </div>
+
+          <div className="management-map-card">
+            <div className="data-section-header">
+              <div>
+                <h3>Pack map</h3>
+                <p className="muted-text">
+                  Markers show saved Juise Pack locations for this school.
+                </p>
+              </div>
+              <span>{existingPackMapMarkers.length} pins</span>
+            </div>
+            <PackLocationsMap markers={existingPackMapMarkers} />
+            {packsWithoutLocationsCount > 0 ? (
+              <p className="muted-text">
+                {packsWithoutLocationsCount} pack
+                {packsWithoutLocationsCount === 1 ? "" : "s"} do not have saved
+                coordinates yet.
+              </p>
+            ) : null}
+          </div>
+
+          <div className="management-table-card">
+            <div className="data-section-header">
+              <div>
+                <h3>Created packs</h3>
+                <p className="muted-text">
+                  Open a row to edit pack details or manage QR codes.
+                </p>
+              </div>
+              {packBusy || packsLoading ? (
+                <span className="muted-text">
+                  {packBusy ? "Creating..." : "Refreshing..."}
+                </span>
+              ) : null}
+            </div>
+
+            {packsLoading && schoolPacks.length === 0 ? (
+              <p className="muted-text">Loading school packs...</p>
+            ) : null}
+
+            {!packsLoading && schoolPacks.length === 0 ? (
+              <p className="empty-state">
+                No school-owned Juise packs have been created yet.
+              </p>
+            ) : null}
+
+            {schoolPacks.length > 0 ? (
+              <div className="management-table-scroll">
+                <table className="management-table">
+                  <thead>
+                    <tr>
+                      <th>Pack</th>
+                      <th>Campus</th>
+                      <th>Spots</th>
+                      <th>Location</th>
+                      <th>QR</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {schoolPacks.map((pack: any) => {
+                      const spotsWithQr = pack.spots.filter(
+                        (spot: any) => spot.qr_code,
+                      ).length;
+
+                      return (
+                        <tr key={pack.pack_uuid}>
+                          <td>
+                            <strong>{pack.name || "Juise Pack"}</strong>
+                            <span>{pack.description || "No description"}</span>
+                          </td>
+                          <td>{pack.school_owner?.campus_id || "-"}</td>
+                          <td>
+                            {pack.spot_count} total
+                            <span>{spotsWithQr} QR ready</span>
+                          </td>
+                          <td>
+                            {pack.location
+                              ? `${pack.location.lat.toFixed(6)}, ${pack.location.lng.toFixed(6)}`
+                              : "No location"}
+                          </td>
+                          <td>
+                            {pack.qr_code ? (
+                              <button
+                                className="secondary-button"
+                                type="button"
+                                onClick={() => handleDownloadPackQrCode(pack)}
+                              >
+                                Download
+                              </button>
+                            ) : (
+                              <button
+                                className="secondary-button"
+                                type="button"
+                                onClick={() => void handleGeneratePackQrCode(pack)}
+                                disabled={qrActionTarget === `pack:${pack.pack_uuid}`}
+                              >
+                                {qrActionTarget === `pack:${pack.pack_uuid}`
+                                  ? "Generating..."
+                                  : "Generate"}
+                              </button>
+                            )}
+                          </td>
+                          <td>
+                            <button
+                              className="secondary-button"
+                              type="button"
+                              onClick={() => handleStartEditingPack(pack)}
+                              disabled={packEditBusy}
+                            >
+                              Edit
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+          </div>
+        </>
+      ) : null}
+
+      {isImportModalOpen ? (
+        <div
+          className="management-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Upload Juise Packs CSV"
+          onClick={() => setIsImportModalOpen(false)}
+        >
+          <div
+            className="management-modal-sheet management-import-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="management-modal-header">
+              <div>
+                <p className="eyebrow">CSV upload</p>
+                <h3>Import Juise Packs</h3>
+              </div>
+              <button
+                className="text-button management-modal-close"
+                type="button"
+                onClick={() => setIsImportModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="management-import-body">
+              <div className="management-import-instructions">
+                <h4>Required CSV headers</h4>
+                <code>name,description,number_of_spots,latitude,longitude,campus_id</code>
+                <p className="muted-text">
+                  <code>campus_id</code> is optional if the school has a default
+                  campus. Latitude and longitude must be decimal coordinates.
+                  Photos and QR codes are not imported from CSV.
+                </p>
+              </div>
+
+              <label className="secondary-button challenge-upload-button management-import-upload">
+                <input
+                  className="challenge-upload-input"
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(event) => void handlePackCsvUpload(event)}
+                  disabled={packBusy}
+                />
+                Choose CSV
+              </label>
+
+              {importMessage ? <p className="empty-state">{importMessage}</p> : null}
+
+              {pendingImportedPacks.length > 0 ? (
+                <div className="management-table-scroll">
+                  <table className="management-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Spots</th>
+                        <th>Campus</th>
+                        <th>Latitude</th>
+                        <th>Longitude</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingImportedPacks.slice(0, 8).map((draft, index) => (
+                        <tr key={`${draft.name}-${index}`}>
+                          <td>
+                            <strong>{draft.name || `Pack ${index + 1}`}</strong>
+                            <span>{draft.description || "No description"}</span>
+                          </td>
+                          <td>{draft.number_of_spots || "1"}</td>
+                          <td>{draft.campus_id || "-"}</td>
+                          <td>{draft.lat || "-"}</td>
+                          <td>{draft.lng || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+
+              <div className="form-actions">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => setIsImportModalOpen(false)}
+                  disabled={packBusy}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => void applyPackImport()}
+                  disabled={packBusy || pendingImportedPacks.length === 0}
+                >
+                  {packBusy ? "Creating..." : "Done"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {activePackTab === "create" ? (
         <div
-          className="pack-tab-panel pack-builder"
-          role="tabpanel"
-          id="pack-tab-panel-create"
-          aria-labelledby="pack-tab-create"
+          className="management-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Create Juise Pack"
+          onClick={closeCreateModal}
         >
-          <form className="pack-form-layout" onSubmit={handleCreatePack}>
-            <div className="pack-form-fields">
-              <div className="map-card">
-                <div className="pack-step-header">
-                  <span className="pack-step-number">1</span>
-                  <div>
-                    <h3>Pack details</h3>
-                    <p>Name, capacity, and description</p>
-                  </div>
-                </div>
+          <form
+            className="management-modal-sheet"
+            onSubmit={submitCreatePack}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="management-modal-header">
+              <div>
+                <p className="eyebrow">New Juise Pack</p>
+                <h3>{packDraft.name || "Create pack"}</h3>
+              </div>
+              <button
+                className="text-button management-modal-close"
+                type="button"
+                onClick={closeCreateModal}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="management-modal-grid">
+              <div className="management-modal-map">
+                <PackLocationPicker
+                  disabled={!activeSchoolId}
+                  onChange={handlePackLocationSelect}
+                  value={selectedPackLocation}
+                  otherMarkers={existingPackMapMarkers}
+                />
+              </div>
+
+              <div className="data-section">
                 <div className="form-grid">
-                  <label className="field">
-                    <span>School ID</span>
-                    <input value={activeSchoolId} disabled />
-                  </label>
                   <label className="field">
                     <span>Campus ID</span>
                     <input
                       value={packDraft.campus_id}
-                      onChange={(event: any) =>
+                      onChange={(event) =>
                         setPackDraft((current: any) => ({
                           ...current,
                           campus_id: event.target.value,
@@ -155,10 +577,25 @@ export function PacksScreen(props: Props) {
                     />
                   </label>
                   <label className="field">
+                    <span>Number of Spots</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={packDraft.number_of_spots}
+                      onChange={(event) =>
+                        setPackDraft((current: any) => ({
+                          ...current,
+                          number_of_spots: event.target.value,
+                        }))
+                      }
+                      disabled={!activeSchoolId}
+                    />
+                  </label>
+                  <label className="field">
                     <span>Pack Name</span>
                     <input
                       value={packDraft.name}
-                      onChange={(event: any) =>
+                      onChange={(event) =>
                         setPackDraft((current: any) => ({
                           ...current,
                           name: event.target.value,
@@ -169,138 +606,10 @@ export function PacksScreen(props: Props) {
                     />
                   </label>
                   <label className="field">
-                    <span>Number of Spots</span>
-                    <input
-                      type="number"
-                      min={1}
-                      value={packDraft.number_of_spots}
-                      onChange={(event: any) =>
-                        setPackDraft((current: any) => ({
-                          ...current,
-                          number_of_spots: event.target.value,
-                        }))
-                      }
-                      disabled={!activeSchoolId}
-                    />
-                  </label>
-                  <label className="field field-span-2">
-                    <span>Description</span>
-                    <textarea
-                      value={packDraft.description}
-                      onChange={(event: any) =>
-                        setPackDraft((current: any) => ({
-                          ...current,
-                          description: event.target.value,
-                        }))
-                      }
-                      placeholder="Covered student parking near the library entrance."
-                      rows={4}
-                      disabled={!activeSchoolId}
-                    />
-                  </label>
-                </div>
-              </div>
-
-              <div className="map-card">
-                <div className="pack-step-header">
-                  <span className="pack-step-number">2</span>
-                  <div>
-                    <h3>Cover photo</h3>
-                    <p>Optional image for the pack</p>
-                  </div>
-                </div>
-                <div className="challenge-image-field">
-                  <EntityImagePreview
-                    imageUrl={packPhotoPreviewUrl}
-                    label={packDraft.name || "Juise Pack"}
-                    altSuffix="pack photo"
-                    fallbackLabel="Pack photo"
-                  />
-                  <div className="challenge-image-field-controls">
-                    <p className="muted-text">
-                      Upload a cover image for this Juise Pack.
-                    </p>
-                    <div className="challenge-image-upload-row">
-                      <label className="secondary-button challenge-upload-button">
-                        <input
-                          className="challenge-upload-input"
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp,image/gif"
-                          onChange={handlePackPhotoFileChange}
-                          disabled={packBusy || !activeSchoolId}
-                        />
-                        {packPhotoFile ? "Replace Photo" : "Upload Photo"}
-                      </label>
-                      {packPhotoFile ? (
-                        <button
-                          className="secondary-button"
-                          type="button"
-                          onClick={() => {
-                            setPackPhotoFile(null);
-                            setPackPhotoPreviewUrl("");
-                          }}
-                          disabled={packBusy}
-                        >
-                          Clear Photo
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="form-actions">
-                <button
-                  className="primary-button"
-                  type="submit"
-                  disabled={packBusy || !activeSchoolId}
-                >
-                  {packBusy ? "Creating Pack…" : "Create Juise Pack"}
-                </button>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  disabled={packBusy}
-                  onClick={() =>
-                    resetPackCreateForm(schoolDraft.default_campus_id ?? "")
-                  }
-                >
-                  Reset Form
-                </button>
-              </div>
-            </div>
-
-            <div className="pack-form-map">
-              <div className="map-card">
-                <div className="pack-step-header">
-                  <span className="pack-step-number">3</span>
-                  <div>
-                    <h3>Pack location</h3>
-                    <p>
-                      {selectedPackLocation
-                        ? "Pin placed — adjust if needed"
-                        : "Click the map to drop a pin"}
-                    </p>
-                  </div>
-                </div>
-                <PackLocationPicker
-                  disabled={!activeSchoolId}
-                  onChange={handlePackLocationSelect}
-                  value={selectedPackLocation}
-                />
-              </div>
-
-              <div className="map-card">
-                <div className="data-section-header">
-                  <h3>Coordinates</h3>
-                  <span>Fine tune manually</span>
-                </div>
-                <div className="coordinate-grid">
-                  <label className="field">
                     <span>Latitude</span>
                     <input
                       value={packDraft.lat}
-                      onChange={(event: any) =>
+                      onChange={(event) =>
                         setPackDraft((current: any) => ({
                           ...current,
                           lat: event.target.value,
@@ -314,7 +623,7 @@ export function PacksScreen(props: Props) {
                     <span>Longitude</span>
                     <input
                       value={packDraft.lng}
-                      onChange={(event: any) =>
+                      onChange={(event) =>
                         setPackDraft((current: any) => ({
                           ...current,
                           lng: event.target.value,
@@ -324,410 +633,290 @@ export function PacksScreen(props: Props) {
                       disabled={!activeSchoolId}
                     />
                   </label>
+                  <label className="field field-span-2">
+                    <span>Description</span>
+                    <textarea
+                      value={packDraft.description}
+                      onChange={(event) =>
+                        setPackDraft((current: any) => ({
+                          ...current,
+                          description: event.target.value,
+                        }))
+                      }
+                      placeholder="Covered student parking near the library entrance."
+                      rows={4}
+                      disabled={!activeSchoolId}
+                    />
+                  </label>
+                  <div className="field field-span-2">
+                    <span>Cover Photo</span>
+                    <div className="challenge-image-field">
+                      <EntityImagePreview
+                        imageUrl={packPhotoPreviewUrl}
+                        label={packDraft.name || "Juise Pack"}
+                        altSuffix="pack photo"
+                        fallbackLabel="Pack photo"
+                      />
+                      <div className="challenge-image-field-controls">
+                        <div className="challenge-image-upload-row">
+                          <label className="secondary-button challenge-upload-button">
+                            <input
+                              className="challenge-upload-input"
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp,image/gif"
+                              onChange={handlePackPhotoFileChange}
+                              disabled={packBusy || !activeSchoolId}
+                            />
+                            {packPhotoFile ? "Replace Photo" : "Upload Photo"}
+                          </label>
+                          {packPhotoFile ? (
+                            <button
+                              className="secondary-button"
+                              type="button"
+                              onClick={() => {
+                                setPackPhotoFile(null);
+                                setPackPhotoPreviewUrl("");
+                              }}
+                              disabled={packBusy}
+                            >
+                              Clear Photo
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <p className="muted-text">
-                  This pack will be assigned to{" "}
-                  <code>{activeSchoolId || "school-scope"}</code>.
-                </p>
+
+                <div className="form-actions">
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled={packBusy}
+                    onClick={() =>
+                      resetPackCreateForm(schoolDraft.default_campus_id ?? "")
+                    }
+                  >
+                    Reset
+                  </button>
+                  <button
+                    className="primary-button"
+                    type="submit"
+                    disabled={packBusy || !activeSchoolId}
+                  >
+                    {packBusy ? "Creating..." : "Create Pack"}
+                  </button>
+                </div>
               </div>
             </div>
           </form>
         </div>
-      ) : (
+      ) : null}
+
+      {editingPack && packEditDraft ? (
         <div
-          className="pack-tab-panel pack-preview-panel"
-          role="tabpanel"
-          id="pack-tab-panel-existing"
-          aria-labelledby="pack-tab-existing"
+          className="management-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Edit Juise Pack"
+          onClick={handleCancelPackEdit}
         >
-          {activeSchoolId && packsLoading && schoolPacks.length === 0 ? (
-            <p className="muted-text">Loading school packs…</p>
-          ) : null}
+          <form
+            className="management-modal-sheet"
+            onSubmit={(event) => submitEditPack(event, editingPack)}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="management-modal-header">
+              <div>
+                <p className="eyebrow">Pack editor</p>
+                <h3>{packEditDraft.name || editingPack.name || "Juise Pack"}</h3>
+              </div>
+              <button
+                className="text-button management-modal-close"
+                type="button"
+                onClick={handleCancelPackEdit}
+              >
+                Close
+              </button>
+            </div>
 
-          {activeSchoolId && !packsLoading && schoolPacks.length === 0 ? (
-            <p className="empty-state">
-              No school-owned Juise packs have been created for this school yet.
-            </p>
-          ) : null}
+            <div className="management-modal-grid">
+              <div className="management-modal-map">
+                <PackLocationPicker
+                  disabled={packEditBusy}
+                  onChange={handleEditLocationSelect}
+                  value={editPackLocation}
+                  otherMarkers={editOtherMarkers}
+                />
 
-          {activeSchoolId && schoolPacks.length > 0 ? (
-            <div className="pack-inventory-layout">
-              <div className="map-card pack-map-card">
-                <div className="data-section-header">
-                  <div>
-                    <h3>Pack pins</h3>
-                    <p className="muted-text">
-                      All saved Juise Pack locations for this school.
-                    </p>
+                {editingPack.spots.length > 0 ? (
+                  <div className="pack-spots-chips management-spot-list">
+                    {editingPack.spots.map((spot: any) => (
+                      <div className="pack-spot-chip" key={spot.spot_uuid}>
+                        <span className="pack-spot-chip-num">
+                          #{spot.spot_number}
+                        </span>
+                        {spot.qr_code ? (
+                          <button
+                            className="pack-spot-qr-button pack-spot-chip-qr pack-spot-chip-qr-ready"
+                            type="button"
+                            onClick={() => handleDownloadPackSpotQrCode(spot)}
+                            title="Download QR for this spot"
+                          >
+                            QR
+                          </button>
+                        ) : (
+                          <button
+                            className="pack-spot-qr-button pack-spot-chip-qr"
+                            type="button"
+                            onClick={() => void handleGeneratePackSpotQrCode(spot)}
+                            disabled={qrActionTarget === `spot:${spot.spot_uuid}`}
+                            title="Generate QR for this spot"
+                          >
+                            {qrActionTarget === `spot:${spot.spot_uuid}`
+                              ? "..."
+                              : "+ QR"}
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                  <span>{existingPackMapMarkers.length} pins</span>
-                </div>
-                <PackLocationsMap markers={existingPackMapMarkers} />
-                {packsWithoutLocationsCount > 0 ? (
-                  <p className="muted-text">
-                    {packsWithoutLocationsCount} pack
-                    {packsWithoutLocationsCount === 1 ? "" : "s"} do not have
-                    saved coordinates yet.
-                  </p>
                 ) : null}
               </div>
 
-              <div className="stack-list">
-                {schoolPacks.map((pack: any) => {
-                  const isEditingPack =
-                    editingPackId === pack.pack_uuid && packEditDraft !== null;
-                  const currentPackEditDraft = isEditingPack ? packEditDraft : null;
-                  const packPhotoUrl = getPackPhotoUrl(pack);
-                  const displayedPackPhoto = isEditingPack
-                    ? packEditPhotoPreviewUrl || packPhotoUrl
-                    : packPhotoUrl;
-                  const spotsWithQr = pack.spots.filter((s: any) => s.qr_code).length;
-
-                  return (
-                    <article className="data-card pack-record-card" key={pack.pack_uuid}>
-                      <div className="pack-record-header">
-                        <div className="pack-record-thumb">
-                          <EntityImagePreview
-                            imageUrl={displayedPackPhoto}
-                            label={pack.name || "Juise Pack"}
-                            altSuffix="pack photo"
-                            fallbackLabel="📦"
-                          />
-                        </div>
-
-                        <div className="pack-record-info">
-                          <strong>{pack.name || "Juise Pack"}</strong>
-                          <p>{pack.description || "No description set."}</p>
-                          <div className="pack-record-badges">
-                            <span
-                              className={`pack-record-badge ${
-                                pack.active
-                                  ? "pack-record-badge-active"
-                                  : "pack-record-badge-inactive"
-                              }`}
-                            >
-                              {pack.active ? "✓ Active" : "Inactive"}
-                            </span>
-                            <span className="pack-record-badge">
-                              {pack.spot_count} {pack.spot_count === 1 ? "spot" : "spots"}
-                            </span>
-                            {pack.school_owner?.campus_id ? (
-                              <span className="pack-record-badge pack-record-badge-location">
-                                {pack.school_owner.campus_id}
-                              </span>
-                            ) : null}
-                            {pack.location ? (
-                              <span className="pack-record-badge pack-record-badge-location">
-                                📍 Located
-                              </span>
-                            ) : (
-                              <span className="pack-record-badge pack-record-badge-inactive">
-                                No location
-                              </span>
-                            )}
-                            {pack.qr_code ? (
-                              <span className="pack-record-badge pack-record-badge-active">
-                                Pack QR ready
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-
-                        <div className="pack-record-menu">
-                          <button
-                            className="secondary-button"
-                            type="button"
-                            onClick={() =>
-                              isEditingPack
-                                ? handleCancelPackEdit()
-                                : handleStartEditingPack(pack)
-                            }
-                            disabled={packEditBusy}
-                          >
-                            {isEditingPack ? "Cancel" : "Edit"}
-                          </button>
-                          {pack.qr_code ? (
+              <div className="data-section">
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Pack Name</span>
+                    <input
+                      value={packEditDraft.name}
+                      onChange={(event) =>
+                        setPackEditDraft((current: any) =>
+                          current
+                            ? { ...current, name: event.target.value }
+                            : current,
+                        )
+                      }
+                      placeholder="North Garage Pack"
+                      disabled={packEditBusy}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Latitude</span>
+                    <input
+                      value={packEditDraft.lat}
+                      onChange={(event) =>
+                        setPackEditDraft((current: any) =>
+                          current
+                            ? { ...current, lat: event.target.value }
+                            : current,
+                        )
+                      }
+                      placeholder="42.678000"
+                      disabled={packEditBusy}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Longitude</span>
+                    <input
+                      value={packEditDraft.lng}
+                      onChange={(event) =>
+                        setPackEditDraft((current: any) =>
+                          current
+                            ? { ...current, lng: event.target.value }
+                            : current,
+                        )
+                      }
+                      placeholder="-83.195000"
+                      disabled={packEditBusy}
+                    />
+                  </label>
+                  <label className="field field-span-2">
+                    <span>Description</span>
+                    <textarea
+                      value={packEditDraft.description}
+                      onChange={(event) =>
+                        setPackEditDraft((current: any) =>
+                          current
+                            ? { ...current, description: event.target.value }
+                            : current,
+                        )
+                      }
+                      placeholder="Covered student parking near the library entrance."
+                      rows={4}
+                      disabled={packEditBusy}
+                    />
+                  </label>
+                  <div className="field field-span-2">
+                    <span>Pack Photo</span>
+                    <div className="challenge-image-field">
+                      <EntityImagePreview
+                        imageUrl={packEditPhotoPreviewUrl || getPackPhotoUrl(editingPack)}
+                        label={editingPack.name || "Juise Pack"}
+                        altSuffix="pack photo"
+                        fallbackLabel="Pack photo preview"
+                      />
+                      <div className="challenge-image-field-controls">
+                        <div className="challenge-image-upload-row">
+                          <label className="secondary-button challenge-upload-button">
+                            <input
+                              className="challenge-upload-input"
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp,image/gif"
+                              onChange={handlePackEditPhotoFileChange}
+                              disabled={packEditBusy}
+                            />
+                            {packEditPhotoFile ? "Replace Photo" : "Upload Photo"}
+                          </label>
+                          {packEditPhotoFile ? (
                             <button
                               className="secondary-button"
                               type="button"
-                              onClick={() => handleDownloadPackQrCode(pack)}
-                            >
-                              QR
-                            </button>
-                          ) : (
-                            <button
-                              className="secondary-button"
-                              type="button"
-                              onClick={() => void handleGeneratePackQrCode(pack)}
-                              disabled={qrActionTarget === `pack:${pack.pack_uuid}`}
-                            >
-                              {qrActionTarget === `pack:${pack.pack_uuid}` ? "…" : "Gen QR"}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="pack-record-body">
-                        {pack.spots.length > 0 ? (
-                          <div>
-                            <div className="pack-spots-section-header">
-                              <h4>
-                                Spots — {pack.spots.length} total, {spotsWithQr} with QR
-                              </h4>
-                            </div>
-                            <div className="pack-spots-chips" style={{ marginTop: 10 }}>
-                              {pack.spots.map((spot: any) => (
-                                <div className="pack-spot-chip" key={spot.spot_uuid}>
-                                  <span className="pack-spot-chip-num">
-                                    #{spot.spot_number}
-                                  </span>
-                                  {spot.qr_code ? (
-                                    <button
-                                      className="pack-spot-qr-button pack-spot-chip-qr pack-spot-chip-qr-ready"
-                                      type="button"
-                                      onClick={() => handleDownloadPackSpotQrCode(spot)}
-                                      title="Download QR for this spot"
-                                    >
-                                      ↓ QR
-                                    </button>
-                                  ) : (
-                                    <button
-                                      className="pack-spot-qr-button pack-spot-chip-qr"
-                                      type="button"
-                                      onClick={() =>
-                                        void handleGeneratePackSpotQrCode(spot)
-                                      }
-                                      disabled={qrActionTarget === `spot:${spot.spot_uuid}`}
-                                      title="Generate QR for this spot"
-                                    >
-                                      {qrActionTarget === `spot:${spot.spot_uuid}` ? "…" : "+ QR"}
-                                    </button>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null}
-
-                        <div className="pack-record-actions-row">
-                          <button
-                            className="secondary-button"
-                            type="button"
-                            onClick={() =>
-                              isEditingPack
-                                ? handleCancelPackEdit()
-                                : handleStartEditingPack(pack)
-                            }
-                            disabled={packEditBusy}
-                          >
-                            {isEditingPack ? "Cancel Edit" : "Edit Details"}
-                          </button>
-                          {pack.qr_code ? (
-                            <button
-                              className="secondary-button"
-                              type="button"
-                              onClick={() => handleDownloadPackQrCode(pack)}
-                            >
-                              Download Pack QR
-                            </button>
-                          ) : (
-                            <button
-                              className="secondary-button"
-                              type="button"
-                              onClick={() => void handleGeneratePackQrCode(pack)}
-                              disabled={qrActionTarget === `pack:${pack.pack_uuid}`}
-                            >
-                              {qrActionTarget === `pack:${pack.pack_uuid}`
-                                ? "Generating Pack QR…"
-                                : "Generate Pack QR"}
-                            </button>
-                          )}
-                        </div>
-
-                        {currentPackEditDraft ? (
-                          <form
-                            className="data-section pack-edit-form"
-                            onSubmit={(event) => void handleSavePackEdit(event, pack)}
-                          >
-                            <div className="data-section-header">
-                              <div>
-                                <h4>Edit pack details</h4>
-                                <p className="muted-text">
-                                  Update name, description, location, and photo.
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="form-grid">
-                              <label className="field">
-                                <span>Pack Name</span>
-                                <input
-                                  value={currentPackEditDraft.name}
-                                  onChange={(event: any) =>
-                                    setPackEditDraft((current: any) =>
-                                      current
-                                        ? { ...current, name: event.target.value }
-                                        : current,
-                                    )
-                                  }
-                                  placeholder="North Garage Pack"
-                                  disabled={packEditBusy}
-                                />
-                              </label>
-                              <label className="field">
-                                <span>Latitude</span>
-                                <input
-                                  value={currentPackEditDraft.lat}
-                                  onChange={(event: any) =>
-                                    setPackEditDraft((current: any) =>
-                                      current
-                                        ? { ...current, lat: event.target.value }
-                                        : current,
-                                    )
-                                  }
-                                  placeholder="42.678000"
-                                  disabled={packEditBusy}
-                                />
-                              </label>
-                              <label className="field">
-                                <span>Longitude</span>
-                                <input
-                                  value={currentPackEditDraft.lng}
-                                  onChange={(event: any) =>
-                                    setPackEditDraft((current: any) =>
-                                      current
-                                        ? { ...current, lng: event.target.value }
-                                        : current,
-                                    )
-                                  }
-                                  placeholder="-83.195000"
-                                  disabled={packEditBusy}
-                                />
-                              </label>
-                              <label className="field field-span-2">
-                                <span>Description</span>
-                                <textarea
-                                  value={currentPackEditDraft.description}
-                                  onChange={(event: any) =>
-                                    setPackEditDraft((current: any) =>
-                                      current
-                                        ? {
-                                            ...current,
-                                            description: event.target.value,
-                                          }
-                                        : current,
-                                    )
-                                  }
-                                  placeholder="Covered student parking near the library entrance."
-                                  rows={4}
-                                  disabled={packEditBusy}
-                                />
-                              </label>
-                              <div className="field field-span-2">
-                                <span>Pack Photo</span>
-                                <div className="challenge-image-field">
-                                  <EntityImagePreview
-                                    imageUrl={displayedPackPhoto}
-                                    label={pack.name || "Juise Pack"}
-                                    altSuffix="pack photo"
-                                    fallbackLabel="Pack photo preview"
-                                  />
-                                  <div className="challenge-image-field-controls">
-                                    <p className="muted-text">
-                                      Upload a new pack photo to replace the current image.
-                                    </p>
-                                    <div className="challenge-image-upload-row">
-                                      <label className="secondary-button challenge-upload-button">
-                                        <input
-                                          className="challenge-upload-input"
-                                          type="file"
-                                          accept="image/png,image/jpeg,image/webp,image/gif"
-                                          onChange={handlePackEditPhotoFileChange}
-                                          disabled={packEditBusy}
-                                        />
-                                        {packEditPhotoFile ? "Replace Photo" : "Upload Photo"}
-                                      </label>
-                                      {packEditPhotoFile ? (
-                                        <button
-                                          className="secondary-button"
-                                          type="button"
-                                          onClick={() => {
-                                            setPackEditPhotoFile(null);
-                                            setPackEditPhotoPreviewUrl("");
-                                          }}
-                                          disabled={packEditBusy}
-                                        >
-                                          Use Current Photo
-                                        </button>
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="form-actions pack-edit-actions">
-                              <button
-                                className="primary-button"
-                                type="submit"
-                                disabled={packEditBusy}
-                              >
-                                {packEditBusy ? "Saving Changes…" : "Save Changes"}
-                              </button>
-                              <button
-                                className="secondary-button"
-                                type="button"
-                                onClick={handleCancelPackEdit}
-                                disabled={packEditBusy}
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </form>
-                        ) : null}
-
-                        <div className="uuid-copy-stack">
-                          <UuidCopyField
-                            label="pack_uuid"
-                            value={pack.pack_uuid}
-                            onCopy={handleCopyUuid}
-                          />
-                        </div>
-
-                        {pack.spots.length > 0 ? (
-                          <details>
-                            <summary
-                              style={{
-                                cursor: "pointer",
-                                fontSize: "0.82rem",
-                                color: "var(--muted)",
-                                fontWeight: 600,
-                                userSelect: "none",
+                              onClick={() => {
+                                setPackEditPhotoFile(null);
+                                setPackEditPhotoPreviewUrl("");
                               }}
+                              disabled={packEditBusy}
                             >
-                              Spot UUIDs ({pack.spots.length})
-                            </summary>
-                            <div className="uuid-copy-stack" style={{ marginTop: 10 }}>
-                              {pack.spots.map((spot: any) => (
-                                <UuidCopyField
-                                  key={spot.spot_uuid}
-                                  label={`spot_${spot.spot_number}`}
-                                  value={spot.spot_uuid}
-                                  onCopy={handleCopyUuid}
-                                />
-                              ))}
-                            </div>
-                          </details>
-                        ) : null}
+                              Use Current Photo
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
-                    </article>
-                  );
-                })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="uuid-copy-stack">
+                  <UuidCopyField
+                    label="pack_uuid"
+                    value={editingPack.pack_uuid}
+                    onCopy={handleCopyUuid}
+                  />
+                </div>
+
+                <div className="form-actions">
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={handleCancelPackEdit}
+                    disabled={packEditBusy}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="primary-button"
+                    type="submit"
+                    disabled={packEditBusy}
+                  >
+                    {packEditBusy ? "Saving..." : "Save"}
+                  </button>
+                </div>
               </div>
             </div>
-          ) : null}
+          </form>
         </div>
-      )}
+      ) : null}
     </section>
   );
 }
