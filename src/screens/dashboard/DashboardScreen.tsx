@@ -3,9 +3,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
 	fetchSchoolPOIs,
 	fetchSchoolStudentRoster,
+	fetchStudentParkingViolations,
 	fetchStudentRouteHistory,
 	type SchoolPOI,
 	type SchoolStudentRosterEntry,
+	type StudentParkingViolation,
 	type StudentRouteHistorySession,
 } from "../../lib/api";
 
@@ -22,6 +24,7 @@ type DashboardLoadState = {
 type StudentActivityBundle = {
 	entry: SchoolStudentRosterEntry;
 	routeHistory: StudentRouteHistorySession[];
+	parkingViolations: StudentParkingViolation[];
 	error: string;
 };
 
@@ -51,6 +54,51 @@ type PoiRankingEntry = {
 	configuredBonusPoints: number;
 };
 
+type RidePenaltyTypeSummary = {
+	key: string;
+	title: string;
+	count: number;
+	pointsLost: number;
+};
+
+type StudentPenaltySummary = {
+	userUUID: string;
+	name: string;
+	detail: string;
+	count: number;
+	pointsLost: number;
+	lastOccurredAt: number;
+};
+
+type RecentRidePenalty = {
+	key: string;
+	name: string;
+	detail: string;
+	title: string;
+	zoneType: string;
+	reason: string;
+	pointsLost: number;
+	occurredAt: number;
+};
+
+type ActivePenaltyReport = {
+	key: string;
+	name: string;
+	detail: string;
+	status: string;
+	description: string;
+	deviceUUID: string;
+	createdAt: number;
+};
+
+type StudentPenaltyReportSummary = {
+	userUUID: string;
+	name: string;
+	detail: string;
+	count: number;
+	lastCreatedAt: number;
+};
+
 type DashboardVisuals = {
 	generatedAt: number;
 	rosterCount: number;
@@ -67,6 +115,18 @@ type DashboardVisuals = {
 	leaderboardWeek: LeaderboardEntry[];
 	leaderboardAll: LeaderboardEntry[];
 	poiRankings: PoiRankingEntry[];
+	ridePenaltyCount: number;
+	ridePenaltyCountThisWeek: number;
+	ridePenaltyPointsLost: number;
+	ridePenaltyStudentCount: number;
+	ridePenaltyTypes: RidePenaltyTypeSummary[];
+	ridePenaltyStudents: StudentPenaltySummary[];
+	recentRidePenalties: RecentRidePenalty[];
+	penaltyReportCount: number;
+	activePenaltyReportCount: number;
+	activePenaltyReportStudentCount: number;
+	activePenaltyReports: ActivePenaltyReport[];
+	activePenaltyReportStudents: StudentPenaltyReportSummary[];
 	studentsLoadedWithErrors: number;
 };
 
@@ -98,6 +158,11 @@ function formatStudentName(entry: SchoolStudentRosterEntry): string {
 
 function resolveStudentUserUUID(entry: SchoolStudentRosterEntry): string {
 	return entry.membership.user_uuid?.trim() || entry.user.k_guid;
+}
+
+function formatStudentDetail(entry: SchoolStudentRosterEntry): string {
+	const studentId = entry.membership.student_id.trim();
+	return studentId || entry.user.email || entry.user.username || "Student";
 }
 
 function formatCompactNumber(value: number): string {
@@ -161,6 +226,44 @@ function filterSessions(
 	);
 }
 
+function getStudentParkingViolations(
+	bundle: StudentActivityBundle,
+): StudentParkingViolation[] {
+	return Array.isArray(bundle.parkingViolations)
+		? bundle.parkingViolations.filter(
+				(violation): violation is StudentParkingViolation => Boolean(violation),
+			)
+		: [];
+}
+
+function formatDashboardTimestamp(timestamp: number): string {
+	if (!Number.isFinite(timestamp) || timestamp <= 0) {
+		return "No timestamp";
+	}
+
+	return new Date(timestamp * 1000).toLocaleString([], {
+		month: "short",
+		day: "numeric",
+		hour: "numeric",
+		minute: "2-digit",
+	});
+}
+
+function formatPenaltyZoneType(zoneType: string): string {
+	switch (zoneType.trim()) {
+		case "no_go":
+			return "No-go zone";
+		case "speed_limit":
+			return "Speed limit zone";
+		default:
+			return zoneType.trim() || "Ride penalty";
+	}
+}
+
+function formatReportStatus(status: string): string {
+	return status.trim() || "reported";
+}
+
 function buildLeaderboard(
 	students: StudentActivityBundle[],
 	from?: number,
@@ -181,13 +284,10 @@ function buildLeaderboard(
 				(sum, session) => sum + session.distance_meters,
 				0,
 			);
-			const studentId = bundle.entry.membership.student_id.trim();
-
 			return {
 				userUUID: resolveStudentUserUUID(bundle.entry),
 				name: formatStudentName(bundle.entry),
-				detail:
-					studentId || bundle.entry.user.email || bundle.entry.user.username,
+				detail: formatStudentDetail(bundle.entry),
 				earnedPoints,
 				bonusPoints,
 				rideCount: sessions.length,
@@ -307,6 +407,168 @@ function buildPoiRankings(
 		.slice(0, 12);
 }
 
+function getRidePenaltyRecords(
+	students: StudentActivityBundle[],
+	from?: number,
+	to?: number,
+) {
+	return students.flatMap((bundle) =>
+		bundle.routeHistory.flatMap((session) =>
+			session.penalty_events
+				.filter((event) =>
+					typeof from === "number"
+						? isInRange(event.occurred_at, from, to)
+						: true,
+				)
+				.map((event) => ({ bundle, session, event })),
+		),
+	);
+}
+
+function buildRidePenaltyTypes(
+	records: ReturnType<typeof getRidePenaltyRecords>,
+): RidePenaltyTypeSummary[] {
+	const summaryByType = new Map<string, RidePenaltyTypeSummary>();
+
+	for (const { event } of records) {
+		const key = event.zone_type.trim() || "unknown";
+		const current = summaryByType.get(key);
+		if (current) {
+			current.count += 1;
+			current.pointsLost += event.points_lost;
+		} else {
+			summaryByType.set(key, {
+				key,
+				title: formatPenaltyZoneType(event.zone_type),
+				count: 1,
+				pointsLost: event.points_lost,
+			});
+		}
+	}
+
+	return Array.from(summaryByType.values()).sort((left, right) => {
+		if (left.count !== right.count) {
+			return right.count - left.count;
+		}
+		if (left.pointsLost !== right.pointsLost) {
+			return right.pointsLost - left.pointsLost;
+		}
+		return left.title.localeCompare(right.title);
+	});
+}
+
+function buildRidePenaltyStudents(
+	records: ReturnType<typeof getRidePenaltyRecords>,
+): StudentPenaltySummary[] {
+	const summaryByStudent = new Map<string, StudentPenaltySummary>();
+
+	for (const { bundle, event } of records) {
+		const userUUID = resolveStudentUserUUID(bundle.entry);
+		const current = summaryByStudent.get(userUUID);
+		if (current) {
+			current.count += 1;
+			current.pointsLost += event.points_lost;
+			current.lastOccurredAt = Math.max(current.lastOccurredAt, event.occurred_at);
+		} else {
+			summaryByStudent.set(userUUID, {
+				userUUID,
+				name: formatStudentName(bundle.entry),
+				detail: formatStudentDetail(bundle.entry),
+				count: 1,
+				pointsLost: event.points_lost,
+				lastOccurredAt: event.occurred_at,
+			});
+		}
+	}
+
+	return Array.from(summaryByStudent.values())
+		.sort((left, right) => {
+			if (left.count !== right.count) {
+				return right.count - left.count;
+			}
+			if (left.pointsLost !== right.pointsLost) {
+				return right.pointsLost - left.pointsLost;
+			}
+			return right.lastOccurredAt - left.lastOccurredAt;
+		})
+		.slice(0, 5);
+}
+
+function buildRecentRidePenalties(
+	records: ReturnType<typeof getRidePenaltyRecords>,
+): RecentRidePenalty[] {
+	return records
+		.map(({ bundle, session, event }) => ({
+			key: `${session.session_id}:${event.zone_uuid}:${event.occurred_at}`,
+			name: formatStudentName(bundle.entry),
+			detail: formatStudentDetail(bundle.entry),
+			title: event.title || formatPenaltyZoneType(event.zone_type),
+			zoneType: formatPenaltyZoneType(event.zone_type),
+			reason: event.reason || event.description || "No reason provided.",
+			pointsLost: event.points_lost,
+			occurredAt: event.occurred_at,
+		}))
+		.sort((left, right) => right.occurredAt - left.occurredAt)
+		.slice(0, 5);
+}
+
+function buildActivePenaltyReports(
+	students: StudentActivityBundle[],
+): ActivePenaltyReport[] {
+	return students
+		.flatMap((bundle) =>
+			getStudentParkingViolations(bundle)
+				.filter((violation) => violation.active)
+				.map((violation) => ({
+					key: violation.violation_uuid,
+					name: formatStudentName(bundle.entry),
+					detail: formatStudentDetail(bundle.entry),
+					status: formatReportStatus(violation.status),
+					description: violation.description || "No description provided.",
+					deviceUUID: violation.registered_device_uuid ?? "",
+					createdAt: violation.created_at,
+				})),
+		)
+		.sort((left, right) => right.createdAt - left.createdAt)
+		.slice(0, 6);
+}
+
+function buildActivePenaltyReportStudents(
+	students: StudentActivityBundle[],
+): StudentPenaltyReportSummary[] {
+	const summaryByStudent = new Map<string, StudentPenaltyReportSummary>();
+
+	for (const bundle of students) {
+		const activeReports = getStudentParkingViolations(bundle).filter(
+			(violation) => violation.active,
+		);
+		if (activeReports.length === 0) {
+			continue;
+		}
+
+		const userUUID = resolveStudentUserUUID(bundle.entry);
+		summaryByStudent.set(userUUID, {
+			userUUID,
+			name: formatStudentName(bundle.entry),
+			detail: formatStudentDetail(bundle.entry),
+			count: activeReports.length,
+			lastCreatedAt: Math.max(
+				0,
+				...activeReports.map((violation) => violation.created_at),
+			),
+		});
+	}
+
+	return Array.from(summaryByStudent.values())
+		.sort((left, right) => {
+			if (left.count !== right.count) {
+				return right.count - left.count;
+			}
+			return right.lastCreatedAt - left.lastCreatedAt;
+		})
+		.slice(0, 5);
+}
+
 function buildDashboardVisuals(dataset: DashboardDataset): DashboardVisuals {
 	const now = Date.now();
 	const todayStart = startOfLocalDay(now);
@@ -326,6 +588,14 @@ function buildDashboardVisuals(dataset: DashboardDataset): DashboardVisuals {
 	const earnedPoints = allSessions.reduce(
 		(sum, session) => sum + calculateEarnedPoints(session),
 		0,
+	);
+	const ridePenaltyRecords = getRidePenaltyRecords(dataset.students);
+	const weeklyRidePenaltyRecords = getRidePenaltyRecords(
+		dataset.students,
+		weekStart,
+	);
+	const allPenaltyReports = dataset.students.flatMap((bundle) =>
+		getStudentParkingViolations(bundle),
 	);
 
 	return {
@@ -361,6 +631,34 @@ function buildDashboardVisuals(dataset: DashboardDataset): DashboardVisuals {
 		leaderboardWeek: buildLeaderboard(dataset.students, weekStart),
 		leaderboardAll: buildLeaderboard(dataset.students),
 		poiRankings: buildPoiRankings(dataset, weekStart),
+		ridePenaltyCount: ridePenaltyRecords.length,
+		ridePenaltyCountThisWeek: weeklyRidePenaltyRecords.length,
+		ridePenaltyPointsLost: ridePenaltyRecords.reduce(
+			(sum, { event }) => sum + event.points_lost,
+			0,
+		),
+		ridePenaltyStudentCount: new Set(
+			ridePenaltyRecords.map(({ bundle }) => resolveStudentUserUUID(bundle.entry)),
+		).size,
+		ridePenaltyTypes: buildRidePenaltyTypes(ridePenaltyRecords),
+		ridePenaltyStudents: buildRidePenaltyStudents(ridePenaltyRecords),
+		recentRidePenalties: buildRecentRidePenalties(ridePenaltyRecords),
+		penaltyReportCount: allPenaltyReports.length,
+		activePenaltyReportCount: allPenaltyReports.filter(
+			(violation) => violation.active,
+		).length,
+		activePenaltyReportStudentCount: new Set(
+			dataset.students
+				.filter((bundle) =>
+					getStudentParkingViolations(bundle).some(
+						(violation) => violation.active,
+					),
+				)
+				.map((bundle) => resolveStudentUserUUID(bundle.entry)),
+		).size,
+		activePenaltyReports: buildActivePenaltyReports(dataset.students),
+		activePenaltyReportStudents:
+			buildActivePenaltyReportStudents(dataset.students),
 		studentsLoadedWithErrors: dataset.students.filter((bundle) => bundle.error)
 			.length,
 	};
@@ -429,6 +727,202 @@ function DashboardKpi({
 			<span>{label}</span>
 			<strong>{value}</strong>
 			<small>{detail}</small>
+		</article>
+	);
+}
+
+function DashboardMiniKpi({
+	label,
+	value,
+	detail,
+}: {
+	label: string;
+	value: string;
+	detail: string;
+}) {
+	return (
+		<div className="dashboard-mini-kpi">
+			<span>{label}</span>
+			<strong>{value}</strong>
+			<small>{detail}</small>
+		</div>
+	);
+}
+
+function RidePenaltySection({ visuals }: { visuals: DashboardVisuals }) {
+	const topTypeCount = Math.max(
+		1,
+		...visuals.ridePenaltyTypes.map((type) => type.count),
+	);
+
+	return (
+		<article className="dashboard-card dashboard-penalty-card">
+			<div className="reports-visual-heading">
+				<h3>Ride penalties faced</h3>
+				<p>Speed-limit and no-go events students have hit during rides.</p>
+			</div>
+			<div className="dashboard-penalty-kpi-grid">
+				<DashboardMiniKpi
+					label="All ride penalties"
+					value={visuals.ridePenaltyCount.toLocaleString()}
+					detail={`${visuals.ridePenaltyCountThisWeek.toLocaleString()} this week`}
+				/>
+				<DashboardMiniKpi
+					label="Points lost"
+					value={visuals.ridePenaltyPointsLost.toLocaleString()}
+					detail="Across ride events"
+				/>
+				<DashboardMiniKpi
+					label="Students affected"
+					value={visuals.ridePenaltyStudentCount.toLocaleString()}
+					detail="Top students shown"
+				/>
+			</div>
+			<div className="dashboard-penalty-columns">
+				<div className="dashboard-penalty-panel">
+					<h4>Penalty type mix</h4>
+					<div className="dashboard-penalty-list">
+						{visuals.ridePenaltyTypes.length === 0 ? (
+							<p className="reports-visual-empty">No ride penalties recorded.</p>
+						) : (
+							visuals.ridePenaltyTypes.map((type) => (
+								<div className="dashboard-penalty-row" key={type.key}>
+									<div className="dashboard-penalty-copy">
+										<strong>{type.title}</strong>
+										<span>{type.pointsLost.toLocaleString()} points lost</span>
+										<div className="reports-bar-track">
+											<div
+												className="reports-bar-fill dashboard-penalty-fill"
+												style={{
+													width: `${Math.max(
+														5,
+														Math.round((type.count / topTypeCount) * 100),
+													)}%`,
+												}}
+											/>
+										</div>
+									</div>
+									<div className="dashboard-penalty-score">
+										<strong>{type.count.toLocaleString()}</strong>
+										<span>events</span>
+									</div>
+								</div>
+							))
+						)}
+					</div>
+				</div>
+				<div className="dashboard-penalty-panel">
+					<h4>Recent ride penalties</h4>
+					<div className="dashboard-penalty-list">
+						{visuals.recentRidePenalties.length === 0 ? (
+							<p className="reports-visual-empty">No recent ride penalties.</p>
+						) : (
+							visuals.recentRidePenalties.map((penalty) => (
+								<div className="dashboard-penalty-row" key={penalty.key}>
+									<div className="dashboard-penalty-copy">
+										<strong>{penalty.name}</strong>
+										<span>
+											{penalty.title} · {penalty.zoneType}
+										</span>
+										<small>
+											{penalty.reason} ·{" "}
+											{formatDashboardTimestamp(penalty.occurredAt)}
+										</small>
+									</div>
+									<div className="dashboard-penalty-score">
+										<strong>{penalty.pointsLost.toLocaleString()}</strong>
+										<span>pts lost</span>
+									</div>
+								</div>
+							))
+						)}
+					</div>
+				</div>
+			</div>
+		</article>
+	);
+}
+
+function ActivePenaltyReportsSection({
+	visuals,
+}: {
+	visuals: DashboardVisuals;
+}) {
+	return (
+		<article className="dashboard-card dashboard-penalty-card">
+			<div className="reports-visual-heading">
+				<h3>Active penalty reports</h3>
+				<p>Reports still marked active and ready for review.</p>
+			</div>
+			<div className="dashboard-penalty-kpi-grid">
+				<DashboardMiniKpi
+					label="Active reports"
+					value={visuals.activePenaltyReportCount.toLocaleString()}
+					detail="Currently active"
+				/>
+				<DashboardMiniKpi
+					label="All reports"
+					value={visuals.penaltyReportCount.toLocaleString()}
+					detail="Active and archived"
+				/>
+				<DashboardMiniKpi
+					label="Students flagged"
+					value={visuals.activePenaltyReportStudentCount.toLocaleString()}
+					detail="Top students shown"
+				/>
+			</div>
+			<div className="dashboard-penalty-columns">
+				<div className="dashboard-penalty-panel">
+					<h4>Students with active reports</h4>
+					<div className="dashboard-penalty-list">
+						{visuals.activePenaltyReportStudents.length === 0 ? (
+							<p className="reports-visual-empty">No active reports right now.</p>
+						) : (
+							visuals.activePenaltyReportStudents.map((student) => (
+								<div className="dashboard-penalty-row" key={student.userUUID}>
+									<div className="dashboard-penalty-copy">
+										<strong>{student.name}</strong>
+										<span>{student.detail}</span>
+										<small>
+											Last report {formatDashboardTimestamp(student.lastCreatedAt)}
+										</small>
+									</div>
+									<div className="dashboard-penalty-score">
+										<strong>{student.count.toLocaleString()}</strong>
+										<span>active</span>
+									</div>
+								</div>
+							))
+						)}
+					</div>
+				</div>
+				<div className="dashboard-penalty-panel">
+					<h4>Latest active reports</h4>
+					<div className="dashboard-penalty-list">
+						{visuals.activePenaltyReports.length === 0 ? (
+							<p className="reports-visual-empty">No active reports to show.</p>
+						) : (
+							visuals.activePenaltyReports.map((report) => (
+								<div className="dashboard-penalty-row" key={report.key}>
+									<div className="dashboard-penalty-copy">
+										<strong>{report.name}</strong>
+										<span>{report.description}</span>
+										<small>
+											{report.deviceUUID
+												? `Device ${report.deviceUUID} · `
+												: ""}
+											{formatDashboardTimestamp(report.createdAt)}
+										</small>
+									</div>
+									<span className="dashboard-penalty-chip">
+										{report.status}
+									</span>
+								</div>
+							))
+						)}
+					</div>
+				</div>
+			</div>
 		</article>
 	);
 }
@@ -530,7 +1024,7 @@ export function DashboardScreen({ activeSchoolId, managedAppId }: Props) {
 
 			setLoadState({
 				status: "loading",
-				message: "Syncing student rides...",
+				message: "Syncing student rides and reports...",
 				completed: 0,
 				total: roster.length,
 			});
@@ -540,28 +1034,47 @@ export function DashboardScreen({ activeSchoolId, managedAppId }: Props) {
 				DASHBOARD_CONCURRENCY,
 				async (entry) => {
 					const studentUserUUID = resolveStudentUserUUID(entry);
-					try {
-						return {
-							entry,
-							routeHistory: await fetchStudentRouteHistory(
+					const [routeHistoryResult, parkingViolationsResult] =
+						await Promise.allSettled([
+							fetchStudentRouteHistory(
 								managedAppId,
 								activeSchoolId,
 								studentUserUUID,
 							),
-							error: "",
-						} satisfies StudentActivityBundle;
-					} catch (error) {
-						return {
-							entry,
-							routeHistory: [],
-							error: getErrorMessage(error),
-						} satisfies StudentActivityBundle;
-					}
+							fetchStudentParkingViolations(
+								managedAppId,
+								activeSchoolId,
+								studentUserUUID,
+							),
+						]);
+					const errors = [
+						routeHistoryResult.status === "rejected"
+							? `Route history: ${getErrorMessage(routeHistoryResult.reason)}`
+							: "",
+						parkingViolationsResult.status === "rejected"
+							? `Penalty reports: ${getErrorMessage(
+									parkingViolationsResult.reason,
+								)}`
+							: "",
+					].filter(Boolean);
+
+					return {
+						entry,
+						routeHistory:
+							routeHistoryResult.status === "fulfilled"
+								? routeHistoryResult.value
+								: [],
+						parkingViolations:
+							parkingViolationsResult.status === "fulfilled"
+								? parkingViolationsResult.value
+								: [],
+						error: errors.join("; "),
+					} satisfies StudentActivityBundle;
 				},
 				(completed) => {
 					setLoadState({
 						status: "loading",
-						message: "Syncing student rides...",
+						message: "Syncing student rides and reports...",
 						completed,
 						total: roster.length,
 					});
@@ -760,6 +1273,11 @@ export function DashboardScreen({ activeSchoolId, managedAppId }: Props) {
 						</div>
 						<PoiRankings rankings={visuals.poiRankings} />
 					</article>
+
+					<div className="dashboard-penalty-grid">
+						<RidePenaltySection visuals={visuals} />
+						<ActivePenaltyReportsSection visuals={visuals} />
+					</div>
 
 					<div className="dashboard-footnote-grid">
 						<DashboardKpi
