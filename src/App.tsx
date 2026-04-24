@@ -83,6 +83,7 @@ import {
   type DashboardContext,
 } from "./lib/storage";
 import { ChallengesScreen } from "./screens/dashboard/ChallengesScreen";
+import { DashboardScreen } from "./screens/dashboard/DashboardScreen";
 import { PacksScreen } from "./screens/dashboard/PacksScreen";
 import { PoisScreen } from "./screens/dashboard/PoisScreen";
 import { ReportsScreen } from "./screens/dashboard/ReportsScreen";
@@ -102,6 +103,7 @@ import {
 import { useAppDispatch, useAppSelector } from "./store/hooks";
 
 type Section =
+  | "dashboard"
   | "school"
   | "terms"
   | "pois"
@@ -120,6 +122,7 @@ const dashboardSections: Array<{
   label: string;
   path: string;
 }> = [
+  { section: "dashboard", label: "Dashboard", path: "/dashboard" },
   { section: "school", label: "School Profile", path: "/school" },
   { section: "terms", label: "School Terms", path: "/terms" },
   { section: "pois", label: "School POIs", path: "/pois" },
@@ -1131,7 +1134,7 @@ function App() {
   const scopedSchoolId = session?.claims.school_id?.trim() ?? "";
   const activeSchoolId = scopedSchoolId;
   const currentSection =
-    resolveSectionFromPathname(location.pathname) ?? "school";
+    resolveSectionFromPathname(location.pathname) ?? "dashboard";
   const deferredStudentRosterSearch = useDeferredValue(studentRosterSearch);
   const studentsDispatch = useAppDispatch();
   const {
@@ -1759,7 +1762,7 @@ function App() {
       return;
     }
 
-    navigate(sectionPathByName.school, { replace: true });
+    navigate(sectionPathByName.dashboard, { replace: true });
   }, [location.pathname, navigate]);
 
   useEffect(() => {
@@ -2715,9 +2718,9 @@ function App() {
       managedAppId: trimmedAppId,
     });
     if (
-      normalizeDashboardPath(location.pathname) !== sectionPathByName.school
+      normalizeDashboardPath(location.pathname) !== sectionPathByName.dashboard
     ) {
-      navigate(sectionPathByName.school);
+      navigate(sectionPathByName.dashboard);
     }
   }
 
@@ -3785,6 +3788,13 @@ function App() {
 
   const sectionContent = (() => {
     switch (currentSection) {
+      case "dashboard":
+        return (
+          <DashboardScreen
+            activeSchoolId={activeSchoolId}
+            managedAppId={context.managedAppId}
+          />
+        );
       case "school":
         return schoolProfileContent;
       case "terms":
