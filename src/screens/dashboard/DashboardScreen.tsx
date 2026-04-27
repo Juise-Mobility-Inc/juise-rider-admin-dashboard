@@ -1234,7 +1234,9 @@ export function DashboardScreen({
 							<div className="dashboard-hero-points-balance">
 								<div className="dashboard-hero-points-earned">
 									<small>Earned</small>
-									<strong>+{formatCompactNumber(visuals.earnedPoints)}</strong>
+									<strong className="stat-value">
+										+{formatCompactNumber(visuals.earnedPoints)}
+									</strong>
 								</div>
 								<div className="dashboard-hero-points-lost">
 									<small>Lost</small>

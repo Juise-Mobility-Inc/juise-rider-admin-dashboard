@@ -2703,6 +2703,23 @@ function App() {
 		void handleSelectStudentInRoster(normalizedMembershipId);
 	}
 
+	async function handleOpenStudentDeviceFromPenaltyReport(
+		membershipId: string,
+		deviceUUID: string,
+	) {
+		const normalizedMembershipId = membershipId.trim();
+		const normalizedDeviceUUID = deviceUUID.trim();
+		if (!normalizedMembershipId) {
+			return;
+		}
+
+		navigate(sectionPathByName.students);
+		await handleSelectStudentInRoster(normalizedMembershipId);
+		if (normalizedDeviceUUID) {
+			handleOpenStudentDevice(normalizedDeviceUUID);
+		}
+	}
+
 	async function handleLogin(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
 		setAuthBusy(true);
@@ -4006,6 +4023,7 @@ function App() {
 							studentRoster={sortedSchoolStudentRoster}
 							studentProfilePhotoUrls={schoolStudentProfilePhotoUrls}
 							onOpenStudent={handleOpenStudentFromPenaltyReport}
+							onOpenStudentDevice={handleOpenStudentDeviceFromPenaltyReport}
 						/>
 					);
 			case "reports":

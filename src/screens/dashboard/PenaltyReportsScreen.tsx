@@ -4,12 +4,17 @@ import {
 	fetchSchoolParkingViolationMedia,
 	fetchSchoolParkingViolationHistory,
 	fetchSchoolParkingViolations,
+	fetchStudentProfile,
+	fetchUserMediaAssets,
+	signSchoolMedia,
+	type RegisteredDevice,
 	type SchoolStudentRosterEntry,
 	type StudentParkingViolation,
 	type StudentParkingViolationHistoryEvent,
 	updateSchoolParkingViolation,
 	uploadSchoolParkingViolationMedia,
 	type UploadedEntityMedia,
+	type UserMediaAsset,
 } from "../../lib/api";
 
 type Props = {
@@ -18,6 +23,7 @@ type Props = {
 	studentRoster: SchoolStudentRosterEntry[];
 	studentProfilePhotoUrls: Record<string, string>;
 	onOpenStudent: (membershipUUID: string) => void;
+	onOpenStudentDevice: (membershipUUID: string, deviceUUID: string) => void;
 };
 
 const openStatusTokens = [
@@ -85,6 +91,63 @@ function getStudentInitials(entry?: SchoolStudentRosterEntry | null): string {
 		.toUpperCase();
 }
 
+function formatDeviceName(device?: RegisteredDevice | null): string {
+	if (!device) {
+		return "Registered device";
+	}
+
+	return (
+		device.nickname?.trim() ||
+		[device.make, device.model].filter(Boolean).join(" ").trim() ||
+		device.device_type?.trim() ||
+		"Registered device"
+	);
+}
+
+function formatDeviceMeta(device?: RegisteredDevice | null): string {
+	if (!device) {
+		return "Device details unavailable";
+	}
+
+	return (
+		[
+			device.device_type?.trim(),
+			device.color?.trim(),
+			device.serial_number?.trim(),
+		]
+			.filter(Boolean)
+			.join(" · ") || "Device details unavailable"
+	);
+}
+
+function resolveMediaObjectKey(asset?: Pick<UserMediaAsset, "object_key">) {
+	return asset?.object_key?.trim() ?? "";
+}
+
+function resolveDevicePhotoObjectKey(assets: UserMediaAsset[]): string {
+	const slotPriority: Record<string, number> = {
+		photo: 0,
+		overview: 1,
+		logo: 2,
+	};
+
+	return (
+		[...assets]
+			.filter((asset) => asset.object_key?.trim())
+			.sort((left, right) => {
+				const leftRank = slotPriority[left.slot?.trim() ?? ""] ?? 99;
+				const rightRank = slotPriority[right.slot?.trim() ?? ""] ?? 99;
+				if (leftRank !== rightRank) {
+					return leftRank - rightRank;
+				}
+				if (left.updated_at !== right.updated_at) {
+					return right.updated_at - left.updated_at;
+				}
+				return right.created_at - left.created_at;
+			})[0]?.object_key?.trim() ?? ""
+	);
+}
+
 function isOpenReport(report: StudentParkingViolation): boolean {
 	if (!report.active) {
 		return false;
@@ -138,6 +201,7 @@ function formatHistoryEvent(
 export function PenaltyReportsScreen({
 	activeSchoolId,
 	managedAppId,
+	onOpenStudentDevice,
 	onOpenStudent,
 	studentProfilePhotoUrls,
 	studentRoster,
@@ -157,6 +221,11 @@ export function PenaltyReportsScreen({
 	const [loadBusy, setLoadBusy] = useState(false);
 	const [saveBusy, setSaveBusy] = useState(false);
 	const [uploadBusy, setUploadBusy] = useState(false);
+	const [deviceBusy, setDeviceBusy] = useState(false);
+	const [selectedDevice, setSelectedDevice] = useState<RegisteredDevice | null>(
+		null,
+	);
+	const [selectedDevicePhotoUrl, setSelectedDevicePhotoUrl] = useState("");
 	const [error, setError] = useState("");
 	const [success, setSuccess] = useState("");
 
@@ -204,6 +273,7 @@ export function PenaltyReportsScreen({
 				studentProfilePhotoUrls[selectedStudentEntry.membership.user_uuid] ||
 				""
 			: "";
+	const selectedDeviceUUID = selectedReport?.registered_device_uuid?.trim() ?? "";
 
 	const refreshReports = useCallback(async () => {
 		if (!activeSchoolId) {
@@ -307,6 +377,81 @@ export function PenaltyReportsScreen({
 		void refreshMedia(selectedReport);
 		void refreshHistory(selectedReport);
 	}, [refreshHistory, refreshMedia, selectedReport]);
+
+	useEffect(() => {
+		let canceled = false;
+
+		async function loadSelectedDevice() {
+			setSelectedDevice(null);
+			setSelectedDevicePhotoUrl("");
+
+			if (!selectedReport || !selectedDeviceUUID || !activeSchoolId) {
+				setDeviceBusy(false);
+				return;
+			}
+
+			setDeviceBusy(true);
+			try {
+				const profile = await fetchStudentProfile(
+					managedAppId,
+					selectedReport.user_uuid,
+				);
+				if (canceled) {
+					return;
+				}
+
+				const device =
+					profile.devices.find(
+						(candidate) =>
+							candidate.registered_device_uuid === selectedDeviceUUID,
+					) ?? null;
+				setSelectedDevice(device);
+
+				if (!device) {
+					return;
+				}
+
+				const mediaAssets = await fetchUserMediaAssets(
+					managedAppId,
+					device.user_uuid || selectedReport.user_uuid,
+					"registered_device",
+					device.registered_device_uuid,
+				).catch(() => []);
+				if (canceled) {
+					return;
+				}
+
+				const objectKey =
+					resolveDevicePhotoObjectKey(mediaAssets) ||
+					resolveMediaObjectKey(mediaAssets[0]);
+				if (!objectKey) {
+					return;
+				}
+
+				const signedUrls = await signSchoolMedia(activeSchoolId, [objectKey]).catch(
+					() => ({} as Record<string, string>),
+				);
+				if (!canceled) {
+					setSelectedDevicePhotoUrl(signedUrls[objectKey] ?? "");
+				}
+			} catch {
+				if (!canceled) {
+					setSelectedDevice(null);
+					setSelectedDevicePhotoUrl("");
+				}
+			} finally {
+				if (!canceled) {
+					setDeviceBusy(false);
+				}
+			}
+		}
+
+		void loadSelectedDevice();
+
+		return () => {
+			canceled = true;
+		};
+	}, [activeSchoolId, managedAppId, selectedDeviceUUID, selectedReport]);
 
 	async function saveReport(
 		nextStatus = statusDraft,
@@ -498,11 +643,40 @@ export function PenaltyReportsScreen({
 										View Student
 									</button>
 								</div>
-								<div>
-									<span>Device UUID</span>
-									<strong>
-										{selectedReport.registered_device_uuid || "Not linked"}
-									</strong>
+								<div className="penalty-report-device-card">
+									<div className="penalty-report-device-thumb">
+										{selectedDevicePhotoUrl ? (
+											<img
+												src={selectedDevicePhotoUrl}
+												alt={`${formatDeviceName(selectedDevice)} device`}
+											/>
+										) : (
+											(selectedDevice?.device_type?.slice(0, 1) || "D").toUpperCase()
+										)}
+									</div>
+									<div className="penalty-report-device-copy">
+										<span>Device</span>
+										<strong>
+											{deviceBusy
+												? "Loading device..."
+												: formatDeviceName(selectedDevice)}
+										</strong>
+										<small>{formatDeviceMeta(selectedDevice)}</small>
+									</div>
+									<button
+										className="secondary-button penalty-report-device-link"
+										type="button"
+										disabled={!selectedStudentEntry || !selectedDeviceUUID}
+										onClick={() => {
+											if (selectedStudentEntry && selectedDeviceUUID) {
+												onOpenStudentDevice(
+													selectedStudentEntry.membership.membership_uuid,
+													selectedDeviceUUID,
+												);
+											}
+										}}>
+										View Device
+									</button>
 								</div>
 							<div>
 								<span>Reported</span>
