@@ -1925,6 +1925,51 @@ export interface AdminParkingViolationMediaUploadResponse {
   expires_in: number;
 }
 
+export type CustomNotificationAudience = "school" | "student";
+
+export interface SchoolCustomNotificationInput {
+  audience: CustomNotificationAudience;
+  title: string;
+  message: string;
+  url?: string;
+  user_uuids?: string[];
+  data?: Record<string, unknown>;
+}
+
+export interface SchoolCustomNotificationResponse {
+  app_id: string;
+  school_id: string;
+  audience: string;
+  provider: string;
+  provider_message_id?: string;
+  provider_recipients?: unknown;
+  provider_response?: Record<string, unknown>;
+}
+
+export async function sendSchoolCustomNotification(
+  managedAppId: string,
+  schoolId: string,
+  input: SchoolCustomNotificationInput,
+): Promise<SchoolCustomNotificationResponse> {
+  return request<SchoolCustomNotificationResponse>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/notifications/custom`,
+    {
+      method: "POST",
+      body: {
+        managed_app_id: managedAppId,
+        audience: input.audience,
+        title: input.title,
+        message: input.message,
+        url: input.url ?? "",
+        user_uuids: input.user_uuids ?? [],
+        data: input.data ?? {},
+      },
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
 export async function fetchStudentParkingViolations(
   managedAppId: string,
   schoolId: string,

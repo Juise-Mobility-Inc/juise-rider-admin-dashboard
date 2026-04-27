@@ -4714,6 +4714,18 @@
 	justify-content: flex-start;
 }
 
+.notifications-page {
+	min-width: 0;
+}
+
+.notification-composer textarea {
+	min-height: 140px;
+}
+
+.notification-send-status {
+	margin: 0;
+}
+
 .management-spot-list {
 	padding: 12px;
 	border-radius: 8px;

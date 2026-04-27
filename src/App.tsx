@@ -82,6 +82,7 @@ import {
 } from "./lib/storage";
 import { ChallengesScreen } from "./screens/dashboard/ChallengesScreen";
 import { DashboardScreen } from "./screens/dashboard/DashboardScreen";
+import { NotificationsScreen } from "./screens/dashboard/NotificationsScreen";
 import { PacksScreen } from "./screens/dashboard/PacksScreen";
 import { PenaltyReportsScreen } from "./screens/dashboard/PenaltyReportsScreen";
 import { PoisScreen } from "./screens/dashboard/PoisScreen";
@@ -109,6 +110,7 @@ type Section =
 	| "zones"
 	| "challenges"
 	| "students"
+	| "notifications"
 	| "penaltyReports"
 	| "reports"
 	| "packs"
@@ -129,6 +131,7 @@ const dashboardSections: Array<{
 	{ section: "zones", label: "School Zones", path: "/zones" },
 	{ section: "challenges", label: "Challenges", path: "/challenges" },
 	{ section: "students", label: "Students", path: "/students" },
+	{ section: "notifications", label: "Notifications", path: "/notifications" },
 	{
 		section: "penaltyReports",
 		label: "Penalty Reports",
@@ -4013,6 +4016,15 @@ function App() {
 						DetailRow={DetailRow}
 						UuidCopyField={UuidCopyField}
 						handleImagePreview={handleOpenImagePreview}
+					/>
+				);
+			case "notifications":
+				return (
+					<NotificationsScreen
+						activeSchoolId={activeSchoolId}
+						managedAppId={context.managedAppId}
+						studentRoster={sortedSchoolStudentRoster}
+						formatNebulaUserName={formatNebulaUserName}
 					/>
 				);
 			case "penaltyReports":
