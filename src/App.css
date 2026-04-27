@@ -469,7 +469,11 @@
 
 .sidebar-brand-card {
 	padding: 18px;
-	background: linear-gradient(180deg, var(--sidebar-surface-strong), var(--sidebar-surface));
+	background: linear-gradient(
+		180deg,
+		var(--sidebar-surface-strong),
+		var(--sidebar-surface)
+	);
 }
 
 .sidebar-brand-top {
@@ -1044,7 +1048,10 @@
 }
 
 .primary-button {
-	background: var(--button-primary-bg, linear-gradient(135deg, #16425b, #1f6f78));
+	background: var(
+		--button-primary-bg,
+		linear-gradient(135deg, #16425b, #1f6f78)
+	);
 	color: var(--button-primary-text, #f5efe5);
 	border-color: var(--panel-border-accent, transparent);
 }
@@ -3831,7 +3838,10 @@
 
 .reports-filter-bar {
 	display: grid;
-	grid-template-columns: minmax(150px, 0.24fr) minmax(150px, 0.24fr) minmax(240px, 1fr);
+	grid-template-columns: minmax(150px, 0.24fr) minmax(150px, 0.24fr) minmax(
+			240px,
+			1fr
+		);
 	gap: 14px;
 	align-items: end;
 	padding: 16px;
@@ -3891,6 +3901,28 @@
 .reports-status-copy span {
 	color: var(--muted);
 	font-size: 0.86rem;
+}
+
+.reports-status-dismiss {
+	appearance: none;
+	border: 1px solid rgba(47, 111, 72, 0.22);
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.58);
+	color: var(--text-strong);
+	cursor: pointer;
+	font-size: 0.82rem;
+	font-weight: 800;
+	padding: 6px 12px;
+	transition:
+		background 140ms ease,
+		border-color 140ms ease,
+		transform 140ms ease;
+}
+
+.reports-status-dismiss:hover {
+	background: rgba(255, 255, 255, 0.82);
+	border-color: rgba(47, 111, 72, 0.36);
+	transform: translateY(-1px);
 }
 
 .reports-progress-track {
@@ -4037,6 +4069,49 @@
 	color: var(--text-strong);
 	font-size: clamp(2.6rem, 6vw, 4.8rem);
 	line-height: 0.9;
+}
+
+.dashboard-hero-points-balance {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 10px;
+	align-items: stretch;
+}
+
+.dashboard-hero-points-balance > div {
+	display: flex;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: 16px;
+	min-width: 0;
+}
+
+.dashboard-hero-points-lost {
+	padding-top: 10px;
+	border-top: 1px solid rgba(17, 45, 78, 0.12);
+}
+
+.dashboard-hero-card .dashboard-hero-points-balance small {
+	color: var(--muted);
+	font-size: 0.74rem;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	line-height: 1;
+	text-transform: uppercase;
+}
+
+.dashboard-hero-card .dashboard-hero-points-balance strong {
+	font-size: clamp(2.1rem, 4.5vw, 3.4rem);
+	font-variant-numeric: tabular-nums;
+	line-height: 0.95;
+	overflow-wrap: anywhere;
+	white-space: nowrap;
+}
+
+.dashboard-hero-card .dashboard-hero-points-lost strong {
+	color: #b44b35;
+	font-size: 1.35rem;
+	line-height: 1.05;
 }
 
 .dashboard-hero-card small,
@@ -4605,9 +4680,348 @@
 }
 
 .reports-visual-heading-row {
+	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto;
 	align-items: start;
 	gap: 16px;
+}
+
+.dashboard-heading-actions {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.dashboard-section-arrow {
+	display: inline-grid;
+	place-items: center;
+	width: 34px;
+	height: 34px;
+	border: 1px solid var(--panel-border);
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.66);
+	color: var(--text-strong);
+	font-size: 1.2rem;
+	font-weight: 900;
+	line-height: 1;
+	text-decoration: none;
+	transition:
+		background 140ms ease,
+		border-color 140ms ease,
+		transform 140ms ease;
+}
+
+.dashboard-section-arrow:hover {
+	background: rgba(255, 255, 255, 0.9);
+	border-color: var(--panel-border-accent, rgba(22, 66, 91, 0.22));
+	transform: translateX(2px);
+}
+
+.penalty-reports-section {
+	display: grid;
+	gap: 20px;
+}
+
+.penalty-reports-layout {
+	display: grid;
+	grid-template-columns: minmax(280px, 0.38fr) minmax(0, 1fr);
+	gap: 16px;
+	align-items: start;
+}
+
+.penalty-reports-list,
+.penalty-report-detail {
+	border: 1px solid var(--panel-border);
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.62);
+	box-shadow: 0 16px 40px rgba(17, 45, 78, 0.08);
+}
+
+.penalty-reports-list {
+	display: grid;
+	gap: 10px;
+	padding: 14px;
+}
+
+.penalty-reports-list-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	color: var(--muted);
+	font-size: 0.84rem;
+}
+
+.penalty-reports-list-header strong {
+	color: var(--text-strong);
+}
+
+.penalty-report-list-tabs,
+.penalty-report-detail-tabs {
+	display: flex;
+	gap: 8px;
+	padding: 4px;
+	border: 1px solid var(--panel-border);
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.44);
+}
+
+.penalty-report-list-tab,
+.penalty-report-detail-tab {
+	appearance: none;
+	flex: 1;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--muted);
+	font-weight: 800;
+	padding: 8px 10px;
+	cursor: pointer;
+}
+
+.penalty-report-list-tab-active,
+.penalty-report-detail-tab-active {
+	background: var(--selected-surface, rgba(246, 174, 45, 0.14));
+	color: var(--text-strong);
+}
+
+.penalty-report-list-item {
+	appearance: none;
+	display: grid;
+	gap: 6px;
+	width: 100%;
+	border: 1px solid var(--panel-border);
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.5);
+	padding: 12px;
+	text-align: left;
+	cursor: pointer;
+}
+
+.penalty-report-list-item-active {
+	border-color: var(--panel-border-accent, rgba(246, 174, 45, 0.74));
+	background: var(--selected-surface, rgba(246, 174, 45, 0.12));
+}
+
+.penalty-report-list-item strong,
+.penalty-report-list-item span,
+.penalty-report-list-item small {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.penalty-report-list-item strong {
+	color: var(--text-strong);
+	font-size: 0.92rem;
+}
+
+.penalty-report-list-item span,
+.penalty-report-list-item small {
+	color: var(--muted);
+	font-size: 0.8rem;
+}
+
+.penalty-report-detail {
+	display: grid;
+	gap: 18px;
+	padding: 18px;
+	min-width: 0;
+}
+
+.penalty-report-detail-empty {
+	align-content: center;
+	min-height: 240px;
+}
+
+.penalty-report-detail-header,
+.penalty-report-media-header,
+.penalty-report-actions {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+
+.penalty-report-detail-header h3,
+.penalty-report-media-header h4 {
+	margin: 0;
+	color: var(--text-strong);
+}
+
+.penalty-report-detail-grid,
+.penalty-report-form-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px;
+}
+
+.penalty-report-detail-grid > div,
+.penalty-report-appeal {
+	display: grid;
+	gap: 5px;
+	border: 1px solid var(--panel-border);
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.44);
+	padding: 12px;
+}
+
+.penalty-report-detail-grid > .penalty-report-student-card {
+	grid-column: 1 / -1;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.penalty-report-student-avatar {
+	width: 52px;
+	height: 52px;
+	display: grid;
+	place-items: center;
+	flex: 0 0 auto;
+	border-radius: 50%;
+	background: linear-gradient(135deg, #0e2240, #1a5276);
+	color: #fff;
+	font-size: 1rem;
+	font-weight: 900;
+	letter-spacing: 0.02em;
+	overflow: hidden;
+	box-shadow: 0 4px 12px rgba(17, 45, 78, 0.16);
+}
+
+.penalty-report-student-avatar img {
+	width: 100%;
+	height: 100%;
+	display: block;
+	object-fit: cover;
+}
+
+.penalty-report-student-copy {
+	display: grid;
+	gap: 3px;
+	min-width: 0;
+	flex: 1;
+}
+
+.penalty-report-student-copy small {
+	color: var(--muted);
+	font-size: 0.82rem;
+	font-weight: 700;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.penalty-report-student-link {
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
+
+.penalty-report-detail-grid span,
+.penalty-report-appeal span,
+.penalty-report-media-header span {
+	color: var(--muted);
+	font-size: 0.72rem;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.penalty-report-detail-grid strong,
+.penalty-report-appeal p {
+	margin: 0;
+	color: var(--text-strong);
+	font-size: 0.9rem;
+	line-height: 1.35;
+	overflow-wrap: anywhere;
+}
+
+.penalty-report-appeal {
+	border-color: rgba(246, 174, 45, 0.28);
+	background: rgba(246, 174, 45, 0.1);
+}
+
+.penalty-report-appeal small {
+	color: var(--muted);
+}
+
+.penalty-report-actions {
+	justify-content: flex-start;
+}
+
+.penalty-report-upload-button {
+	position: relative;
+	overflow: hidden;
+}
+
+.penalty-report-upload-button input {
+	position: absolute;
+	inset: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+
+.penalty-report-photo-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+	gap: 12px;
+}
+
+.penalty-report-photo-card {
+	appearance: none;
+	border: 1px solid var(--panel-border);
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.5);
+	padding: 0;
+	overflow: hidden;
+	aspect-ratio: 1;
+}
+
+.penalty-report-photo-card img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.penalty-report-history {
+	display: grid;
+	gap: 10px;
+}
+
+.penalty-report-history-item {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 14px;
+	border: 1px solid var(--panel-border);
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.48);
+	padding: 12px;
+}
+
+.penalty-report-history-item strong {
+	color: var(--text-strong);
+	font-size: 0.92rem;
+}
+
+.penalty-report-history-item p {
+	margin: 4px 0 0;
+	color: var(--muted);
+	font-size: 0.84rem;
+	line-height: 1.35;
+}
+
+.penalty-report-history-item time {
+	flex: 0 0 auto;
+	color: var(--muted);
+	font-size: 0.78rem;
+	font-weight: 800;
+	text-align: right;
 }
 
 .reports-visual-heading h3 {

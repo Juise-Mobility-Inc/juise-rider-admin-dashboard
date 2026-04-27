@@ -1878,10 +1878,51 @@ export interface StudentParkingViolation {
   registered_device_uuid?: string | null;
   reported_by_user_uuid: string;
   description: string;
+  admin_notes: string;
+  appeal_description: string;
   status: string;
+  appealed_at?: number | null;
+  payment_requested_at?: number | null;
+  payment_collected_at?: number | null;
   active: boolean;
   created_at: number;
   updated_at: number;
+}
+
+export interface StudentParkingViolationHistoryEvent {
+  history_uuid: string;
+  app_id: string;
+  school_id: string;
+  violation_uuid: string;
+  user_uuid: string;
+  event_type: string;
+  status?: string | null;
+  note: string;
+  actor_user_uuid?: string | null;
+  media_uuid?: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface StudentParkingViolationUpdateInput {
+  status?: string;
+  admin_notes?: string;
+  description?: string;
+  payment_requested_at?: number | null;
+  payment_collected_at?: number | null;
+  active?: boolean;
+}
+
+export interface AdminParkingViolationMediaUploadInitResponse {
+  object_key: string;
+  put_url: string;
+  content_type: string;
+  expires_in: number;
+}
+
+export interface AdminParkingViolationMediaUploadResponse {
+  media: UploadedEntityMedia["media"];
+  expires_in: number;
 }
 
 export async function fetchStudentParkingViolations(
@@ -1899,6 +1940,156 @@ export async function fetchStudentParkingViolations(
     `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violations?${search.toString()}`,
     {
       appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function fetchSchoolParkingViolations(
+  managedAppId: string,
+  schoolId: string,
+  options: {
+    userUUID?: string;
+    membershipUUID?: string;
+    includeInactive?: boolean;
+  } = {},
+): Promise<StudentParkingViolation[]> {
+  const search = new URLSearchParams({
+    managed_app_id: managedAppId,
+  });
+  if (options.userUUID?.trim()) {
+    search.set("user_uuid", options.userUUID.trim());
+  }
+  if (options.membershipUUID?.trim()) {
+    search.set("membership_uuid", options.membershipUUID.trim());
+  }
+  if (options.includeInactive) {
+    search.set("include_inactive", "true");
+  }
+
+  return request<StudentParkingViolation[]>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violations?${search.toString()}`,
+    {
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function fetchSchoolParkingViolationHistory(
+  managedAppId: string,
+  schoolId: string,
+  violationUUID: string,
+): Promise<StudentParkingViolationHistoryEvent[]> {
+  const search = new URLSearchParams({
+    managed_app_id: managedAppId,
+  });
+
+  return request<StudentParkingViolationHistoryEvent[]>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violations/${encodeURIComponent(violationUUID)}/history?${search.toString()}`,
+    {
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function updateSchoolParkingViolation(
+  managedAppId: string,
+  schoolId: string,
+  violationUUID: string,
+  input: StudentParkingViolationUpdateInput,
+): Promise<StudentParkingViolation> {
+  const search = new URLSearchParams({
+    managed_app_id: managedAppId,
+  });
+
+  return request<StudentParkingViolation>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violations/${encodeURIComponent(violationUUID)}?${search.toString()}`,
+    {
+      method: "PUT",
+      body: input,
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function fetchSchoolParkingViolationMedia(
+  managedAppId: string,
+  schoolId: string,
+  violationUUID: string,
+  targetUserUUID: string,
+): Promise<UploadedEntityMedia["media"][]> {
+  const search = new URLSearchParams({
+    managed_app_id: managedAppId,
+    target_user_uuid: targetUserUUID,
+  });
+
+  return request<UploadedEntityMedia["media"][]>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violations/${encodeURIComponent(violationUUID)}/media?${search.toString()}`,
+    {
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function uploadSchoolParkingViolationMedia(
+  managedAppId: string,
+  schoolId: string,
+  violation: Pick<StudentParkingViolation, "violation_uuid" | "user_uuid">,
+  file: File,
+  slot = "admin_note",
+): Promise<AdminParkingViolationMediaUploadResponse> {
+  const authAppId = currentSession?.authAppId ?? managedAppId;
+  const bearerToken = currentSession?.tokens.access_token.token;
+  if (!bearerToken) {
+    throw new Error("Login required");
+  }
+
+  const fileExt = file.name.split(".").pop()?.trim() ?? "";
+  const contentType = file.type?.trim() || "application/octet-stream";
+  const init = await request<AdminParkingViolationMediaUploadInitResponse>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violations/${encodeURIComponent(violation.violation_uuid)}/media/upload/init`,
+    {
+      method: "POST",
+      body: {
+        target_user_uuid: violation.user_uuid,
+        slot,
+        file_ext: fileExt,
+        content_type: contentType,
+        managed_app_id: managedAppId,
+      },
+      appIdHeader: authAppId,
+    },
+  );
+
+  const uploadResponse = await fetch(init.put_url, {
+    method: "PUT",
+    headers: {
+      "Content-Type": init.content_type || contentType,
+    },
+    body: file,
+  });
+  if (!uploadResponse.ok) {
+    const text = await uploadResponse.text();
+    throw new Error(text.trim() || `Upload failed with status ${uploadResponse.status}`);
+  }
+
+  return request<AdminParkingViolationMediaUploadResponse>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violations/${encodeURIComponent(violation.violation_uuid)}/media/upload/complete`,
+    {
+      method: "POST",
+      body: {
+        target_user_uuid: violation.user_uuid,
+        slot,
+        object_key: init.object_key,
+        content_type: init.content_type || contentType,
+        managed_app_id: managedAppId,
+      },
+      appIdHeader: authAppId,
     },
   );
 }

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import {
+	fetchPendingReservations,
 	fetchSchoolPOIs,
 	fetchSchoolStudentRoster,
 	fetchStudentParkingViolations,
@@ -133,6 +135,11 @@ type DashboardVisuals = {
 type Props = {
 	activeSchoolId: string;
 	managedAppId: string;
+	adminUserUUID: string;
+	onHeaderCountsLoaded?: (counts: {
+		studentCount: number;
+		pendingReservationCount: number;
+	}) => void;
 };
 
 const DASHBOARD_CONCURRENCY = 5;
@@ -758,6 +765,14 @@ function DashboardMiniKpi({
 	);
 }
 
+function DashboardSectionArrow({ to, label }: { to: string; label: string }) {
+	return (
+		<Link className="dashboard-section-arrow" to={to} aria-label={label}>
+			→
+		</Link>
+	);
+}
+
 function RidePenaltySection({ visuals }: { visuals: DashboardVisuals }) {
 	const topTypeCount = Math.max(
 		1,
@@ -766,9 +781,12 @@ function RidePenaltySection({ visuals }: { visuals: DashboardVisuals }) {
 
 	return (
 		<article className="dashboard-card dashboard-penalty-card">
-			<div className="reports-visual-heading">
-				<h3>Ride penalties faced</h3>
-				<p>Speed-limit and no-go events students have hit during rides.</p>
+			<div className="reports-visual-heading-row">
+				<div className="reports-visual-heading">
+					<h3>Ride penalties faced</h3>
+					<p>Speed-limit and no-go events students have hit during rides.</p>
+				</div>
+				<DashboardSectionArrow to="/zones" label="Open School Zones" />
 			</div>
 			<div className="dashboard-penalty-kpi-grid">
 				<DashboardMiniKpi
@@ -861,9 +879,12 @@ function ActivePenaltyReportsSection({
 }) {
 	return (
 		<article className="dashboard-card dashboard-penalty-card">
-			<div className="reports-visual-heading">
-				<h3>Active penalty reports</h3>
-				<p>Reports still marked active and ready for review.</p>
+			<div className="reports-visual-heading-row">
+				<div className="reports-visual-heading">
+					<h3>Active penalty reports</h3>
+					<p>Reports still marked active and ready for review.</p>
+				</div>
+				<DashboardSectionArrow to="/penalty-reports" label="Penalty Reports" />
 			</div>
 			<div className="dashboard-penalty-kpi-grid">
 				<DashboardMiniKpi
@@ -977,7 +998,12 @@ function Leaderboard({
 	);
 }
 
-export function DashboardScreen({ activeSchoolId, managedAppId }: Props) {
+export function DashboardScreen({
+	activeSchoolId,
+	managedAppId,
+	adminUserUUID,
+	onHeaderCountsLoaded,
+}: Props) {
 	const [dataset, setDataset] = useState<DashboardDataset | null>(null);
 	const [leaderboardWindow, setLeaderboardWindow] =
 		useState<LeaderboardWindow>("week");
@@ -1029,11 +1055,18 @@ export function DashboardScreen({ activeSchoolId, managedAppId }: Props) {
 		});
 
 		try {
-			const [roster, pois] = await Promise.all([
+			const [roster, pois, pendingReservations] = await Promise.all([
 				fetchSchoolStudentRoster(managedAppId, activeSchoolId),
 				fetchSchoolPOIs(managedAppId, activeSchoolId).catch(
 					() => [] as SchoolPOI[],
 				),
+				adminUserUUID.trim()
+					? fetchPendingReservations(
+							adminUserUUID,
+							managedAppId,
+							activeSchoolId,
+						).catch(() => [])
+					: Promise.resolve([]),
 			]);
 
 			setLoadState({
@@ -1107,6 +1140,10 @@ export function DashboardScreen({ activeSchoolId, managedAppId }: Props) {
 				completed: roster.length,
 				total: roster.length,
 			});
+			onHeaderCountsLoaded?.({
+				studentCount: roster.length,
+				pendingReservationCount: pendingReservations.length,
+			});
 		} catch (error) {
 			setDataset(null);
 			setLoadState({
@@ -1116,7 +1153,7 @@ export function DashboardScreen({ activeSchoolId, managedAppId }: Props) {
 				total: 0,
 			});
 		}
-	}, [activeSchoolId, managedAppId]);
+	}, [activeSchoolId, adminUserUUID, managedAppId, onHeaderCountsLoaded]);
 
 	useEffect(() => {
 		const timer = window.setTimeout(() => {
@@ -1158,7 +1195,21 @@ export function DashboardScreen({ activeSchoolId, managedAppId }: Props) {
 					aria-live="polite">
 					<div className="reports-status-copy">
 						<strong>{loadState.message}</strong>
-						{loadState.total > 0 ? (
+						{loadState.status === "ready" ? (
+							<button
+								className="reports-status-dismiss"
+								type="button"
+								onClick={() =>
+									setLoadState({
+										status: "idle",
+										message: "",
+										completed: 0,
+										total: 0,
+									})
+								}>
+								Dismiss
+							</button>
+						) : loadState.total > 0 ? (
 							<span>
 								{loadState.completed} of {loadState.total} students processed
 							</span>
@@ -1179,12 +1230,19 @@ export function DashboardScreen({ activeSchoolId, managedAppId }: Props) {
 				<>
 					<div className="dashboard-hero-grid">
 						<article className="dashboard-hero-card">
-							<span>All-time student points earned</span>
-							<strong>{formatCompactNumber(visuals.earnedPoints)}</strong>
-							<small>
-								{formatCompactNumber(visuals.bonusPoints)} bonus points from
-								POIs
-							</small>
+							<span>All-time student points</span>
+							<div className="dashboard-hero-points-balance">
+								<div className="dashboard-hero-points-earned">
+									<small>Earned</small>
+									<strong>+{formatCompactNumber(visuals.earnedPoints)}</strong>
+								</div>
+								<div className="dashboard-hero-points-lost">
+									<small>Lost</small>
+									<strong>
+										-{formatCompactNumber(visuals.ridePenaltyPointsLost)}
+									</strong>
+								</div>
+							</div>
 						</article>
 						<DashboardKpi
 							label="Rides today"
@@ -1217,20 +1275,23 @@ export function DashboardScreen({ activeSchoolId, managedAppId }: Props) {
 									<h3>Student leaderboard</h3>
 									<p>Points earned from rides and POI bonuses.</p>
 								</div>
-								<div className="dashboard-segmented">
-									{(["today", "week", "all"] as const).map((windowKey) => (
-										<button
-											className={
-												leaderboardWindow === windowKey
-													? "dashboard-segment dashboard-segment-active"
-													: "dashboard-segment"
-											}
-											key={windowKey}
-											type="button"
-											onClick={() => setLeaderboardWindow(windowKey)}>
-											{windowKey === "all" ? "All time" : windowKey}
-										</button>
-									))}
+								<div className="dashboard-heading-actions">
+									<div className="dashboard-segmented">
+										{(["today", "week", "all"] as const).map((windowKey) => (
+											<button
+												className={
+													leaderboardWindow === windowKey
+														? "dashboard-segment dashboard-segment-active"
+														: "dashboard-segment"
+												}
+												key={windowKey}
+												type="button"
+												onClick={() => setLeaderboardWindow(windowKey)}>
+												{windowKey === "all" ? "All time" : windowKey}
+											</button>
+										))}
+									</div>
+									<DashboardSectionArrow to="/students" label="Open Students" />
 								</div>
 							</div>
 							<Leaderboard
@@ -1240,11 +1301,14 @@ export function DashboardScreen({ activeSchoolId, managedAppId }: Props) {
 						</article>
 
 						<article className="dashboard-card">
-							<div className="reports-visual-heading">
-								<h3>Student points earned</h3>
-								<p>
-									Top earners turn routes and POI visits into campus momentum.
-								</p>
+							<div className="reports-visual-heading-row">
+								<div className="reports-visual-heading">
+									<h3>Student points earned</h3>
+									<p>
+										Top earners turn routes and POI visits into campus momentum.
+									</p>
+								</div>
+								<DashboardSectionArrow to="/students" label="Open Students" />
 							</div>
 							<div className="dashboard-points-bars">
 								{(visuals.leaderboardAll.length > 0
@@ -1281,9 +1345,12 @@ export function DashboardScreen({ activeSchoolId, managedAppId }: Props) {
 					</div>
 
 					<article className="dashboard-card dashboard-poi-card">
-						<div className="reports-visual-heading">
-							<h3>POI rankings</h3>
-							<p>Which POIs are pulling students in this week.</p>
+						<div className="reports-visual-heading-row">
+							<div className="reports-visual-heading">
+								<h3>POI rankings</h3>
+								<p>Which POIs are pulling students in this week.</p>
+							</div>
+							<DashboardSectionArrow to="/pois" label="Open School POIs" />
 						</div>
 						<PoiRankings rankings={visuals.poiRankings} />
 					</article>

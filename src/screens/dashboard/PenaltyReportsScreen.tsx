@@ -1,0 +1,674 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+import {
+	fetchSchoolParkingViolationMedia,
+	fetchSchoolParkingViolationHistory,
+	fetchSchoolParkingViolations,
+	type SchoolStudentRosterEntry,
+	type StudentParkingViolation,
+	type StudentParkingViolationHistoryEvent,
+	updateSchoolParkingViolation,
+	uploadSchoolParkingViolationMedia,
+	type UploadedEntityMedia,
+} from "../../lib/api";
+
+type Props = {
+	activeSchoolId: string;
+	managedAppId: string;
+	studentRoster: SchoolStudentRosterEntry[];
+	studentProfilePhotoUrls: Record<string, string>;
+	onOpenStudent: (membershipUUID: string) => void;
+};
+
+const openStatusTokens = [
+	"reported",
+	"awaiting_payment",
+	"appealed",
+	"under_review",
+];
+
+const statusOptions = [
+	"reported",
+	"under_review",
+	"awaiting_payment",
+	"appealed",
+	"dismissed",
+	"paid",
+	"resolved",
+	"closed",
+];
+
+function getErrorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : "Something went wrong.";
+}
+
+function formatStatus(status: string): string {
+	const normalized = status.trim() || "reported";
+	return normalized
+		.split(/[_\-\s]+/)
+		.filter(Boolean)
+		.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+		.join(" ");
+}
+
+function formatDateTime(timestamp?: number | null): string {
+	if (!timestamp) {
+		return "Not set";
+	}
+
+	return new Date(timestamp * 1000).toLocaleString([], {
+		month: "short",
+		day: "numeric",
+		hour: "numeric",
+		minute: "2-digit",
+	});
+}
+
+function formatStudentName(entry?: SchoolStudentRosterEntry | null): string {
+	if (!entry) {
+		return "Student";
+	}
+
+	const fullName = `${entry.user.first_name?.trim() ?? ""} ${
+		entry.user.last_name?.trim() ?? ""
+	}`.trim();
+	return fullName || entry.user.username || entry.user.email || "Student";
+}
+
+function getStudentInitials(entry?: SchoolStudentRosterEntry | null): string {
+	return formatStudentName(entry)
+		.split(" ")
+		.filter(Boolean)
+		.slice(0, 2)
+		.map((word) => word[0])
+		.join("")
+		.toUpperCase();
+}
+
+function isOpenReport(report: StudentParkingViolation): boolean {
+	if (!report.active) {
+		return false;
+	}
+	const status = report.status.trim().toLowerCase();
+	if (!status) {
+		return true;
+	}
+	if (openStatusTokens.includes(status)) {
+		return true;
+	}
+	return !["dismissed", "paid", "resolved", "closed"].some((token) =>
+		status.includes(token),
+	);
+}
+
+function isResolvedReport(report: StudentParkingViolation): boolean {
+	return !isOpenReport(report);
+}
+
+function formatHistoryEvent(
+	event: StudentParkingViolationHistoryEvent,
+): string {
+	const status = event.status ? ` · ${formatStatus(event.status)}` : "";
+	switch (event.event_type) {
+		case "status_created":
+			return `Report created${status}`;
+		case "status_updated":
+			return `Status updated${status}`;
+		case "appeal_submitted":
+			return "Student appeal submitted";
+		case "payment_requested":
+			return "Payment requested";
+		case "payment_completed":
+			return "Payment completed";
+		case "payment_collected":
+			return "Payment collected";
+		case "photo_added":
+			return "Photo added";
+		case "note_updated":
+			return "Admin notes updated";
+		default:
+			return event.event_type
+				.split(/[_\-\s]+/)
+				.filter(Boolean)
+				.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+				.join(" ");
+	}
+}
+
+export function PenaltyReportsScreen({
+	activeSchoolId,
+	managedAppId,
+	onOpenStudent,
+	studentProfilePhotoUrls,
+	studentRoster,
+}: Props) {
+	const [reports, setReports] = useState<StudentParkingViolation[]>([]);
+	const [selectedReportId, setSelectedReportId] = useState("");
+	const [media, setMedia] = useState<UploadedEntityMedia["media"][]>([]);
+	const [history, setHistory] = useState<StudentParkingViolationHistoryEvent[]>(
+		[],
+	);
+	const [listMode, setListMode] = useState<"open" | "history">("open");
+	const [detailTab, setDetailTab] = useState<"details" | "photos" | "history">(
+		"details",
+	);
+	const [statusDraft, setStatusDraft] = useState("reported");
+	const [notesDraft, setNotesDraft] = useState("");
+	const [loadBusy, setLoadBusy] = useState(false);
+	const [saveBusy, setSaveBusy] = useState(false);
+	const [uploadBusy, setUploadBusy] = useState(false);
+	const [error, setError] = useState("");
+	const [success, setSuccess] = useState("");
+
+	const openReports = useMemo(() => reports.filter(isOpenReport), [reports]);
+	const resolvedReports = useMemo(
+		() => reports.filter(isResolvedReport),
+		[reports],
+	);
+	const visibleReports = listMode === "open" ? openReports : resolvedReports;
+	const selectedReport = useMemo(
+		() =>
+			visibleReports.find(
+				(report) => report.violation_uuid === selectedReportId,
+			) ??
+			visibleReports[0] ??
+			null,
+		[selectedReportId, visibleReports],
+	);
+	const selectedStudentEntry = useMemo(() => {
+		if (!selectedReport) {
+			return null;
+		}
+
+		const membershipUUID = selectedReport.membership_uuid?.trim() ?? "";
+		if (membershipUUID) {
+			const byMembership = studentRoster.find(
+				(entry) => entry.membership.membership_uuid === membershipUUID,
+			);
+			if (byMembership) {
+				return byMembership;
+			}
+		}
+
+		return (
+			studentRoster.find(
+				(entry) =>
+					entry.user.k_guid === selectedReport.user_uuid ||
+					entry.membership.user_uuid === selectedReport.user_uuid,
+			) ?? null
+		);
+	}, [selectedReport, studentRoster]);
+	const selectedStudentPhotoUrl =
+		selectedStudentEntry
+			? studentProfilePhotoUrls[selectedStudentEntry.user.k_guid] ||
+				studentProfilePhotoUrls[selectedStudentEntry.membership.user_uuid] ||
+				""
+			: "";
+
+	const refreshReports = useCallback(async () => {
+		if (!activeSchoolId) {
+			setReports([]);
+			setSelectedReportId("");
+			return;
+		}
+
+		setLoadBusy(true);
+		setError("");
+		try {
+			const nextReports = await fetchSchoolParkingViolations(
+				managedAppId,
+				activeSchoolId,
+				{ includeInactive: true },
+			);
+			setReports(nextReports);
+			setSelectedReportId((current) => {
+				if (nextReports.some((report) => report.violation_uuid === current)) {
+					return current;
+				}
+				return (
+					nextReports.find(
+						listMode === "open" ? isOpenReport : isResolvedReport,
+					)?.violation_uuid ??
+					nextReports.find(isOpenReport)?.violation_uuid ??
+					nextReports[0]?.violation_uuid ??
+					""
+				);
+			});
+		} catch (nextError) {
+			setError(getErrorMessage(nextError));
+		} finally {
+			setLoadBusy(false);
+		}
+	}, [activeSchoolId, listMode, managedAppId]);
+
+	const refreshMedia = useCallback(
+		async (report: StudentParkingViolation | null) => {
+			if (!report) {
+				setMedia([]);
+				return;
+			}
+
+			try {
+				const nextMedia = await fetchSchoolParkingViolationMedia(
+					managedAppId,
+					activeSchoolId,
+					report.violation_uuid,
+					report.user_uuid,
+				);
+				setMedia(nextMedia);
+			} catch {
+				setMedia([]);
+			}
+		},
+		[activeSchoolId, managedAppId],
+	);
+
+	const refreshHistory = useCallback(
+		async (report: StudentParkingViolation | null) => {
+			if (!report) {
+				setHistory([]);
+				return;
+			}
+
+			try {
+				const nextHistory = await fetchSchoolParkingViolationHistory(
+					managedAppId,
+					activeSchoolId,
+					report.violation_uuid,
+				);
+				setHistory(nextHistory);
+			} catch {
+				setHistory([]);
+			}
+		},
+		[activeSchoolId, managedAppId],
+	);
+
+	useEffect(() => {
+		void refreshReports();
+	}, [refreshReports]);
+
+	useEffect(() => {
+		if (visibleReports.length === 0) {
+			return;
+		}
+		if (
+			!visibleReports.some(
+				(report) => report.violation_uuid === selectedReportId,
+			)
+		) {
+			setSelectedReportId(visibleReports[0].violation_uuid);
+		}
+	}, [selectedReportId, visibleReports]);
+
+	useEffect(() => {
+		setStatusDraft(selectedReport?.status || "reported");
+		setNotesDraft(selectedReport?.admin_notes || "");
+		void refreshMedia(selectedReport);
+		void refreshHistory(selectedReport);
+	}, [refreshHistory, refreshMedia, selectedReport]);
+
+	async function saveReport(
+		nextStatus = statusDraft,
+		options?: {
+			paymentRequestedAt?: number;
+			paymentCollectedAt?: number;
+			active?: boolean;
+		},
+	) {
+		if (!selectedReport) {
+			return;
+		}
+
+		setSaveBusy(true);
+		setError("");
+		setSuccess("");
+		try {
+			const updated = await updateSchoolParkingViolation(
+				managedAppId,
+				activeSchoolId,
+				selectedReport.violation_uuid,
+				{
+					status: nextStatus,
+					admin_notes: notesDraft,
+					payment_requested_at: options?.paymentRequestedAt ?? null,
+					payment_collected_at: options?.paymentCollectedAt ?? null,
+					active: options?.active,
+				},
+			);
+			setReports((current) =>
+				current.map((report) =>
+					report.violation_uuid === updated.violation_uuid ? updated : report,
+				),
+			);
+			setSelectedReportId(updated.violation_uuid);
+			setSuccess("Report updated.");
+		} catch (nextError) {
+			setError(getErrorMessage(nextError));
+		} finally {
+			setSaveBusy(false);
+		}
+	}
+
+	async function handleFileSelected(fileList: FileList | null) {
+		const file = fileList?.[0];
+		if (!file || !selectedReport) {
+			return;
+		}
+
+		setUploadBusy(true);
+		setError("");
+		setSuccess("");
+		try {
+			await uploadSchoolParkingViolationMedia(
+				managedAppId,
+				activeSchoolId,
+				selectedReport,
+				file,
+				"admin_update",
+			);
+			await refreshMedia(selectedReport);
+			await refreshHistory(selectedReport);
+			setSuccess("Photo attached.");
+		} catch (nextError) {
+			setError(getErrorMessage(nextError));
+		} finally {
+			setUploadBusy(false);
+		}
+	}
+
+	return (
+		<section className="panel penalty-reports-section">
+			<div className="panel-header">
+				<div>
+					<p className="eyebrow">Penalty Reports</p>
+					<h2>Active penalty reports</h2>
+				</div>
+				<button
+					className="primary-button"
+					type="button"
+					onClick={() => void refreshReports()}
+					disabled={loadBusy || !activeSchoolId}>
+					{loadBusy ? "Refreshing..." : "Refresh Reports"}
+				</button>
+			</div>
+
+			{error ? <p className="error-text">{error}</p> : null}
+			{success ? <p className="success-text">{success}</p> : null}
+
+			<div className="penalty-reports-layout">
+				<aside className="penalty-reports-list">
+					<div className="penalty-reports-list-header">
+						<strong>{openReports.length.toLocaleString()} open</strong>
+						<span>{reports.length.toLocaleString()} total</span>
+					</div>
+					<div className="penalty-report-list-tabs">
+						<button
+							className={
+								listMode === "open"
+									? "penalty-report-list-tab penalty-report-list-tab-active"
+									: "penalty-report-list-tab"
+							}
+							type="button"
+							onClick={() => setListMode("open")}>
+							Open
+						</button>
+						<button
+							className={
+								listMode === "history"
+									? "penalty-report-list-tab penalty-report-list-tab-active"
+									: "penalty-report-list-tab"
+							}
+							type="button"
+							onClick={() => setListMode("history")}>
+							History
+						</button>
+					</div>
+					{loadBusy ? (
+						<p className="muted-text">Loading reports...</p>
+					) : visibleReports.length === 0 ? (
+						<p className="empty-state">
+							{listMode === "open"
+								? "No open penalty reports."
+								: "No resolved parking penalties yet."}
+						</p>
+					) : (
+						visibleReports.map((report) => (
+							<button
+								className={
+									selectedReport?.violation_uuid === report.violation_uuid
+										? "penalty-report-list-item penalty-report-list-item-active"
+										: "penalty-report-list-item"
+								}
+								key={report.violation_uuid}
+								type="button"
+								onClick={() => setSelectedReportId(report.violation_uuid)}>
+								<strong>{report.description || "Parking report"}</strong>
+								<span>{formatStatus(report.status)}</span>
+								<small>{formatDateTime(report.created_at)}</small>
+							</button>
+						))
+					)}
+				</aside>
+
+				{selectedReport ? (
+					<article className="penalty-report-detail">
+						<div className="penalty-report-detail-header">
+							<div>
+								<p className="eyebrow">Report detail</p>
+								<h3>{selectedReport.description || "Parking report"}</h3>
+							</div>
+							<span className="dashboard-penalty-chip">
+								{formatStatus(selectedReport.status)}
+							</span>
+						</div>
+
+							<div className="penalty-report-detail-grid">
+								<div className="penalty-report-student-card">
+									<div className="penalty-report-student-avatar">
+										{selectedStudentPhotoUrl ? (
+											<img
+												src={selectedStudentPhotoUrl}
+												alt={`${formatStudentName(selectedStudentEntry)} profile`}
+											/>
+										) : (
+											getStudentInitials(selectedStudentEntry) || "?"
+										)}
+									</div>
+									<div className="penalty-report-student-copy">
+										<span>Student</span>
+										<strong>{formatStudentName(selectedStudentEntry)}</strong>
+										<small>
+											ID:{" "}
+											{selectedStudentEntry?.membership.student_id ||
+												"Unavailable"}
+										</small>
+									</div>
+									<button
+										className="secondary-button penalty-report-student-link"
+										type="button"
+										disabled={!selectedStudentEntry}
+										onClick={() => {
+											if (selectedStudentEntry) {
+												onOpenStudent(
+													selectedStudentEntry.membership.membership_uuid,
+												);
+											}
+										}}>
+										View Student
+									</button>
+								</div>
+								<div>
+									<span>Device UUID</span>
+									<strong>
+										{selectedReport.registered_device_uuid || "Not linked"}
+									</strong>
+								</div>
+							<div>
+								<span>Reported</span>
+								<strong>{formatDateTime(selectedReport.created_at)}</strong>
+							</div>
+							<div>
+								<span>Updated</span>
+								<strong>{formatDateTime(selectedReport.updated_at)}</strong>
+							</div>
+						</div>
+
+						{selectedReport.appeal_description ? (
+							<div className="penalty-report-appeal">
+								<span>Student appeal</span>
+								<p>{selectedReport.appeal_description}</p>
+								<small>{formatDateTime(selectedReport.appealed_at)}</small>
+							</div>
+						) : null}
+
+						<div className="penalty-report-detail-tabs">
+							{(["details", "photos", "history"] as const).map((tab) => (
+								<button
+									className={
+										detailTab === tab
+											? "penalty-report-detail-tab penalty-report-detail-tab-active"
+											: "penalty-report-detail-tab"
+									}
+									key={tab}
+									type="button"
+									onClick={() => setDetailTab(tab)}>
+									{tab === "details"
+										? "Details"
+										: tab === "photos"
+											? "Photos"
+											: "History"}
+								</button>
+							))}
+						</div>
+
+						{detailTab === "details" ? (
+							<>
+								<div className="penalty-report-form-grid">
+									<label className="field">
+										<span>Status</span>
+										<select
+											value={statusDraft}
+											onChange={(event) => setStatusDraft(event.target.value)}>
+											{statusOptions.map((status) => (
+												<option key={status} value={status}>
+													{formatStatus(status)}
+												</option>
+											))}
+										</select>
+									</label>
+									<label className="field">
+										<span>Admin notes</span>
+										<textarea
+											value={notesDraft}
+											onChange={(event) => setNotesDraft(event.target.value)}
+											placeholder="Add internal notes, payment context, or appeal review notes."
+										/>
+									</label>
+								</div>
+
+								<div className="penalty-report-actions">
+									<button
+										className="primary-button"
+										type="button"
+										onClick={() => void saveReport()}
+										disabled={saveBusy}>
+										{saveBusy ? "Saving..." : "Save Changes"}
+									</button>
+									<button
+										className="secondary-button"
+										type="button"
+										onClick={() =>
+											void saveReport("awaiting_payment", {
+												paymentRequestedAt: Math.floor(Date.now() / 1000),
+											})
+										}
+										disabled={saveBusy}>
+										Collect Payment
+									</button>
+									<button
+										className="danger-button"
+										type="button"
+										onClick={() =>
+											void saveReport("dismissed", { active: false })
+										}
+										disabled={saveBusy}>
+										Dismiss
+									</button>
+								</div>
+							</>
+						) : null}
+
+						{detailTab === "photos" ? (
+							<div className="penalty-report-media">
+								<div className="penalty-report-media-header">
+									<div>
+										<h4>Photos</h4>
+										<span>{media.length.toLocaleString()} attached</span>
+									</div>
+									<label className="secondary-button penalty-report-upload-button">
+										{uploadBusy ? "Uploading..." : "Add Photo"}
+										<input
+											type="file"
+											accept="image/*"
+											disabled={uploadBusy}
+											onChange={(event) =>
+												void handleFileSelected(event.target.files)
+											}
+										/>
+									</label>
+								</div>
+								{media.length === 0 ? (
+									<p className="empty-state">No photos attached yet.</p>
+								) : (
+									<div className="penalty-report-photo-grid">
+										{media.map((item) => (
+											<button
+												className="penalty-report-photo-card"
+												key={item.media_uuid}
+												type="button">
+												{item.get_url ? (
+													<img
+														src={item.get_url}
+														alt="Penalty report evidence"
+													/>
+												) : (
+													<span>No preview</span>
+												)}
+											</button>
+										))}
+									</div>
+								)}
+							</div>
+						) : null}
+
+						{detailTab === "history" ? (
+							<div className="penalty-report-history">
+								{history.length === 0 ? (
+									<p className="empty-state">No history events yet.</p>
+								) : (
+									history.map((event) => (
+										<div
+											className="penalty-report-history-item"
+											key={event.history_uuid}>
+											<div>
+												<strong>{formatHistoryEvent(event)}</strong>
+												{event.note ? <p>{event.note}</p> : null}
+											</div>
+											<time>{formatDateTime(event.created_at)}</time>
+										</div>
+									))
+								)}
+							</div>
+						) : null}
+					</article>
+				) : (
+					<article className="penalty-report-detail penalty-report-detail-empty">
+						<strong>Select a report</strong>
+						<p className="muted-text">Choose a report to review details.</p>
+					</article>
+				)}
+			</div>
+		</section>
+	);
+}
