@@ -1925,7 +1925,11 @@ export interface AdminParkingViolationMediaUploadResponse {
   expires_in: number;
 }
 
-export type CustomNotificationAudience = "school" | "student";
+export type CustomNotificationAudience =
+  | "school"
+  | "student"
+  | "onesignal"
+  | "subscription";
 
 export interface SchoolCustomNotificationInput {
   audience: CustomNotificationAudience;
@@ -1933,6 +1937,8 @@ export interface SchoolCustomNotificationInput {
   message: string;
   url?: string;
   user_uuids?: string[];
+  onesignal_ids?: string[];
+  subscription_ids?: string[];
   data?: Record<string, unknown>;
 }
 
@@ -1941,9 +1947,11 @@ export interface SchoolCustomNotificationResponse {
   school_id: string;
   audience: string;
   provider: string;
+  message?: string;
   provider_message_id?: string;
   provider_recipients?: unknown;
   provider_response?: Record<string, unknown>;
+  provider_targeting?: Record<string, unknown>;
 }
 
 export async function sendSchoolCustomNotification(
@@ -1963,6 +1971,8 @@ export async function sendSchoolCustomNotification(
         message: input.message,
         url: input.url ?? "",
         user_uuids: input.user_uuids ?? [],
+        onesignal_ids: input.onesignal_ids ?? [],
+        subscription_ids: input.subscription_ids ?? [],
         data: input.data ?? {},
       },
       appIdHeader: currentSession?.authAppId ?? managedAppId,
