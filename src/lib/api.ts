@@ -1269,6 +1269,15 @@ function buildSchoolLogoEntityUUID(
   return `school_logo.${appSegment}.${schoolSegment}`.slice(0, 128);
 }
 
+function buildSchoolNotificationEntityUUID(
+  managedAppId: string,
+  schoolId: string,
+): string {
+  const appSegment = normalizeEntityMediaSegment(managedAppId, "app");
+  const schoolSegment = normalizeEntityMediaSegment(schoolId, "school");
+  return `school_notification.${appSegment}.${schoolSegment}`.slice(0, 128);
+}
+
 export async function initUserEntityMediaUpload(
   managedAppId: string,
   input: {
@@ -1278,6 +1287,7 @@ export async function initUserEntityMediaUpload(
     file_ext?: string;
     content_type?: string;
   },
+  appIdHeader = managedAppId,
 ): Promise<UserEntityMediaUploadInitResponse> {
   return request<UserEntityMediaUploadInitResponse>(
     "kcaProxy",
@@ -1285,7 +1295,7 @@ export async function initUserEntityMediaUpload(
     {
       method: "POST",
       body: input,
-      appIdHeader: managedAppId,
+      appIdHeader,
     },
   );
 }
@@ -1300,6 +1310,7 @@ export async function completeUserEntityMediaUpload(
     content_type?: string;
     storage_provider?: string;
   },
+  appIdHeader = managedAppId,
 ): Promise<UploadedEntityMedia> {
   return request<UploadedEntityMedia>(
     "kcaProxy",
@@ -1307,7 +1318,7 @@ export async function completeUserEntityMediaUpload(
     {
       method: "POST",
       body: input,
-      appIdHeader: managedAppId,
+      appIdHeader,
     },
   );
 }
@@ -1320,6 +1331,7 @@ export async function uploadUserEntityMedia(
     slot: string;
     file: File;
   },
+  appIdHeader = managedAppId,
 ): Promise<UploadedEntityMedia> {
   const fileExt = input.file.name.split(".").pop()?.trim() ?? "";
   const contentType = input.file.type?.trim() ?? "";
@@ -1329,7 +1341,7 @@ export async function uploadUserEntityMedia(
     slot: input.slot,
     file_ext: fileExt,
     content_type: contentType,
-  });
+  }, appIdHeader);
 
   await uploadFileToSignedUrl(
     initUpload.put_url,
@@ -1343,14 +1355,47 @@ export async function uploadUserEntityMedia(
     },
   );
 
-  return completeUserEntityMediaUpload(managedAppId, {
-    object_key: initUpload.object_key,
-    entity_type: input.entityType,
-    entity_uuid: input.entityUUID,
-    slot: input.slot,
-    content_type: initUpload.content_type || contentType,
-    storage_provider: "do_spaces",
-  });
+  return completeUserEntityMediaUpload(
+    managedAppId,
+    {
+      object_key: initUpload.object_key,
+      entity_type: input.entityType,
+      entity_uuid: input.entityUUID,
+      slot: input.slot,
+      content_type: initUpload.content_type || contentType,
+      storage_provider: "do_spaces",
+    },
+    appIdHeader,
+  );
+}
+
+export async function uploadUserEntityMediaViaProxy(
+  managedAppId: string,
+  input: {
+    entityType: string;
+    entityUUID: string;
+    slot: string;
+    file: File;
+  },
+  appIdHeader = managedAppId,
+): Promise<UploadedEntityMedia> {
+  const formData = new FormData();
+  formData.append("file", input.file);
+  formData.append("entity_type", input.entityType);
+  formData.append("entity_uuid", input.entityUUID);
+  formData.append("slot", input.slot);
+  formData.append("file_ext", input.file.name.split(".").pop()?.trim() ?? "");
+  formData.append("content_type", input.file.type?.trim() ?? "");
+
+  return request<UploadedEntityMedia>(
+    "kcaProxy",
+    "/api/v1/user/media/entity/upload",
+    {
+      method: "POST",
+      body: formData,
+      appIdHeader,
+    },
+  );
 }
 
 export async function uploadSchoolLogoImage(
@@ -1379,6 +1424,37 @@ export async function uploadSchoolLogoImage(
 
   return {
     logo_url: publicUrl,
+    media: uploaded.media,
+  };
+}
+
+export async function uploadSchoolNotificationImage(
+  managedAppId: string,
+  schoolId: string,
+  file: File,
+): Promise<{
+  image_url: string;
+  media: UploadedEntityMedia["media"];
+}> {
+  const uploaded = await uploadUserEntityMediaViaProxy(
+    managedAppId,
+    {
+      entityType: "campaign_group",
+      entityUUID: buildSchoolNotificationEntityUUID(managedAppId, schoolId),
+      slot: "notification_image",
+      file,
+    },
+    currentSession?.authAppId ?? managedAppId,
+  );
+
+  const publicUrl =
+    uploaded.public_url?.trim() || uploaded.media.public_url?.trim() || "";
+  if (!publicUrl) {
+    throw new Error("Notification image upload did not return a public URL.");
+  }
+
+  return {
+    image_url: publicUrl,
     media: uploaded.media,
   };
 }
@@ -1936,6 +2012,9 @@ export interface SchoolCustomNotificationInput {
   title: string;
   message: string;
   url?: string;
+  image_url?: string;
+  large_icon?: string;
+  small_icon?: string;
   user_uuids?: string[];
   onesignal_ids?: string[];
   subscription_ids?: string[];
@@ -1970,6 +2049,9 @@ export async function sendSchoolCustomNotification(
         title: input.title,
         message: input.message,
         url: input.url ?? "",
+        image_url: input.image_url ?? "",
+        large_icon: input.large_icon ?? "",
+        small_icon: input.small_icon ?? "",
         user_uuids: input.user_uuids ?? [],
         onesignal_ids: input.onesignal_ids ?? [],
         subscription_ids: input.subscription_ids ?? [],

@@ -4718,12 +4718,247 @@
 	min-width: 0;
 }
 
+.notification-workspace {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(320px, 0.48fr);
+	gap: 18px;
+	align-items: start;
+}
+
 .notification-composer textarea {
 	min-height: 140px;
 }
 
+.notification-preview-panel {
+	display: grid;
+	gap: 14px;
+	position: sticky;
+	top: 18px;
+}
+
+.notification-preview-stack {
+	display: grid;
+	gap: 14px;
+}
+
+.notification-preview-card {
+	display: grid;
+	gap: 12px;
+	padding: 12px;
+	border-radius: 8px;
+	border: 1px solid var(--panel-border);
+	box-shadow: 0 12px 28px rgba(15, 23, 42, 0.1);
+	overflow: hidden;
+}
+
+.notification-preview-card-light {
+	background: #f9fafb;
+	color: #111827;
+}
+
+.notification-preview-card-dark {
+	background: #111827;
+	color: #f8fafc;
+	border-color: rgba(255, 255, 255, 0.14);
+	box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
+}
+
+.notification-preview-header,
+.notification-preview-body {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	gap: 10px;
+	align-items: center;
+	min-width: 0;
+}
+
+.notification-preview-body {
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: start;
+}
+
+.notification-preview-small-icon,
+.notification-preview-large-mark {
+	display: grid;
+	place-items: center;
+	overflow: hidden;
+	border-radius: 8px;
+	background: #eef2f7;
+}
+
+.notification-preview-small-icon {
+	width: 26px;
+	height: 26px;
+}
+
+.notification-preview-small-icon-dark {
+	background: #0f172a;
+}
+
+.notification-preview-bolt {
+	width: 52%;
+	height: 68%;
+	clip-path: polygon(58% 0, 18% 48%, 45% 48%, 32% 100%, 83% 38%, 55% 38%);
+	background: currentColor;
+}
+
+.notification-preview-small-icon-default,
+.notification-preview-small-icon-black_bolt,
+.notification-preview-large-mark-default,
+.notification-preview-large-mark-black_bolt {
+	color: #00160a;
+}
+
+.notification-preview-small-icon-white_bolt,
+.notification-preview-large-mark-white_bolt {
+	color: #f8fafc;
+}
+
+.notification-preview-small-icon-custom,
+.notification-preview-large-mark-custom {
+	color: #2f6f56;
+}
+
+.notification-preview-large-mark {
+	width: 48px;
+	height: 48px;
+	border-radius: 10px;
+	background: rgba(47, 111, 86, 0.08);
+}
+
+.notification-preview-large-icon img {
+	display: block;
+	width: 48px;
+	height: 48px;
+	border-radius: 10px;
+	object-fit: cover;
+	border: 1px solid rgba(15, 23, 42, 0.12);
+}
+
+.notification-preview-app-meta {
+	display: flex;
+	min-width: 0;
+	gap: 6px;
+	align-items: baseline;
+	color: inherit;
+}
+
+.notification-preview-app-meta strong,
+.notification-preview-copy strong {
+	color: #111827;
+	overflow-wrap: anywhere;
+}
+
+.notification-preview-card-dark .notification-preview-app-meta strong,
+.notification-preview-card-dark .notification-preview-copy strong {
+	color: #f8fafc;
+}
+
+.notification-preview-app-meta span,
+.notification-preview-copy span {
+	color: currentColor;
+	opacity: 0.72;
+	font-size: 0.78rem;
+}
+
+.notification-preview-copy {
+	display: grid;
+	gap: 4px;
+	min-width: 0;
+}
+
+.notification-preview-copy p {
+	margin: 0;
+	color: currentColor;
+	opacity: 0.82;
+	line-height: 1.35;
+	overflow-wrap: anywhere;
+}
+
+.notification-preview-card-dark .notification-preview-copy p {
+	color: #e5e7eb;
+	opacity: 1;
+}
+
+.notification-preview-image {
+	display: grid;
+	place-items: center;
+	width: 100%;
+	aspect-ratio: 16 / 9;
+	border-radius: 8px;
+	overflow: hidden;
+	background: rgba(47, 111, 86, 0.08);
+	color: var(--muted);
+	font-size: 0.82rem;
+	font-weight: 700;
+}
+
+.notification-preview-image img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.notification-preview-card-dark .notification-preview-image {
+	background: rgba(255, 255, 255, 0.08);
+	color: rgba(248, 250, 252, 0.66);
+}
+
+.notification-preview-meta {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+}
+
+.notification-preview-meta div {
+	display: grid;
+	gap: 5px;
+	padding: 10px;
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.58);
+	border: 1px solid var(--panel-border);
+	min-width: 0;
+}
+
+.notification-preview-meta span {
+	color: var(--muted);
+	font-size: 0.72rem;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.notification-preview-meta strong {
+	color: var(--text-strong);
+	font-size: 0.88rem;
+	overflow-wrap: anywhere;
+}
+
 .notification-send-status {
 	margin: 0;
+}
+
+.notification-image-upload-field {
+	align-content: start;
+}
+
+.notification-upload-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	align-items: center;
+}
+
+.notification-upload-button {
+	position: relative;
+	overflow: hidden;
+}
+
+.notification-upload-name {
+	min-width: 0;
+	color: var(--muted-strong);
+	font-size: 0.86rem;
+	overflow-wrap: anywhere;
 }
 
 .notification-diagnostics {
@@ -4769,6 +5004,81 @@
 
 .notification-diagnostics-wide {
 	grid-column: 1 / -1;
+}
+
+.notification-history-panel {
+	display: grid;
+	gap: 14px;
+}
+
+.notification-history-list {
+	display: grid;
+	gap: 12px;
+}
+
+.notification-history-item {
+	display: grid;
+	gap: 10px;
+	padding: 14px;
+	border-radius: 8px;
+	border: 1px solid var(--panel-border);
+	background: rgba(255, 255, 255, 0.62);
+}
+
+.notification-history-main {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 12px;
+	align-items: start;
+}
+
+.notification-history-main strong {
+	display: block;
+	color: var(--text-strong);
+	overflow-wrap: anywhere;
+}
+
+.notification-history-main p,
+.notification-history-error {
+	margin: 4px 0 0;
+	color: var(--muted-strong);
+	line-height: 1.45;
+	overflow-wrap: anywhere;
+}
+
+.notification-history-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	color: var(--muted);
+	font-size: 0.82rem;
+}
+
+.notification-history-status {
+	padding: 5px 8px;
+	border-radius: 999px;
+	font-size: 0.72rem;
+	font-weight: 800;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+}
+
+.notification-history-status-sent {
+	background: rgba(33, 126, 82, 0.12);
+	color: #1f734c;
+}
+
+.notification-history-status-failed {
+	background: rgba(179, 58, 58, 0.12);
+	color: #8a1f1f;
+}
+
+.notification-history-error {
+	color: #8a1f1f;
+}
+
+.notification-history-actions {
+	justify-content: flex-start;
 }
 
 .management-spot-list {
@@ -6296,8 +6606,13 @@
 	.school-profile-chip-row,
 	.school-profile-logo-row,
 	.school-profile-logo-sidecar,
-	.school-profile-term-fields {
+	.school-profile-term-fields,
+	.notification-workspace {
 		grid-template-columns: 1fr;
+	}
+
+	.notification-preview-panel {
+		position: static;
 	}
 
 	.students-sidebar {
