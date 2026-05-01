@@ -1,22 +1,36 @@
 import {
 	type ChangeEvent,
+	type FocusEvent,
 	type FormEvent,
 	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
 
 import {
 	sendSchoolCustomNotification,
+	signSchoolMedia,
 	type CustomNotificationAudience,
 	type SchoolStudentRosterEntry,
 	uploadSchoolNotificationImage,
 } from "../../lib/api";
 
+type NotificationAudienceMode = Extract<
+	CustomNotificationAudience,
+	"school" | "student"
+>;
+type StudentIdPhotoSlot = "front" | "back";
+type StudentIdPhotoKeys = Partial<Record<StudentIdPhotoSlot, string>>;
+type StudentRosterPhotoKeyMap = Record<string, StudentIdPhotoKeys>;
+
 type Props = {
 	activeSchoolId: string;
 	managedAppId: string;
 	studentRoster: SchoolStudentRosterEntry[];
+	schoolStudentMediaUrls: Record<string, string>;
+	schoolStudentPhotoKeys: StudentRosterPhotoKeyMap;
+	studentProfilePhotoUrls: Record<string, string>;
 	formatNebulaUserName: (profile: {
 		first_name?: string;
 		last_name?: string;
@@ -50,7 +64,8 @@ type NotificationHistoryEntry = {
 	createdAt: number;
 	audience: CustomNotificationAudience;
 	targetLabel: string;
-	selectedUserUUID: string;
+	selectedUserUUID?: string;
+	selectedUserUUIDs?: string[];
 	oneSignalId: string;
 	subscriptionId: string;
 	title: string;
@@ -122,6 +137,66 @@ function resolveStudentUserUUIDs(entry: SchoolStudentRosterEntry | undefined) {
 				.filter((value): value is string => Boolean(value)),
 		),
 	);
+}
+
+function resolveStudentPhotoUrl(
+	entry: SchoolStudentRosterEntry,
+	studentProfilePhotoUrls: Record<string, string>,
+	schoolStudentPhotoKeys: StudentRosterPhotoKeyMap,
+	schoolStudentMediaUrls: Record<string, string>,
+) {
+	const userUUIDs = resolveStudentUserUUIDs(entry);
+	for (const userUUID of userUUIDs) {
+		const photoUrl = studentProfilePhotoUrls[userUUID]?.trim();
+		if (photoUrl) {
+			return photoUrl;
+		}
+	}
+
+	const membershipUUID = entry.membership.membership_uuid;
+	const frontPhotoObjectKey =
+		entry.membership.front_photo?.object_key?.trim() ||
+		entry.membership.photo?.object_key?.trim() ||
+		schoolStudentPhotoKeys[membershipUUID]?.front?.trim() ||
+		"";
+	if (frontPhotoObjectKey) {
+		const frontPhotoUrl = schoolStudentMediaUrls[frontPhotoObjectKey]?.trim();
+		if (frontPhotoUrl) {
+			return frontPhotoUrl;
+		}
+	}
+
+	const backPhotoObjectKey =
+		entry.membership.back_photo?.object_key?.trim() ||
+		schoolStudentPhotoKeys[membershipUUID]?.back?.trim() ||
+		"";
+	if (backPhotoObjectKey) {
+		const backPhotoUrl = schoolStudentMediaUrls[backPhotoObjectKey]?.trim();
+		if (backPhotoUrl) {
+			return backPhotoUrl;
+		}
+	}
+
+	return "";
+}
+
+function resolveStudentInitials(
+	entry: SchoolStudentRosterEntry,
+	formatNebulaUserName: Props["formatNebulaUserName"],
+) {
+	const name = formatNebulaUserName(entry.user);
+	const source =
+		name ||
+		entry.membership.student_id ||
+		entry.user.email ||
+		entry.user.username ||
+		"?";
+	const parts = source.trim().split(/\s+/).filter(Boolean);
+	if (parts.length >= 2) {
+		return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+	}
+
+	return source.slice(0, 2).toUpperCase();
 }
 
 function resolveRecipientCount(value: unknown): number | null {
@@ -248,17 +323,48 @@ function isRemoteImageUrl(value: string) {
 	return /^https?:\/\//i.test(value.trim());
 }
 
+function NotificationStudentAvatar({
+	photoUrl,
+	initials,
+}: {
+	photoUrl: string;
+	initials: string;
+}) {
+	const [failedPhotoUrl, setFailedPhotoUrl] = useState("");
+	const normalizedPhotoUrl = photoUrl.trim();
+	const showPhoto =
+		normalizedPhotoUrl !== "" && failedPhotoUrl !== normalizedPhotoUrl;
+
+	return (
+		<span className="notification-student-avatar">
+			{showPhoto ? (
+				<img
+					src={normalizedPhotoUrl}
+					alt=""
+					onError={() => setFailedPhotoUrl(normalizedPhotoUrl)}
+				/>
+			) : (
+				initials || "?"
+			)}
+		</span>
+	);
+}
+
 export function NotificationsScreen({
 	activeSchoolId,
 	managedAppId,
 	studentRoster,
+	schoolStudentMediaUrls,
+	schoolStudentPhotoKeys,
+	studentProfilePhotoUrls,
 	formatNebulaUserName,
 }: Props) {
 	const [audience, setAudience] =
-		useState<CustomNotificationAudience>("school");
-	const [selectedUserUUID, setSelectedUserUUID] = useState("");
-	const [oneSignalId, setOneSignalId] = useState("");
-	const [subscriptionId, setSubscriptionId] = useState("");
+		useState<NotificationAudienceMode>("school");
+	const [selectedUserUUIDs, setSelectedUserUUIDs] = useState<string[]>([]);
+	const [studentSearch, setStudentSearch] = useState("");
+	const [studentPickerOpen, setStudentPickerOpen] = useState(false);
+	const studentPickerRef = useRef<HTMLDivElement | null>(null);
 	const [title, setTitle] = useState("");
 	const [message, setMessage] = useState("");
 	const [url, setUrl] = useState("");
@@ -276,6 +382,8 @@ export function NotificationsScreen({
 	const [errorMessage, setErrorMessage] = useState("");
 	const [deliveryDetails, setDeliveryDetails] =
 		useState<NotificationDeliveryDetails | null>(null);
+	const [locallySignedStudentMediaUrls, setLocallySignedStudentMediaUrls] =
+		useState<Record<string, string>>({});
 	const [history, setHistory] = useState<NotificationHistoryEntry[]>(() =>
 		loadNotificationHistory(managedAppId, activeSchoolId),
 	);
@@ -283,6 +391,10 @@ export function NotificationsScreen({
 	useEffect(() => {
 		setHistory(loadNotificationHistory(managedAppId, activeSchoolId));
 	}, [activeSchoolId, managedAppId]);
+
+	useEffect(() => {
+		setLocallySignedStudentMediaUrls({});
+	}, [activeSchoolId]);
 
 	const studentOptions = useMemo(
 		() =>
@@ -295,15 +407,127 @@ export function NotificationsScreen({
 				),
 		[formatNebulaUserName, studentRoster],
 	);
-
-	const selectedStudent = studentOptions.find(
-		(entry) => resolveStudentUserUUID(entry) === selectedUserUUID,
+	const resolvedStudentMediaUrls = useMemo(
+		() => ({
+			...schoolStudentMediaUrls,
+			...locallySignedStudentMediaUrls,
+		}),
+		[locallySignedStudentMediaUrls, schoolStudentMediaUrls],
 	);
-	const selectedStudentLabel = selectedStudent
-		? formatNebulaUserName(selectedStudent.user) ||
-			selectedStudent.membership.student_id ||
-			selectedStudent.user.k_guid
-		: "";
+
+	useEffect(() => {
+		if (!activeSchoolId || studentOptions.length === 0) {
+			return;
+		}
+
+		const missingObjectKeys = Array.from(
+			new Set(
+				studentOptions
+					.flatMap((entry) => [
+						entry.membership.front_photo?.object_key?.trim() ?? "",
+						entry.membership.photo?.object_key?.trim() ?? "",
+						entry.membership.back_photo?.object_key?.trim() ?? "",
+					])
+					.filter(
+						(objectKey) =>
+							objectKey &&
+							!resolvedStudentMediaUrls[objectKey] &&
+							!locallySignedStudentMediaUrls[objectKey],
+					),
+			),
+		);
+
+		if (missingObjectKeys.length === 0) {
+			return;
+		}
+
+		let cancelled = false;
+		async function signMissingStudentMedia() {
+			const signedUrls = await signSchoolMedia(
+				activeSchoolId,
+				missingObjectKeys,
+			).catch(() => ({} as Record<string, string>));
+
+			if (cancelled) {
+				return;
+			}
+
+			if (Object.keys(signedUrls).length === 0) {
+				return;
+			}
+
+			setLocallySignedStudentMediaUrls((current) => ({
+				...current,
+				...signedUrls,
+			}));
+		}
+
+		void signMissingStudentMedia();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		activeSchoolId,
+		locallySignedStudentMediaUrls,
+		resolvedStudentMediaUrls,
+		studentOptions,
+	]);
+
+	const selectedUserUUIDSet = useMemo(
+		() => new Set(selectedUserUUIDs),
+		[selectedUserUUIDs],
+	);
+	useEffect(() => {
+		const availableUserUUIDs = new Set(
+			studentOptions.map((entry) => resolveStudentUserUUID(entry)),
+		);
+		setSelectedUserUUIDs((current) =>
+			current.filter((userUUID) => availableUserUUIDs.has(userUUID)),
+		);
+	}, [studentOptions]);
+	const selectedStudents = useMemo(
+		() =>
+			studentOptions.filter((entry) =>
+				selectedUserUUIDSet.has(resolveStudentUserUUID(entry)),
+			),
+		[studentOptions, selectedUserUUIDSet],
+	);
+	const normalizedStudentSearch = studentSearch.trim().toLowerCase();
+	const filteredStudentOptions = useMemo(() => {
+		if (!normalizedStudentSearch) {
+			return studentOptions;
+		}
+
+		return studentOptions.filter((entry) => {
+			const searchableText = [
+				formatNebulaUserName(entry.user),
+				entry.membership.student_id,
+				entry.user.email,
+				entry.user.username,
+				entry.user.k_guid,
+				entry.membership.user_uuid,
+			]
+				.filter(Boolean)
+				.join(" ")
+				.toLowerCase();
+			return searchableText.includes(normalizedStudentSearch);
+		});
+	}, [formatNebulaUserName, normalizedStudentSearch, studentOptions]);
+	const selectedStudentLabel =
+		selectedStudents.length === 0
+			? ""
+			: selectedStudents.length === 1
+				? formatNebulaUserName(selectedStudents[0].user) ||
+					selectedStudents[0].membership.student_id ||
+					selectedStudents[0].user.k_guid
+				: `${selectedStudents.length} selected students`;
+	const targetPreviewLabel =
+		audience === "school"
+			? "Campus Wide"
+			: selectedStudents.length > 0
+				? selectedStudentLabel
+				: "No students selected";
 	const resolvedLargeIcon =
 		largeIconChoice === "custom"
 			? customLargeIcon.trim()
@@ -339,11 +563,36 @@ export function NotificationsScreen({
 		});
 	};
 
+	const handleToggleStudent = (userUUID: string) => {
+		setSelectedUserUUIDs((current) =>
+			current.includes(userUUID)
+				? current.filter((value) => value !== userUUID)
+				: [...current, userUUID],
+		);
+	};
+
+	const handleClearSelectedStudents = () => {
+		setSelectedUserUUIDs([]);
+	};
+
+	const handleStudentPickerBlur = (event: FocusEvent<HTMLDivElement>) => {
+		const nextFocusedElement = event.relatedTarget;
+		if (
+			nextFocusedElement instanceof Node &&
+			studentPickerRef.current?.contains(nextFocusedElement)
+		) {
+			return;
+		}
+
+		setStudentPickerOpen(false);
+	};
+
 	const handleCopyNotification = (entry: NotificationHistoryEntry) => {
-		setAudience(entry.audience);
-		setSelectedUserUUID(entry.selectedUserUUID);
-		setOneSignalId(entry.oneSignalId);
-		setSubscriptionId(entry.subscriptionId);
+		setAudience(entry.audience === "student" ? "student" : "school");
+		setSelectedUserUUIDs(
+			entry.selectedUserUUIDs ??
+				(entry.selectedUserUUID ? [entry.selectedUserUUID] : []),
+		);
 		setTitle(entry.title);
 		setMessage(entry.message);
 		setUrl(entry.url);
@@ -412,8 +661,6 @@ export function NotificationsScreen({
 		const trimmedImageUrl = imageUrl.trim();
 		const trimmedLargeIcon = resolvedLargeIcon.trim();
 		const trimmedSmallIcon = resolvedSmallIcon.trim();
-		const trimmedOneSignalId = oneSignalId.trim();
-		const trimmedSubscriptionId = subscriptionId.trim();
 		if (!activeSchoolId || !managedAppId) {
 			setErrorMessage("A school-scoped admin session is required.");
 			return;
@@ -422,42 +669,35 @@ export function NotificationsScreen({
 			setErrorMessage("Title and message are required.");
 			return;
 		}
-		if (audience === "student" && !selectedUserUUID.trim()) {
-			setErrorMessage("Choose a student before sending.");
-			return;
-		}
-		if (audience === "onesignal" && !trimmedOneSignalId) {
-			setErrorMessage("Enter a OneSignal ID before sending.");
-			return;
-		}
-		if (audience === "subscription" && !trimmedSubscriptionId) {
-			setErrorMessage("Enter a OneSignal subscription ID before sending.");
+		if (audience === "student" && selectedUserUUIDs.length === 0) {
+			setErrorMessage("Choose at least one student before sending.");
 			return;
 		}
 
 		setBusy(true);
-		let targetLabel = "active school audience";
+		let targetLabel = "Campus Wide";
 		let targetUserUUIDs: string[] = [];
 		let targetOneSignalIDs: string[] = [];
 		let targetSubscriptionIDs: string[] = [];
 		try {
 			targetUserUUIDs =
-				audience === "student" ? resolveStudentUserUUIDs(selectedStudent) : [];
-			targetOneSignalIDs = audience === "onesignal" ? [trimmedOneSignalId] : [];
-			targetSubscriptionIDs =
-				audience === "subscription" ? [trimmedSubscriptionId] : [];
+				audience === "student"
+					? Array.from(
+							new Set(
+								selectedStudents.flatMap((entry) =>
+									resolveStudentUserUUIDs(entry),
+								),
+							),
+						)
+					: [];
 			if (audience === "student" && targetUserUUIDs.length === 0) {
-				setErrorMessage("Choose a student before sending.");
+				setErrorMessage("Choose at least one student before sending.");
 				return;
 			}
 			targetLabel =
 				audience === "student"
 					? selectedStudentLabel || "selected student"
-					: audience === "onesignal"
-						? "OneSignal user"
-						: audience === "subscription"
-							? "OneSignal subscription"
-							: "active school audience";
+					: "Campus Wide";
 
 			const response = await sendSchoolCustomNotification(
 				managedAppId,
@@ -471,10 +711,6 @@ export function NotificationsScreen({
 					large_icon: trimmedLargeIcon || undefined,
 					small_icon: trimmedSmallIcon || undefined,
 					user_uuids: audience === "student" ? targetUserUUIDs : undefined,
-					onesignal_ids:
-						audience === "onesignal" ? targetOneSignalIDs : undefined,
-					subscription_ids:
-						audience === "subscription" ? targetSubscriptionIDs : undefined,
 					data: {
 						dashboard_section: "notifications",
 					},
@@ -509,9 +745,9 @@ export function NotificationsScreen({
 					createdAt: Date.now(),
 					audience,
 					targetLabel,
-					selectedUserUUID,
-					oneSignalId: trimmedOneSignalId,
-					subscriptionId: trimmedSubscriptionId,
+					selectedUserUUIDs,
+					oneSignalId: "",
+					subscriptionId: "",
 					title: trimmedTitle,
 					message: trimmedMessage,
 					url: trimmedUrl,
@@ -533,9 +769,9 @@ export function NotificationsScreen({
 					createdAt: Date.now(),
 					audience,
 					targetLabel,
-					selectedUserUUID,
-					oneSignalId: trimmedOneSignalId,
-					subscriptionId: trimmedSubscriptionId,
+					selectedUserUUIDs,
+					oneSignalId: "",
+					subscriptionId: "",
 					title: trimmedTitle,
 					message: trimmedMessage,
 					url: trimmedUrl,
@@ -566,9 +802,9 @@ export function NotificationsScreen({
 				createdAt: Date.now(),
 				audience,
 				targetLabel,
-				selectedUserUUID,
-				oneSignalId: trimmedOneSignalId,
-				subscriptionId: trimmedSubscriptionId,
+				selectedUserUUIDs,
+				oneSignalId: "",
+				subscriptionId: "",
 				title: trimmedTitle,
 				message: trimmedMessage,
 				url: trimmedUrl,
@@ -585,12 +821,6 @@ export function NotificationsScreen({
 			setMessage("");
 			setUrl("");
 			setImageUrl("");
-			if (audience !== "onesignal") {
-				setOneSignalId("");
-			}
-			if (audience !== "subscription") {
-				setSubscriptionId("");
-			}
 		} catch (error) {
 			setErrorMessage(
 				error instanceof Error ? error.message : "Unable to send notification.",
@@ -645,7 +875,7 @@ export function NotificationsScreen({
 								}
 								type="button"
 								onClick={() => setAudience("school")}>
-								School
+								Campus Wide
 							</button>
 							<button
 								className={
@@ -655,83 +885,119 @@ export function NotificationsScreen({
 								}
 								type="button"
 								onClick={() => setAudience("student")}>
-								Student
-							</button>
-							<button
-								className={
-									audience === "subscription"
-										? "dashboard-segment dashboard-segment-active"
-										: "dashboard-segment"
-								}
-								type="button"
-								onClick={() => setAudience("subscription")}>
-								Subscription
-							</button>
-							<button
-								className={
-									audience === "onesignal"
-										? "dashboard-segment dashboard-segment-active"
-										: "dashboard-segment"
-								}
-								type="button"
-								onClick={() => setAudience("onesignal")}>
-								OneSignal
+								Students
 							</button>
 						</div>
 					</div>
 
 					<div className="form-grid">
 						{audience === "student" ? (
-							<label className="field field-span-2">
-								<span>Student</span>
-								<select
-									value={selectedUserUUID}
-									onChange={(event) => setSelectedUserUUID(event.target.value)}
-									required>
-									<option value="">Choose a student</option>
-									{studentOptions.map((entry) => {
-										const name = formatNebulaUserName(entry.user);
-										const userUUID = resolveStudentUserUUID(entry);
-										const label = [
-											name || entry.user.email || entry.user.k_guid,
-											entry.membership.student_id
-												? `ID ${entry.membership.student_id}`
-												: "",
-										]
-											.filter(Boolean)
-											.join(" - ");
-										return (
-											<option key={userUUID} value={userUUID}>
-												{label}
-											</option>
-										);
-									})}
-								</select>
-							</label>
-						) : null}
-
-						{audience === "onesignal" ? (
-							<label className="field field-span-2">
-								<span>OneSignal ID</span>
+							<div
+								className="field field-span-2 notification-student-picker"
+								ref={studentPickerRef}
+								onBlur={handleStudentPickerBlur}
+								onFocus={() => setStudentPickerOpen(true)}>
+								<div className="notification-picker-header">
+									<div>
+										<span>Students</span>
+										<strong>
+											{selectedStudents.length} selected
+										</strong>
+									</div>
+									{selectedStudents.length > 0 ? (
+										<button
+											className="secondary-button"
+											type="button"
+											onClick={handleClearSelectedStudents}>
+											Clear
+										</button>
+									) : null}
+								</div>
 								<input
-									value={oneSignalId}
-									onChange={(event) => setOneSignalId(event.target.value)}
-									placeholder="77ba871e-9e87-42a4-80a0-682540d54f41"
-									required
+									value={studentSearch}
+									onChange={(event) => setStudentSearch(event.target.value)}
+									onClick={() => setStudentPickerOpen(true)}
+									placeholder="Search name or student ID"
 								/>
-							</label>
-						) : null}
-
-						{audience === "subscription" ? (
-							<label className="field field-span-2">
-								<span>OneSignal subscription ID</span>
-								<input
-									value={subscriptionId}
-									onChange={(event) => setSubscriptionId(event.target.value)}
-									placeholder="0a54ebec-1a06-47f1-83ea-cb5455acb87f"
-									required
-								/>
-							</label>
+								{selectedStudents.length > 0 ? (
+									<div className="notification-selected-students">
+										{selectedStudents.map((entry) => {
+											const userUUID = resolveStudentUserUUID(entry);
+											const name =
+												formatNebulaUserName(entry.user) ||
+												entry.user.email ||
+												entry.membership.student_id ||
+												"Student";
+											return (
+												<button
+													className="notification-selected-chip"
+													key={userUUID}
+													type="button"
+													onClick={() => handleToggleStudent(userUUID)}>
+													{name}
+													<span aria-hidden="true">x</span>
+												</button>
+											);
+										})}
+									</div>
+								) : null}
+								{studentPickerOpen ? (
+									<div className="notification-student-results">
+										{filteredStudentOptions.length === 0 ? (
+											<p className="empty-state notification-send-status">
+												No students match that search.
+											</p>
+										) : (
+											filteredStudentOptions.map((entry) => {
+												const userUUID = resolveStudentUserUUID(entry);
+												const name =
+													formatNebulaUserName(entry.user) ||
+													entry.user.email ||
+													entry.user.username ||
+													"Unnamed student";
+												const studentId = entry.membership.student_id.trim();
+											const photoUrl = resolveStudentPhotoUrl(
+												entry,
+												studentProfilePhotoUrls,
+												schoolStudentPhotoKeys,
+												resolvedStudentMediaUrls,
+											);
+												const isSelected = selectedUserUUIDSet.has(userUUID);
+												return (
+													<button
+														className={
+															isSelected
+																? "notification-student-option notification-student-option-selected"
+																: "notification-student-option"
+														}
+														key={userUUID}
+														type="button"
+														onClick={() => handleToggleStudent(userUUID)}>
+														<NotificationStudentAvatar
+															photoUrl={photoUrl}
+															initials={resolveStudentInitials(
+																entry,
+																formatNebulaUserName,
+															)}
+														/>
+														<span className="notification-student-copy">
+															<strong>{name}</strong>
+															<span>
+																{studentId
+																	? `ID ${studentId}`
+																	: "No student ID"}
+															</span>
+														</span>
+														<span className="notification-student-check">
+															{isSelected ? "Selected" : "Add"}
+														</span>
+													</button>
+												);
+											})
+										)}
+									</div>
+								) : null}
+							</div>
 						) : null}
 
 						<label className="field field-span-2">
@@ -895,22 +1161,6 @@ export function NotificationsScreen({
 								</code>
 							</div>
 							<div>
-								<span>Subscription IDs</span>
-								<code>
-									{deliveryDetails.targetSubscriptionIDs.length
-										? deliveryDetails.targetSubscriptionIDs.join(", ")
-										: "None"}
-								</code>
-							</div>
-							<div>
-								<span>OneSignal IDs</span>
-								<code>
-									{deliveryDetails.targetOneSignalIDs.length
-										? deliveryDetails.targetOneSignalIDs.join(", ")
-										: "None"}
-								</code>
-							</div>
-							<div>
 								<span>Provider recipients</span>
 								<pre>
 									{formatDiagnosticValue(deliveryDetails.providerRecipients)}
@@ -939,9 +1189,7 @@ export function NotificationsScreen({
 								busy ||
 								!activeSchoolId ||
 								!managedAppId ||
-								(audience === "student" && !selectedUserUUID) ||
-								(audience === "onesignal" && !oneSignalId.trim()) ||
-								(audience === "subscription" && !subscriptionId.trim())
+								(audience === "student" && selectedUserUUIDs.length === 0)
 							}>
 							{busy ? "Sending..." : "Send Notification"}
 						</button>
@@ -999,6 +1247,10 @@ export function NotificationsScreen({
 					</div>
 
 					<div className="notification-preview-meta">
+						<div>
+							<span>Audience</span>
+							<strong>{targetPreviewLabel}</strong>
+						</div>
 						<div>
 							<span>Small icon</span>
 							<strong>{previewSmallIconLabel}</strong>

@@ -635,6 +635,7 @@ function resolveStudentPhotoObjectKey(
 	if (slot === "front") {
 		return (
 			resolveMediaObjectKey(membership.front_photo) ||
+			resolveMediaObjectKey(membership.photo) ||
 			photoKeysByMembership[membership.membership_uuid]?.front?.trim() ||
 			""
 		);
@@ -4016,6 +4017,9 @@ function App() {
 						activeSchoolId={activeSchoolId}
 						managedAppId={context.managedAppId}
 						studentRoster={sortedSchoolStudentRoster}
+						schoolStudentMediaUrls={schoolStudentMediaUrls}
+						schoolStudentPhotoKeys={schoolStudentPhotoKeys}
+						studentProfilePhotoUrls={schoolStudentProfilePhotoUrls}
 						formatNebulaUserName={formatNebulaUserName}
 					/>
 				);

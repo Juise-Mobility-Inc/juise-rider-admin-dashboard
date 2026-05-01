@@ -142,6 +142,7 @@ function resolveStudentPhotoObjectKey(
   if (slot === "front") {
     return (
       resolveMediaObjectKey(membership.front_photo) ||
+      resolveMediaObjectKey(membership.photo) ||
       photoKeysByMembership[membership.membership_uuid]?.front?.trim() ||
       ""
     );
@@ -407,7 +408,8 @@ async function resolveSchoolStudentPhotoState(
   const fallbackMediaEntries = roster.filter((entry) => {
     const membership = entry.membership;
     return (
-      !resolveMediaObjectKey(membership.front_photo) ||
+      (!resolveMediaObjectKey(membership.front_photo) &&
+        !resolveMediaObjectKey(membership.photo)) ||
       !resolveMediaObjectKey(membership.back_photo)
     );
   });
