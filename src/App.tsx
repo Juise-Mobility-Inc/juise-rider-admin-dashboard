@@ -1964,11 +1964,7 @@ function App() {
 	}, [session]);
 
 	useEffect(() => {
-		if (
-			!session ||
-			(currentSection !== "students" && currentSection !== "penaltyReports") ||
-			!activeSchoolId
-		) {
+		if (!session || !activeSchoolId) {
 			return;
 		}
 
@@ -1983,7 +1979,6 @@ function App() {
 	}, [
 		activeSchoolId,
 		context.managedAppId,
-		currentSection,
 		session,
 		studentsDispatch,
 	]);
@@ -2148,7 +2143,7 @@ function App() {
 	}, [activeSchoolId, context.managedAppId, session]);
 
 	useEffect(() => {
-		if (!session || currentSection !== "reservations" || !activeSchoolId) {
+		if (!session || !activeSchoolId) {
 			return;
 		}
 
@@ -2172,15 +2167,14 @@ function App() {
 					...current,
 					pendingReservationCount: nextReservations.length,
 				}));
-				const hasCurrentSelection = nextReservations.some(
-					(reservation) =>
-						reservation.reservation_uuid === selectedReservationId,
-				);
-				setSelectedReservationId(
-					hasCurrentSelection
-						? selectedReservationId
-						: (nextReservations[0]?.reservation_uuid ?? ""),
-				);
+				setSelectedReservationId((current) => {
+					const hasCurrentSelection = nextReservations.some(
+						(reservation) => reservation.reservation_uuid === current,
+					);
+					return hasCurrentSelection
+						? current
+						: (nextReservations[0]?.reservation_uuid ?? "");
+				});
 			} catch (error) {
 				if (!cancelled) {
 					setBanner({
@@ -2203,8 +2197,6 @@ function App() {
 	}, [
 		activeSchoolId,
 		context.managedAppId,
-		currentSection,
-		selectedReservationId,
 		session,
 	]);
 
