@@ -2004,6 +2004,8 @@ export interface AdminParkingViolationMediaUploadResponse {
 export type CustomNotificationAudience =
   | "school"
   | "student"
+  | "external_ids"
+  | "student_tags"
   | "onesignal"
   | "subscription";
 
@@ -2016,6 +2018,11 @@ export interface SchoolCustomNotificationInput {
   large_icon?: string;
   small_icon?: string;
   user_uuids?: string[];
+  external_ids?: string[];
+  target_tags?: Array<{
+    key: "user_uuid" | "membership_uuid" | "student_id";
+    value: string;
+  }>;
   onesignal_ids?: string[];
   subscription_ids?: string[];
   data?: Record<string, unknown>;
@@ -2053,6 +2060,8 @@ export async function sendSchoolCustomNotification(
         large_icon: input.large_icon ?? "",
         small_icon: input.small_icon ?? "",
         user_uuids: input.user_uuids ?? [],
+        external_ids: input.external_ids ?? [],
+        target_tags: input.target_tags ?? [],
         onesignal_ids: input.onesignal_ids ?? [],
         subscription_ids: input.subscription_ids ?? [],
         data: input.data ?? {},

@@ -23,6 +23,10 @@ type NotificationAudienceMode = Extract<
 type StudentIdPhotoSlot = "front" | "back";
 type StudentIdPhotoKeys = Partial<Record<StudentIdPhotoSlot, string>>;
 type StudentRosterPhotoKeyMap = Record<string, StudentIdPhotoKeys>;
+type NotificationTargetTag = {
+	key: "user_uuid" | "membership_uuid" | "student_id";
+	value: string;
+};
 
 type Props = {
 	activeSchoolId: string;
@@ -45,6 +49,8 @@ type NotificationDeliveryDetails = {
 	providerMessageId?: string;
 	recipientCount: number | null;
 	targetUserUUIDs: string[];
+	targetExternalIDs: string[];
+	targetTags: NotificationTargetTag[];
 	targetOneSignalIDs: string[];
 	targetSubscriptionIDs: string[];
 	providerMessage?: string;
@@ -121,8 +127,32 @@ const largeIconOptions: Array<{
 	{ value: "custom", label: "Custom URL or resource", providerValue: "" },
 ];
 
+function normalizeNotificationUserUUID(value?: string | null): string {
+	return value?.trim() ?? "";
+}
+
+function resolveNotificationIdentifierVariants(value?: string | null): string[] {
+	const normalized = normalizeNotificationUserUUID(value);
+	if (!normalized) {
+		return [];
+	}
+
+	const variants = new Set<string>([normalized]);
+	const entityPrefixMatch = normalized.match(
+		/^[a-z]{2}-[a-z]{3}-\d+\.[a-z]+_(.+)$/i,
+	);
+	if (entityPrefixMatch?.[1]) {
+		variants.add(entityPrefixMatch[1]);
+	}
+
+	return Array.from(variants);
+}
+
 function resolveStudentUserUUID(entry: SchoolStudentRosterEntry): string {
-	return (entry.membership.user_uuid || "").trim() || entry.user.k_guid;
+	return (
+		normalizeNotificationUserUUID(entry.user.k_guid) ||
+		normalizeNotificationUserUUID(entry.membership.user_uuid)
+	);
 }
 
 function resolveStudentUserUUIDs(entry: SchoolStudentRosterEntry | undefined) {
@@ -130,9 +160,71 @@ function resolveStudentUserUUIDs(entry: SchoolStudentRosterEntry | undefined) {
 		return [];
 	}
 
+	const canonicalUserUUID = resolveStudentUserUUID(entry);
+	return canonicalUserUUID ? [canonicalUserUUID] : [];
+}
+
+function resolveStudentTargetTags(entry: SchoolStudentRosterEntry): NotificationTargetTag[] {
+	return [
+		...resolveNotificationIdentifierVariants(entry.user.k_guid).map((value) => ({
+			key: "user_uuid" as const,
+			value,
+		})),
+		...resolveNotificationIdentifierVariants(entry.membership.user_uuid).map(
+			(value) => ({
+				key: "user_uuid" as const,
+				value,
+			}),
+		),
+		...resolveNotificationIdentifierVariants(
+			entry.membership.membership_uuid,
+		).map((value) => ({
+			key: "membership_uuid" as const,
+			value,
+		})),
+		{ key: "student_id", value: entry.membership.student_id },
+	].flatMap((tag) => {
+		const value = tag.value?.trim() ?? "";
+		return value ? [{ ...tag, value }] : [];
+	});
+}
+
+function collectUniqueTargetTags(entries: SchoolStudentRosterEntry[]): NotificationTargetTag[] {
+	const seen = new Set<string>();
+	return entries.flatMap((entry) =>
+		resolveStudentTargetTags(entry).filter((tag) => {
+			const key = `${tag.key}:${tag.value}`;
+			if (seen.has(key)) {
+				return false;
+			}
+			seen.add(key);
+			return true;
+		}),
+	);
+}
+
+function collectUniqueExternalIDs(entries: SchoolStudentRosterEntry[]): string[] {
+	const seen = new Set<string>();
+	return entries.flatMap((entry) =>
+		[entry.user.k_guid, entry.membership.user_uuid].flatMap((value) => {
+			const externalID = normalizeNotificationUserUUID(value);
+			if (!externalID || seen.has(externalID)) {
+				return [];
+			}
+			seen.add(externalID);
+			return [externalID];
+		}),
+	);
+}
+
+function resolveStudentPhotoUserUUIDs(entry: SchoolStudentRosterEntry | undefined) {
+	if (!entry) {
+		return [];
+	}
+
 	return Array.from(
 		new Set(
-			[entry.membership.user_uuid, entry.user.k_guid]
+			[entry.user.k_guid, entry.membership.user_uuid]
 				.map((value) => value?.trim())
 				.filter((value): value is string => Boolean(value)),
 		),
@@ -145,7 +237,7 @@ function resolveStudentPhotoUrl(
 	schoolStudentPhotoKeys: StudentRosterPhotoKeyMap,
 	schoolStudentMediaUrls: Record<string, string>,
 ) {
-	const userUUIDs = resolveStudentUserUUIDs(entry);
+	const userUUIDs = resolveStudentPhotoUserUUIDs(entry);
 	for (const userUUID of userUUIDs) {
 		const photoUrl = studentProfilePhotoUrls[userUUID]?.trim();
 		if (photoUrl) {
@@ -677,8 +769,11 @@ export function NotificationsScreen({
 		setBusy(true);
 		let targetLabel = "Campus Wide";
 		let targetUserUUIDs: string[] = [];
+		let targetExternalIDs: string[] = [];
 		let targetOneSignalIDs: string[] = [];
 		let targetSubscriptionIDs: string[] = [];
+		let targetTags: NotificationTargetTag[] = [];
+		let deliveryAudience: CustomNotificationAudience = audience;
 		try {
 			targetUserUUIDs =
 				audience === "student"
@@ -698,19 +793,40 @@ export function NotificationsScreen({
 				audience === "student"
 					? selectedStudentLabel || "selected student"
 					: "Campus Wide";
+			if (audience === "student") {
+				deliveryAudience = "external_ids";
+				targetExternalIDs = collectUniqueExternalIDs(selectedStudents);
+				if (targetExternalIDs.length === 0) {
+					setErrorMessage("Could not resolve a OneSignal target for that student.");
+					return;
+				}
+			}
 
 			const response = await sendSchoolCustomNotification(
 				managedAppId,
 				activeSchoolId,
 				{
-					audience,
+					audience: deliveryAudience,
 					title: trimmedTitle,
 					message: trimmedMessage,
 					url: trimmedUrl || undefined,
 					image_url: trimmedImageUrl || undefined,
 					large_icon: trimmedLargeIcon || undefined,
 					small_icon: trimmedSmallIcon || undefined,
-					user_uuids: audience === "student" ? targetUserUUIDs : undefined,
+					user_uuids:
+						audience === "student" ? targetUserUUIDs : undefined,
+					external_ids:
+						deliveryAudience === "external_ids"
+							? targetExternalIDs
+							: undefined,
+					target_tags:
+						deliveryAudience === "student_tags" ? targetTags : undefined,
+					onesignal_ids:
+						deliveryAudience === "onesignal" ? targetOneSignalIDs : undefined,
+					subscription_ids:
+						deliveryAudience === "subscription"
+							? targetSubscriptionIDs
+							: undefined,
 					data: {
 						dashboard_section: "notifications",
 					},
@@ -724,11 +840,13 @@ export function NotificationsScreen({
 				resolveRecipientCount(response.provider_recipients) ??
 				resolveRecipientCount(response.provider_response);
 			setDeliveryDetails({
-				audience,
+				audience: deliveryAudience,
 				provider: response.provider,
 				providerMessageId: response.provider_message_id,
 				recipientCount,
 				targetUserUUIDs,
+				targetExternalIDs,
+				targetTags,
 				targetOneSignalIDs,
 				targetSubscriptionIDs,
 				providerMessage: response.message,
@@ -1159,6 +1277,22 @@ export function NotificationsScreen({
 										? deliveryDetails.targetUserUUIDs.join(", ")
 										: "None"}
 								</code>
+							</div>
+							<div>
+								<span>External IDs</span>
+								<code>
+									{deliveryDetails.targetExternalIDs.length
+										? deliveryDetails.targetExternalIDs.join(", ")
+										: "None"}
+								</code>
+							</div>
+							<div className="notification-diagnostics-wide">
+								<span>Target tags</span>
+								<pre>
+									{deliveryDetails.targetTags.length
+										? formatDiagnosticValue(deliveryDetails.targetTags)
+										: "None"}
+								</pre>
 							</div>
 							<div>
 								<span>Provider recipients</span>
