@@ -336,6 +336,10 @@ export function StudentVehicleDetailModal({
               <strong>{device.device_type || "Not set"}</strong>
             </div>
             <div className="detail-row">
+              <span>Powertrain</span>
+              <strong>{device.powertrain_type || "non_electric"}</strong>
+            </div>
+            <div className="detail-row">
               <span>Make &amp; model</span>
               <strong>{[device.make, device.model].filter(Boolean).join(" ") || "Not set"}</strong>
             </div>

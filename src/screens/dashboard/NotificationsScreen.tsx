@@ -18,7 +18,7 @@ import {
 
 type NotificationAudienceMode = Extract<
 	CustomNotificationAudience,
-	"school" | "student"
+	"school" | "student" | "onesignal" | "subscription"
 >;
 type StudentIdPhotoSlot = "front" | "back";
 type StudentIdPhotoKeys = Partial<Record<StudentIdPhotoSlot, string>>;
@@ -182,7 +182,7 @@ function resolveStudentTargetTags(entry: SchoolStudentRosterEntry): Notification
 			key: "membership_uuid" as const,
 			value,
 		})),
-		{ key: "student_id", value: entry.membership.student_id },
+		{ key: "student_id" as const, value: entry.membership.student_id },
 	].flatMap((tag) => {
 		const value = tag.value?.trim() ?? "";
 		return value ? [{ ...tag, value }] : [];
@@ -203,18 +203,18 @@ function collectUniqueTargetTags(entries: SchoolStudentRosterEntry[]): Notificat
 	);
 }
 
-function collectUniqueExternalIDs(entries: SchoolStudentRosterEntry[]): string[] {
+function parseNotificationIdList(value: string): string[] {
 	const seen = new Set<string>();
-	return entries.flatMap((entry) =>
-		[entry.user.k_guid, entry.membership.user_uuid].flatMap((value) => {
-			const externalID = normalizeNotificationUserUUID(value);
-			if (!externalID || seen.has(externalID)) {
-				return [];
+	return value
+		.split(/[\s,]+/)
+		.map((entry) => entry.trim())
+		.filter((entry) => {
+			if (!entry || seen.has(entry)) {
+				return false;
 			}
-			seen.add(externalID);
-			return [externalID];
-		}),
-	);
+			seen.add(entry);
+			return true;
+		});
 }
 
 function resolveStudentPhotoUserUUIDs(entry: SchoolStudentRosterEntry | undefined) {
@@ -454,6 +454,8 @@ export function NotificationsScreen({
 	const [audience, setAudience] =
 		useState<NotificationAudienceMode>("school");
 	const [selectedUserUUIDs, setSelectedUserUUIDs] = useState<string[]>([]);
+	const [oneSignalIdsText, setOneSignalIdsText] = useState("");
+	const [subscriptionIdsText, setSubscriptionIdsText] = useState("");
 	const [studentSearch, setStudentSearch] = useState("");
 	const [studentPickerOpen, setStudentPickerOpen] = useState(false);
 	const studentPickerRef = useRef<HTMLDivElement | null>(null);
@@ -609,17 +611,23 @@ export function NotificationsScreen({
 	const selectedStudentLabel =
 		selectedStudents.length === 0
 			? ""
-			: selectedStudents.length === 1
-				? formatNebulaUserName(selectedStudents[0].user) ||
-					selectedStudents[0].membership.student_id ||
-					selectedStudents[0].user.k_guid
-				: `${selectedStudents.length} selected students`;
+		: selectedStudents.length === 1
+			? formatNebulaUserName(selectedStudents[0].user) ||
+				selectedStudents[0].membership.student_id ||
+				selectedStudents[0].user.k_guid
+		: `${selectedStudents.length} selected students`;
+	const parsedOneSignalIds = parseNotificationIdList(oneSignalIdsText);
+	const parsedSubscriptionIds = parseNotificationIdList(subscriptionIdsText);
 	const targetPreviewLabel =
 		audience === "school"
 			? "Campus Wide"
-			: selectedStudents.length > 0
-				? selectedStudentLabel
-				: "No students selected";
+			: audience === "onesignal"
+				? `${parsedOneSignalIds.length || "No"} OneSignal ID${parsedOneSignalIds.length === 1 ? "" : "s"}`
+				: audience === "subscription"
+					? `${parsedSubscriptionIds.length || "No"} Subscriber ID${parsedSubscriptionIds.length === 1 ? "" : "s"}`
+					: selectedStudents.length > 0
+						? selectedStudentLabel
+						: "No students selected";
 	const resolvedLargeIcon =
 		largeIconChoice === "custom"
 			? customLargeIcon.trim()
@@ -680,11 +688,21 @@ export function NotificationsScreen({
 	};
 
 	const handleCopyNotification = (entry: NotificationHistoryEntry) => {
-		setAudience(entry.audience === "student" ? "student" : "school");
+		setAudience(
+			entry.audience === "onesignal"
+				? "onesignal"
+				: entry.audience === "subscription"
+					? "subscription"
+					: entry.audience === "student"
+						? "student"
+						: "school",
+		);
 		setSelectedUserUUIDs(
 			entry.selectedUserUUIDs ??
 				(entry.selectedUserUUID ? [entry.selectedUserUUID] : []),
 		);
+		setOneSignalIdsText(entry.oneSignalId);
+		setSubscriptionIdsText(entry.subscriptionId);
 		setTitle(entry.title);
 		setMessage(entry.message);
 		setUrl(entry.url);
@@ -765,11 +783,19 @@ export function NotificationsScreen({
 			setErrorMessage("Choose at least one student before sending.");
 			return;
 		}
+		if (audience === "onesignal" && parsedOneSignalIds.length === 0) {
+			setErrorMessage("Add at least one OneSignal ID before sending.");
+			return;
+		}
+		if (audience === "subscription" && parsedSubscriptionIds.length === 0) {
+			setErrorMessage("Add at least one subscriber ID before sending.");
+			return;
+		}
 
 		setBusy(true);
 		let targetLabel = "Campus Wide";
 		let targetUserUUIDs: string[] = [];
-		let targetExternalIDs: string[] = [];
+		const targetExternalIDs: string[] = [];
 		let targetOneSignalIDs: string[] = [];
 		let targetSubscriptionIDs: string[] = [];
 		let targetTags: NotificationTargetTag[] = [];
@@ -789,15 +815,33 @@ export function NotificationsScreen({
 				setErrorMessage("Choose at least one student before sending.");
 				return;
 			}
+			if (audience === "onesignal") {
+				targetOneSignalIDs = parsedOneSignalIds;
+				if (targetOneSignalIDs.length === 0) {
+					setErrorMessage("Add at least one OneSignal ID before sending.");
+					return;
+				}
+			}
+			if (audience === "subscription") {
+				targetSubscriptionIDs = parsedSubscriptionIds;
+				if (targetSubscriptionIDs.length === 0) {
+					setErrorMessage("Add at least one subscriber ID before sending.");
+					return;
+				}
+			}
 			targetLabel =
-				audience === "student"
+				audience === "onesignal"
+					? `${targetOneSignalIDs.length} OneSignal ID${targetOneSignalIDs.length === 1 ? "" : "s"}`
+				: audience === "subscription"
+					? `${targetSubscriptionIDs.length} Subscriber ID${targetSubscriptionIDs.length === 1 ? "" : "s"}`
+				: audience === "student"
 					? selectedStudentLabel || "selected student"
 					: "Campus Wide";
 			if (audience === "student") {
-				deliveryAudience = "external_ids";
-				targetExternalIDs = collectUniqueExternalIDs(selectedStudents);
-				if (targetExternalIDs.length === 0) {
-					setErrorMessage("Could not resolve a OneSignal target for that student.");
+				deliveryAudience = "student_tags";
+				targetTags = collectUniqueTargetTags(selectedStudents);
+				if (targetTags.length === 0) {
+					setErrorMessage("Could not resolve a push target for that student.");
 					return;
 				}
 			}
@@ -815,10 +859,6 @@ export function NotificationsScreen({
 					small_icon: trimmedSmallIcon || undefined,
 					user_uuids:
 						audience === "student" ? targetUserUUIDs : undefined,
-					external_ids:
-						deliveryAudience === "external_ids"
-							? targetExternalIDs
-							: undefined,
 					target_tags:
 						deliveryAudience === "student_tags" ? targetTags : undefined,
 					onesignal_ids:
@@ -864,8 +904,8 @@ export function NotificationsScreen({
 					audience,
 					targetLabel,
 					selectedUserUUIDs,
-					oneSignalId: "",
-					subscriptionId: "",
+					oneSignalId: targetOneSignalIDs.join("\n"),
+					subscriptionId: targetSubscriptionIDs.join("\n"),
 					title: trimmedTitle,
 					message: trimmedMessage,
 					url: trimmedUrl,
@@ -888,8 +928,8 @@ export function NotificationsScreen({
 					audience,
 					targetLabel,
 					selectedUserUUIDs,
-					oneSignalId: "",
-					subscriptionId: "",
+					oneSignalId: targetOneSignalIDs.join("\n"),
+					subscriptionId: targetSubscriptionIDs.join("\n"),
 					title: trimmedTitle,
 					message: trimmedMessage,
 					url: trimmedUrl,
@@ -921,8 +961,8 @@ export function NotificationsScreen({
 				audience,
 				targetLabel,
 				selectedUserUUIDs,
-				oneSignalId: "",
-				subscriptionId: "",
+				oneSignalId: targetOneSignalIDs.join("\n"),
+				subscriptionId: targetSubscriptionIDs.join("\n"),
 				title: trimmedTitle,
 				message: trimmedMessage,
 				url: trimmedUrl,
@@ -939,6 +979,12 @@ export function NotificationsScreen({
 			setMessage("");
 			setUrl("");
 			setImageUrl("");
+			if (audience === "onesignal") {
+				setOneSignalIdsText("");
+			}
+			if (audience === "subscription") {
+				setSubscriptionIdsText("");
+			}
 		} catch (error) {
 			setErrorMessage(
 				error instanceof Error ? error.message : "Unable to send notification.",
@@ -1004,6 +1050,26 @@ export function NotificationsScreen({
 								type="button"
 								onClick={() => setAudience("student")}>
 								Students
+							</button>
+							<button
+								className={
+									audience === "onesignal"
+										? "dashboard-segment dashboard-segment-active"
+										: "dashboard-segment"
+								}
+								type="button"
+								onClick={() => setAudience("onesignal")}>
+								OneSignal ID
+							</button>
+							<button
+								className={
+									audience === "subscription"
+										? "dashboard-segment dashboard-segment-active"
+										: "dashboard-segment"
+								}
+								type="button"
+								onClick={() => setAudience("subscription")}>
+								Subscriber ID
 							</button>
 						</div>
 					</div>
@@ -1116,6 +1182,32 @@ export function NotificationsScreen({
 									</div>
 								) : null}
 							</div>
+						) : null}
+
+						{audience === "onesignal" ? (
+							<label className="field field-span-2">
+								<span>OneSignal IDs</span>
+								<textarea
+									value={oneSignalIdsText}
+									onChange={(event) => setOneSignalIdsText(event.target.value)}
+									placeholder="Paste one or more OneSignal IDs. Separate multiple IDs with commas, spaces, or new lines."
+									required
+								/>
+							</label>
+						) : null}
+
+						{audience === "subscription" ? (
+							<label className="field field-span-2">
+								<span>Subscriber IDs</span>
+								<textarea
+									value={subscriptionIdsText}
+									onChange={(event) =>
+										setSubscriptionIdsText(event.target.value)
+									}
+									placeholder="Paste one or more subscriber IDs. Separate multiple IDs with commas, spaces, or new lines."
+									required
+								/>
+							</label>
 						) : null}
 
 						<label className="field field-span-2">
@@ -1294,6 +1386,22 @@ export function NotificationsScreen({
 										: "None"}
 								</pre>
 							</div>
+							<div className="notification-diagnostics-wide">
+								<span>OneSignal IDs</span>
+								<pre>
+									{deliveryDetails.targetOneSignalIDs.length
+										? deliveryDetails.targetOneSignalIDs.join("\n")
+										: "None"}
+								</pre>
+							</div>
+							<div className="notification-diagnostics-wide">
+								<span>Subscriber IDs</span>
+								<pre>
+									{deliveryDetails.targetSubscriptionIDs.length
+										? deliveryDetails.targetSubscriptionIDs.join("\n")
+										: "None"}
+								</pre>
+							</div>
 							<div>
 								<span>Provider recipients</span>
 								<pre>
@@ -1323,7 +1431,10 @@ export function NotificationsScreen({
 								busy ||
 								!activeSchoolId ||
 								!managedAppId ||
-								(audience === "student" && selectedUserUUIDs.length === 0)
+								(audience === "student" && selectedUserUUIDs.length === 0) ||
+								(audience === "onesignal" && parsedOneSignalIds.length === 0) ||
+								(audience === "subscription" &&
+									parsedSubscriptionIds.length === 0)
 							}>
 							{busy ? "Sending..." : "Send Notification"}
 						</button>

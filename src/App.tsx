@@ -91,6 +91,7 @@ import { ReservationsScreen } from "./screens/dashboard/ReservationsScreen";
 import { SchoolProfileScreen } from "./screens/dashboard/SchoolProfileScreen";
 import { StudentVehicleDetailModal } from "./screens/dashboard/StudentVehicleDetailModal";
 import { StudentsScreen } from "./screens/dashboard/StudentsScreen";
+import { ViolationFeesScreen } from "./screens/dashboard/ViolationFeesScreen";
 import { ZonesScreen } from "./screens/dashboard/ZonesScreen";
 import {
 	loadSelectedStudentDetail,
@@ -112,6 +113,7 @@ type Section =
 	| "students"
 	| "notifications"
 	| "penaltyReports"
+	| "violationFees"
 	| "reports"
 	| "packs"
 	| "reservations";
@@ -132,11 +134,16 @@ const dashboardSections: Array<{
 	{ section: "challenges", label: "Challenges", path: "/challenges" },
 	{ section: "students", label: "Students", path: "/students" },
 	{ section: "notifications", label: "Notifications", path: "/notifications" },
-	{
-		section: "penaltyReports",
-		label: "Penalty Reports",
-		path: "/penalty-reports",
-	},
+		{
+			section: "penaltyReports",
+			label: "Penalty Reports",
+			path: "/penalty-reports",
+		},
+		{
+			section: "violationFees",
+			label: "Violation Fees",
+			path: "/violation-fees",
+		},
 	{ section: "reports", label: "Reports", path: "/reports" },
 	{ section: "packs", label: "Juise Packs", path: "/packs" },
 	{
@@ -4023,7 +4030,7 @@ function App() {
 						formatNebulaUserName={formatNebulaUserName}
 					/>
 				);
-			case "penaltyReports":
+				case "penaltyReports":
 					return (
 						<PenaltyReportsScreen
 							activeSchoolId={activeSchoolId}
@@ -4032,6 +4039,13 @@ function App() {
 							studentProfilePhotoUrls={schoolStudentProfilePhotoUrls}
 							onOpenStudent={handleOpenStudentFromPenaltyReport}
 							onOpenStudentDevice={handleOpenStudentDeviceFromPenaltyReport}
+						/>
+					);
+				case "violationFees":
+					return (
+						<ViolationFeesScreen
+							activeSchoolId={activeSchoolId}
+							managedAppId={context.managedAppId}
 						/>
 					);
 			case "reports":

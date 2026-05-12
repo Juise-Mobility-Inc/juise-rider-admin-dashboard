@@ -724,6 +724,15 @@
 }
 
 @media (max-width: 900px) {
+	.violation-fees-layout,
+	.violation-fees-row {
+		grid-template-columns: 1fr;
+	}
+
+	.violation-fees-row-actions {
+		justify-content: flex-start;
+	}
+
 	.header-stats {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
@@ -6598,7 +6607,8 @@
 }
 
 .empty-state,
-.error-text {
+.error-text,
+.success-text {
 	border-radius: 18px;
 	padding: 14px 16px;
 }
@@ -6611,6 +6621,79 @@
 .error-text {
 	background: rgba(179, 58, 58, 0.11);
 	color: #8a1f1f;
+}
+
+.success-text {
+	background: rgba(44, 124, 92, 0.11);
+	color: #1f6a4d;
+}
+
+.violation-fees-screen,
+.violation-fees-layout,
+.violation-fees-form,
+.violation-fees-list,
+.violation-fees-table {
+	display: grid;
+	gap: 16px;
+}
+
+.violation-fees-layout {
+	grid-template-columns: minmax(280px, 0.42fr) minmax(0, 1fr);
+	align-items: start;
+}
+
+.violation-fees-checkbox {
+	align-content: end;
+}
+
+.violation-fees-checkbox input {
+	width: 22px;
+	height: 22px;
+}
+
+.violation-fees-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) max-content max-content max-content;
+	align-items: center;
+	gap: 12px;
+	border: 1px solid var(--panel-border);
+	border-radius: 8px;
+	background: var(--panel-bg-elevated, rgba(255, 255, 255, 0.54));
+	padding: 12px;
+}
+
+.violation-fees-row > div:first-child {
+	display: grid;
+	gap: 4px;
+	min-width: 0;
+}
+
+.violation-fees-row span {
+	color: var(--muted);
+	font-size: 0.84rem;
+}
+
+.violation-fees-row p {
+	margin: 0;
+	color: var(--muted-strong);
+	font-size: 0.9rem;
+	line-height: 1.4;
+}
+
+.violation-fees-row-actions {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+}
+
+.penalty-report-fee-match {
+	border: 1px solid var(--panel-border);
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.44);
+	color: var(--muted-strong);
+	padding: 10px 12px;
+	font-size: 0.9rem;
 }
 
 @media (max-width: 1180px) {
@@ -7125,7 +7208,7 @@
 	}
 
 	.penalty-report-student-link,
-	.penalty-report-device-link {
-		width: 100%;
-	}
+.penalty-report-device-link {
+	width: 100%;
+}
 }

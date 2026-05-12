@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
 	fetchSchoolParkingViolationMedia,
+	fetchParkingViolationFeeRules,
 	fetchSchoolParkingViolationHistory,
 	fetchSchoolParkingViolations,
 	fetchStudentProfile,
@@ -11,6 +12,7 @@ import {
 	type SchoolStudentRosterEntry,
 	type StudentParkingViolation,
 	type StudentParkingViolationHistoryEvent,
+	type ParkingViolationFeeRule,
 	updateSchoolParkingViolation,
 	uploadSchoolParkingViolationMedia,
 	type UploadedEntityMedia,
@@ -44,6 +46,17 @@ const statusOptions = [
 	"closed",
 ];
 
+const fallbackViolationTypes = [
+	"no_permit",
+	"wrong_spot",
+	"expired_reservation",
+	"blocking_access",
+	"unauthorized_parking",
+	"other",
+];
+
+const customViolationTypeValue = "__custom_violation_type__";
+
 function getErrorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : "Something went wrong.";
 }
@@ -68,6 +81,39 @@ function formatDateTime(timestamp?: number | null): string {
 		hour: "numeric",
 		minute: "2-digit",
 	});
+}
+
+function formatCurrencyFromCents(value?: number | null): string {
+	if (!value || value <= 0) {
+		return "Not set";
+	}
+
+	return new Intl.NumberFormat(undefined, {
+		style: "currency",
+		currency: "USD",
+	}).format(value / 100);
+}
+
+function formatCentsForInput(value?: number | null): string {
+	if (!value || value <= 0) {
+		return "";
+	}
+
+	return (value / 100).toFixed(2);
+}
+
+function parseCurrencyCents(value: string): number | null {
+	const normalized = value.replace(/[$,\s]/g, "");
+	if (!normalized) {
+		return null;
+	}
+
+	const amount = Number(normalized);
+	if (!Number.isFinite(amount) || amount <= 0) {
+		return null;
+	}
+
+	return Math.round(amount * 100);
 }
 
 function formatStudentName(entry?: SchoolStudentRosterEntry | null): string {
@@ -112,11 +158,79 @@ function formatDeviceMeta(device?: RegisteredDevice | null): string {
 	return (
 		[
 			device.device_type?.trim(),
+			device.powertrain_type?.trim(),
 			device.color?.trim(),
 			device.serial_number?.trim(),
 		]
 			.filter(Boolean)
 			.join(" · ") || "Device details unavailable"
+	);
+}
+
+function normalizeRuleToken(value?: string | null): string {
+	return value?.trim().toLowerCase() ?? "";
+}
+
+function normalizeViolationType(value?: string | null): string {
+	return (value ?? "")
+		.trim()
+		.toLowerCase()
+		.replace(/[\s-]+/g, "_")
+		.replace(/[^a-z0-9_]/g, "")
+		.replace(/_+/g, "_")
+		.replace(/^_+|_+$/g, "");
+}
+
+function normalizeStatusValue(value: string): string {
+	return value
+		.trim()
+		.toLowerCase()
+		.replace(/[\s-]+/g, "_");
+}
+
+function matchParkingViolationFeeRule(
+	rules: ParkingViolationFeeRule[],
+	report: StudentParkingViolation | null,
+	device: RegisteredDevice | null,
+	campusId: string,
+	violationType: string,
+): ParkingViolationFeeRule | null {
+	const normalizedViolationType = normalizeViolationType(violationType);
+	if (!report || !normalizedViolationType) {
+		return null;
+	}
+	const normalizedCampus = normalizeRuleToken(campusId);
+	const normalizedDeviceType = normalizeRuleToken(device?.device_type);
+	const normalizedPowertrain = normalizeRuleToken(device?.powertrain_type);
+
+	return (
+		[...rules]
+			.filter(
+				(rule) =>
+					rule.active &&
+					normalizeViolationType(rule.violation_type) ===
+						normalizedViolationType &&
+					(!rule.campus_id ||
+						normalizeRuleToken(rule.campus_id) === normalizedCampus) &&
+					(!rule.device_type ||
+						normalizeRuleToken(rule.device_type) === normalizedDeviceType) &&
+					(!rule.powertrain_type ||
+						normalizeRuleToken(rule.powertrain_type) === normalizedPowertrain),
+			)
+			.sort((left, right) => {
+				const leftScore =
+					(left.campus_id ? 4 : 0) +
+					(left.device_type ? 2 : 0) +
+					(left.powertrain_type ? 1 : 0);
+				const rightScore =
+					(right.campus_id ? 4 : 0) +
+					(right.device_type ? 2 : 0) +
+					(right.powertrain_type ? 1 : 0);
+				if (leftScore !== rightScore) {
+					return rightScore - leftScore;
+				}
+				return right.updated_at - left.updated_at;
+			})[0] ?? null
 	);
 }
 
@@ -144,8 +258,33 @@ function resolveDevicePhotoObjectKey(assets: UserMediaAsset[]): string {
 					return right.updated_at - left.updated_at;
 				}
 				return right.created_at - left.created_at;
-			})[0]?.object_key?.trim() ?? ""
+			})[0]
+			?.object_key?.trim() ?? ""
 	);
+}
+
+function buildViolationTypeOptions(
+	feeRules: ParkingViolationFeeRule[],
+	currentType?: string | null,
+) {
+	const options: string[] = [];
+	const pushOption = (value?: string | null) => {
+		const normalized = normalizeViolationType(value);
+		if (
+			normalized &&
+			!options.some((option) => normalizeViolationType(option) === normalized)
+		) {
+			options.push(normalized);
+		}
+	};
+
+	pushOption(currentType);
+	feeRules
+		.filter((rule) => rule.active)
+		.forEach((rule) => pushOption(rule.violation_type));
+	fallbackViolationTypes.forEach(pushOption);
+
+	return options.sort((left, right) => left.localeCompare(right));
 }
 
 function isOpenReport(report: StudentParkingViolation): boolean {
@@ -218,6 +357,10 @@ export function PenaltyReportsScreen({
 	);
 	const [statusDraft, setStatusDraft] = useState("reported");
 	const [notesDraft, setNotesDraft] = useState("");
+	const [violationTypeDraft, setViolationTypeDraft] = useState("");
+	const [paymentAmountDraft, setPaymentAmountDraft] = useState("");
+	const [feeRules, setFeeRules] = useState<ParkingViolationFeeRule[]>([]);
+	const [feeRulesBusy, setFeeRulesBusy] = useState(false);
 	const [loadBusy, setLoadBusy] = useState(false);
 	const [saveBusy, setSaveBusy] = useState(false);
 	const [uploadBusy, setUploadBusy] = useState(false);
@@ -267,13 +410,46 @@ export function PenaltyReportsScreen({
 			) ?? null
 		);
 	}, [selectedReport, studentRoster]);
-	const selectedStudentPhotoUrl =
-		selectedStudentEntry
-			? studentProfilePhotoUrls[selectedStudentEntry.user.k_guid] ||
-				studentProfilePhotoUrls[selectedStudentEntry.membership.user_uuid] ||
-				""
-			: "";
-	const selectedDeviceUUID = selectedReport?.registered_device_uuid?.trim() ?? "";
+	const selectedStudentPhotoUrl = selectedStudentEntry
+		? studentProfilePhotoUrls[selectedStudentEntry.user.k_guid] ||
+			studentProfilePhotoUrls[selectedStudentEntry.membership.user_uuid] ||
+			""
+		: "";
+	const selectedDeviceUUID =
+		selectedReport?.registered_device_uuid?.trim() ?? "";
+	const selectedCampusId =
+		selectedStudentEntry?.membership.campus_id?.trim() ?? "";
+	const violationTypeOptions = useMemo(
+		() => buildViolationTypeOptions(feeRules, selectedReport?.violation_type),
+		[feeRules, selectedReport?.violation_type],
+	);
+	const selectedViolationTypeOption = useMemo(() => {
+		const normalizedDraft = normalizeViolationType(violationTypeDraft);
+		return (
+			violationTypeOptions.find(
+				(option) => normalizeViolationType(option) === normalizedDraft,
+			) ?? customViolationTypeValue
+		);
+	}, [violationTypeDraft, violationTypeOptions]);
+	const isCustomViolationType =
+		selectedViolationTypeOption === customViolationTypeValue;
+	const matchedFeeRule = useMemo(
+		() =>
+			matchParkingViolationFeeRule(
+				feeRules,
+				selectedReport,
+				selectedDevice,
+				selectedCampusId,
+				violationTypeDraft,
+			),
+		[
+			feeRules,
+			selectedCampusId,
+			selectedDevice,
+			selectedReport,
+			violationTypeDraft,
+		],
+	);
 
 	const refreshReports = useCallback(async () => {
 		if (!activeSchoolId) {
@@ -310,6 +486,23 @@ export function PenaltyReportsScreen({
 			setLoadBusy(false);
 		}
 	}, [activeSchoolId, listMode, managedAppId]);
+
+	const refreshFeeRules = useCallback(async () => {
+		if (!activeSchoolId || !managedAppId) {
+			setFeeRules([]);
+			return;
+		}
+		setFeeRulesBusy(true);
+		try {
+			setFeeRules(
+				await fetchParkingViolationFeeRules(managedAppId, activeSchoolId),
+			);
+		} catch (nextError) {
+			setError(getErrorMessage(nextError));
+		} finally {
+			setFeeRulesBusy(false);
+		}
+	}, [activeSchoolId, managedAppId]);
 
 	const refreshMedia = useCallback(
 		async (report: StudentParkingViolation | null) => {
@@ -359,6 +552,10 @@ export function PenaltyReportsScreen({
 	}, [refreshReports]);
 
 	useEffect(() => {
+		void refreshFeeRules();
+	}, [refreshFeeRules]);
+
+	useEffect(() => {
 		if (visibleReports.length === 0) {
 			return;
 		}
@@ -374,9 +571,22 @@ export function PenaltyReportsScreen({
 	useEffect(() => {
 		setStatusDraft(selectedReport?.status || "reported");
 		setNotesDraft(selectedReport?.admin_notes || "");
+		setViolationTypeDraft(selectedReport?.violation_type || "");
+		setPaymentAmountDraft(
+			formatCentsForInput(selectedReport?.payment_amount_cents),
+		);
 		void refreshMedia(selectedReport);
 		void refreshHistory(selectedReport);
 	}, [refreshHistory, refreshMedia, selectedReport]);
+
+	useEffect(() => {
+		if (
+			matchedFeeRule &&
+			normalizeStatusValue(statusDraft) === "awaiting_payment"
+		) {
+			setPaymentAmountDraft(formatCentsForInput(matchedFeeRule.amount_cents));
+		}
+	}, [matchedFeeRule, statusDraft]);
 
 	useEffect(() => {
 		let canceled = false;
@@ -428,9 +638,9 @@ export function PenaltyReportsScreen({
 					return;
 				}
 
-				const signedUrls = await signSchoolMedia(activeSchoolId, [objectKey]).catch(
-					() => ({} as Record<string, string>),
-				);
+				const signedUrls = await signSchoolMedia(activeSchoolId, [
+					objectKey,
+				]).catch(() => ({}) as Record<string, string>);
 				if (!canceled) {
 					setSelectedDevicePhotoUrl(signedUrls[objectKey] ?? "");
 				}
@@ -458,6 +668,7 @@ export function PenaltyReportsScreen({
 		options?: {
 			paymentRequestedAt?: number;
 			paymentCollectedAt?: number;
+			paymentAmountCents?: number;
 			active?: boolean;
 		},
 	) {
@@ -469,6 +680,45 @@ export function PenaltyReportsScreen({
 		setError("");
 		setSuccess("");
 		try {
+			const normalizedViolationType =
+				normalizeViolationType(violationTypeDraft);
+			const parsedPaymentAmountCents = parseCurrencyCents(paymentAmountDraft);
+			const isRequestingPayment =
+				normalizeStatusValue(nextStatus) === "awaiting_payment";
+			const hasMatchedRule = Boolean(matchedFeeRule);
+			let paymentAmountCents: number | undefined;
+			if (isRequestingPayment && !normalizedViolationType) {
+				setError(
+					"Select or create a violation type before requesting payment.",
+				);
+				return;
+			}
+			if (isRequestingPayment && hasMatchedRule) {
+				paymentAmountCents = undefined;
+			} else if (options?.paymentAmountCents != null) {
+				paymentAmountCents = options.paymentAmountCents;
+			} else if (paymentAmountDraft.trim()) {
+				paymentAmountCents = parsedPaymentAmountCents ?? undefined;
+			}
+			if (
+				paymentAmountDraft.trim() &&
+				parsedPaymentAmountCents == null &&
+				!hasMatchedRule
+			) {
+				setError("Enter a valid payment amount before saving.");
+				return;
+			}
+			if (
+				isRequestingPayment &&
+				!hasMatchedRule &&
+				(!paymentAmountCents || paymentAmountCents <= 0)
+			) {
+				setError(
+					"No fee rule matched this violation. Enter a manual amount before requesting payment.",
+				);
+				return;
+			}
+
 			const updated = await updateSchoolParkingViolation(
 				managedAppId,
 				activeSchoolId,
@@ -476,6 +726,8 @@ export function PenaltyReportsScreen({
 				{
 					status: nextStatus,
 					admin_notes: notesDraft,
+					violation_type: normalizedViolationType || undefined,
+					payment_amount_cents: paymentAmountCents,
 					payment_requested_at: options?.paymentRequestedAt ?? null,
 					payment_collected_at: options?.paymentCollectedAt ?? null,
 					active: options?.active,
@@ -487,7 +739,14 @@ export function PenaltyReportsScreen({
 				),
 			);
 			setSelectedReportId(updated.violation_uuid);
-			setSuccess("Report updated.");
+			if (updated.payment_charge_error) {
+				setError(updated.payment_charge_error);
+				setSuccess("Payment requested. The charge did not complete.");
+			} else if (isRequestingPayment) {
+				setSuccess("Payment charged and report paid.");
+			} else {
+				setSuccess("Report updated.");
+			}
 		} catch (nextError) {
 			setError(getErrorMessage(nextError));
 		} finally {
@@ -608,76 +867,78 @@ export function PenaltyReportsScreen({
 							</span>
 						</div>
 
-							<div className="penalty-report-detail-grid">
-								<div className="penalty-report-student-card">
-									<div className="penalty-report-student-avatar">
-										{selectedStudentPhotoUrl ? (
-											<img
-												src={selectedStudentPhotoUrl}
-												alt={`${formatStudentName(selectedStudentEntry)} profile`}
-											/>
-										) : (
-											getStudentInitials(selectedStudentEntry) || "?"
-										)}
-									</div>
-									<div className="penalty-report-student-copy">
-										<span>Student</span>
-										<strong>{formatStudentName(selectedStudentEntry)}</strong>
-										<small>
-											ID:{" "}
-											{selectedStudentEntry?.membership.student_id ||
-												"Unavailable"}
-										</small>
-									</div>
-									<button
-										className="secondary-button penalty-report-student-link"
-										type="button"
-										disabled={!selectedStudentEntry}
-										onClick={() => {
-											if (selectedStudentEntry) {
-												onOpenStudent(
-													selectedStudentEntry.membership.membership_uuid,
-												);
-											}
-										}}>
-										View Student
-									</button>
+						<div className="penalty-report-detail-grid">
+							<div className="penalty-report-student-card">
+								<div className="penalty-report-student-avatar">
+									{selectedStudentPhotoUrl ? (
+										<img
+											src={selectedStudentPhotoUrl}
+											alt={`${formatStudentName(selectedStudentEntry)} profile`}
+										/>
+									) : (
+										getStudentInitials(selectedStudentEntry) || "?"
+									)}
 								</div>
-								<div className="penalty-report-device-card">
-									<div className="penalty-report-device-thumb">
-										{selectedDevicePhotoUrl ? (
-											<img
-												src={selectedDevicePhotoUrl}
-												alt={`${formatDeviceName(selectedDevice)} device`}
-											/>
-										) : (
-											(selectedDevice?.device_type?.slice(0, 1) || "D").toUpperCase()
-										)}
-									</div>
-									<div className="penalty-report-device-copy">
-										<span>Device</span>
-										<strong>
-											{deviceBusy
-												? "Loading device..."
-												: formatDeviceName(selectedDevice)}
-										</strong>
-										<small>{formatDeviceMeta(selectedDevice)}</small>
-									</div>
-									<button
-										className="secondary-button penalty-report-device-link"
-										type="button"
-										disabled={!selectedStudentEntry || !selectedDeviceUUID}
-										onClick={() => {
-											if (selectedStudentEntry && selectedDeviceUUID) {
-												onOpenStudentDevice(
-													selectedStudentEntry.membership.membership_uuid,
-													selectedDeviceUUID,
-												);
-											}
-										}}>
-										View Device
-									</button>
+								<div className="penalty-report-student-copy">
+									<span>Student</span>
+									<strong>{formatStudentName(selectedStudentEntry)}</strong>
+									<small>
+										ID:{" "}
+										{selectedStudentEntry?.membership.student_id ||
+											"Unavailable"}
+									</small>
 								</div>
+								<button
+									className="secondary-button penalty-report-student-link"
+									type="button"
+									disabled={!selectedStudentEntry}
+									onClick={() => {
+										if (selectedStudentEntry) {
+											onOpenStudent(
+												selectedStudentEntry.membership.membership_uuid,
+											);
+										}
+									}}>
+									View Student
+								</button>
+							</div>
+							<div className="penalty-report-device-card">
+								<div className="penalty-report-device-thumb">
+									{selectedDevicePhotoUrl ? (
+										<img
+											src={selectedDevicePhotoUrl}
+											alt={`${formatDeviceName(selectedDevice)} device`}
+										/>
+									) : (
+										(
+											selectedDevice?.device_type?.slice(0, 1) || "D"
+										).toUpperCase()
+									)}
+								</div>
+								<div className="penalty-report-device-copy">
+									<span>Device</span>
+									<strong>
+										{deviceBusy
+											? "Loading device..."
+											: formatDeviceName(selectedDevice)}
+									</strong>
+									<small>{formatDeviceMeta(selectedDevice)}</small>
+								</div>
+								<button
+									className="secondary-button penalty-report-device-link"
+									type="button"
+									disabled={!selectedStudentEntry || !selectedDeviceUUID}
+									onClick={() => {
+										if (selectedStudentEntry && selectedDeviceUUID) {
+											onOpenStudentDevice(
+												selectedStudentEntry.membership.membership_uuid,
+												selectedDeviceUUID,
+											);
+										}
+									}}>
+									View Device
+								</button>
+							</div>
 							<div>
 								<span>Reported</span>
 								<strong>{formatDateTime(selectedReport.created_at)}</strong>
@@ -685,6 +946,20 @@ export function PenaltyReportsScreen({
 							<div>
 								<span>Updated</span>
 								<strong>{formatDateTime(selectedReport.updated_at)}</strong>
+							</div>
+							<div>
+								<span>Payment amount</span>
+								<strong>
+									{formatCurrencyFromCents(selectedReport.payment_amount_cents)}
+								</strong>
+							</div>
+							<div>
+								<span>Violation type</span>
+								<strong>
+									{selectedReport.violation_type
+										? formatStatus(selectedReport.violation_type)
+										: "Not set"}
+								</strong>
 							</div>
 						</div>
 
@@ -732,6 +1007,39 @@ export function PenaltyReportsScreen({
 										</select>
 									</label>
 									<label className="field">
+										<span>Violation type</span>
+										<select
+											value={selectedViolationTypeOption}
+											onChange={(event) => {
+												const nextValue = event.target.value;
+												setViolationTypeDraft(
+													nextValue === customViolationTypeValue
+														? ""
+														: nextValue,
+												);
+											}}>
+											<option value={customViolationTypeValue}>
+												New violation type...
+											</option>
+											{violationTypeOptions.map((type) => (
+												<option key={type} value={type}>
+													{formatStatus(type)}
+												</option>
+											))}
+										</select>
+										{isCustomViolationType ? (
+											<input
+												value={violationTypeDraft}
+												onChange={(event) =>
+													setViolationTypeDraft(event.target.value)
+												}
+												placeholder={
+													feeRulesBusy ? "Loading types..." : "no_permit"
+												}
+											/>
+										) : null}
+									</label>
+									<label className="field">
 										<span>Admin notes</span>
 										<textarea
 											value={notesDraft}
@@ -739,6 +1047,36 @@ export function PenaltyReportsScreen({
 											placeholder="Add internal notes, payment context, or appeal review notes."
 										/>
 									</label>
+									<label className="field">
+										<span>Payment amount</span>
+										<input
+											type="number"
+											min="0"
+											step="0.01"
+											value={paymentAmountDraft}
+											onChange={(event) =>
+												setPaymentAmountDraft(event.target.value)
+											}
+											disabled={Boolean(matchedFeeRule)}
+											placeholder="40.00"
+										/>
+									</label>
+								</div>
+								<div className="penalty-report-fee-match">
+									{matchedFeeRule ? (
+										<span>
+											Matched fee:{" "}
+											<strong>
+												{matchedFeeRule.label ||
+													formatStatus(matchedFeeRule.violation_type)}
+											</strong>{" "}
+											{formatCurrencyFromCents(matchedFeeRule.amount_cents)}
+										</span>
+									) : (
+										<span>
+											No matching fee rule. Manual amount will be used.
+										</span>
+									)}
 								</div>
 
 								<div className="penalty-report-actions">
@@ -748,26 +1086,6 @@ export function PenaltyReportsScreen({
 										onClick={() => void saveReport()}
 										disabled={saveBusy}>
 										{saveBusy ? "Saving..." : "Save Changes"}
-									</button>
-									<button
-										className="secondary-button"
-										type="button"
-										onClick={() =>
-											void saveReport("awaiting_payment", {
-												paymentRequestedAt: Math.floor(Date.now() / 1000),
-											})
-										}
-										disabled={saveBusy}>
-										Collect Payment
-									</button>
-									<button
-										className="danger-button"
-										type="button"
-										onClick={() =>
-											void saveReport("dismissed", { active: false })
-										}
-										disabled={saveBusy}>
-										Dismiss
 									</button>
 								</div>
 							</>

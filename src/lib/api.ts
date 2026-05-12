@@ -417,6 +417,7 @@ export interface RegisteredDevice {
   app_id: string;
   membership_uuid?: string | null;
   device_type: string;
+  powertrain_type: string;
   make: string;
   model: string;
   nickname: string;
@@ -1953,13 +1954,20 @@ export interface StudentParkingViolation {
   membership_uuid?: string | null;
   registered_device_uuid?: string | null;
   reported_by_user_uuid: string;
+  violation_type: string;
   description: string;
   admin_notes: string;
   appeal_description: string;
   status: string;
   appealed_at?: number | null;
+  payment_amount_cents?: number | null;
+  fee_rule_uuid?: string | null;
+  payment_amount_source?: string | null;
   payment_requested_at?: number | null;
   payment_collected_at?: number | null;
+  payment_transaction_id?: string | null;
+  payment_charge_error?: string | null;
+  payment_charge_status?: number | null;
   active: boolean;
   created_at: number;
   updated_at: number;
@@ -1984,8 +1992,35 @@ export interface StudentParkingViolationUpdateInput {
   status?: string;
   admin_notes?: string;
   description?: string;
+  violation_type?: string;
+  payment_amount_cents?: number | null;
   payment_requested_at?: number | null;
   payment_collected_at?: number | null;
+  active?: boolean;
+}
+
+export interface ParkingViolationFeeRule {
+  fee_rule_uuid: string;
+  app_id: string;
+  school_id: string;
+  campus_id?: string | null;
+  violation_type: string;
+  device_type?: string | null;
+  powertrain_type?: string | null;
+  amount_cents: number;
+  label: string;
+  active: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ParkingViolationFeeRuleInput {
+  campus_id?: string | null;
+  violation_type: string;
+  device_type?: string | null;
+  powertrain_type?: string | null;
+  amount_cents: number;
+  label: string;
   active?: boolean;
 }
 
@@ -2155,6 +2190,87 @@ export async function updateSchoolParkingViolation(
     {
       method: "PUT",
       body: input,
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function fetchParkingViolationFeeRules(
+  managedAppId: string,
+  schoolId: string,
+  options: { includeInactive?: boolean } = {},
+): Promise<ParkingViolationFeeRule[]> {
+  const search = new URLSearchParams({
+    managed_app_id: managedAppId,
+  });
+  if (options.includeInactive) {
+    search.set("include_inactive", "true");
+  }
+
+  return request<ParkingViolationFeeRule[]>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violation-fee-rules?${search.toString()}`,
+    {
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function createParkingViolationFeeRule(
+  managedAppId: string,
+  schoolId: string,
+  input: ParkingViolationFeeRuleInput,
+): Promise<ParkingViolationFeeRule> {
+  const search = new URLSearchParams({
+    managed_app_id: managedAppId,
+  });
+
+  return request<ParkingViolationFeeRule>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violation-fee-rules?${search.toString()}`,
+    {
+      method: "POST",
+      body: input,
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function updateParkingViolationFeeRule(
+  managedAppId: string,
+  schoolId: string,
+  feeRuleUUID: string,
+  input: ParkingViolationFeeRuleInput,
+): Promise<ParkingViolationFeeRule> {
+  const search = new URLSearchParams({
+    managed_app_id: managedAppId,
+  });
+
+  return request<ParkingViolationFeeRule>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violation-fee-rules/${encodeURIComponent(feeRuleUUID)}?${search.toString()}`,
+    {
+      method: "PUT",
+      body: input,
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function deleteParkingViolationFeeRule(
+  managedAppId: string,
+  schoolId: string,
+  feeRuleUUID: string,
+): Promise<ParkingViolationFeeRule> {
+  const search = new URLSearchParams({
+    managed_app_id: managedAppId,
+  });
+
+  return request<ParkingViolationFeeRule>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violation-fee-rules/${encodeURIComponent(feeRuleUUID)}?${search.toString()}`,
+    {
+      method: "DELETE",
       appIdHeader: currentSession?.authAppId ?? managedAppId,
     },
   );
