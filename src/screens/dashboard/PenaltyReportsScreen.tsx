@@ -739,11 +739,8 @@ export function PenaltyReportsScreen({
 				),
 			);
 			setSelectedReportId(updated.violation_uuid);
-			if (updated.payment_charge_error) {
-				setError(updated.payment_charge_error);
-				setSuccess("Payment requested. The charge did not complete.");
-			} else if (isRequestingPayment) {
-				setSuccess("Payment charged and report paid.");
+			if (isRequestingPayment) {
+				setSuccess("Payment requested. The rider can pay from the app.");
 			} else {
 				setSuccess("Report updated.");
 			}
