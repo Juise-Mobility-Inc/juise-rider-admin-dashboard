@@ -122,7 +122,8 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
 
   const [, setPOIs] = useState<SchoolPOI[]>([]);
 
-  // ref for the ride scroller so we can scroll-to-selected chip
+  // ref for the ride scroller — used to scroll selected chip into view
+  // without triggering page-level scrolling (scrollIntoView moves the whole page)
   const rideScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -165,7 +166,11 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
   useEffect(() => {
     if (!selId || !rideScrollRef.current) return;
     const chip = rideScrollRef.current.querySelector<HTMLElement>("[data-active='true']");
-    chip?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    if (!chip) return;
+    // Scroll only the strip container horizontally — never the page
+    const container = rideScrollRef.current;
+    const targetLeft = chip.offsetLeft - container.offsetWidth / 2 + chip.offsetWidth / 2;
+    container.scrollTo({ left: Math.max(0, targetLeft), behavior: "smooth" });
   }, [selId]);
 
   const filtered = useMemo(() => {
