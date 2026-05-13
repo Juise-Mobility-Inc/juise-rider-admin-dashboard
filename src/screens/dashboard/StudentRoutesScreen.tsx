@@ -44,8 +44,12 @@ function formatStudentName(entry: SchoolStudentRosterEntry): string {
     fullName ||
     entry.user.username?.trim() ||
     entry.user.email?.trim() ||
-    "Unnamed student"
+    "Student"
   );
+}
+
+function formatStudentFirstName(entry: SchoolStudentRosterEntry): string {
+  return entry.user.first_name?.trim() || formatStudentName(entry).split(" ")[0] || "Student";
 }
 
 function formatStudentDetail(entry: SchoolStudentRosterEntry): string {
@@ -53,12 +57,30 @@ function formatStudentDetail(entry: SchoolStudentRosterEntry): string {
     entry.membership.student_id?.trim() ||
     entry.user.email?.trim() ||
     entry.user.username?.trim() ||
-    "Student"
+    ""
   );
 }
 
 function resolveUserUUID(entry: SchoolStudentRosterEntry): string {
   return entry.membership.user_uuid?.trim() || entry.user.k_guid;
+}
+
+function getInitials(entry: SchoolStudentRosterEntry): string {
+  const first = entry.user.first_name?.trim();
+  const last = entry.user.last_name?.trim();
+  if (first && last) return `${first[0]}${last[0]}`.toUpperCase();
+  const name = formatStudentName(entry);
+  const parts = name.split(" ").filter(Boolean);
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  return name.charAt(0).toUpperCase() || "?";
+}
+
+function getPhotoUrl(entry: SchoolStudentRosterEntry): string | null {
+  // UserMediaAsset objects need signed URLs fetched separately — not available
+  // from the roster payload directly. Return null to show the initials avatar.
+  // The infrastructure (showPhoto / onError) is in place for when a URL is available.
+  void entry; // suppress lint
+  return null;
 }
 
 function formatDistance(meters: number): string {
@@ -74,9 +96,10 @@ function formatDuration(seconds: number): string {
   return `${seconds}s`;
 }
 
-function formatSessionShort(timestamp: number): string {
+function formatRideLabel(timestamp: number): string {
   if (!timestamp) return "—";
-  return new Date(timestamp * 1000).toLocaleString([], {
+  const d = new Date(timestamp * 1000);
+  return d.toLocaleString([], {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -84,7 +107,7 @@ function formatSessionShort(timestamp: number): string {
   });
 }
 
-function formatSessionFull(timestamp: number): string {
+function formatRideFull(timestamp: number): string {
   if (!timestamp) return "—";
   return new Date(timestamp * 1000).toLocaleString([], {
     weekday: "short",
@@ -96,7 +119,6 @@ function formatSessionFull(timestamp: number): string {
   });
 }
 
-// Fits map bounds to a set of points whenever the point set changes
 function MapFitter({ points }: { points: [number, number][] }) {
   const map = useMap();
   const prevKey = useRef<string>("");
@@ -123,31 +145,28 @@ interface Props {
 type RouteSegment = { color: string; positions: [number, number][] };
 
 export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
-  // Data
   const [roster, setRoster] = useState<SchoolStudentRosterEntry[]>([]);
   const [schoolZones, setSchoolZones] = useState<SchoolZone[]>([]);
   const [rosterBusy, setRosterBusy] = useState(false);
   const [rosterError, setRosterError] = useState("");
   const [search, setSearch] = useState("");
 
-  // Selection
   const [selectedUUID, setSelectedUUID] = useState<string | null>(null);
   const [routeHistory, setRouteHistory] = useState<StudentRouteHistorySession[]>([]);
   const [routeBusy, setRouteBusy] = useState(false);
   const [routeError, setRouteError] = useState("");
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
-  // Map layer toggles
   const [showRoute, setShowRoute] = useState(true);
   const [showPOIs, setShowPOIs] = useState(true);
   const [showPenalties, setShowPenalties] = useState(true);
   const [showZones, setShowZones] = useState(true);
-
-  // Stats overlay open/closed
   const [statsOpen, setStatsOpen] = useState(true);
 
-  // Suppress unused variable — schoolPOIs reserved for future all-POI overlay
   const [, setSchoolPOIs] = useState<SchoolPOI[]>([]);
+
+  // track broken photo URLs so we can fall back to initials
+  const [brokenPhotos, setBrokenPhotos] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -166,13 +185,9 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
       })
       .catch((err) => {
         if (!cancelled)
-          setRosterError(
-            err instanceof Error ? err.message : "Failed to load students",
-          );
+          setRosterError(err instanceof Error ? err.message : "Failed to load students");
       })
-      .finally(() => {
-        if (!cancelled) setRosterBusy(false);
-      });
+      .finally(() => { if (!cancelled) setRosterBusy(false); });
     return () => { cancelled = true; };
   }, [managedAppId, activeSchoolId]);
 
@@ -186,17 +201,11 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
       setRouteBusy(true);
       setRouteError("");
       try {
-        const sessions = await fetchStudentRouteHistory(
-          managedAppId,
-          activeSchoolId,
-          uuid,
-        );
+        const sessions = await fetchStudentRouteHistory(managedAppId, activeSchoolId, uuid);
         setRouteHistory(sessions);
         if (sessions.length > 0) setSelectedSessionId(sessions[0].session_id);
       } catch (err) {
-        setRouteError(
-          err instanceof Error ? err.message : "Failed to load routes",
-        );
+        setRouteError(err instanceof Error ? err.message : "Failed to load routes");
       } finally {
         setRouteBusy(false);
       }
@@ -269,10 +278,16 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
 
   return (
     <div className="sr-layout">
-      {/* ──────── Left sidebar ──────── */}
-      <aside className="sr-sidebar">
-        <div className="sr-sidebar-header">
-          <span className="sr-sidebar-eyebrow">Student Routes</span>
+
+      {/* ── Student picker ── */}
+      <div className="sr-picker-section">
+        <div className="sr-picker-header">
+          <div className="sr-picker-title-row">
+            <h3 className="sr-section-label">Students</h3>
+            {!rosterBusy && roster.length > 0 && (
+              <span className="sr-count-badge">{roster.length}</span>
+            )}
+          </div>
           <input
             className="sr-search"
             type="search"
@@ -280,121 +295,140 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          {rosterBusy && <p className="sr-sidebar-hint">Loading…</p>}
-          {rosterError && <p className="sr-sidebar-error">{rosterError}</p>}
-          {!rosterBusy && !rosterError && roster.length > 0 && (
-            <p className="sr-sidebar-hint">
-              {filteredRoster.length} of {roster.length} student{roster.length !== 1 ? "s" : ""}
-            </p>
-          )}
         </div>
 
-        {/* Student list */}
-        <div className="sr-student-list">
-          {filteredRoster.map((entry) => {
+        {rosterError && <p className="sr-error-msg">{rosterError}</p>}
+
+        <div className="sr-picker-scroll">
+          {rosterBusy && (
+            <div className="sr-picker-loading">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="sr-student-card sr-student-card--skeleton" />
+              ))}
+            </div>
+          )}
+
+          {!rosterBusy && filteredRoster.length === 0 && !rosterError && (
+            <p className="sr-picker-empty">
+              {search ? "No students match that search." : "No students enrolled."}
+            </p>
+          )}
+
+          {!rosterBusy && filteredRoster.map((entry) => {
             const uuid = resolveUserUUID(entry);
             const active = uuid === selectedUUID;
+            const photoUrl = getPhotoUrl(entry);
+            const showPhoto = photoUrl && !brokenPhotos.has(uuid);
+
             return (
               <button
                 key={uuid}
-                className={`sr-student-item${active ? " sr-student-item--active" : ""}`}
+                className={`sr-student-card${active ? " sr-student-card--active" : ""}`}
                 onClick={() => handleSelectStudent(entry)}
+                title={formatStudentName(entry)}
               >
-                <div className="sr-student-avatar">
-                  {formatStudentName(entry).charAt(0).toUpperCase()}
+                <div className="sr-student-photo-wrap">
+                  {showPhoto ? (
+                    <img
+                      className="sr-student-photo"
+                      src={photoUrl!}
+                      alt={formatStudentName(entry)}
+                      onError={() =>
+                        setBrokenPhotos((prev) => new Set([...prev, uuid]))
+                      }
+                    />
+                  ) : (
+                    <span className="sr-student-initials">{getInitials(entry)}</span>
+                  )}
+                  {active && (
+                    <span className="sr-student-active-dot" aria-hidden="true" />
+                  )}
                 </div>
-                <div className="sr-student-info">
-                  <span className="sr-student-name">{formatStudentName(entry)}</span>
-                  <span className="sr-student-detail">{formatStudentDetail(entry)}</span>
-                </div>
-                {active && routeHistory.length > 0 && (
-                  <span className="sr-student-ride-count">{routeHistory.length}</span>
+                <span className="sr-student-first-name">
+                  {formatStudentFirstName(entry)}
+                </span>
+                {routeBusy && active && (
+                  <span className="sr-student-loading-dot" />
+                )}
+                {!routeBusy && active && routeHistory.length > 0 && (
+                  <span className="sr-student-ride-badge">{routeHistory.length}</span>
                 )}
               </button>
             );
           })}
-          {!rosterBusy && filteredRoster.length === 0 && !rosterError && (
-            <p className="sr-sidebar-empty">No students found.</p>
-          )}
         </div>
+      </div>
 
-        {/* Session list — only when a student is selected */}
-        {selectedUUID && (
-          <div className="sr-session-panel">
-            <div className="sr-session-panel-header">
-              <span className="sr-session-panel-title">
-                {selectedEntry ? formatStudentName(selectedEntry) : "Rides"}
-              </span>
-              <span className="sr-session-panel-count">
-                {routeBusy ? "…" : routeHistory.length}
-              </span>
-            </div>
+      {/* ── Ride selector strip (shown when a student is selected) ── */}
+      {selectedUUID && (
+        <div className="sr-ride-section">
+          <div className="sr-ride-section-header">
+            <span className="sr-section-label">
+              {selectedEntry ? `${formatStudentFirstName(selectedEntry)}'s Rides` : "Rides"}
+            </span>
+            {routeError && <span className="sr-error-inline">{routeError}</span>}
+            {routeBusy && <span className="sr-muted-inline">Loading…</span>}
+            {!routeBusy && !routeError && routeHistory.length > 0 && (
+              <span className="sr-count-badge">{routeHistory.length}</span>
+            )}
+          </div>
 
-            {routeError && <p className="sr-sidebar-error">{routeError}</p>}
+          {noRides && !routeBusy && (
+            <p className="sr-ride-empty">No rides recorded for this student yet.</p>
+          )}
 
-            <div className="sr-session-list">
+          {routeHistory.length > 0 && (
+            <div className="sr-ride-scroll">
               {routeHistory.map((session) => {
                 const active = session.session_id === selectedSessionId;
                 const hasPenalties = session.penalty_events.length > 0;
                 const hasPOIs = session.visited_pois.length > 0;
+                const noGPSThisRide = session.points.length === 0;
+
                 return (
                   <button
                     key={session.session_id}
-                    className={`sr-session-item${active ? " sr-session-item--active" : ""}`}
+                    className={`sr-ride-chip${active ? " sr-ride-chip--active" : ""}`}
                     onClick={() => setSelectedSessionId(session.session_id)}
                   >
-                    <div className="sr-session-row-top">
-                      <span className="sr-session-date">
-                        {formatSessionShort(session.started_at)}
-                      </span>
-                      <span className="sr-session-dist">
-                        {formatDistance(session.distance_meters)}
-                      </span>
-                    </div>
-                    <div className="sr-session-row-meta">
-                      <span className="sr-session-dur">
-                        {formatDuration(session.duration_seconds)}
-                      </span>
-                      <div className="sr-session-chips">
-                        {session.bonus_points > 0 && (
-                          <span className="sr-chip sr-chip--green">+{session.bonus_points} pts</span>
-                        )}
-                        {hasPenalties && (
-                          <span className="sr-chip sr-chip--red">
-                            {session.penalty_events.length} {session.penalty_events.length === 1 ? "penalty" : "penalties"}
-                          </span>
-                        )}
-                        {hasPOIs && (
-                          <span className="sr-chip sr-chip--gold">
-                            {session.visited_pois.length} POI
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                    <span className="sr-ride-chip-date">{formatRideLabel(session.started_at)}</span>
+                    <span className="sr-ride-chip-stats">
+                      <span className="sr-ride-chip-dist">{formatDistance(session.distance_meters)}</span>
+                      <span className="sr-ride-chip-dur">{formatDuration(session.duration_seconds)}</span>
+                    </span>
+                    <span className="sr-ride-chip-badges">
+                      {session.bonus_points > 0 && (
+                        <span className="sr-tiny-badge sr-tiny-badge--green">+{session.bonus_points}</span>
+                      )}
+                      {hasPenalties && (
+                        <span className="sr-tiny-badge sr-tiny-badge--red">{session.penalty_events.length}⚠</span>
+                      )}
+                      {hasPOIs && (
+                        <span className="sr-tiny-badge sr-tiny-badge--gold">{session.visited_pois.length}★</span>
+                      )}
+                      {noGPSThisRide && (
+                        <span className="sr-tiny-badge sr-tiny-badge--muted">no GPS</span>
+                      )}
+                    </span>
                   </button>
                 );
               })}
-              {!routeBusy && routeHistory.length === 0 && !routeError && (
-                <p className="sr-sidebar-empty">No rides recorded.</p>
-              )}
             </div>
-          </div>
-        )}
-      </aside>
+          )}
+        </div>
+      )}
 
-      {/* ──────── Map panel ──────── */}
-      <div className="sr-content">
-        {/* The Leaflet map fills this entire panel */}
+      {/* ── Map ── */}
+      <div className="sr-map-section">
         <MapContainer
           center={DEFAULT_CENTER}
           zoom={DEFAULT_ZOOM}
           className="sr-map"
-          zoomControl={false}
+          zoomControl={true}
         >
           <TileLayer attribution={TILE_LAYER_ATTRIBUTION} url={TILE_LAYER_URL} />
           <MapFitter points={allRoutePoints} />
 
-          {/* Zone polygons */}
           {showZones &&
             displayZones
               .filter((z) => z.active && z.polygon.length >= 3)
@@ -422,7 +456,6 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                 </Polygon>
               ))}
 
-          {/* Speed-colored route polyline */}
           {showRoute &&
             routeSegments.map((seg, i) => (
               <Polyline
@@ -432,7 +465,6 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
               />
             ))}
 
-          {/* Start / end markers */}
           {showRoute && selectedSession && selectedSession.points.length > 0 && (
             <>
               <CircleMarker
@@ -440,10 +472,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                 radius={9}
                 pathOptions={{ color: "#fff", fillColor: "#27cc5e", fillOpacity: 1, weight: 2.5 }}
               >
-                <Popup>
-                  <strong>Ride started</strong><br />
-                  {formatSessionFull(selectedSession.started_at)}
-                </Popup>
+                <Popup><strong>Ride started</strong><br />{formatRideFull(selectedSession.started_at)}</Popup>
               </CircleMarker>
               <CircleMarker
                 center={[
@@ -455,13 +484,12 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
               >
                 <Popup>
                   <strong>Ride ended</strong><br />
-                  {selectedSession.ended_at ? formatSessionFull(selectedSession.ended_at) : "—"}
+                  {selectedSession.ended_at ? formatRideFull(selectedSession.ended_at) : "—"}
                 </Popup>
               </CircleMarker>
             </>
           )}
 
-          {/* POI visit markers */}
           {showPOIs &&
             selectedSession?.visited_pois.map((poi, i) => (
               <CircleMarker
@@ -475,13 +503,12 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                   +{poi.bonus_points} pts
                   {poi.description && <><br />{poi.description}</>}
                   {poi.visited_at > 0 && (
-                    <><br /><span style={{ color: "#888", fontSize: "0.82em" }}>{formatSessionShort(poi.visited_at)}</span></>
+                    <><br /><span style={{ color: "#888", fontSize: "0.82em" }}>{formatRideLabel(poi.visited_at)}</span></>
                   )}
                 </Popup>
               </CircleMarker>
             ))}
 
-          {/* Penalty event markers */}
           {showPenalties &&
             selectedSession?.penalty_events.map((event, i) => (
               <CircleMarker
@@ -505,7 +532,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
             ))}
         </MapContainer>
 
-        {/* ── Floating: layer toggles (top-left on map) ── */}
+        {/* Floating layer toggles — top-left on map */}
         {hasGPS && (
           <div className="sr-overlay-filters">
             <span className="sr-overlay-label">Layers</span>
@@ -539,7 +566,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
           </div>
         )}
 
-        {/* ── Floating: session stats card (bottom-left on map) ── */}
+        {/* Floating session stats — bottom-left on map */}
         {selectedSession && (
           <div className={`sr-overlay-stats${statsOpen ? " sr-overlay-stats--open" : ""}`}>
             <button
@@ -548,7 +575,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
               title={statsOpen ? "Collapse stats" : "Expand stats"}
             >
               <span className="sr-stats-toggle-title">
-                {formatSessionShort(selectedSession.started_at)}
+                {formatRideLabel(selectedSession.started_at)}
               </span>
               <span className="sr-stats-toggle-icon">{statsOpen ? "▾" : "▴"}</span>
             </button>
@@ -589,20 +616,18 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
           </div>
         )}
 
-        {/* ── Empty / loading state overlays on the map ── */}
+        {/* Map empty states */}
         {noStudent && (
           <div className="sr-map-overlay">
             <div className="sr-map-empty">
-              <div className="sr-map-empty-icon-wrap">
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <div className="sr-map-empty-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="11" r="3" />
                   <path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z" />
                 </svg>
               </div>
-              <p className="sr-map-empty-title">Select a student</p>
-              <p className="sr-map-empty-desc">
-                Pick a student from the left sidebar to view their ride routes, POI visits, and penalty events.
-              </p>
+              <p className="sr-map-empty-title">Select a student above</p>
+              <p className="sr-map-empty-desc">Their ride routes, POI visits, and penalty events will appear here.</p>
             </div>
           </div>
         )}
@@ -616,11 +641,9 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
         {noRides && (
           <div className="sr-map-overlay">
             <div className="sr-map-empty">
-              <div className="sr-map-empty-icon-wrap">
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="12" />
-                  <line x1="12" y1="16" x2="12.01" y2="16" />
+              <div className="sr-map-empty-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
               </div>
               <p className="sr-map-empty-title">No rides recorded</p>
@@ -631,15 +654,9 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
         {noGPS && !noRides && (
           <div className="sr-map-overlay">
             <div className="sr-map-empty">
-              <div className="sr-map-empty-icon-wrap">
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="1" y1="1" x2="23" y2="23" />
-                  <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
-                  <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
-                  <path d="M10.71 5.05A16 16 0 0 1 22.56 9" />
-                  <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" />
-                  <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
-                  <line x1="12" y1="20" x2="12.01" y2="20" />
+              <div className="sr-map-empty-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="1" y1="1" x2="23" y2="23" /><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" /><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" /><path d="M10.71 5.05A16 16 0 0 1 22.56 9" /><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" /><path d="M8.53 16.11a6 6 0 0 1 6.95 0" /><line x1="12" y1="20" x2="12.01" y2="20" />
                 </svg>
               </div>
               <p className="sr-map-empty-title">No GPS data</p>
