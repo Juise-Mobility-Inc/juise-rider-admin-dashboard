@@ -1266,7 +1266,7 @@ export function DashboardScreen({
 						<DashboardKpi
 							label="POI visits"
 							value={visuals.poiVisits.toLocaleString()}
-							detail={`${visuals.poiRankings.filter((point) => point.visits > 0).length.toLocaleString()} POIs getting traffic`}
+							detail={`${visuals.poiRankings.filter((point) => point.visits > 0).length.toLocaleString()} POIs getting the most traffic`}
 						/>
 					</div>
 

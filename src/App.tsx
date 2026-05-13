@@ -4291,20 +4291,6 @@ function App() {
 					<p>School scope: {activeSchoolId || "Unscoped login"}</p>
 				</div>
 
-				<form className="scope-form" onSubmit={handleSwitchManagedApp}>
-					<label className="field compact-field">
-						<span>Managed App ID</span>
-						<input
-							value={managedAppInput}
-							onChange={(event) => setManagedAppInput(event.target.value)}
-							placeholder="juise-customer-app"
-						/>
-					</label>
-					<button className="secondary-button" type="submit">
-						Load App
-					</button>
-				</form>
-
 				<div className="sidebar-block">
 					<div className="sidebar-block-header">
 						<span>School Account</span>
@@ -4386,19 +4372,11 @@ function App() {
 					</div>
 					<div className="header-stats">
 						<div className="stat-card">
-							<span>School</span>
-							<strong>{activeSchoolId || "None"}</strong>
-						</div>
-						<div className="stat-card">
-							<span>Terms</span>
-							<strong>{termDrafts.length}</strong>
-						</div>
-						<div className="stat-card">
 							<span>Students</span>
 							<strong>{headerStudentCount}</strong>
 						</div>
 						<div className="stat-card">
-							<span>Pending</span>
+							<span>Pending Parking Reservations</span>
 							<strong>{headerPendingReservationCount}</strong>
 						</div>
 					</div>
