@@ -520,7 +520,6 @@ function challengeToResubmitDraft(challenge: SchoolChallenge): ChallengeDraft {
 	return {
 		...challengeToDraft(challenge),
 		challenge_uuid: "",
-		title: `${challenge.title} rerun`,
 		start_time: formatDateTimeLocalValue(now),
 		end_time: formatDateTimeLocalValue(now + durationSeconds),
 		active: true,
