@@ -4110,21 +4110,47 @@
 .dashboard-kpi,
 .dashboard-card {
         border: 1px solid var(--panel-border);
-        border-radius: 8px;
+        border-radius: 14px;
         background: rgba(255, 255, 255, 0.62);
-        box-shadow: 0 16px 40px rgba(17, 45, 78, 0.08);
+        box-shadow: 0 8px 28px rgba(17, 45, 78, 0.1);
         min-width: 0;
 }
 
 .dashboard-hero-card {
         display: grid;
         align-content: center;
-        gap: 8px;
+        gap: 10px;
         min-height: 156px;
-        padding: 22px;
-        background:
-                linear-gradient(135deg, rgba(39, 204, 94, 0.2), rgba(246, 174, 45, 0.2)),
-                rgba(255, 255, 255, 0.72);
+        padding: 24px;
+        background: linear-gradient(150deg, #0c1c33 0%, #112845 55%, #1a3a5c 100%);
+        border-color: rgba(246, 174, 45, 0.24);
+        box-shadow: 0 24px 64px rgba(17, 45, 78, 0.34), inset 0 1px 0 rgba(246, 174, 45, 0.16);
+        position: relative;
+        overflow: hidden;
+}
+
+.dashboard-hero-card::before {
+        content: "";
+        position: absolute;
+        top: -55px;
+        right: -55px;
+        width: 210px;
+        height: 210px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(246, 174, 45, 0.16) 0%, transparent 68%);
+        pointer-events: none;
+}
+
+.dashboard-hero-card::after {
+        content: "";
+        position: absolute;
+        bottom: -30px;
+        left: -20px;
+        width: 130px;
+        height: 130px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(39, 204, 94, 0.1) 0%, transparent 70%);
+        pointer-events: none;
 }
 
 .dashboard-hero-card span,
@@ -4136,8 +4162,13 @@
         text-transform: uppercase;
 }
 
+.dashboard-hero-card > span {
+        color: rgba(246, 174, 45, 0.75);
+        letter-spacing: 0.1em;
+}
+
 .dashboard-hero-card strong {
-        color: var(--text-strong);
+        color: #fff;
         font-size: clamp(2.6rem, 6vw, 4.8rem);
         line-height: 0.9;
 }
@@ -4159,29 +4190,30 @@
 
 .dashboard-hero-points-lost {
         padding-top: 10px;
-        border-top: 1px solid rgba(17, 45, 78, 0.12);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .dashboard-hero-card .dashboard-hero-points-balance small {
-        color: var(--muted);
-        font-size: 0.74rem;
+        color: rgba(255, 255, 255, 0.45);
+        font-size: 0.7rem;
         font-weight: 800;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.1em;
         line-height: 1;
         text-transform: uppercase;
 }
 
 .dashboard-hero-card .dashboard-hero-points-balance strong {
-        font-size: clamp(2.1rem, 4.5vw, 3.4rem);
+        font-size: clamp(1.5rem, 3.6vw, 3.4rem);
         font-variant-numeric: tabular-nums;
         line-height: 0.95;
         overflow-wrap: anywhere;
-        white-space: nowrap;
+        white-space: normal;
+        color: #f6ae2d;
 }
 
 .dashboard-hero-card .dashboard-hero-points-lost strong {
-        color: #b44b35;
-        font-size: 1.35rem;
+        color: #ff8a7a;
+        font-size: clamp(1.1rem, 2vw, 1.5rem);
         line-height: 1.05;
 }
 
@@ -4198,6 +4230,19 @@
         gap: 8px;
         min-height: 156px;
         padding: 18px;
+        position: relative;
+        overflow: hidden;
+}
+
+.dashboard-kpi::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #f6ae2d, rgba(246, 174, 45, 0.2));
+        border-radius: 14px 14px 0 0;
 }
 
 .dashboard-kpi strong {
@@ -4282,6 +4327,22 @@
         color: #7a5200;
         font-size: 0.78rem;
         font-weight: 900;
+}
+
+.dashboard-leaderboard-list .dashboard-leaderboard-row:nth-child(1) .dashboard-rank {
+        background: linear-gradient(135deg, #f6ae2d, #d49200);
+        color: #fff;
+        box-shadow: 0 4px 12px rgba(246, 174, 45, 0.45);
+}
+
+.dashboard-leaderboard-list .dashboard-leaderboard-row:nth-child(2) .dashboard-rank {
+        background: linear-gradient(135deg, #bcc8d4, #8fa3b3);
+        color: #fff;
+}
+
+.dashboard-leaderboard-list .dashboard-leaderboard-row:nth-child(3) .dashboard-rank {
+        background: linear-gradient(135deg, #cd8b4a, #a86528);
+        color: #fff;
 }
 
 .dashboard-avatar {
