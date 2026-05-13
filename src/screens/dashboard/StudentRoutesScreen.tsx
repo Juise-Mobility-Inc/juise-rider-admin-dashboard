@@ -122,9 +122,33 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
 
   const [, setPOIs] = useState<SchoolPOI[]>([]);
 
-  // ref for the ride scroller — used to scroll selected chip into view
-  // without triggering page-level scrolling (scrollIntoView moves the whole page)
+  // Ride strip scroll ref + drag-to-scroll state
   const rideScrollRef = useRef<HTMLDivElement>(null);
+  const dragActive    = useRef(false);
+  const dragStartX    = useRef(0);
+  const dragScrollL   = useRef(0);
+  const didDrag       = useRef(false); // true when pointer moved enough to be a drag
+
+  const onRidePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const el = rideScrollRef.current;
+    if (!el) return;
+    dragActive.current  = true;
+    didDrag.current     = false;
+    dragStartX.current  = e.clientX;
+    dragScrollL.current = el.scrollLeft;
+    el.setPointerCapture(e.pointerId); // keep tracking even outside the element
+  }, []);
+
+  const onRidePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragActive.current || !rideScrollRef.current) return;
+    const dx = e.clientX - dragStartX.current;
+    if (Math.abs(dx) > 4) didDrag.current = true;
+    rideScrollRef.current.scrollLeft = dragScrollL.current - dx;
+  }, []);
+
+  const onRidePointerUp = useCallback(() => {
+    dragActive.current = false;
+  }, []);
 
   useEffect(() => {
     let dead = false;
@@ -470,7 +494,14 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
           )}
 
           {history.length > 0 && (
-            <div className="sr-ride-scroll" ref={rideScrollRef}>
+            <div
+              className="sr-ride-scroll"
+              ref={rideScrollRef}
+              onPointerDown={onRidePointerDown}
+              onPointerMove={onRidePointerMove}
+              onPointerUp={onRidePointerUp}
+              onPointerCancel={onRidePointerUp}
+            >
               {history.map((sess) => {
                 const active = sess.session_id === selId;
                 return (
@@ -478,7 +509,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                     key={sess.session_id}
                     data-active={active ? "true" : "false"}
                     className={`sr-ride-chip${active ? " sr-ride-chip--active" : ""}`}
-                    onClick={() => setSelId(sess.session_id)}
+                    onClick={() => { if (!didDrag.current) setSelId(sess.session_id); }}
                   >
                     <span className="sr-chip-date">{fmtShort(sess.started_at)}</span>
                     <span className="sr-chip-dist">{fmtDist(sess.distance_meters)}</span>
