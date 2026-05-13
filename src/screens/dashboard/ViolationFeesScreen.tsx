@@ -314,136 +314,171 @@ export function ViolationFeesScreen({ activeSchoolId, managedAppId }: Props) {
                   ? formatViolationType(draft.violation_type)
                   : draft.fee_rule_uuid
                     ? "Edit fee"
-                    : "New fee"}
+                    : "New fee rule"}
               </h3>
-              <span>{activeSchoolId || "No school selected"}</span>
+              <span>{draft.fee_rule_uuid ? "Editing existing rule" : "Create a new fee rule"}</span>
             </div>
           </div>
-          <div className="form-grid">
-            <label className="field">
-              <span>Violation type</span>
-              <select
-                value={selectedViolationTypeOption}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    violation_type:
-                      event.target.value === customViolationTypeValue
-                        ? ""
-                        : event.target.value,
-                  }))
+
+          <div className="vr-form-block">
+            <p className="vr-block-label">Violation type</p>
+            <div className="vr-type-grid">
+              {violationTypeOptions.map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  className={`vr-type-btn${selectedViolationTypeOption === type ? " vr-type-btn-active" : ""}`}
+                  onClick={() =>
+                    setDraft((current) => ({ ...current, violation_type: type }))
+                  }>
+                  {formatViolationType(type)}
+                </button>
+              ))}
+              <button
+                type="button"
+                className={`vr-type-btn vr-type-btn-custom${selectedViolationTypeOption === customViolationTypeValue ? " vr-type-btn-active" : ""}`}
+                onClick={() =>
+                  setDraft((current) => ({ ...current, violation_type: "" }))
                 }>
-                <option value={customViolationTypeValue}>
-                  New violation type...
-                </option>
-                {violationTypeOptions.map((type) => (
-                  <option key={type} value={type}>
-                    {formatViolationType(type)}
-                  </option>
-                ))}
-              </select>
-              {selectedViolationTypeOption === customViolationTypeValue ? (
-                <input
-                  value={draft.violation_type}
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      violation_type: event.target.value,
-                    }))
-                  }
-                  placeholder="no_permit"
-                />
-              ) : null}
-            </label>
-            <label className="field field-span-2">
-              <span>Description</span>
-              <textarea
-                value={draft.description}
+                Custom…
+              </button>
+            </div>
+            {selectedViolationTypeOption === customViolationTypeValue ? (
+              <input
+                className="vr-type-custom"
+                value={draft.violation_type}
                 onChange={(event) =>
                   setDraft((current) => ({
                     ...current,
-                    description: event.target.value,
+                    violation_type: event.target.value,
                   }))
                 }
-                placeholder="Describe when this fee should be used."
+                placeholder="e.g. no_permit"
               />
-            </label>
-            <label className="field">
-              <span>Amount</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={draft.amount}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, amount: event.target.value }))
-                }
-                placeholder="40.00"
-              />
-            </label>
-            <label className="field">
-              <span>Device type</span>
-              <select
-                value={selectedDeviceTypeOption}
-                onChange={(event) => {
-                  setIsDeviceTypeCustom(
-                    event.target.value === customDeviceTypeValue,
-                  );
-                  setDraft((current) => ({
-                    ...current,
-                    device_type:
-                      event.target.value === customDeviceTypeValue
-                        ? ""
-                        : event.target.value,
-                  }));
-                }}>
-                <option value="">Any device</option>
-                <option value={customDeviceTypeValue}>New device type...</option>
-                {deviceTypeOptions.map((type) => (
-                  <option key={type} value={type}>
-                    {formatViolationType(type)}
-                  </option>
-                ))}
-              </select>
-              {selectedDeviceTypeOption === customDeviceTypeValue ? (
-                <input
-                  value={draft.device_type}
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      device_type: event.target.value,
-                    }))
-                  }
-                  placeholder="escooter"
-                />
-              ) : null}
-            </label>
-            <label className="field">
-              <span>Powertrain</span>
-              <select
-                value={draft.powertrain_type}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    powertrain_type: event.target.value as FeeRuleDraft["powertrain_type"],
-                  }))
-                }>
-                <option value="">Any</option>
-                <option value="electric">Electric</option>
-                <option value="non_electric">Non-electric</option>
-              </select>
-            </label>
-            <label className="field violation-fees-checkbox">
-              <span>Active</span>
-              <input
-                type="checkbox"
-                checked={draft.active}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, active: event.target.checked }))
-                }
-              />
-            </label>
+            ) : null}
           </div>
+
+          <label className="field">
+            <span>Description (optional)</span>
+            <textarea
+              value={draft.description}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  description: event.target.value,
+                }))
+              }
+              placeholder="Describe when this fee should be used."
+            />
+          </label>
+
+          <label className="field">
+            <span>Amount (USD)</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={draft.amount}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, amount: event.target.value }))
+              }
+              placeholder="40.00"
+            />
+          </label>
+
+          <div className="vr-form-block">
+            <p className="vr-block-label">Device type (optional)</p>
+            <div className="vr-type-grid">
+              <button
+                type="button"
+                className={`vr-type-btn${selectedDeviceTypeOption === "" ? " vr-type-btn-active" : ""}`}
+                onClick={() => {
+                  setIsDeviceTypeCustom(false);
+                  setDraft((current) => ({ ...current, device_type: "" }));
+                }}>
+                Any
+              </button>
+              {deviceTypeOptions.map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  className={`vr-type-btn${selectedDeviceTypeOption === type ? " vr-type-btn-active" : ""}`}
+                  onClick={() => {
+                    setIsDeviceTypeCustom(false);
+                    setDraft((current) => ({ ...current, device_type: type }));
+                  }}>
+                  {formatViolationType(type)}
+                </button>
+              ))}
+              <button
+                type="button"
+                className={`vr-type-btn vr-type-btn-custom${selectedDeviceTypeOption === customDeviceTypeValue ? " vr-type-btn-active" : ""}`}
+                onClick={() => {
+                  setIsDeviceTypeCustom(true);
+                  setDraft((current) => ({ ...current, device_type: "" }));
+                }}>
+                Custom…
+              </button>
+            </div>
+            {selectedDeviceTypeOption === customDeviceTypeValue ? (
+              <input
+                className="vr-type-custom"
+                value={draft.device_type}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    device_type: event.target.value,
+                  }))
+                }
+                placeholder="e.g. escooter"
+              />
+            ) : null}
+          </div>
+
+          <div className="vr-form-block">
+            <p className="vr-block-label">Powertrain (optional)</p>
+            <div className="vr-type-grid">
+              <button
+                type="button"
+                className={`vr-type-btn${draft.powertrain_type === "" ? " vr-type-btn-active" : ""}`}
+                onClick={() =>
+                  setDraft((current) => ({ ...current, powertrain_type: "" }))
+                }>
+                Any
+              </button>
+              <button
+                type="button"
+                className={`vr-type-btn${draft.powertrain_type === "electric" ? " vr-type-btn-active" : ""}`}
+                onClick={() =>
+                  setDraft((current) => ({ ...current, powertrain_type: "electric" }))
+                }>
+                Electric
+              </button>
+              <button
+                type="button"
+                className={`vr-type-btn${draft.powertrain_type === "non_electric" ? " vr-type-btn-active" : ""}`}
+                onClick={() =>
+                  setDraft((current) => ({
+                    ...current,
+                    powertrain_type: "non_electric",
+                  }))
+                }>
+                Non-electric
+              </button>
+            </div>
+          </div>
+
+          <label className="vf-active-toggle">
+            <input
+              type="checkbox"
+              checked={draft.active}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, active: event.target.checked }))
+              }
+            />
+            <span>Rule is active</span>
+          </label>
+
           <div className="form-actions">
             <button
               className="primary-button"
@@ -476,34 +511,45 @@ export function ViolationFeesScreen({ activeSchoolId, managedAppId }: Props) {
           ) : (
             <div className="violation-fees-table">
               {sortedRules.map((rule) => (
-                <div className="violation-fees-row" key={rule.fee_rule_uuid}>
-                  <div>
-                    <strong>{formatViolationType(rule.violation_type)}</strong>
-                    {rule.label.trim() ? <p>{rule.label.trim()}</p> : null}
-                    <span>
-                      {formatRuleValue(rule.device_type)} device ·{" "}
-                      {formatRuleValue(rule.powertrain_type)}
-                    </span>
+                <div className="vf-rule-card" key={rule.fee_rule_uuid}>
+                  <div className="vf-rule-card-header">
+                    <div className="vf-rule-card-title">
+                      <strong>{formatViolationType(rule.violation_type)}</strong>
+                      {rule.label.trim() ? <p>{rule.label.trim()}</p> : null}
+                    </div>
+                    <div className="vf-rule-card-kpi">
+                      <span className="vf-rule-amount">
+                        {formatCurrencyFromCents(rule.amount_cents)}
+                      </span>
+                      <span className={`vf-rule-status${rule.active ? " vf-rule-status-on" : " vf-rule-status-off"}`}>
+                        {rule.active ? "Active" : "Inactive"}
+                      </span>
+                    </div>
                   </div>
-                  <strong>{formatCurrencyFromCents(rule.amount_cents)}</strong>
-                  <span>{rule.active ? "Active" : "Inactive"}</span>
-                  <div className="violation-fees-row-actions">
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={() => {
-                        setDraft(draftFromRule(rule));
-                        setIsDeviceTypeCustom(false);
-                      }}>
-                      Edit
-                    </button>
-                    <button
-                      className="danger-button"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void handleDelete(rule)}>
-                      Delete
-                    </button>
+                  <div className="vf-rule-card-footer">
+                    <div className="vf-rule-meta">
+                      <span>{formatRuleValue(rule.device_type)} device</span>
+                      <span className="vf-rule-meta-sep">·</span>
+                      <span>{formatRuleValue(rule.powertrain_type)}</span>
+                    </div>
+                    <div className="vf-rule-actions">
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={() => {
+                          setDraft(draftFromRule(rule));
+                          setIsDeviceTypeCustom(false);
+                        }}>
+                        Edit
+                      </button>
+                      <button
+                        className="danger-button"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleDelete(rule)}>
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
