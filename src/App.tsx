@@ -137,16 +137,16 @@ const dashboardSections: Array<{
 	{ section: "challenges", label: "Challenges", path: "/challenges" },
 	{ section: "students", label: "Students", path: "/students" },
 	{ section: "notifications", label: "Notifications", path: "/notifications" },
-		{
-			section: "penaltyReports",
-			label: "Penalty Reports",
-			path: "/penalty-reports",
-		},
-		{
-			section: "violationFees",
-			label: "Violation Fees",
-			path: "/violation-fees",
-		},
+	{
+		section: "penaltyReports",
+		label: "Penalty Reports",
+		path: "/penalty-reports",
+	},
+	{
+		section: "violationFees",
+		label: "Violation Fees",
+		path: "/violation-fees",
+	},
 	{ section: "reports", label: "Reports", path: "/reports" },
 	{ section: "packs", label: "Juise Packs", path: "/packs" },
 	{
@@ -2091,12 +2091,7 @@ function App() {
 				adminUserUUID: session.claims.user_uuid,
 			}),
 		);
-	}, [
-		activeSchoolId,
-		context.managedAppId,
-		session,
-		studentsDispatch,
-	]);
+	}, [activeSchoolId, context.managedAppId, session, studentsDispatch]);
 
 	useEffect(() => {
 		if (!imagePreview && !selectedStudentDeviceUUID) {
@@ -2309,11 +2304,7 @@ function App() {
 		return () => {
 			cancelled = true;
 		};
-	}, [
-		activeSchoolId,
-		context.managedAppId,
-		session,
-	]);
+	}, [activeSchoolId, context.managedAppId, session]);
 
 	useEffect(() => {
 		if (!session || currentSection !== "pois" || !activeSchoolId) {
@@ -2800,7 +2791,7 @@ function App() {
 				adminUserUUID: session.claims.user_uuid,
 				membershipId,
 			}),
-			);
+		);
 	}
 
 	function handleOpenStudentFromPenaltyReport(membershipId: string) {
@@ -4158,24 +4149,24 @@ function App() {
 						formatNebulaUserName={formatNebulaUserName}
 					/>
 				);
-				case "penaltyReports":
-					return (
-						<PenaltyReportsScreen
-							activeSchoolId={activeSchoolId}
-							managedAppId={context.managedAppId}
-							studentRoster={sortedSchoolStudentRoster}
-							studentProfilePhotoUrls={schoolStudentProfilePhotoUrls}
-							onOpenStudent={handleOpenStudentFromPenaltyReport}
-							onOpenStudentDevice={handleOpenStudentDeviceFromPenaltyReport}
-						/>
-					);
-				case "violationFees":
-					return (
-						<ViolationFeesScreen
-							activeSchoolId={activeSchoolId}
-							managedAppId={context.managedAppId}
-						/>
-					);
+			case "penaltyReports":
+				return (
+					<PenaltyReportsScreen
+						activeSchoolId={activeSchoolId}
+						managedAppId={context.managedAppId}
+						studentRoster={sortedSchoolStudentRoster}
+						studentProfilePhotoUrls={schoolStudentProfilePhotoUrls}
+						onOpenStudent={handleOpenStudentFromPenaltyReport}
+						onOpenStudentDevice={handleOpenStudentDeviceFromPenaltyReport}
+					/>
+				);
+			case "violationFees":
+				return (
+					<ViolationFeesScreen
+						activeSchoolId={activeSchoolId}
+						managedAppId={context.managedAppId}
+					/>
+				);
 			case "reports":
 				return (
 					<ReportsScreen
@@ -4289,20 +4280,6 @@ function App() {
 					<p>Signed in as {formatAdminIdentity(session)}</p>
 					<p>School scope: {activeSchoolId || "Unscoped login"}</p>
 				</div>
-
-				<form className="scope-form" onSubmit={handleSwitchManagedApp}>
-					<label className="field compact-field">
-						<span>Managed App ID</span>
-						<input
-							value={managedAppInput}
-							onChange={(event) => setManagedAppInput(event.target.value)}
-							placeholder="juise-customer-app"
-						/>
-					</label>
-					<button className="secondary-button" type="submit">
-						Load App
-					</button>
-				</form>
 
 				<div className="sidebar-block">
 					<div className="sidebar-block-header">
