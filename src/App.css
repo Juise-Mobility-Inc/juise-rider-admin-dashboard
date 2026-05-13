@@ -8108,7 +8108,6 @@
         gap: 8px;
         overflow-x: scroll;                    /* always show scrollbar */
         -webkit-overflow-scrolling: touch;
-        scroll-behavior: smooth;
         padding-bottom: 4px;
         cursor: grab;
         min-width: 0;                          /* must be 0 so the flex container doesn't grow to chip total width */
