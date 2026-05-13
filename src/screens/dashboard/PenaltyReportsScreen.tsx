@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import {
         fetchSchoolParkingViolationMedia,
@@ -345,6 +346,10 @@ export function PenaltyReportsScreen({
         studentProfilePhotoUrls,
         studentRoster,
 }: Props) {
+        const [searchParams] = useSearchParams();
+        const dlReport = useRef(searchParams.get("report"));
+        const dlConsumed = useRef(false);
+
         const [reports, setReports] = useState<StudentParkingViolation[]>([]);
         const [selectedReportId, setSelectedReportId] = useState("");
         const [media, setMedia] = useState<UploadedEntityMedia["media"][]>([]);
@@ -505,6 +510,19 @@ export function PenaltyReportsScreen({
                         setFeeRulesBusy(false);
                 }
         }, [activeSchoolId, managedAppId]);
+
+        // Deep-link: once reports load, auto-select the report from URL param
+        useEffect(() => {
+                if (dlConsumed.current || !dlReport.current || reports.length === 0) return;
+                const target = reports.find((r) => r.violation_uuid === dlReport.current);
+                if (!target) return;
+                dlConsumed.current = true;
+                // Switch to history tab if the report is resolved
+                const isResolved = !isOpenReport(target);
+                if (isResolved) setListMode("history");
+                setSelectedReportId(target.violation_uuid);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [reports]);
 
         const refreshMedia = useCallback(
                 async (report: StudentParkingViolation | null) => {

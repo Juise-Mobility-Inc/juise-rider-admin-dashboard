@@ -926,6 +926,7 @@ function ActivePenaltyReportsSection({
 }: {
         visuals: DashboardVisuals;
 }) {
+        const navigate = useNavigate();
         return (
                 <article className="dashboard-card dashboard-penalty-card">
                         <div className="reports-visual-heading-row">
@@ -987,7 +988,12 @@ function ActivePenaltyReportsSection({
                                                         <p className="reports-visual-empty">No active reports to show.</p>
                                                 ) : (
                                                         visuals.activePenaltyReports.map((report) => (
-                                                                <div className="dashboard-penalty-row" key={report.key}>
+                                                                <div
+                                                                        className="dashboard-penalty-row dashboard-penalty-row--clickable"
+                                                                        key={report.key}
+                                                                        title="Open penalty report"
+                                                                        onClick={() => navigate(`/penalty-reports?report=${report.key}`)}
+                                                                >
                                                                         <div className="dashboard-penalty-copy">
                                                                                 <strong>{report.name}</strong>
                                                                                 <span>{report.description}</span>
