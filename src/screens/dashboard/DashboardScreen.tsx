@@ -231,21 +231,35 @@ function PenaltyTypePieChart({ types }: { types: RidePenaltyTypeSummary[] }) {
         return (
                 <div className="penalty-pie-wrap">
                         <svg viewBox="0 0 160 160" className="penalty-pie-svg">
-                                {slices.map((slice) => (
-                                        <path
-                                                key={slice.key}
-                                                d={donutSlicePath(80, 80, 70, 42, slice.startAngle, slice.endAngle)}
-                                                fill={slice.color}
-                                                opacity={hovered === null || hovered === slice.key ? 1 : 0.35}
-                                                style={{ transition: "opacity 0.15s" }}
-                                                onMouseEnter={() => setHovered(slice.key)}
-                                                onMouseLeave={() => setHovered(null)}
-                                        >
-                                                <title>
-                                                        {slice.title}: {slice.count.toLocaleString()} events ({(slice.pct * 100).toFixed(1)}%)
-                                                </title>
-                                        </path>
-                                ))}
+                                {slices.map((slice) =>
+                                        slice.endAngle - slice.startAngle >= 359.99 ? (
+                                                // Full circle — SVG arc degenerates at 360°, use circle elements instead
+                                                <g key={slice.key}
+                                                        opacity={hovered === null || hovered === slice.key ? 1 : 0.35}
+                                                        style={{ transition: "opacity 0.15s" }}
+                                                        onMouseEnter={() => setHovered(slice.key)}
+                                                        onMouseLeave={() => setHovered(null)}
+                                                >
+                                                        <circle cx="80" cy="80" r="70" fill={slice.color} />
+                                                        <circle cx="80" cy="80" r="42" fill="var(--surface, #fff)" />
+                                                        <title>{slice.title}: {slice.count.toLocaleString()} events (100%)</title>
+                                                </g>
+                                        ) : (
+                                                <path
+                                                        key={slice.key}
+                                                        d={donutSlicePath(80, 80, 70, 42, slice.startAngle, slice.endAngle)}
+                                                        fill={slice.color}
+                                                        opacity={hovered === null || hovered === slice.key ? 1 : 0.35}
+                                                        style={{ transition: "opacity 0.15s" }}
+                                                        onMouseEnter={() => setHovered(slice.key)}
+                                                        onMouseLeave={() => setHovered(null)}
+                                                >
+                                                        <title>
+                                                                {slice.title}: {slice.count.toLocaleString()} events ({(slice.pct * 100).toFixed(1)}%)
+                                                        </title>
+                                                </path>
+                                        )
+                                )}
                                 <text x="80" y="75" className="penalty-pie-center-num">
                                         {total.toLocaleString()}
                                 </text>
@@ -939,50 +953,48 @@ function RidePenaltySection({ visuals }: { visuals: DashboardVisuals }) {
                                         detail="Top students shown"
                                 />
                         </div>
-                        <div className="dashboard-penalty-columns">
-                                <div className="dashboard-penalty-panel">
-                                        <h4>Penalty type mix</h4>
-                                        <PenaltyTypePieChart types={visuals.ridePenaltyTypes} />
-                                </div>
-                                <div className="dashboard-penalty-panel">
-                                        <h4>Recent ride penalties</h4>
-                                        <div className="dashboard-penalty-list">
-                                                {visuals.recentRidePenalties.length === 0 ? (
-                                                        <p className="reports-visual-empty">No recent ride penalties.</p>
-                                                ) : (
-                                                        visuals.recentRidePenalties.map((penalty) => (
-                                                                <div
-                                                                        className="dashboard-penalty-row dashboard-penalty-row--clickable"
-                                                                        key={penalty.key}
-                                                                        title="View on Student Routes map"
-                                                                        onClick={() => {
-                                                                                const params = new URLSearchParams({
-                                                                                        user: penalty.userUUID,
-                                                                                        session: penalty.sessionId,
-                                                                                        lat: String(penalty.lat),
-                                                                                        lng: String(penalty.lng),
-                                                                                });
-                                                                                navigate(`/routes?${params.toString()}`);
-                                                                        }}
-                                                                >
-                                                                        <div className="dashboard-penalty-copy">
-                                                                                <strong>{penalty.name}</strong>
-                                                                                <span>
-                                                                                        {penalty.title} · {penalty.zoneType}
-                                                                                </span>
-                                                                                <small>
-                                                                                        {penalty.reason} ·{" "}
-                                                                                        {formatDashboardTimestamp(penalty.occurredAt)}
-                                                                                </small>
-                                                                        </div>
-                                                                        <div className="dashboard-penalty-score">
-                                                                                <strong>{penalty.pointsLost.toLocaleString()}</strong>
-                                                                                <span>pts lost</span>
-                                                                        </div>
+                        <div className="dashboard-penalty-panel">
+                                <h4>Penalty type mix</h4>
+                                <PenaltyTypePieChart types={visuals.ridePenaltyTypes} />
+                        </div>
+                        <div className="dashboard-penalty-panel">
+                                <h4>Recent ride penalties</h4>
+                                <div className="dashboard-penalty-list">
+                                        {visuals.recentRidePenalties.length === 0 ? (
+                                                <p className="reports-visual-empty">No recent ride penalties.</p>
+                                        ) : (
+                                                visuals.recentRidePenalties.map((penalty) => (
+                                                        <div
+                                                                className="dashboard-penalty-row dashboard-penalty-row--clickable"
+                                                                key={penalty.key}
+                                                                title="View on Student Routes map"
+                                                                onClick={() => {
+                                                                        const params = new URLSearchParams({
+                                                                                user: penalty.userUUID,
+                                                                                session: penalty.sessionId,
+                                                                                lat: String(penalty.lat),
+                                                                                lng: String(penalty.lng),
+                                                                        });
+                                                                        navigate(`/routes?${params.toString()}`);
+                                                                }}
+                                                        >
+                                                                <div className="dashboard-penalty-copy">
+                                                                        <strong>{penalty.name}</strong>
+                                                                        <span>
+                                                                                {penalty.title} · {penalty.zoneType}
+                                                                        </span>
+                                                                        <small>
+                                                                                {penalty.reason} ·{" "}
+                                                                                {formatDashboardTimestamp(penalty.occurredAt)}
+                                                                        </small>
                                                                 </div>
-                                                        ))
-                                                )}
-                                        </div>
+                                                                <div className="dashboard-penalty-score">
+                                                                        <strong>{penalty.pointsLost.toLocaleString()}</strong>
+                                                                        <span>pts lost</span>
+                                                                </div>
+                                                        </div>
+                                                ))
+                                        )}
                                 </div>
                         </div>
                 </article>
