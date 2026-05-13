@@ -4122,9 +4122,9 @@
         gap: 10px;
         min-height: 156px;
         padding: 24px;
-        background: linear-gradient(150deg, #0c1c33 0%, #112845 55%, #1a3a5c 100%);
-        border-color: rgba(246, 174, 45, 0.24);
-        box-shadow: 0 24px 64px rgba(17, 45, 78, 0.34), inset 0 1px 0 rgba(246, 174, 45, 0.16);
+        background: linear-gradient(150deg, #fff9ee 0%, #fffdf7 60%, #f0fbf4 100%);
+        border-color: rgba(246, 174, 45, 0.35);
+        box-shadow: 0 8px 32px rgba(17, 45, 78, 0.1), inset 0 1px 0 rgba(246, 174, 45, 0.3);
         position: relative;
         overflow: hidden;
 }
@@ -4132,24 +4132,24 @@
 .dashboard-hero-card::before {
         content: "";
         position: absolute;
-        top: -55px;
-        right: -55px;
-        width: 210px;
-        height: 210px;
+        top: -45px;
+        right: -45px;
+        width: 180px;
+        height: 180px;
         border-radius: 50%;
-        background: radial-gradient(circle, rgba(246, 174, 45, 0.16) 0%, transparent 68%);
+        background: radial-gradient(circle, rgba(246, 174, 45, 0.18) 0%, transparent 68%);
         pointer-events: none;
 }
 
 .dashboard-hero-card::after {
         content: "";
         position: absolute;
-        bottom: -30px;
-        left: -20px;
-        width: 130px;
-        height: 130px;
+        bottom: -25px;
+        left: -15px;
+        width: 110px;
+        height: 110px;
         border-radius: 50%;
-        background: radial-gradient(circle, rgba(39, 204, 94, 0.1) 0%, transparent 70%);
+        background: radial-gradient(circle, rgba(39, 204, 94, 0.14) 0%, transparent 70%);
         pointer-events: none;
 }
 
@@ -4163,12 +4163,12 @@
 }
 
 .dashboard-hero-card > span {
-        color: rgba(246, 174, 45, 0.75);
+        color: var(--muted);
         letter-spacing: 0.1em;
 }
 
 .dashboard-hero-card strong {
-        color: #fff;
+        color: var(--text-strong);
         font-size: clamp(2.6rem, 6vw, 4.8rem);
         line-height: 0.9;
 }
@@ -4190,11 +4190,11 @@
 
 .dashboard-hero-points-lost {
         padding-top: 10px;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        border-top: 1px solid rgba(17, 45, 78, 0.1);
 }
 
 .dashboard-hero-card .dashboard-hero-points-balance small {
-        color: rgba(255, 255, 255, 0.45);
+        color: var(--muted);
         font-size: 0.7rem;
         font-weight: 800;
         letter-spacing: 0.1em;
@@ -4208,11 +4208,11 @@
         line-height: 0.95;
         overflow-wrap: anywhere;
         white-space: normal;
-        color: #f6ae2d;
+        color: #1a9e4a;
 }
 
 .dashboard-hero-card .dashboard-hero-points-lost strong {
-        color: #ff8a7a;
+        color: #d63b2f;
         font-size: clamp(1.1rem, 2vw, 1.5rem);
         line-height: 1.05;
 }
