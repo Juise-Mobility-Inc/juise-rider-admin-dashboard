@@ -5560,6 +5560,21 @@
         gap: 12px;
 }
 
+.penalty-report-detail-grid > .penalty-report-location-card {
+        grid-column: 1 / -1;
+}
+
+.penalty-report-location-card small {
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 700;
+}
+
+.penalty-report-location-card .student-event-map-caption span {
+        letter-spacing: 0;
+        text-transform: none;
+}
+
 .penalty-report-student-avatar,
 .penalty-report-device-thumb {
         width: 52px;
@@ -6145,6 +6160,22 @@
 .student-event-map-caption span:first-child {
         color: var(--text-strong);
         font-weight: 700;
+}
+
+.student-violation-location {
+        display: grid;
+        gap: 8px;
+}
+
+.student-violation-location > strong {
+        color: var(--text-strong);
+        font-size: 0.86rem;
+}
+
+.student-violation-location > span {
+        color: var(--muted);
+        font-size: 0.82rem;
+        line-height: 1.4;
 }
 
 .student-public-stats-grid {

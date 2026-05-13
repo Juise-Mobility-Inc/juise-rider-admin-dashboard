@@ -667,7 +667,6 @@ function normalizeBaseUrl(value: string | undefined): string {
 function resolveServiceBaseUrl(
   developmentBase: string,
   configuredBase: string | undefined,
-  _productionFallback: string,
 ): string {
   const normalizedConfiguredBase = normalizeBaseUrl(configuredBase);
   if (!normalizedConfiguredBase) {
@@ -683,34 +682,18 @@ const serviceBase: Record<ServiceName, string> = {
   auth: resolveServiceBaseUrl(
     "/auth-api",
     import.meta.env.VITE_AUTH_API_BASE,
-    normalizeBaseUrl(
-      import.meta.env.VITE_AUTH_PROXY_TARGET ||
-        "https://global-auth-service.kuhmute.net",
-    ),
   ),
   nebula: resolveServiceBaseUrl(
     "/nebula-api",
     import.meta.env.VITE_NEBULA_API_BASE,
-    normalizeBaseUrl(
-      import.meta.env.VITE_NEBULA_PROXY_TARGET ||
-        "https://nebula-user-server.kuhmute.net",
-    ),
   ),
   hubStore: resolveServiceBaseUrl(
     "/hub-store-api",
     import.meta.env.VITE_HUB_STORE_API_BASE,
-    normalizeBaseUrl(
-      import.meta.env.VITE_HUB_STORE_PROXY_TARGET ||
-        "https://hub-store-service.kuhmute.net",
-    ),
   ),
   kcaProxy: resolveServiceBaseUrl(
     "/kca-api",
     import.meta.env.VITE_KCA_PROXY_API_BASE,
-    normalizeBaseUrl(
-      import.meta.env.VITE_KCA_PROXY_TARGET ||
-        "https://kca-proxy.kuhmute.net",
-    ),
   ),
 };
 
@@ -1990,6 +1973,10 @@ export interface StudentParkingViolation {
   payment_transaction_id?: string | null;
   payment_charge_error?: string | null;
   payment_charge_status?: number | null;
+  violation_latitude?: number | null;
+  violation_longitude?: number | null;
+  location_accuracy_meters?: number | null;
+  location_captured_at?: number | null;
   active: boolean;
   created_at: number;
   updated_at: number;

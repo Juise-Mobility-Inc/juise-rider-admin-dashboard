@@ -106,6 +106,23 @@ type Props = {
 	UuidCopyField: UuidCopyFieldComponent;
 };
 
+function hasViolationLocation(violation?: StudentParkingViolation | null): boolean {
+	return (
+		typeof violation?.violation_latitude === "number" &&
+		Number.isFinite(violation.violation_latitude) &&
+		typeof violation?.violation_longitude === "number" &&
+		Number.isFinite(violation.violation_longitude)
+	);
+}
+
+function formatViolationCoordinates(violation: StudentParkingViolation): string {
+	if (!hasViolationLocation(violation)) {
+		return "Location unavailable";
+	}
+
+	return `${violation.violation_latitude!.toFixed(5)}, ${violation.violation_longitude!.toFixed(5)}`;
+}
+
 const studentExportColumns = [
 	"row_type",
 	"full_name",
@@ -1818,6 +1835,29 @@ export function StudentsScreen(props: Props) {
 																			{violation.registered_device_uuid ||
 																				"Not linked"}
 																		</span>
+																		<div className="student-violation-location">
+																			<strong>Violation location</strong>
+																			{hasViolationLocation(violation) ? (
+																				<>
+																					<StudentEventMiniMap
+																						lat={violation.violation_latitude!}
+																						lng={violation.violation_longitude!}
+																						label="Violation pin"
+																						tone="penalty"
+																					/>
+																					<span>
+																						{formatViolationCoordinates(violation)}
+																						{violation.location_accuracy_meters
+																							? ` · Accuracy ${Math.round(
+																									violation.location_accuracy_meters,
+																								)}m`
+																							: ""}
+																					</span>
+																				</>
+																			) : (
+																				<span>No location pin attached.</span>
+																			)}
+																		</div>
 																		<div className="uuid-copy-stack">
 																			<UuidCopyField
 																				label="violation_uuid"

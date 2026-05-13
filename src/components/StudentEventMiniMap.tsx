@@ -65,20 +65,44 @@ function RecenterMap(props: {
 	return null;
 }
 
-function CaptureMapInstance(props: {
+function CaptureMapInstance({
+	onReady,
+}: {
 	onReady: (map: LeafletMap) => void;
 }) {
 	const map = useMap();
 
 	useEffect(() => {
-		props.onReady(map);
-	}, [map, props.onReady]);
+		onReady(map);
+	}, [map, onReady]);
 
 	return null;
 }
 
-export function StudentEventMiniMap(props: Props) {
-	if (!Number.isFinite(props.lat) || !Number.isFinite(props.lng)) {
+export function StudentEventMiniMap({
+	lat,
+	lng,
+	label,
+	tone,
+	polygon,
+}: Props) {
+	const center: LatLngLiteral = useMemo(
+		() => ({
+			lat,
+			lng,
+		}),
+		[lat, lng],
+	);
+	const [mapInstance, setMapInstance] = useState<LeafletMap | null>(null);
+	const googleMapsUrl = useMemo(
+		() =>
+			`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+				`${lat},${lng}`,
+			)}`,
+		[lat, lng],
+	);
+
+	if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
 		return (
 			<div className="student-event-map-shell">
 				<div className="student-event-map-placeholder">
@@ -88,13 +112,8 @@ export function StudentEventMiniMap(props: Props) {
 		);
 	}
 
-	const center: LatLngLiteral = {
-		lat: props.lat,
-		lng: props.lng,
-	};
-	const [mapInstance, setMapInstance] = useState<LeafletMap | null>(null);
 	const markerColors =
-		props.tone === "penalty"
+		tone === "penalty"
 			? {
 					stroke: "#8a1f1f",
 					fill: "#d36a3d",
@@ -105,15 +124,8 @@ export function StudentEventMiniMap(props: Props) {
 					fill: "#27cc5e",
 					polygonFill: "rgba(39, 204, 94, 0.18)",
 				};
-	const polygonPoints = (props.polygon ?? []).filter(
+	const polygonPoints = (polygon ?? []).filter(
 		(point) => Number.isFinite(point.lat) && Number.isFinite(point.lng),
-	);
-	const googleMapsUrl = useMemo(
-		() =>
-			`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-				`${props.lat},${props.lng}`,
-			)}`,
-		[props.lat, props.lng],
 	);
 
 	return (
@@ -190,9 +202,9 @@ export function StudentEventMiniMap(props: Props) {
 				</a>
 			</div>
 			<div className="student-event-map-caption">
-				<span>{props.label}</span>
+				<span>{label}</span>
 				<span>
-					{props.lat.toFixed(5)}, {props.lng.toFixed(5)}
+					{lat.toFixed(5)}, {lng.toFixed(5)}
 				</span>
 			</div>
 		</div>

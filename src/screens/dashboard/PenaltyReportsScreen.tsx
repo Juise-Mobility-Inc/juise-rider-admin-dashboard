@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { StudentEventMiniMap } from "../../components/StudentEventMiniMap";
 import {
         fetchSchoolParkingViolationMedia,
         fetchParkingViolationFeeRules,
@@ -81,6 +82,23 @@ function formatDateTime(timestamp?: number | null): string {
                 hour: "numeric",
                 minute: "2-digit",
         });
+}
+
+function hasViolationLocation(report?: StudentParkingViolation | null): boolean {
+        return (
+                typeof report?.violation_latitude === "number" &&
+                Number.isFinite(report.violation_latitude) &&
+                typeof report?.violation_longitude === "number" &&
+                Number.isFinite(report.violation_longitude)
+        );
+}
+
+function formatViolationCoordinates(report: StudentParkingViolation): string {
+        if (!hasViolationLocation(report)) {
+                return "Location unavailable";
+        }
+
+        return `${report.violation_latitude!.toFixed(5)}, ${report.violation_longitude!.toFixed(5)}`;
 }
 
 function formatCurrencyFromCents(value?: number | null): string {
@@ -971,6 +989,31 @@ export function PenaltyReportsScreen({
                                                                                 ? formatStatus(selectedReport.violation_type)
                                                                                 : "Not set"}
                                                                 </strong>
+                                                        </div>
+                                                        <div className="penalty-report-location-card">
+                                                                <span>Violation location</span>
+                                                                {hasViolationLocation(selectedReport) ? (
+                                                                        <>
+                                                                                <StudentEventMiniMap
+                                                                                        lat={selectedReport.violation_latitude!}
+                                                                                        lng={selectedReport.violation_longitude!}
+                                                                                        label="Violation pin"
+                                                                                        tone="penalty"
+                                                                                />
+                                                                                <strong>{formatViolationCoordinates(selectedReport)}</strong>
+                                                                                {selectedReport.location_accuracy_meters ? (
+                                                                                        <small>
+                                                                                                Accuracy{" "}
+                                                                                                {Math.round(
+                                                                                                        selectedReport.location_accuracy_meters,
+                                                                                                )}
+                                                                                                m
+                                                                                        </small>
+                                                                                ) : null}
+                                                                        </>
+                                                                ) : (
+                                                                        <strong>Location unavailable</strong>
+                                                                )}
                                                         </div>
                                                 </div>
 

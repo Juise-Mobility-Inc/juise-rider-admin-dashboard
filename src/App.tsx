@@ -1076,10 +1076,9 @@ function App() {
 	const [authInitializing, setAuthInitializing] = useState(
 		() => initialSession !== null,
 	);
-	const [context, setContext] = useState<DashboardContext>(() =>
+	const [context] = useState<DashboardContext>(() =>
 		readDashboardContext(defaultManagedAppId),
 	);
-	const [managedAppInput, setManagedAppInput] = useState(context.managedAppId);
 	const [banner, setBanner] = useState<BannerState | null>(null);
 	const [authMode, setAuthMode] = useState<AuthMode>("login");
 
@@ -1857,10 +1856,6 @@ function App() {
 				: zoneDrafts[0].id,
 		);
 	}, [zoneDrafts]);
-
-	useEffect(() => {
-		setManagedAppInput(context.managedAppId);
-	}, [context.managedAppId]);
 
 	useEffect(() => {
 		setApiSession(session);
@@ -2884,27 +2879,6 @@ function App() {
 			tone: "info",
 			message: "Signed out.",
 		});
-	}
-
-	function handleSwitchManagedApp(event: FormEvent<HTMLFormElement>) {
-		event.preventDefault();
-		const trimmedAppId = managedAppInput.trim();
-		if (!trimmedAppId) {
-			setBanner({
-				tone: "error",
-				message: "Managed app id is required.",
-			});
-			return;
-		}
-
-		setContext({
-			managedAppId: trimmedAppId,
-		});
-		if (
-			normalizeDashboardPath(location.pathname) !== sectionPathByName.dashboard
-		) {
-			navigate(sectionPathByName.dashboard);
-		}
 	}
 
 	function handleSchoolColorChange(
