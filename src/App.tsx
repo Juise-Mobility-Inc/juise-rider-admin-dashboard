@@ -28,9 +28,11 @@ import {
 	fetchUserMediaAssets,
 	generateAdminPackQrCode,
 	generateAdminPackSpotQrCode,
+	getSessionRefreshExpiryMs,
 	getAdminPackQrCodeDownloadUrl,
 	getAdminPackSpotQrCodeDownloadUrl,
 	loginWithIdentifier,
+	refreshDashboardSession,
 	saveSchool,
 	saveSchoolPOIs,
 	saveSchoolZones,
@@ -120,6 +122,7 @@ type Section =
 type PackTab = "create" | "existing";
 type BannerTone = "success" | "error" | "info";
 type AuthMode = "login" | "signup";
+const maxSessionExpiryCheckDelayMs = 2_147_483_647;
 
 const dashboardSections: Array<{
 	section: Section;
@@ -1063,8 +1066,12 @@ function resolveSectionFromPathname(pathname: string): Section | null {
 function App() {
 	const location = useLocation();
 	const navigate = useNavigate();
-	const [session, setSession] = useState<AdminSession | null>(() =>
+	const [initialSession] = useState<AdminSession | null>(() =>
 		readDashboardSession(),
+	);
+	const [session, setSession] = useState<AdminSession | null>(null);
+	const [authInitializing, setAuthInitializing] = useState(
+		() => initialSession !== null,
 	);
 	const [context, setContext] = useState<DashboardContext>(() =>
 		readDashboardContext(defaultManagedAppId),
@@ -1854,12 +1861,60 @@ function App() {
 
 	useEffect(() => {
 		setApiSession(session);
+		if (authInitializing) {
+			return;
+		}
 		if (session) {
 			writeDashboardSession(session);
 		} else {
 			clearDashboardSession();
 		}
-	}, [session]);
+	}, [authInitializing, session]);
+
+	useEffect(() => {
+		if (!initialSession) {
+			setAuthInitializing(false);
+			return;
+		}
+
+		let cancelled = false;
+
+		async function refreshStoredSession() {
+			setApiSession(initialSession);
+			try {
+				const nextSession = await refreshDashboardSession();
+				if (cancelled) {
+					return;
+				}
+
+				setSession(nextSession);
+			} catch (error) {
+				if (cancelled) {
+					return;
+				}
+
+				setSession(null);
+				setAuthError("");
+				setPassword("");
+				setBanner({
+					tone: "info",
+					message:
+						getErrorMessage(error) ||
+						"Your session has expired. Please sign in again.",
+				});
+			} finally {
+				if (!cancelled) {
+					setAuthInitializing(false);
+				}
+			}
+		}
+
+		void refreshStoredSession();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [initialSession]);
 
 	useEffect(() => {
 		if (!session?.claims.user_uuid || session.user) {
@@ -1899,6 +1954,58 @@ function App() {
 	useEffect(() => {
 		writeDashboardContext(context);
 	}, [context]);
+
+	useEffect(() => {
+		if (!session) {
+			return;
+		}
+
+		const activeSession = session;
+		let cancelled = false;
+		let timeoutId: number | undefined;
+
+		function expireSession() {
+			if (cancelled) {
+				return;
+			}
+
+			setSession(null);
+			setAuthError("");
+			setPassword("");
+			setBanner({
+				tone: "info",
+				message: "Your session has expired. Please sign in again.",
+			});
+		}
+
+		function scheduleExpiryCheck() {
+			const delayMs = getSessionRefreshExpiryMs(activeSession) - Date.now();
+			if (delayMs <= 0) {
+				expireSession();
+				return;
+			}
+
+			timeoutId = window.setTimeout(
+				() => {
+					if (getSessionRefreshExpiryMs(activeSession) <= Date.now()) {
+						expireSession();
+					} else {
+						scheduleExpiryCheck();
+					}
+				},
+				Math.min(delayMs, maxSessionExpiryCheckDelayMs),
+			);
+		}
+
+		scheduleExpiryCheck();
+
+		return () => {
+			cancelled = true;
+			if (timeoutId !== undefined) {
+				window.clearTimeout(timeoutId);
+			}
+		};
+	}, [session]);
 
 	useEffect(() => {
 		setSessionObserver((nextSession) => {
@@ -3611,6 +3718,27 @@ function App() {
 		} finally {
 			setReservationsBusy(false);
 		}
+	}
+
+	if (authInitializing) {
+		return (
+			<div className="login-shell">
+				<section className="login-panel login-form-panel">
+					<div className="login-form-panel-inner">
+						<div className="login-form-brand">
+							<div className="login-form-brand-mark">J</div>
+							<span>Juise Admin</span>
+						</div>
+						<div className="login-form">
+							<div className="login-form-header">
+								<p className="eyebrow">Restoring session</p>
+								<h2>Opening dashboard...</h2>
+							</div>
+						</div>
+					</div>
+				</section>
+			</div>
+		);
 	}
 
 	if (!session) {

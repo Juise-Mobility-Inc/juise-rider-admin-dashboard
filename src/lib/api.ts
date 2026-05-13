@@ -716,12 +716,21 @@ const serviceBase: Record<ServiceName, string> = {
 
 let currentSession: AdminSession | null = null;
 let sessionObserver: ((session: AdminSession | null) => void) | null = null;
+const tokenExpirySkewMs = 30_000;
 
 function updateSession(session: AdminSession | null) {
   currentSession = session;
   if (sessionObserver) {
     sessionObserver(session);
   }
+}
+
+function tokenExpiryToMs(exp: number): number {
+  return exp > 1_000_000_000_000 ? exp : exp * 1000;
+}
+
+function isTokenExpired(token: TokenPair, skewMs = tokenExpirySkewMs): boolean {
+  return tokenExpiryToMs(token.exp) <= Date.now() + skewMs;
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -763,6 +772,11 @@ async function refreshSession(): Promise<AdminSession> {
     throw new Error("Login required");
   }
 
+  if (isTokenExpired(previousSession.tokens.refresh_token)) {
+    updateSession(null);
+    throw new Error("Your session has expired. Please sign in again.");
+  }
+
   const response = await fetch(`${serviceBase.auth}/api/v1/auth/refresh`, {
     method: "PUT",
     headers: {
@@ -802,6 +816,14 @@ async function refreshSession(): Promise<AdminSession> {
   } catch {
     return refreshedSession;
   }
+}
+
+export async function refreshDashboardSession(): Promise<AdminSession> {
+  return refreshSession();
+}
+
+export function getSessionRefreshExpiryMs(session: AdminSession): number {
+  return tokenExpiryToMs(session.tokens.refresh_token.exp);
 }
 
 async function request<T>(
