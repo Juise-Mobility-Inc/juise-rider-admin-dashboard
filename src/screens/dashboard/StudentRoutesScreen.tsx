@@ -151,7 +151,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
       if (!active) return;
       const dx = e.clientX - startX;
       if (Math.abs(dx) > 4) didDrag.current = true;
-      el.scrollLeft = scrollL - dx;
+      el.scrollLeft = scrollL - dx * 2;
     };
     const onMU = () => {
       active          = false;

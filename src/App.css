@@ -8141,7 +8141,6 @@
 
 /* Individual ride chip */
 .sr-ride-chip {
-        scroll-snap-align: start;             /* snaps to left edge of each chip */
         display: flex;
         flex-direction: column;
         gap: 5px;
