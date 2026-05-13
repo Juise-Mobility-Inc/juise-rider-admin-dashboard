@@ -103,6 +103,7 @@ type StudentPenaltyReportSummary = {
         detail: string;
         count: number;
         lastCreatedAt: number;
+        latestViolationUUID: string;
 };
 
 type DashboardVisuals = {
