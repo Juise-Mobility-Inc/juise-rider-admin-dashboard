@@ -177,6 +177,103 @@ function formatStudentDetail(entry: SchoolStudentRosterEntry): string {
         return studentId || entry.user.email || entry.user.username || "Student";
 }
 
+const PIE_COLORS = [
+        "#f6ae2d", "#cf3f3f", "#3a7ebf", "#6bbf8e",
+        "#e67e22", "#9b59b6", "#4ecdc4",
+];
+
+function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
+        const rad = ((angleDeg - 90) * Math.PI) / 180;
+        return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+function donutSlicePath(
+        cx: number, cy: number,
+        outerR: number, innerR: number,
+        startAngle: number, endAngle: number,
+): string {
+        const large = endAngle - startAngle > 180 ? 1 : 0;
+        const o1 = polarToCartesian(cx, cy, outerR, startAngle);
+        const o2 = polarToCartesian(cx, cy, outerR, endAngle);
+        const i1 = polarToCartesian(cx, cy, innerR, endAngle);
+        const i2 = polarToCartesian(cx, cy, innerR, startAngle);
+        return [
+                `M ${o1.x.toFixed(3)} ${o1.y.toFixed(3)}`,
+                `A ${outerR} ${outerR} 0 ${large} 1 ${o2.x.toFixed(3)} ${o2.y.toFixed(3)}`,
+                `L ${i1.x.toFixed(3)} ${i1.y.toFixed(3)}`,
+                `A ${innerR} ${innerR} 0 ${large} 0 ${i2.x.toFixed(3)} ${i2.y.toFixed(3)}`,
+                "Z",
+        ].join(" ");
+}
+
+function PenaltyTypePieChart({ types }: { types: RidePenaltyTypeSummary[] }) {
+        const [hovered, setHovered] = useState<string | null>(null);
+        const total = types.reduce((sum, t) => sum + t.count, 0);
+
+        if (types.length === 0) {
+                return <p className="reports-visual-empty">No ride penalties recorded.</p>;
+        }
+
+        let cursor = 0;
+        const slices = types.map((type, i) => {
+                const pct = type.count / total;
+                const startAngle = cursor;
+                cursor += pct * 360;
+                return {
+                        ...type,
+                        color: PIE_COLORS[i % PIE_COLORS.length],
+                        startAngle,
+                        endAngle: cursor,
+                        pct,
+                };
+        });
+
+        return (
+                <div className="penalty-pie-wrap">
+                        <svg viewBox="0 0 160 160" className="penalty-pie-svg">
+                                {slices.map((slice) => (
+                                        <path
+                                                key={slice.key}
+                                                d={donutSlicePath(80, 80, 70, 42, slice.startAngle, slice.endAngle)}
+                                                fill={slice.color}
+                                                opacity={hovered === null || hovered === slice.key ? 1 : 0.35}
+                                                style={{ transition: "opacity 0.15s" }}
+                                                onMouseEnter={() => setHovered(slice.key)}
+                                                onMouseLeave={() => setHovered(null)}
+                                        >
+                                                <title>
+                                                        {slice.title}: {slice.count.toLocaleString()} events ({(slice.pct * 100).toFixed(1)}%)
+                                                </title>
+                                        </path>
+                                ))}
+                                <text x="80" y="75" className="penalty-pie-center-num">
+                                        {total.toLocaleString()}
+                                </text>
+                                <text x="80" y="90" className="penalty-pie-center-label">
+                                        events
+                                </text>
+                        </svg>
+                        <div className="penalty-pie-legend">
+                                {slices.map((slice) => (
+                                        <div
+                                                key={slice.key}
+                                                className={`penalty-pie-legend-row${hovered === slice.key ? " penalty-pie-legend-row--active" : ""}`}
+                                                onMouseEnter={() => setHovered(slice.key)}
+                                                onMouseLeave={() => setHovered(null)}
+                                        >
+                                                <span className="penalty-pie-swatch" style={{ background: slice.color }} />
+                                                <span className="penalty-pie-legend-title">{slice.title}</span>
+                                                <span className="penalty-pie-legend-count">{slice.count.toLocaleString()}</span>
+                                                <span className="penalty-pie-legend-pct">
+                                                        {(slice.pct * 100).toFixed(0)}%
+                                                </span>
+                                        </div>
+                                ))}
+                        </div>
+                </div>
+        );
+}
+
 function FitText({
         children,
         maxFontSize = 54,
@@ -815,10 +912,6 @@ function DashboardSectionArrow({ to, label }: { to: string; label: string }) {
 
 function RidePenaltySection({ visuals }: { visuals: DashboardVisuals }) {
         const navigate = useNavigate();
-        const topTypeCount = Math.max(
-                1,
-                ...visuals.ridePenaltyTypes.map((type) => type.count),
-        );
 
         return (
                 <article className="dashboard-card dashboard-penalty-card">
@@ -849,37 +942,7 @@ function RidePenaltySection({ visuals }: { visuals: DashboardVisuals }) {
                         <div className="dashboard-penalty-columns">
                                 <div className="dashboard-penalty-panel">
                                         <h4>Penalty type mix</h4>
-                                        <div className="dashboard-penalty-list">
-                                                {visuals.ridePenaltyTypes.length === 0 ? (
-                                                        <p className="reports-visual-empty">
-                                                                No ride penalties recorded.
-                                                        </p>
-                                                ) : (
-                                                        visuals.ridePenaltyTypes.map((type) => (
-                                                                <div className="dashboard-penalty-row" key={type.key}>
-                                                                        <div className="dashboard-penalty-copy">
-                                                                                <strong>{type.title}</strong>
-                                                                                <span>{type.pointsLost.toLocaleString()} points lost</span>
-                                                                                <div className="reports-bar-track">
-                                                                                        <div
-                                                                                                className="reports-bar-fill dashboard-penalty-fill"
-                                                                                                style={{
-                                                                                                        width: `${Math.max(
-                                                                                                                5,
-                                                                                                                Math.round((type.count / topTypeCount) * 100),
-                                                                                                        )}%`,
-                                                                                                }}
-                                                                                        />
-                                                                                </div>
-                                                                        </div>
-                                                                        <div className="dashboard-penalty-score">
-                                                                                <strong>{type.count.toLocaleString()}</strong>
-                                                                                <span>events</span>
-                                                                        </div>
-                                                                </div>
-                                                        ))
-                                                )}
-                                        </div>
+                                        <PenaltyTypePieChart types={visuals.ridePenaltyTypes} />
                                 </div>
                                 <div className="dashboard-penalty-panel">
                                         <h4>Recent ride penalties</h4>
