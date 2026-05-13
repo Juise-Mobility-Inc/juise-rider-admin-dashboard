@@ -122,33 +122,61 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
 
   const [, setPOIs] = useState<SchoolPOI[]>([]);
 
-  // Ride strip scroll ref + drag-to-scroll state
+  // Ride strip: ref + drag state
   const rideScrollRef = useRef<HTMLDivElement>(null);
-  const dragActive    = useRef(false);
-  const dragStartX    = useRef(0);
-  const dragScrollL   = useRef(0);
-  const didDrag       = useRef(false); // true when pointer moved enough to be a drag
+  const didDrag       = useRef(false);
 
-  const onRidePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+  // Attach native drag-scroll + wheel-to-scroll once the strip is in the DOM.
+  // Native listeners are needed because:
+  //  - wheel needs { passive: false } so preventDefault() actually works
+  //  - mousedown on child <button>s bubbles up but setPointerCapture on the
+  //    React-synthetic layer gets blocked; document-level listeners avoid this
+  useEffect(() => {
     const el = rideScrollRef.current;
     if (!el) return;
-    dragActive.current  = true;
-    didDrag.current     = false;
-    dragStartX.current  = e.clientX;
-    dragScrollL.current = el.scrollLeft;
-    el.setPointerCapture(e.pointerId); // keep tracking even outside the element
-  }, []);
 
-  const onRidePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragActive.current || !rideScrollRef.current) return;
-    const dx = e.clientX - dragStartX.current;
-    if (Math.abs(dx) > 4) didDrag.current = true;
-    rideScrollRef.current.scrollLeft = dragScrollL.current - dx;
-  }, []);
+    let active  = false;
+    let startX  = 0;
+    let scrollL = 0;
 
-  const onRidePointerUp = useCallback(() => {
-    dragActive.current = false;
-  }, []);
+    const onMD = (e: MouseEvent) => {
+      if (!el.contains(e.target as Node)) return;
+      active           = true;
+      didDrag.current  = false;
+      startX           = e.clientX;
+      scrollL          = el.scrollLeft;
+      el.style.cursor  = "grabbing";
+    };
+    const onMM = (e: MouseEvent) => {
+      if (!active) return;
+      const dx = e.clientX - startX;
+      if (Math.abs(dx) > 4) didDrag.current = true;
+      el.scrollLeft = scrollL - dx;
+    };
+    const onMU = () => {
+      active          = false;
+      el.style.cursor = "";
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (!el.contains(e.target as Node) && e.target !== el) return;
+      e.preventDefault();
+      // vertical wheel scrolls horizontally; horizontal trackpad gesture passes through
+      el.scrollLeft += Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    };
+
+    document.addEventListener("mousedown", onMD);
+    document.addEventListener("mousemove", onMM);
+    document.addEventListener("mouseup",   onMU);
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      document.removeEventListener("mousedown", onMD);
+      document.removeEventListener("mousemove", onMM);
+      document.removeEventListener("mouseup",   onMU);
+      el.removeEventListener("wheel", onWheel);
+    };
+  // re-run whenever the ride list appears (history.length 0→N renders the div)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [history.length]);
 
   useEffect(() => {
     let dead = false;
@@ -494,14 +522,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
           )}
 
           {history.length > 0 && (
-            <div
-              className="sr-ride-scroll"
-              ref={rideScrollRef}
-              onPointerDown={onRidePointerDown}
-              onPointerMove={onRidePointerMove}
-              onPointerUp={onRidePointerUp}
-              onPointerCancel={onRidePointerUp}
-            >
+            <div className="sr-ride-scroll" ref={rideScrollRef}>
               {history.map((sess) => {
                 const active = sess.session_id === selId;
                 return (

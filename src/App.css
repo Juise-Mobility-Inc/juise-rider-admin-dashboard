@@ -8103,22 +8103,36 @@
 .sr-ride-scroll {
         display: flex;
         gap: 8px;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;     /* momentum on iOS */
+        overflow-x: scroll;                    /* always show scrollbar */
+        -webkit-overflow-scrolling: touch;
         scroll-behavior: smooth;
-        scroll-snap-type: x mandatory;         /* chip-by-chip snapping */
-        padding-bottom: 6px;
+        padding-bottom: 4px;
         cursor: grab;
-        scrollbar-width: thin;
-        scrollbar-color: rgba(17,45,78,0.14) transparent;
+        /* Firefox */
+        scrollbar-width: auto;
+        scrollbar-color: rgba(17,45,78,0.35) rgba(17,45,78,0.07);
 }
 
 .sr-ride-scroll:active { cursor: grabbing; }
 
-.sr-ride-scroll::-webkit-scrollbar { height: 4px; }
+/* Chrome / Safari / Edge scrollbar */
+.sr-ride-scroll::-webkit-scrollbar {
+        height: 10px;
+}
+.sr-ride-scroll::-webkit-scrollbar-track {
+        background: rgba(17,45,78,0.07);
+        border-radius: 5px;
+        margin: 0 2px;
+}
 .sr-ride-scroll::-webkit-scrollbar-thumb {
-        background: rgba(17,45,78,0.15);
-        border-radius: 99px;
+        background: rgba(17,45,78,0.32);
+        border-radius: 5px;
+        border: 2px solid transparent;
+        background-clip: content-box;
+}
+.sr-ride-scroll::-webkit-scrollbar-thumb:hover {
+        background: rgba(17,45,78,0.55);
+        background-clip: content-box;
 }
 
 /* Individual ride chip */
