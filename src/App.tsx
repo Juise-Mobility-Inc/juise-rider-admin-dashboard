@@ -527,7 +527,9 @@ function challengeToResubmitDraft(challenge: SchoolChallenge): ChallengeDraft {
 }
 
 function getCreatedChallenges(
-	response: SchoolChallenge | { challenge: SchoolChallenge; repeated_challenges?: SchoolChallenge[] },
+	response:
+		| SchoolChallenge
+		| { challenge: SchoolChallenge; repeated_challenges?: SchoolChallenge[] },
 ): SchoolChallenge[] {
 	if ("challenge" in response) {
 		return [response.challenge, ...(response.repeated_challenges ?? [])];
@@ -902,7 +904,8 @@ function UuidCopyField(props: {
 						className="secondary-button uuid-copy-button"
 						type="button"
 						aria-label={`Copy ${props.label}`}
-						onClick={() => void props.onCopy(props.label, normalizedValue)}>
+						onClick={() => void props.onCopy(props.label, normalizedValue)}
+					>
 						Copy
 					</button>
 				</div>
@@ -959,7 +962,8 @@ function SchoolLogoPreview(props: {
 							event.preventDefault();
 							props.onPreview(normalizedUrl, alt, props.label);
 						}
-					}}>
+					}}
+				>
 					<img
 						className="school-logo-image"
 						src={normalizedUrl}
@@ -1004,7 +1008,8 @@ function EntityImagePreview(props: {
 							event.preventDefault();
 							props.onPreview(normalizedUrl, alt, props.label);
 						}
-					}}>
+					}}
+				>
 					<img
 						className="challenge-image-preview-image"
 						src={normalizedUrl}
@@ -3858,7 +3863,8 @@ function App() {
 								onClick={() => {
 									setAuthMode("signup");
 									setAuthError("");
-								}}>
+								}}
+							>
 								Create Account
 							</button>
 							<button
@@ -3871,7 +3877,8 @@ function App() {
 								onClick={() => {
 									setAuthMode("login");
 									setAuthError("");
-								}}>
+								}}
+							>
 								Sign In
 							</button>
 						</div>
@@ -3985,7 +3992,8 @@ function App() {
 								<button
 									className="primary-button"
 									type="submit"
-									disabled={authBusy}>
+									disabled={authBusy}
+								>
 									{authBusy ? "Creating account…" : "Create School Admin"}
 								</button>
 							</form>
@@ -4020,7 +4028,8 @@ function App() {
 								<button
 									className="primary-button"
 									type="submit"
-									disabled={authBusy}>
+									disabled={authBusy}
+								>
 									{authBusy ? "Signing in…" : "Enter Dashboard"}
 								</button>
 							</form>
@@ -4381,7 +4390,8 @@ function App() {
 							to={path}
 							className={({ isActive }) =>
 								isActive ? "nav-button nav-button-active" : "nav-button"
-							}>
+							}
+						>
 							{label}
 						</NavLink>
 					))}
@@ -4391,7 +4401,8 @@ function App() {
 					<button
 						className="secondary-button full-width-button"
 						type="button"
-						onClick={handleLogout}>
+						onClick={handleLogout}
+					>
 						Sign Out
 					</button>
 				</div>
@@ -4430,16 +4441,6 @@ function App() {
 							</p>
 						</div>
 					</div>
-					<div className="header-stats">
-						<div className="stat-card">
-							<span>Students</span>
-							<strong>{headerStudentCount}</strong>
-						</div>
-						<div className="stat-card">
-							<span>Pending Parking Reservations</span>
-							<strong>{headerPendingReservationCount}</strong>
-						</div>
-					</div>
 				</header>
 
 				{banner ? (
@@ -4448,7 +4449,8 @@ function App() {
 						<button
 							className="text-button"
 							type="button"
-							onClick={() => setBanner(null)}>
+							onClick={() => setBanner(null)}
+						>
 							Dismiss
 						</button>
 					</div>
@@ -4462,14 +4464,17 @@ function App() {
 					role="dialog"
 					aria-modal="true"
 					aria-label={imagePreview.label || imagePreview.alt}
-					onClick={() => setImagePreview(null)}>
+					onClick={() => setImagePreview(null)}
+				>
 					<div
 						className="image-lightbox-sheet"
-						onClick={(event) => event.stopPropagation()}>
+						onClick={(event) => event.stopPropagation()}
+					>
 						<button
 							className="image-lightbox-close"
 							type="button"
-							onClick={() => setImagePreview(null)}>
+							onClick={() => setImagePreview(null)}
+						>
 							Close
 						</button>
 						<img
