@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import {
         fetchPendingReservations,
@@ -81,6 +81,10 @@ type RecentRidePenalty = {
         reason: string;
         pointsLost: number;
         occurredAt: number;
+        userUUID: string;
+        sessionId: string;
+        lat: number;
+        lng: number;
 };
 
 type ActivePenaltyReport = {
@@ -544,6 +548,10 @@ function buildRecentRidePenalties(
                         reason: event.reason || event.description || "No reason provided.",
                         pointsLost: event.points_lost,
                         occurredAt: event.occurred_at,
+                        userUUID: bundle.entry.membership.user_uuid?.trim() || bundle.entry.user.k_guid,
+                        sessionId: session.session_id,
+                        lat: event.lat,
+                        lng: event.lng,
                 }))
                 .sort((left, right) => right.occurredAt - left.occurredAt)
                 .slice(0, 5);
@@ -801,6 +809,7 @@ function DashboardSectionArrow({ to, label }: { to: string; label: string }) {
 }
 
 function RidePenaltySection({ visuals }: { visuals: DashboardVisuals }) {
+        const navigate = useNavigate();
         const topTypeCount = Math.max(
                 1,
                 ...visuals.ridePenaltyTypes.map((type) => type.count),
@@ -874,7 +883,20 @@ function RidePenaltySection({ visuals }: { visuals: DashboardVisuals }) {
                                                         <p className="reports-visual-empty">No recent ride penalties.</p>
                                                 ) : (
                                                         visuals.recentRidePenalties.map((penalty) => (
-                                                                <div className="dashboard-penalty-row" key={penalty.key}>
+                                                                <div
+                                                                        className="dashboard-penalty-row dashboard-penalty-row--clickable"
+                                                                        key={penalty.key}
+                                                                        title="View on Student Routes map"
+                                                                        onClick={() => {
+                                                                                const params = new URLSearchParams({
+                                                                                        user: penalty.userUUID,
+                                                                                        session: penalty.sessionId,
+                                                                                        lat: String(penalty.lat),
+                                                                                        lng: String(penalty.lng),
+                                                                                });
+                                                                                navigate(`/routes?${params.toString()}`);
+                                                                        }}
+                                                                >
                                                                         <div className="dashboard-penalty-copy">
                                                                                 <strong>{penalty.name}</strong>
                                                                                 <span>
