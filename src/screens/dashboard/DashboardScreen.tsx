@@ -186,7 +186,7 @@ function FitText({
         maxFontSize?: number;
         className?: string;
 }) {
-        const ref = useRef<HTMLStrongElement>(null);
+        const ref = useRef<HTMLElement>(null);
         useEffect(() => {
                 const el = ref.current;
                 if (!el) return;
@@ -593,6 +593,9 @@ function buildActivePenaltyReportStudents(
                 }
 
                 const userUUID = resolveStudentUserUUID(bundle.entry);
+                const latestReport = activeReports.reduce((best, v) =>
+                        v.created_at > best.created_at ? v : best,
+                );
                 summaryByStudent.set(userUUID, {
                         userUUID,
                         name: formatStudentName(bundle.entry),
@@ -602,6 +605,7 @@ function buildActivePenaltyReportStudents(
                                 0,
                                 ...activeReports.map((violation) => violation.created_at),
                         ),
+                        latestViolationUUID: latestReport.violation_uuid,
                 });
         }
 
