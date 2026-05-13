@@ -4203,11 +4203,8 @@
 }
 
 .dashboard-hero-card .dashboard-hero-points-balance strong {
-        font-size: clamp(1.5rem, 3.6vw, 3.4rem);
         font-variant-numeric: tabular-nums;
-        line-height: 0.95;
-        overflow-wrap: anywhere;
-        white-space: normal;
+        line-height: 1;
         color: #1a9e4a;
 }
 
@@ -4522,6 +4519,16 @@
         padding: 10px;
         border-radius: 8px;
         background: rgba(17, 45, 78, 0.04);
+}
+
+.dashboard-penalty-row--clickable {
+        cursor: pointer;
+        transition: background 0.15s, box-shadow 0.15s;
+}
+
+.dashboard-penalty-row--clickable:hover {
+        background: rgba(17, 45, 78, 0.1);
+        box-shadow: 0 1px 4px rgba(17, 45, 78, 0.12);
 }
 
 .dashboard-penalty-copy {

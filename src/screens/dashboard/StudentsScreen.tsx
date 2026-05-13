@@ -4,6 +4,7 @@ import {
 	type Dispatch,
 	type SetStateAction,
 } from "react";
+import { useNavigate } from "react-router-dom";
 import { StudentEventMiniMap } from "../../components/StudentEventMiniMap";
 import {
 	csvObjectRow,
@@ -106,7 +107,9 @@ type Props = {
 	UuidCopyField: UuidCopyFieldComponent;
 };
 
-function hasViolationLocation(violation?: StudentParkingViolation | null): boolean {
+function hasViolationLocation(
+	violation?: StudentParkingViolation | null,
+): boolean {
 	return (
 		typeof violation?.violation_latitude === "number" &&
 		Number.isFinite(violation.violation_latitude) &&
@@ -115,7 +118,9 @@ function hasViolationLocation(violation?: StudentParkingViolation | null): boole
 	);
 }
 
-function formatViolationCoordinates(violation: StudentParkingViolation): string {
+function formatViolationCoordinates(
+	violation: StudentParkingViolation,
+): string {
 	if (!hasViolationLocation(violation)) {
 		return "Location unavailable";
 	}
@@ -702,6 +707,7 @@ function downloadStudentCSV(params: StudentExportParams) {
 }
 
 export function StudentsScreen(props: Props) {
+	const navigate = useNavigate();
 	const {
 		activeSchoolId,
 		managedAppId,
@@ -1702,10 +1708,37 @@ export function StudentsScreen(props: Props) {
 																			? estimatePenaltySpeedMph(session, event)
 																			: null;
 
+																	const studentUUID =
+																		selectedStudentEntry?.membership?.user_uuid?.trim() ||
+																		selectedStudentEntry?.user?.k_guid ||
+																		"";
+
 																	return (
 																		<div
 																			className="data-card"
-																			key={`${session.session_id}-${event.zone_uuid}-${event.occurred_at}-${index}`}>
+																			key={`${session.session_id}-${event.zone_uuid}-${event.occurred_at}-${index}`}
+																			style={{
+																				cursor: studentUUID
+																					? "pointer"
+																					: undefined,
+																			}}
+																			title={
+																				studentUUID
+																					? "View on Student Routes map"
+																					: undefined
+																			}
+																			onClick={() => {
+																				if (!studentUUID) return;
+																				const params = new URLSearchParams({
+																					user: studentUUID,
+																					session: session.session_id,
+																					lat: String(event.lat),
+																					lng: String(event.lng),
+																				});
+																				navigate(
+																					`/routes?${params.toString()}`,
+																				);
+																			}}>
 																			<div className="student-event-card">
 																				<div className="student-event-copy">
 																					<div className="reservation-card-top">
@@ -1835,29 +1868,6 @@ export function StudentsScreen(props: Props) {
 																			{violation.registered_device_uuid ||
 																				"Not linked"}
 																		</span>
-																		<div className="student-violation-location">
-																			<strong>Violation location</strong>
-																			{hasViolationLocation(violation) ? (
-																				<>
-																					<StudentEventMiniMap
-																						lat={violation.violation_latitude!}
-																						lng={violation.violation_longitude!}
-																						label="Violation pin"
-																						tone="penalty"
-																					/>
-																					<span>
-																						{formatViolationCoordinates(violation)}
-																						{violation.location_accuracy_meters
-																							? ` · Accuracy ${Math.round(
-																									violation.location_accuracy_meters,
-																								)}m`
-																							: ""}
-																					</span>
-																				</>
-																			) : (
-																				<span>No location pin attached.</span>
-																			)}
-																		</div>
 																		<div className="uuid-copy-stack">
 																			<UuidCopyField
 																				label="violation_uuid"

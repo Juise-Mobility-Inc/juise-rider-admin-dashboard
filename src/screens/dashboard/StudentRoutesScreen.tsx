@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LatLngBounds } from "leaflet";
+import { useSearchParams } from "react-router-dom";
+import { LatLng, LatLngBounds } from "leaflet";
 import {
   CircleMarker,
   MapContainer,
@@ -98,10 +99,30 @@ function MapFitter({ points }: { points: [number, number][] }) {
   return null;
 }
 
+function PenaltyFocuser({ lat, lng }: { lat: number; lng: number }) {
+  const map = useMap();
+  const fired = useRef(false);
+  useEffect(() => {
+    if (fired.current) return;
+    fired.current = true;
+    map.flyTo(new LatLng(lat, lng), 17, { animate: true, duration: 1 });
+  }, [map, lat, lng]);
+  return null;
+}
+
 interface Props { activeSchoolId: string; managedAppId: string; }
 type Seg = { color: string; positions: [number, number][] };
 
 export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
+  const [searchParams] = useSearchParams();
+
+  // Deep-link params — read once, stored in refs so effects don't loop
+  const dlUser    = useRef(searchParams.get("user"));
+  const dlSession = useRef(searchParams.get("session"));
+  const dlLat     = useRef(searchParams.get("lat"));
+  const dlLng     = useRef(searchParams.get("lng"));
+  const dlConsumed = useRef(false);
+
   const [roster, setRoster] = useState<SchoolStudentRosterEntry[]>([]);
   const [zones, setZones] = useState<SchoolZone[]>([]);
   const [rosterBusy, setRosterBusy] = useState(false);
@@ -113,6 +134,9 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
   const [histBusy, setHistBusy] = useState(false);
   const [histErr, setHistErr] = useState("");
   const [selId, setSelId] = useState<string | null>(null);
+
+  // lat/lng to fly to once the right session is loaded
+  const [focusPin, setFocusPin] = useState<[number, number] | null>(null);
 
   const [showRoute, setShowRoute] = useState(true);
   const [showPOIs, setShowPOIs] = useState(true);
@@ -195,24 +219,43 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
     return () => { dead = true; };
   }, [managedAppId, activeSchoolId]);
 
-  const selectStudent = useCallback(async (entry: SchoolStudentRosterEntry) => {
+  const selectStudent = useCallback(async (entry: SchoolStudentRosterEntry, targetSessionId?: string | null, pinLat?: number | null, pinLng?: number | null) => {
     const u = uuid(entry);
-    if (u === selUUID) return;
+    if (u === selUUID && !targetSessionId) return;
     setSelUUID(u);
     setHistory([]);
     setSelId(null);
+    setFocusPin(null);
     setHistBusy(true);
     setHistErr("");
     try {
       const sessions = await fetchStudentRouteHistory(managedAppId, activeSchoolId, u);
       setHistory(sessions);
-      if (sessions.length > 0) setSelId(sessions[0].session_id);
+      const target = targetSessionId ? sessions.find((s) => s.session_id === targetSessionId) : null;
+      if (target) {
+        setSelId(target.session_id);
+        if (pinLat != null && pinLng != null) setFocusPin([pinLat, pinLng]);
+      } else if (sessions.length > 0) {
+        setSelId(sessions[0].session_id);
+      }
     } catch (e) {
       setHistErr(e instanceof Error ? e.message : "Failed to load routes");
     } finally {
       setHistBusy(false);
     }
   }, [managedAppId, activeSchoolId, selUUID]);
+
+  // Deep-link: once roster loads, auto-select the student from URL params
+  useEffect(() => {
+    if (dlConsumed.current || !dlUser.current || rosterBusy || roster.length === 0) return;
+    const entry = roster.find((e) => uuid(e) === dlUser.current);
+    if (!entry) return;
+    dlConsumed.current = true;
+    const lat = dlLat.current ? parseFloat(dlLat.current) : null;
+    const lng = dlLng.current ? parseFloat(dlLng.current) : null;
+    selectStudent(entry, dlSession.current, lat, lng);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roster, rosterBusy]);
 
   // scroll the selected ride chip into view whenever it changes
   useEffect(() => {
@@ -342,6 +385,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
           <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="sr-map" zoomControl={true}>
             <TileLayer attribution={TILE_ATTR} url={TILE_URL} />
             <MapFitter points={routePts} />
+            {focusPin && <PenaltyFocuser lat={focusPin[0]} lng={focusPin[1]} />}
 
             {showZones && dispZones.filter((z) => z.active && z.polygon.length >= 3).map((z) => (
               <Polygon
