@@ -975,7 +975,7 @@ function RidePenaltySection({ visuals }: { visuals: DashboardVisuals }) {
 				<DashboardMiniKpi
 					label="Students affected"
 					value={visuals.ridePenaltyStudentCount.toLocaleString()}
-					detail="Top students shown"
+					detail="Students"
 				/>
 			</div>
 			<div className="dashboard-penalty-panel">
@@ -1054,68 +1054,35 @@ function ActivePenaltyReportsSection({
 				<DashboardMiniKpi
 					label="Students flagged"
 					value={visuals.activePenaltyReportStudentCount.toLocaleString()}
-					detail="Top students shown"
+					detail="Students"
 				/>
 			</div>
-			<div className="dashboard-penalty-columns">
-				<div className="dashboard-penalty-panel">
-					<h4>Students with active reports</h4>
-					<div className="dashboard-penalty-list">
-						{visuals.activePenaltyReportStudents.length === 0 ? (
-							<p className="reports-visual-empty">
-								No active reports right now.
-							</p>
-						) : (
-							visuals.activePenaltyReportStudents.map((student) => (
-								<div className="dashboard-penalty-row" key={student.userUUID}>
-									<div className="dashboard-penalty-copy">
-										<strong>{student.name}</strong>
-										<span>{student.detail}</span>
-										<small>
-											Last report{" "}
-											{formatDashboardTimestamp(student.lastCreatedAt)}
-										</small>
-									</div>
-									<div className="dashboard-penalty-score">
-										<strong>{student.count.toLocaleString()}</strong>
-										<span>active</span>
-									</div>
+			<div className="dashboard-penalty-panel">
+				<h4>Latest active reports</h4>
+				<div className="dashboard-penalty-list">
+					{visuals.activePenaltyReports.length === 0 ? (
+						<p className="reports-visual-empty">No active reports to show.</p>
+					) : (
+						visuals.activePenaltyReports.map((report) => (
+							<div
+								className="dashboard-penalty-row dashboard-penalty-row--clickable"
+								key={report.key}
+								title="Open penalty report"
+								onClick={() =>
+									navigate(`/penalty-reports?report=${report.key}`)
+								}>
+								<div className="dashboard-penalty-copy">
+									<strong>{report.name}</strong>
+									<span>{report.description}</span>
+									<small>
+										{report.deviceUUID ? `Device ${report.deviceUUID} · ` : ""}
+										{formatDashboardTimestamp(report.createdAt)}
+									</small>
 								</div>
-							))
-						)}
-					</div>
-				</div>
-				<div className="dashboard-penalty-panel">
-					<h4>Latest active reports</h4>
-					<div className="dashboard-penalty-list">
-						{visuals.activePenaltyReports.length === 0 ? (
-							<p className="reports-visual-empty">No active reports to show.</p>
-						) : (
-							visuals.activePenaltyReports.map((report) => (
-								<div
-									className="dashboard-penalty-row dashboard-penalty-row--clickable"
-									key={report.key}
-									title="Open penalty report"
-									onClick={() =>
-										navigate(`/penalty-reports?report=${report.key}`)
-									}>
-									<div className="dashboard-penalty-copy">
-										<strong>{report.name}</strong>
-										<span>{report.description}</span>
-										<small>
-											{report.deviceUUID
-												? `Device ${report.deviceUUID} · `
-												: ""}
-											{formatDashboardTimestamp(report.createdAt)}
-										</small>
-									</div>
-									<span className="dashboard-penalty-chip">
-										{report.status}
-									</span>
-								</div>
-							))
-						)}
-					</div>
+								<span className="dashboard-penalty-chip">{report.status}</span>
+							</div>
+						))
+					)}
 				</div>
 			</div>
 		</article>
