@@ -107,27 +107,6 @@ type Props = {
 	UuidCopyField: UuidCopyFieldComponent;
 };
 
-function hasViolationLocation(
-	violation?: StudentParkingViolation | null,
-): boolean {
-	return (
-		typeof violation?.violation_latitude === "number" &&
-		Number.isFinite(violation.violation_latitude) &&
-		typeof violation?.violation_longitude === "number" &&
-		Number.isFinite(violation.violation_longitude)
-	);
-}
-
-function formatViolationCoordinates(
-	violation: StudentParkingViolation,
-): string {
-	if (!hasViolationLocation(violation)) {
-		return "Location unavailable";
-	}
-
-	return `${violation.violation_latitude!.toFixed(5)}, ${violation.violation_longitude!.toFixed(5)}`;
-}
-
 const studentExportColumns = [
 	"row_type",
 	"full_name",

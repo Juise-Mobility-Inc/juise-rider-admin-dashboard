@@ -253,6 +253,10 @@ interface ChallengeDraft {
 	start_time: string;
 	end_time: string;
 	active: boolean;
+	repeat_enabled: boolean;
+	repeat_interval_value: string;
+	repeat_interval_unit: "days" | "weeks";
+	repeat_count: string;
 }
 
 type StudentIdPhotoSlot = "front" | "back";
@@ -480,6 +484,10 @@ function createEmptyChallengeDraft(): ChallengeDraft {
 		start_time: formatDateTimeLocalValue(Math.floor(now.getTime() / 1000)),
 		end_time: formatDateTimeLocalValue(Math.floor(end.getTime() / 1000)),
 		active: true,
+		repeat_enabled: false,
+		repeat_interval_value: "",
+		repeat_interval_unit: "weeks",
+		repeat_count: "",
 	};
 }
 
@@ -495,7 +503,38 @@ function challengeToDraft(challenge: SchoolChallenge): ChallengeDraft {
 		start_time: formatDateTimeLocalValue(challenge.start_time),
 		end_time: formatDateTimeLocalValue(challenge.end_time),
 		active: challenge.active,
+		repeat_enabled: false,
+		repeat_interval_value: "",
+		repeat_interval_unit: "weeks",
+		repeat_count: "",
 	};
+}
+
+function challengeToResubmitDraft(challenge: SchoolChallenge): ChallengeDraft {
+	const now = Math.floor(Date.now() / 1000);
+	const durationSeconds = Math.max(
+		60 * 60,
+		challenge.end_time - challenge.start_time,
+	);
+
+	return {
+		...challengeToDraft(challenge),
+		challenge_uuid: "",
+		title: `${challenge.title} rerun`,
+		start_time: formatDateTimeLocalValue(now),
+		end_time: formatDateTimeLocalValue(now + durationSeconds),
+		active: true,
+	};
+}
+
+function getCreatedChallenges(
+	response: SchoolChallenge | { challenge: SchoolChallenge; repeated_challenges?: SchoolChallenge[] },
+): SchoolChallenge[] {
+	if ("challenge" in response) {
+		return [response.challenge, ...(response.repeated_challenges ?? [])];
+	}
+
+	return [response];
 }
 
 function formatCoordinateValue(value: number): string {
@@ -1665,18 +1704,6 @@ function App() {
 			sortPacksForDisplay([
 				nextPack,
 				...current.filter((pack) => pack.pack_uuid !== nextPack.pack_uuid),
-			]),
-		);
-	}
-
-	function upsertSchoolChallenge(nextChallenge: SchoolChallenge) {
-		setSchoolChallenges((current) =>
-			sortChallengesForDisplay([
-				nextChallenge,
-				...current.filter(
-					(challenge) =>
-						challenge.challenge_uuid !== nextChallenge.challenge_uuid,
-				),
 			]),
 		);
 	}
@@ -3429,6 +3456,8 @@ function App() {
 		let targetValue = 0;
 		let startTime = 0;
 		let endTime = 0;
+		let repeatCount = 1;
+		let repeatIntervalValue = 1;
 
 		try {
 			targetValue = Number(challengeDraft.target_value.trim());
@@ -3446,6 +3475,26 @@ function App() {
 			);
 			if (endTime <= startTime) {
 				throw new Error("Challenge end must be after the start time.");
+			}
+			if (challengeDraft.repeat_enabled && !challengeDraft.challenge_uuid) {
+				repeatCount = Number.parseInt(challengeDraft.repeat_count.trim(), 10);
+				repeatIntervalValue = Number.parseInt(
+					challengeDraft.repeat_interval_value.trim(),
+					10,
+				);
+				if (
+					!Number.isFinite(repeatCount) ||
+					repeatCount < 2 ||
+					repeatCount > 52
+				) {
+					throw new Error("Repeat submissions must be between 2 and 52.");
+				}
+				if (
+					repeatCount > 1 &&
+					(!Number.isFinite(repeatIntervalValue) || repeatIntervalValue <= 0)
+				) {
+					throw new Error("Repeat interval must be greater than 0.");
+				}
 			}
 		} catch (error) {
 			setBanner({
@@ -3469,26 +3518,53 @@ function App() {
 				active: challengeDraft.active,
 			} as const;
 
-			const savedChallenge = challengeDraft.challenge_uuid
-				? await updateSchoolChallenge(
-						context.managedAppId,
-						activeSchoolId,
-						challengeDraft.challenge_uuid,
-						payload,
-					)
-				: await createSchoolChallenge(
-						context.managedAppId,
-						activeSchoolId,
-						payload,
+			const savedChallenges = challengeDraft.challenge_uuid
+				? [
+						await updateSchoolChallenge(
+							context.managedAppId,
+							activeSchoolId,
+							challengeDraft.challenge_uuid,
+							payload,
+						),
+					]
+				: getCreatedChallenges(
+						await createSchoolChallenge(
+							context.managedAppId,
+							activeSchoolId,
+							challengeDraft.repeat_enabled && repeatCount > 1
+								? {
+										...payload,
+										repeat: {
+											interval_value: repeatIntervalValue,
+											interval_unit: challengeDraft.repeat_interval_unit,
+											count: repeatCount,
+										},
+									}
+								: payload,
+						),
 					);
+			const savedChallenge = savedChallenges[0];
 
-			upsertSchoolChallenge(savedChallenge);
+			setSchoolChallenges((current) =>
+				sortChallengesForDisplay([
+					...savedChallenges,
+					...current.filter(
+						(challenge) =>
+							!savedChallenges.some(
+								(saved) => saved.challenge_uuid === challenge.challenge_uuid,
+							),
+					),
+				]),
+			);
 			setSelectedChallengeId(savedChallenge.challenge_uuid);
 			setChallengeDraft(challengeToDraft(savedChallenge));
 			await refreshChallengeParticipants(savedChallenge.challenge_uuid);
 			setBanner({
 				tone: "success",
-				message: `${challengeDraft.challenge_uuid ? "Updated" : "Created"} challenge ${savedChallenge.title}.`,
+				message:
+					savedChallenges.length > 1
+						? `Created ${savedChallenges.length} repeated challenges from ${savedChallenge.title}.`
+						: `${challengeDraft.challenge_uuid ? "Updated" : "Created"} challenge ${savedChallenge.title}.`,
 			});
 		} catch (error) {
 			setBanner({
@@ -3498,6 +3574,16 @@ function App() {
 		} finally {
 			setChallengeBusy(false);
 		}
+	}
+
+	function handleCopyChallengeForResubmit(challenge: SchoolChallenge) {
+		setSelectedChallengeId(newChallengeSelectionId);
+		setChallengeDraft(challengeToResubmitDraft(challenge));
+		setChallengeParticipants([]);
+		setBanner({
+			tone: "info",
+			message: `Copied ${challenge.title}. Adjust the schedule, then create it again.`,
+		});
 	}
 
 	async function handleDeleteSelectedChallenge() {
@@ -4044,6 +4130,7 @@ function App() {
 						refreshSchoolChallenges={refreshSchoolChallenges}
 						handleSaveChallenge={handleSaveChallenge}
 						handleDeleteSelectedChallenge={handleDeleteSelectedChallenge}
+						handleCopyChallengeForResubmit={handleCopyChallengeForResubmit}
 						handleChallengeImageFileChange={handleChallengeImageFileChange}
 						selectedChallenge={selectedChallenge}
 						schoolChallenges={schoolChallenges}

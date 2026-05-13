@@ -22,6 +22,10 @@ type ChallengeDraft = {
   start_time: string;
   end_time: string;
   active: boolean;
+  repeat_enabled: boolean;
+  repeat_interval_value: string;
+  repeat_interval_unit: "days" | "weeks";
+  repeat_count: string;
 };
 
 type DetailRowComponent = ComponentType<{
@@ -96,6 +100,7 @@ type Props = {
   refreshSchoolChallenges: () => Promise<void>;
   handleSaveChallenge: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
   handleDeleteSelectedChallenge: () => Promise<void>;
+  handleCopyChallengeForResubmit: (challenge: SchoolChallenge) => void;
   handleChallengeImageFileChange: (
     event: ChangeEvent<HTMLInputElement>,
   ) => void | Promise<void>;
@@ -290,6 +295,7 @@ export function ChallengesScreen(props: Props) {
     refreshSchoolChallenges,
     handleSaveChallenge,
     handleDeleteSelectedChallenge,
+    handleCopyChallengeForResubmit,
     handleChallengeImageFileChange,
     selectedChallenge,
     currentAndUpcomingChallenges,
@@ -426,34 +432,43 @@ export function ChallengesScreen(props: Props) {
                   const status = resolveChallengeStatus(ch);
                   const isSelected = ch.challenge_uuid === selectedChallengeId;
                   return (
-                    <button
-                      key={ch.challenge_uuid}
-                      className={`challenge-roster-item ${isSelected ? "challenge-roster-item-active" : ""}`}
-                      type="button"
-                      onClick={() => setSelectedChallengeId(ch.challenge_uuid)}
-                    >
-                      <div className="challenge-roster-thumb">
-                        {ch.image_url.trim() ? (
-                          <img
-                            src={ch.image_url}
-                            alt={ch.title}
-                            className="challenge-roster-img"
-                          />
-                        ) : (
-                          <span className="challenge-roster-img-fallback">🏆</span>
-                        )}
-                      </div>
-                      <div className="challenge-roster-info">
-                        <strong className="challenge-roster-title">{ch.title}</strong>
-                        <span className="challenge-roster-meta">
-                          {formatChallengeAudienceLabel(ch.audience_type)} challenge ·{" "}
-                          {formatChallengeMetricValue(ch.metric_type, ch.target_value)}
+                    <div className="challenge-history-item" key={ch.challenge_uuid}>
+                      <button
+                        className={`challenge-roster-item ${isSelected ? "challenge-roster-item-active" : ""}`}
+                        type="button"
+                        onClick={() => setSelectedChallengeId(ch.challenge_uuid)}
+                      >
+                        <div className="challenge-roster-thumb">
+                          {ch.image_url.trim() ? (
+                            <img
+                              src={ch.image_url}
+                              alt={ch.title}
+                              className="challenge-roster-img"
+                            />
+                          ) : (
+                            <span className="challenge-roster-img-fallback">🏆</span>
+                          )}
+                        </div>
+                        <div className="challenge-roster-info">
+                          <strong className="challenge-roster-title">{ch.title}</strong>
+                          <span className="challenge-roster-meta">
+                            {formatChallengeAudienceLabel(ch.audience_type)} challenge ·{" "}
+                            {formatChallengeMetricValue(ch.metric_type, ch.target_value)}
+                          </span>
+                        </div>
+                        <span className={`challenge-status-badge ${statusClass(status)}`}>
+                          {status}
                         </span>
-                      </div>
-                      <span className={`challenge-status-badge ${statusClass(status)}`}>
-                        {status}
-                      </span>
-                    </button>
+                      </button>
+                      <button
+                        className="secondary-button challenge-history-copy-button"
+                        type="button"
+                        onClick={() => handleCopyChallengeForResubmit(ch)}
+                        disabled={challengeBusy}
+                      >
+                        Copy &amp; Resubmit
+                      </button>
+                    </div>
                   );
                 })}
               </div>
@@ -667,6 +682,86 @@ export function ChallengesScreen(props: Props) {
                   </div>
                 </div>
 
+                {!challengeDraft.challenge_uuid ? (
+                  <div className="challenge-form-section">
+                    <div className="challenge-form-section-label">Schedule repeat</div>
+                    <div className="form-grid">
+                      <label className="field checkbox-field">
+                        <span>Enable schedule</span>
+                        <input
+                          type="checkbox"
+                          checked={challengeDraft.repeat_enabled}
+                          onChange={(e) =>
+                            setChallengeDraft((c) => ({
+                              ...c,
+                              repeat_enabled: e.target.checked,
+                              repeat_interval_value: e.target.checked
+                                ? c.repeat_interval_value || "1"
+                                : "",
+                              repeat_interval_unit: e.target.checked
+                                ? c.repeat_interval_unit
+                                : "weeks",
+                              repeat_count: e.target.checked
+                                ? c.repeat_count || "2"
+                                : "",
+                            }))
+                          }
+                        />
+                      </label>
+                      {challengeDraft.repeat_enabled ? (
+                        <>
+                          <label className="field">
+                            <span>Every</span>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={challengeDraft.repeat_interval_value}
+                              onChange={(e) =>
+                                setChallengeDraft((c) => ({
+                                  ...c,
+                                  repeat_interval_value: e.target.value,
+                                }))
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Interval</span>
+                            <select
+                              value={challengeDraft.repeat_interval_unit}
+                              onChange={(e) =>
+                                setChallengeDraft((c) => ({
+                                  ...c,
+                                  repeat_interval_unit: e.target.value as ChallengeDraft["repeat_interval_unit"],
+                                }))
+                              }
+                            >
+                              <option value="days">Days</option>
+                              <option value="weeks">Weeks</option>
+                            </select>
+                          </label>
+                          <label className="field">
+                            <span>Total submissions</span>
+                            <input
+                              type="number"
+                              min="2"
+                              max="52"
+                              step="1"
+                              value={challengeDraft.repeat_count}
+                              onChange={(e) =>
+                                setChallengeDraft((c) => ({
+                                  ...c,
+                                  repeat_count: e.target.value,
+                                }))
+                              }
+                            />
+                          </label>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+
                 {/* Section: Cover image */}
                 <div className="challenge-form-section">
                   <div className="challenge-form-section-label">Cover image</div>
@@ -834,11 +929,25 @@ export function ChallengesScreen(props: Props) {
                               .slice(0, 16)
                           : "",
                         active: selectedChallenge.active,
+                        repeat_enabled: false,
+                        repeat_interval_value: "",
+                        repeat_interval_unit: "weeks",
+                        repeat_count: "",
                       })
                     }
                   >
                     Edit Challenge
                   </button>
+                  {resolveChallengeStatus(selectedChallenge) === "Ended" ? (
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={() => handleCopyChallengeForResubmit(selectedChallenge)}
+                      disabled={challengeBusy}
+                    >
+                      Copy &amp; Resubmit
+                    </button>
+                  ) : null}
                 </div>
 
                 {/* Participant stats */}

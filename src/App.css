@@ -1578,6 +1578,19 @@
         border-left-color: #f6ae2d;
 }
 
+.challenge-history-item {
+        display: grid;
+        gap: 8px;
+        padding-bottom: 10px;
+}
+
+.challenge-history-copy-button {
+        justify-self: start;
+        margin-left: 66px;
+        padding: 7px 10px;
+        font-size: 0.78rem;
+}
+
 .challenge-roster-thumb {
         width: 40px;
         height: 40px;
@@ -1777,7 +1790,8 @@
 
 .challenge-detail-cover {
         width: 100%;
-        aspect-ratio: 16 / 7;
+        height: 260px;
+        max-height: 32vh;
         object-fit: cover;
         border-radius: 14px;
         cursor: zoom-in;
@@ -1993,6 +2007,18 @@
 .challenge-image-field-controls {
         display: grid;
         gap: 16px;
+}
+
+.challenge-image-field .challenge-image-preview {
+        width: min(100%, 320px);
+        height: 180px;
+        min-height: 0;
+}
+
+.challenge-image-field .challenge-image-preview-image,
+.challenge-image-field .challenge-image-preview-fallback {
+        height: 180px;
+        min-height: 0;
 }
 
 .challenge-image-upload-row {

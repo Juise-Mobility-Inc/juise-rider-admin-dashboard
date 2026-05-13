@@ -115,6 +115,16 @@ export interface SchoolChallengeWriteInput {
   start_time: number;
   end_time: number;
   active?: boolean;
+  repeat?: {
+    interval_value: number;
+    interval_unit: "days" | "weeks";
+    count: number;
+  };
+}
+
+export interface SchoolChallengeCreateResponse {
+  challenge: SchoolChallenge;
+  repeated_challenges: SchoolChallenge[];
 }
 
 export interface SchoolChallengeImageUploadInitResponse {
@@ -1136,8 +1146,8 @@ export async function createSchoolChallenge(
   managedAppId: string,
   schoolId: string,
   input: SchoolChallengeWriteInput,
-): Promise<SchoolChallenge> {
-  return request<SchoolChallenge>(
+): Promise<SchoolChallenge | SchoolChallengeCreateResponse> {
+  return request<SchoolChallenge | SchoolChallengeCreateResponse>(
     "nebula",
     `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/challenges`,
     {
