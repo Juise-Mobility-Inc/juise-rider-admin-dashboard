@@ -476,6 +476,7 @@ export interface StudentRouteHistoryVisitedPOI {
   lng: number;
   bonus_points: number;
   visited_at: number;
+  confidence_percent?: number | null;
 }
 
 export interface StudentRouteHistoryPenaltyEvent {
@@ -491,6 +492,8 @@ export interface StudentRouteHistoryPenaltyEvent {
   duration_ms: number;
   points_lost: number;
   occurred_at: number;
+  confidence_percent?: number | null;
+  evidence_point_count?: number | null;
 }
 
 export interface StudentRouteHistoryPoint {

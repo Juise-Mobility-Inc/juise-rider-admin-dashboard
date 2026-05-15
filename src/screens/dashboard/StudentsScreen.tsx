@@ -293,6 +293,146 @@ function estimatePenaltySpeedMph(
 		: null;
 }
 
+function formatConfidencePercent(value?: number | null): string {
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		return "Unavailable";
+	}
+
+	return `${Math.max(0, Math.min(100, Math.round(value)))}%`;
+}
+
+function routeTimestampWindow(referenceTimestamp: number): number {
+	return referenceTimestamp > 100_000_000_000 ? 120_000 : 120;
+}
+
+function routeDurationSeconds(
+	startTimestamp: number,
+	endTimestamp: number,
+): number {
+	const duration = Math.max(0, endTimestamp - startTimestamp);
+	return Math.max(startTimestamp, endTimestamp) > 100_000_000_000
+		? duration / 1000
+		: duration;
+}
+
+function formatRideContextDuration(seconds: number): string {
+	if (!Number.isFinite(seconds) || seconds <= 0) {
+		return "0s";
+	}
+
+	const roundedSeconds = Math.round(seconds);
+	const minutes = Math.floor(roundedSeconds / 60);
+	const remainingSeconds = roundedSeconds % 60;
+	if (minutes > 0 && remainingSeconds > 0) {
+		return `${minutes}m ${remainingSeconds}s`;
+	}
+	if (minutes > 0) {
+		return `${minutes}m`;
+	}
+	return `${remainingSeconds}s`;
+}
+
+function formatRideContextDistance(meters: number): string {
+	if (!Number.isFinite(meters) || meters <= 0) {
+		return "0 ft";
+	}
+	if (meters < 305) {
+		return `${Math.round(meters * 3.28084).toLocaleString()} ft`;
+	}
+	return `${(meters / 1609.344).toFixed(1)} mi`;
+}
+
+function routePointDistanceMeters(
+	left: StudentRouteHistorySession["points"][number],
+	right: StudentRouteHistorySession["points"][number],
+): number {
+	const earthRadiusMeters = 6_371_000;
+	const latDelta = ((right.latitude - left.latitude) * Math.PI) / 180;
+	const lngDelta = ((right.longitude - left.longitude) * Math.PI) / 180;
+	const leftLat = (left.latitude * Math.PI) / 180;
+	const rightLat = (right.latitude * Math.PI) / 180;
+	const a =
+		Math.sin(latDelta / 2) * Math.sin(latDelta / 2) +
+		Math.cos(leftLat) *
+			Math.cos(rightLat) *
+			Math.sin(lngDelta / 2) *
+			Math.sin(lngDelta / 2);
+	return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function buildRidePenaltyContext(
+	session: StudentRouteHistorySession,
+	event: StudentRouteHistorySession["penalty_events"][number],
+) {
+	const points = [...(session.points ?? [])]
+		.filter(
+			(point) =>
+				Number.isFinite(point.latitude) &&
+				Number.isFinite(point.longitude) &&
+				Number.isFinite(point.timestamp),
+		)
+		.sort((left, right) => left.timestamp - right.timestamp);
+
+	if (points.length === 0) {
+		return {
+			points: [] as { lat: number; lng: number }[],
+			pointCount: 0,
+			distanceMeters: 0,
+			durationSeconds: 0,
+			nearestPoint: null as StudentRouteHistorySession["points"][number] | null,
+		};
+	}
+
+	const nearestPointIndex = points.reduce((bestIndex, point, index) => {
+		const bestPoint = points[bestIndex];
+		const bestTimeDiff = Math.abs(bestPoint.timestamp - event.occurred_at);
+		const pointTimeDiff = Math.abs(point.timestamp - event.occurred_at);
+		if (pointTimeDiff !== bestTimeDiff) {
+			return pointTimeDiff < bestTimeDiff ? index : bestIndex;
+		}
+
+		const bestCoordDiff =
+			Math.abs(bestPoint.latitude - event.lat) +
+			Math.abs(bestPoint.longitude - event.lng);
+		const pointCoordDiff =
+			Math.abs(point.latitude - event.lat) +
+			Math.abs(point.longitude - event.lng);
+		return pointCoordDiff < bestCoordDiff ? index : bestIndex;
+	}, 0);
+	const window = routeTimestampWindow(event.occurred_at);
+	let contextPoints = points.filter(
+		(point) => Math.abs(point.timestamp - event.occurred_at) <= window,
+	);
+	if (contextPoints.length < 4) {
+		const startIndex = Math.max(0, nearestPointIndex - 6);
+		const endIndex = Math.min(points.length, nearestPointIndex + 7);
+		contextPoints = points.slice(startIndex, endIndex);
+	}
+
+	const distanceMeters = contextPoints.reduce((total, point, index) => {
+		if (index === 0) {
+			return total;
+		}
+		return total + routePointDistanceMeters(contextPoints[index - 1], point);
+	}, 0);
+	const firstPoint = contextPoints[0] ?? null;
+	const lastPoint = contextPoints[contextPoints.length - 1] ?? null;
+
+	return {
+		points: contextPoints.map((point) => ({
+			lat: point.latitude,
+			lng: point.longitude,
+		})),
+		pointCount: contextPoints.length,
+		distanceMeters,
+		durationSeconds:
+			firstPoint && lastPoint
+				? routeDurationSeconds(firstPoint.timestamp, lastPoint.timestamp)
+				: 0,
+		nearestPoint: points[nearestPointIndex] ?? null,
+	};
+}
+
 type DetailTab = "profile" | "activity" | "records";
 
 type StudentExportParams = {
@@ -884,7 +1024,8 @@ export function StudentsScreen(props: Props) {
 							}
 							disabled={
 								filteredStudentRoster.length === 0 || schoolStudentRosterBusy
-							}>
+							}
+						>
 							Download Roster CSV
 						</button>
 						<button
@@ -892,7 +1033,8 @@ export function StudentsScreen(props: Props) {
 							type="button"
 							title={`Download full student report data for ${allStudentRoster.length} students`}
 							onClick={() => void handleDownloadAllStudentInformation()}
-							disabled={allStudentExportDisabled}>
+							disabled={allStudentExportDisabled}
+						>
 							{allStudentExportBusy
 								? `Preparing ${allStudentExportProgress.completed}/${allStudentExportProgress.total}`
 								: "Download All CSV"}
@@ -915,7 +1057,8 @@ export function StudentsScreen(props: Props) {
 							void refreshStudentRoster();
 							resetSelectedStudentState();
 						}}
-						disabled={schoolStudentRosterBusy || !activeSchoolId}>
+						disabled={schoolStudentRosterBusy || !activeSchoolId}
+					>
 						Refresh
 					</button>
 				</div>
@@ -980,7 +1123,8 @@ export function StudentsScreen(props: Props) {
 												void handleSelectStudentInRoster(
 													membership.membership_uuid,
 												)
-											}>
+											}
+										>
 											<div className="student-list-avatar">
 												{rosterProfilePhotoUrl ? (
 													<img
@@ -1180,7 +1324,8 @@ export function StudentsScreen(props: Props) {
 														})
 													}
 													disabled={studentBusy}
-													title={`Download ${fullName} as CSV`}>
+													title={`Download ${fullName} as CSV`}
+												>
 													Download CSV
 												</button>
 												{studentBusy ? (
@@ -1207,13 +1352,15 @@ export function StudentsScreen(props: Props) {
 											<button
 												type="button"
 												className={`student-tab-btn${detailTab === "profile" ? " student-tab-btn-active" : ""}`}
-												onClick={() => setDetailTab("profile")}>
+												onClick={() => setDetailTab("profile")}
+											>
 												Profile
 											</button>
 											<button
 												type="button"
 												className={`student-tab-btn${detailTab === "activity" ? " student-tab-btn-active" : ""}`}
-												onClick={() => setDetailTab("activity")}>
+												onClick={() => setDetailTab("activity")}
+											>
 												Activity
 												{visitedPoiVisits.length + penaltyEvents.length > 0 && (
 													<span className="student-tab-count">
@@ -1224,7 +1371,8 @@ export function StudentsScreen(props: Props) {
 											<button
 												type="button"
 												className={`student-tab-btn${detailTab === "records" ? " student-tab-btn-active" : ""}`}
-												onClick={() => setDetailTab("records")}>
+												onClick={() => setDetailTab("records")}
+											>
 												Records
 												{reservationsForMembership.length +
 													studentViolations.length >
@@ -1370,7 +1518,8 @@ export function StudentsScreen(props: Props) {
 																				handleOpenStudentDevice(
 																					device.registered_device_uuid,
 																				)
-																			}>
+																			}
+																		>
 																			{devicePhotoUrl ? (
 																				<img
 																					className="device-card-photo"
@@ -1483,13 +1632,15 @@ export function StudentsScreen(props: Props) {
 																return (
 																	<div
 																		className="data-card"
-																		key={reservation.reservation_uuid}>
+																		key={reservation.reservation_uuid}
+																	>
 																		<div className="reservation-card-top">
 																			<strong>
 																				{reservation.term_name || "School term"}
 																			</strong>
 																			<span
-																				className={`student-badge student-badge-status-${reservation.status}`}>
+																				className={`student-badge student-badge-status-${reservation.status}`}
+																			>
 																				{reservation.status}
 																			</span>
 																		</div>
@@ -1603,7 +1754,8 @@ export function StudentsScreen(props: Props) {
 																({ poi, session }, index) => (
 																	<div
 																		className="data-card"
-																		key={`${session.session_id}-${poi.poi_uuid}-${poi.visited_at}-${index}`}>
+																		key={`${session.session_id}-${poi.poi_uuid}-${poi.visited_at}-${index}`}
+																	>
 																		<div className="student-event-card">
 																			<div className="student-event-copy">
 																				<div className="reservation-card-top">
@@ -1686,6 +1838,48 @@ export function StudentsScreen(props: Props) {
 																		event.zone_type === "speed_limit"
 																			? estimatePenaltySpeedMph(session, event)
 																			: null;
+																	const rideContext = buildRidePenaltyContext(
+																		session,
+																		event,
+																	);
+																	const confidenceLabel =
+																		formatConfidencePercent(
+																			event.confidence_percent,
+																		);
+																	const nearestAccuracy =
+																		typeof rideContext.nearestPoint
+																			?.accuracy === "number" &&
+																		Number.isFinite(
+																			rideContext.nearestPoint.accuracy,
+																		)
+																			? `±${Math.round(
+																					rideContext.nearestPoint.accuracy,
+																				)} m`
+																			: "Accuracy unavailable";
+																	const nearestSpeed =
+																		typeof rideContext.nearestPoint
+																			?.speed_mps === "number" &&
+																		Number.isFinite(
+																			rideContext.nearestPoint.speed_mps,
+																		)
+																			? formatSpeedMph(
+																					rideContext.nearestPoint.speed_mps *
+																						2.2369362920544,
+																				)
+																			: estimatedSpeedMph
+																				? formatSpeedMph(estimatedSpeedMph)
+																				: "Speed unavailable";
+																	const evidenceCount =
+																		typeof event.evidence_point_count ===
+																			"number" &&
+																		Number.isFinite(event.evidence_point_count)
+																			? Math.max(
+																					0,
+																					Math.round(
+																						event.evidence_point_count,
+																					),
+																				)
+																			: null;
 
 																	const studentUUID =
 																		selectedStudentEntry?.membership?.user_uuid?.trim() ||
@@ -1717,7 +1911,8 @@ export function StudentsScreen(props: Props) {
 																				navigate(
 																					`/routes?${params.toString()}`,
 																				);
-																			}}>
+																			}}
+																		>
 																			<div className="student-event-card">
 																				<div className="student-event-copy">
 																					<div className="reservation-card-top">
@@ -1764,6 +1959,48 @@ export function StudentsScreen(props: Props) {
 																						{event.description ||
 																							"No penalty description provided."}
 																					</span>
+																					<div className="student-ride-context">
+																						<div className="student-ride-context-header">
+																							<strong>Ride Context</strong>
+																							<span className="student-badge student-badge-muted">
+																								Confidence {confidenceLabel}
+																							</span>
+																						</div>
+																						<div className="student-ride-context-grid">
+																							<span>
+																								Snippet{" "}
+																								{formatRideContextDistance(
+																									rideContext.distanceMeters,
+																								)}{" "}
+																								·{" "}
+																								{formatRideContextDuration(
+																									rideContext.durationSeconds,
+																								)}
+																							</span>
+																							<span>
+																								{rideContext.pointCount.toLocaleString()}{" "}
+																								route samples near the penalty
+																							</span>
+																							<span>
+																								Evidence samples{" "}
+																								{evidenceCount == null
+																									? "Unavailable"
+																									: evidenceCount.toLocaleString()}
+																							</span>
+																							<span>
+																								Nearest speed {nearestSpeed} ·{" "}
+																								{nearestAccuracy}
+																							</span>
+																							<span>
+																								Trip{" "}
+																								{session.trip_mode || "Unknown"}{" "}
+																								·{" "}
+																								{formatUnixTimestamp(
+																									session.started_at,
+																								)}
+																							</span>
+																						</div>
+																					</div>
 																					<div className="uuid-copy-stack">
 																						<UuidCopyField
 																							label="zone_uuid"
@@ -1787,6 +2024,7 @@ export function StudentsScreen(props: Props) {
 																					lat={event.lat}
 																					lng={event.lng}
 																					polygon={matchingZone?.polygon}
+																					routePoints={rideContext.points}
 																					tone="penalty"
 																				/>
 																			</div>
@@ -1827,7 +2065,8 @@ export function StudentsScreen(props: Props) {
 																return (
 																	<div
 																		className="data-card"
-																		key={violation.violation_uuid}>
+																		key={violation.violation_uuid}
+																	>
 																		<div className="reservation-card-top">
 																			<strong>
 																				{formatUnixTimestamp(
@@ -1877,7 +2116,8 @@ export function StudentsScreen(props: Props) {
 																						return (
 																							<div
 																								className="student-photo-card"
-																								key={asset.media_uuid}>
+																								key={asset.media_uuid}
+																							>
 																								<span>
 																									{formatViolationSlotLabel(
 																										asset.slot,

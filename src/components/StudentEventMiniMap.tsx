@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { LatLngBounds, type LatLngLiteral, type Map as LeafletMap } from "leaflet";
+import {
+	LatLngBounds,
+	type LatLngLiteral,
+	type Map as LeafletMap,
+} from "leaflet";
 import {
 	CircleMarker,
 	MapContainer,
 	Polygon,
+	Polyline,
 	TileLayer,
 	useMap,
 } from "react-leaflet";
@@ -18,6 +23,7 @@ type Props = {
 	label: string;
 	tone: EventTone;
 	polygon?: SchoolZonePoint[];
+	routePoints?: LatLngLiteral[];
 };
 
 const DEFAULT_ZOOM = 17;
@@ -31,14 +37,23 @@ function focusEventOnMap(
 	map: LeafletMap,
 	center: LatLngLiteral,
 	polygon?: SchoolZonePoint[],
+	routePoints?: LatLngLiteral[],
 ) {
 	const polygonPoints = (polygon ?? []).filter(
 		(point) => Number.isFinite(point.lat) && Number.isFinite(point.lng),
 	);
-	if (polygonPoints.length >= 3) {
-		const bounds = new LatLngBounds(
-			polygonPoints.map((point) => [point.lat, point.lng] as [number, number]),
-		);
+	const validRoutePoints = (routePoints ?? []).filter(
+		(point) => Number.isFinite(point.lat) && Number.isFinite(point.lng),
+	);
+	if (polygonPoints.length >= 3 || validRoutePoints.length >= 2) {
+		const bounds = new LatLngBounds([
+			...polygonPoints.map(
+				(point) => [point.lat, point.lng] as [number, number],
+			),
+			...validRoutePoints.map(
+				(point) => [point.lat, point.lng] as [number, number],
+			),
+		]);
 		bounds.extend([center.lat, center.lng]);
 		map.fitBounds(bounds.pad(0.22), {
 			animate: false,
@@ -55,12 +70,13 @@ function focusEventOnMap(
 function RecenterMap(props: {
 	center: LatLngLiteral;
 	polygon?: SchoolZonePoint[];
+	routePoints?: LatLngLiteral[];
 }) {
 	const map = useMap();
 
 	useEffect(() => {
-		focusEventOnMap(map, props.center, props.polygon);
-	}, [map, props.center, props.polygon]);
+		focusEventOnMap(map, props.center, props.polygon, props.routePoints);
+	}, [map, props.center, props.polygon, props.routePoints]);
 
 	return null;
 }
@@ -85,6 +101,7 @@ export function StudentEventMiniMap({
 	label,
 	tone,
 	polygon,
+	routePoints,
 }: Props) {
 	const center: LatLngLiteral = useMemo(
 		() => ({
@@ -127,6 +144,9 @@ export function StudentEventMiniMap({
 	const polygonPoints = (polygon ?? []).filter(
 		(point) => Number.isFinite(point.lat) && Number.isFinite(point.lng),
 	);
+	const routeLinePoints = (routePoints ?? []).filter(
+		(point) => Number.isFinite(point.lat) && Number.isFinite(point.lng),
+	);
 
 	return (
 		<div className="student-event-map-shell">
@@ -143,10 +163,25 @@ export function StudentEventMiniMap({
 				scrollWheelZoom
 				touchZoom
 				zoom={DEFAULT_ZOOM}
-				zoomControl={false}>
+				zoomControl={false}
+			>
 				<TileLayer attribution={TILE_LAYER_ATTRIBUTION} url={TILE_LAYER_URL} />
 				<CaptureMapInstance onReady={setMapInstance} />
-				<RecenterMap center={center} polygon={polygonPoints} />
+				<RecenterMap
+					center={center}
+					polygon={polygonPoints}
+					routePoints={routeLinePoints}
+				/>
+				{routeLinePoints.length >= 2 ? (
+					<Polyline
+						pathOptions={{
+							color: "#112d4e",
+							opacity: 0.88,
+							weight: 4,
+						}}
+						positions={routeLinePoints.map((point) => [point.lat, point.lng])}
+					/>
+				) : null}
 				{polygonPoints.length >= 3 ? (
 					<Polygon
 						pathOptions={{
@@ -173,13 +208,15 @@ export function StudentEventMiniMap({
 				<button
 					className="student-event-map-action"
 					type="button"
-					onClick={() => mapInstance?.zoomIn()}>
+					onClick={() => mapInstance?.zoomIn()}
+				>
 					+
 				</button>
 				<button
 					className="student-event-map-action"
 					type="button"
-					onClick={() => mapInstance?.zoomOut()}>
+					onClick={() => mapInstance?.zoomOut()}
+				>
 					-
 				</button>
 				<button
@@ -189,15 +226,22 @@ export function StudentEventMiniMap({
 						if (!mapInstance) {
 							return;
 						}
-						focusEventOnMap(mapInstance, center, polygonPoints);
-					}}>
+						focusEventOnMap(
+							mapInstance,
+							center,
+							polygonPoints,
+							routeLinePoints,
+						);
+					}}
+				>
 					Center pin
 				</button>
 				<a
 					className="student-event-map-action student-event-map-action-link"
 					href={googleMapsUrl}
 					rel="noreferrer"
-					target="_blank">
+					target="_blank"
+				>
 					Open in Google Maps
 				</a>
 			</div>
