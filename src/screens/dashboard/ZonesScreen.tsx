@@ -520,7 +520,7 @@ export function ZonesScreen(props: Props) {
           onClick={() => setIsZoneModalOpen(false)}
         >
           <div
-            className="management-modal-sheet"
+            className="management-modal-sheet zone-editor-modal"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="management-modal-header">

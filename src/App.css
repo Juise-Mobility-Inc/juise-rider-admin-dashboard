@@ -3243,9 +3243,128 @@
         border: 1px solid rgba(22, 66, 91, 0.12);
 }
 
+.school-zone-search-control {
+        position: absolute;
+        z-index: 1000;
+        top: 12px;
+        left: 12px;
+        width: min(420px, calc(100% - 24px));
+        display: grid;
+        gap: 8px;
+        padding: 12px;
+        border-radius: 8px;
+        border: 1px solid rgba(17, 45, 78, 0.14);
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 16px 34px rgba(17, 45, 78, 0.16);
+}
+
+.school-zone-search-control form {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: end;
+}
+
+.school-zone-search-field {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+}
+
+.school-zone-search-field span {
+        color: var(--muted-strong);
+        font-size: 0.76rem;
+        font-weight: 700;
+        text-transform: uppercase;
+}
+
+.school-zone-search-field input {
+        width: 100%;
+        min-width: 0;
+        border: 1px solid rgba(17, 45, 78, 0.16);
+        border-radius: 8px;
+        padding: 10px 12px;
+        color: var(--text-strong);
+        background: #ffffff;
+}
+
+.school-zone-search-control p {
+        margin: 0;
+        color: var(--muted-strong);
+        font-size: 0.82rem;
+        line-height: 1.35;
+}
+
+.school-zone-search-results {
+        display: grid;
+        gap: 6px;
+        max-height: 190px;
+        overflow-y: auto;
+        padding-right: 2px;
+}
+
+.school-zone-search-results button {
+        width: 100%;
+        display: grid;
+        gap: 3px;
+        padding: 9px 10px;
+        border: 1px solid rgba(17, 45, 78, 0.1);
+        border-radius: 8px;
+        background: rgba(247, 250, 252, 0.94);
+        color: var(--text-strong);
+        text-align: left;
+}
+
+.school-zone-search-results button:hover:not(:disabled) {
+        border-color: rgba(35, 100, 170, 0.28);
+        background: rgba(235, 244, 255, 0.96);
+}
+
+.school-zone-search-results strong,
+.school-zone-search-results span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+}
+
+.school-zone-search-results strong {
+        font-size: 0.9rem;
+}
+
+.school-zone-search-results span {
+        color: var(--muted-strong);
+        font-size: 0.78rem;
+}
+
+.school-zone-search-provider {
+        justify-self: end;
+        color: var(--muted-strong);
+        font-size: 0.72rem;
+        font-weight: 700;
+}
+
+.school-zone-search-control .school-zone-search-error {
+        color: #b42318;
+}
+
 .school-zone-handle-icon {
         background: transparent;
         border: none;
+}
+
+.school-zone-search-result-icon {
+        background: transparent;
+        border: none;
+}
+
+.school-zone-search-result-icon span {
+        display: block;
+        width: 22px;
+        height: 22px;
+        border: 3px solid #ffffff;
+        border-radius: 999px;
+        background: #2364aa;
+        box-shadow: 0 8px 20px rgba(17, 45, 78, 0.28);
 }
 
 .pack-map-caption {
@@ -4836,6 +4955,11 @@
         box-shadow: 0 24px 72px rgba(7, 16, 28, 0.26);
 }
 
+.zone-editor-modal {
+        width: min(1480px, calc(100vw - 32px));
+        max-height: min(94vh, 1040px);
+}
+
 .management-modal-header {
         display: flex;
         align-items: flex-start;
@@ -4865,6 +4989,19 @@
         display: grid;
         gap: 12px;
         min-width: 0;
+}
+
+.zone-editor-modal .management-modal-grid {
+        grid-template-columns: minmax(520px, 1.35fr) minmax(360px, 0.85fr);
+        align-items: center;
+}
+
+.zone-editor-modal .pack-map {
+        height: clamp(440px, 62vh, 720px);
+}
+
+.zone-editor-modal .management-modal-grid > .data-section {
+        width: 100%;
 }
 
 .management-import-modal {
@@ -7466,6 +7603,14 @@
 
         .notification-preview-panel {
                 position: static;
+        }
+
+        .zone-editor-modal .management-modal-grid {
+                grid-template-columns: 1fr;
+        }
+
+        .zone-editor-modal .pack-map {
+                height: clamp(360px, 58vh, 560px);
         }
 
         .students-sidebar {
