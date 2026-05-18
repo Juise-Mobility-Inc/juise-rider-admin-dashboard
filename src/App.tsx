@@ -1209,11 +1209,10 @@ function App() {
 	const [qrActionTarget, setQrActionTarget] = useState("");
 
 	const [reservations, setReservations] = useState<PackSpotReservation[]>([]);
-	const [, setDashboardHeaderCounts] =
-		useState<HeaderDashboardCounts>({
-			studentCount: null,
-			pendingReservationCount: null,
-		});
+	const [, setDashboardHeaderCounts] = useState<HeaderDashboardCounts>({
+		studentCount: null,
+		pendingReservationCount: null,
+	});
 	const [reservationsBusy, setReservationsBusy] = useState(false);
 	const [selectedReservationId, setSelectedReservationId] = useState("");
 	const [reservationStudentProfile, setReservationStudentProfile] =
@@ -2920,7 +2919,9 @@ function App() {
 		} catch (error) {
 			const message = getErrorMessage(error);
 			if (message.toLowerCase().includes("school_name")) {
-				setSignupSchoolName((current) => current || signupForm.school_id.trim());
+				setSignupSchoolName(
+					(current) => current || signupForm.school_id.trim(),
+				);
 				setIsSignupSchoolModalOpen(true);
 				setAuthError("");
 			} else {
@@ -3921,188 +3922,188 @@ function App() {
 								<span>Juise Rider Admin</span>
 							</div>
 
-						<div className="auth-switcher">
-							<button
-								className={
-									authMode === "signup"
-										? "nav-button nav-button-active"
-										: "nav-button"
-								}
-								type="button"
-								onClick={() => {
-									setAuthMode("signup");
-									setAuthError("");
-									setIsSignupSchoolModalOpen(false);
-								}}>
-								Create Account
-							</button>
-							<button
-								className={
-									authMode === "login"
-										? "nav-button nav-button-active"
-										: "nav-button"
-								}
-								type="button"
-								onClick={() => {
-									setAuthMode("login");
-									setAuthError("");
-									setIsSignupSchoolModalOpen(false);
-								}}>
-								Sign In
-							</button>
-						</div>
+							<div className="auth-switcher">
+								<button
+									className={
+										authMode === "signup"
+											? "nav-button nav-button-active"
+											: "nav-button"
+									}
+									type="button"
+									onClick={() => {
+										setAuthMode("signup");
+										setAuthError("");
+										setIsSignupSchoolModalOpen(false);
+									}}>
+									Create Account
+								</button>
+								<button
+									className={
+										authMode === "login"
+											? "nav-button nav-button-active"
+											: "nav-button"
+									}
+									type="button"
+									onClick={() => {
+										setAuthMode("login");
+										setAuthError("");
+										setIsSignupSchoolModalOpen(false);
+									}}>
+									Sign In
+								</button>
+							</div>
 
-						{authMode === "signup" ? (
-							<form className="login-form" onSubmit={handleCreateSchoolAdmin}>
-								<div className="login-form-header">
-									<p className="eyebrow">School Admin Signup</p>
-									<h2>Create your dashboard account</h2>
-								</div>
-								<label className="field">
-									<span>School ID</span>
-									<input
-										value={signupForm.school_id}
-										onChange={(event) =>
-											setSignupForm((current) => ({
-												...current,
-												school_id: event.target.value,
-											}))
-										}
-										placeholder="ou"
-										required
-									/>
-								</label>
-								<div className="form-grid">
+							{authMode === "signup" ? (
+								<form className="login-form" onSubmit={handleCreateSchoolAdmin}>
+									<div className="login-form-header">
+										<p className="eyebrow">School Admin Signup</p>
+										<h2>Create your dashboard account</h2>
+									</div>
 									<label className="field">
-										<span>First name</span>
+										<span>School ID</span>
 										<input
-											value={signupForm.first}
+											value={signupForm.school_id}
 											onChange={(event) =>
 												setSignupForm((current) => ({
 													...current,
-													first: event.target.value,
+													school_id: event.target.value,
 												}))
 											}
-											placeholder="Avery"
+											placeholder="ou"
+											required
 										/>
 									</label>
+									<div className="form-grid">
+										<label className="field">
+											<span>First name</span>
+											<input
+												value={signupForm.first}
+												onChange={(event) =>
+													setSignupForm((current) => ({
+														...current,
+														first: event.target.value,
+													}))
+												}
+												placeholder="Avery"
+											/>
+										</label>
+										<label className="field">
+											<span>Last name</span>
+											<input
+												value={signupForm.last}
+												onChange={(event) =>
+													setSignupForm((current) => ({
+														...current,
+														last: event.target.value,
+													}))
+												}
+												placeholder="Morgan"
+											/>
+										</label>
+									</div>
 									<label className="field">
-										<span>Last name</span>
+										<span>Username</span>
 										<input
-											value={signupForm.last}
+											value={signupForm.username}
 											onChange={(event) =>
 												setSignupForm((current) => ({
 													...current,
-													last: event.target.value,
+													username: event.target.value,
 												}))
 											}
-											placeholder="Morgan"
+											placeholder="ou.parking"
+											required
 										/>
 									</label>
-								</div>
-								<label className="field">
-									<span>Username</span>
-									<input
-										value={signupForm.username}
-										onChange={(event) =>
-											setSignupForm((current) => ({
-												...current,
-												username: event.target.value,
-											}))
-										}
-										placeholder="ou.parking"
-										required
-									/>
-								</label>
-								<label className="field">
-									<span>Email</span>
-									<input
-										type="email"
-										value={signupForm.email}
-										onChange={(event) =>
-											setSignupForm((current) => ({
-												...current,
-												email: event.target.value,
-											}))
-										}
-										placeholder="parking@school.edu"
-										required
-									/>
-								</label>
-								<label className="field">
-									<span>Phone (optional)</span>
-									<input
-										value={signupForm.phone}
-										onChange={(event) =>
-											setSignupForm((current) => ({
-												...current,
-												phone: event.target.value,
-											}))
-										}
-										placeholder="+12485551212"
-									/>
-								</label>
-								<label className="field">
-									<span>Password</span>
-									<input
-										type="password"
-										value={signupForm.password}
-										onChange={(event) =>
-											setSignupForm((current) => ({
-												...current,
-												password: event.target.value,
-											}))
-										}
-										placeholder="••••••••"
-										required
-									/>
-								</label>
-								{authError ? <p className="error-text">{authError}</p> : null}
-								<button
-									className="primary-button"
-									type="submit"
-									disabled={authBusy}>
-									{authBusy ? "Creating account…" : "Create School Admin"}
-								</button>
-							</form>
-						) : (
-							<form className="login-form" onSubmit={handleLogin}>
-								<div className="login-form-header">
-									<p className="eyebrow">Admin Login</p>
-									<h2>Welcome back</h2>
-								</div>
-								<label className="field">
-									<span>Username, email, or phone</span>
-									<input
-										autoComplete="username"
-										value={identifier}
-										onChange={(event) => setIdentifier(event.target.value)}
-										placeholder="admin@example.com"
-										required
-									/>
-								</label>
-								<label className="field">
-									<span>Password</span>
-									<input
-										type="password"
-										autoComplete="current-password"
-										value={password}
-										onChange={(event) => setPassword(event.target.value)}
-										placeholder="••••••••"
-										required
-									/>
-								</label>
-								{authError ? <p className="error-text">{authError}</p> : null}
-								<button
-									className="primary-button"
-									type="submit"
-									disabled={authBusy}>
-									{authBusy ? "Signing in…" : "Enter Dashboard"}
-								</button>
-							</form>
-						)}
-					</div>
-				</section>
+									<label className="field">
+										<span>Email</span>
+										<input
+											type="email"
+											value={signupForm.email}
+											onChange={(event) =>
+												setSignupForm((current) => ({
+													...current,
+													email: event.target.value,
+												}))
+											}
+											placeholder="parking@school.edu"
+											required
+										/>
+									</label>
+									<label className="field">
+										<span>Phone (optional)</span>
+										<input
+											value={signupForm.phone}
+											onChange={(event) =>
+												setSignupForm((current) => ({
+													...current,
+													phone: event.target.value,
+												}))
+											}
+											placeholder="+12485551212"
+										/>
+									</label>
+									<label className="field">
+										<span>Password</span>
+										<input
+											type="password"
+											value={signupForm.password}
+											onChange={(event) =>
+												setSignupForm((current) => ({
+													...current,
+													password: event.target.value,
+												}))
+											}
+											placeholder="••••••••"
+											required
+										/>
+									</label>
+									{authError ? <p className="error-text">{authError}</p> : null}
+									<button
+										className="primary-button"
+										type="submit"
+										disabled={authBusy}>
+										{authBusy ? "Creating account…" : "Create School Admin"}
+									</button>
+								</form>
+							) : (
+								<form className="login-form" onSubmit={handleLogin}>
+									<div className="login-form-header">
+										<p className="eyebrow">Admin Login</p>
+										<h2>Welcome back</h2>
+									</div>
+									<label className="field">
+										<span>Username, email, or phone</span>
+										<input
+											autoComplete="username"
+											value={identifier}
+											onChange={(event) => setIdentifier(event.target.value)}
+											placeholder="admin@example.com"
+											required
+										/>
+									</label>
+									<label className="field">
+										<span>Password</span>
+										<input
+											type="password"
+											autoComplete="current-password"
+											value={password}
+											onChange={(event) => setPassword(event.target.value)}
+											placeholder="••••••••"
+											required
+										/>
+									</label>
+									{authError ? <p className="error-text">{authError}</p> : null}
+									<button
+										className="primary-button"
+										type="submit"
+										disabled={authBusy}>
+										{authBusy ? "Signing in…" : "Enter Dashboard"}
+									</button>
+								</form>
+							)}
+						</div>
+					</section>
 				</div>
 				{isSignupSchoolModalOpen ? (
 					<div
@@ -4479,6 +4480,7 @@ function App() {
 						</span>
 					</div>
 					<p>Signed in as {formatAdminIdentity(session)}</p>
+					{session.user && <p>@{session.user.username}</p>}
 				</div>
 
 				<div className="sidebar-block">
