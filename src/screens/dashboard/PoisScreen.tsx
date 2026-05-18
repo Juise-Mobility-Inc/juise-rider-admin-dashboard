@@ -484,7 +484,7 @@ export function PoisScreen(props: Props) {
           onClick={() => setIsPoiModalOpen(false)}
         >
           <div
-            className="management-modal-sheet"
+            className="management-modal-sheet poi-editor-modal"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="management-modal-header">
@@ -506,6 +506,17 @@ export function PoisScreen(props: Props) {
                 <PackLocationPicker
                   disabled={false}
                   onChange={handlePoiLocationSelect}
+                  onPlaceSelect={(point, label, detail) => {
+                    handlePoiLocationSelect(point);
+                    patchPoi(selectedPoiDraft.id, {
+                      title: selectedPoiDraft.title.trim()
+                        ? selectedPoiDraft.title
+                        : label,
+                      description: selectedPoiDraft.description.trim()
+                        ? selectedPoiDraft.description
+                        : (detail ?? selectedPoiDraft.description),
+                    });
+                  }}
                   value={selectedPoiLocation}
                   radiusMeters={
                     Number.isFinite(Number(selectedPoiDraft.radius_feet))
