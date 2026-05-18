@@ -5033,6 +5033,10 @@
         width: min(900px, 100%);
 }
 
+.signup-school-modal {
+        width: min(560px, 100%);
+}
+
 .management-import-body,
 .management-import-instructions {
         display: grid;

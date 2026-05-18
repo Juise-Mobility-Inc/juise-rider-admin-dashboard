@@ -966,6 +966,7 @@ export async function createSchoolAdminAccount(
   authAppId: string,
   input: {
     school_id: string;
+    school_name?: string;
     first?: string;
     last?: string;
     username: string;
@@ -981,6 +982,11 @@ export async function createSchoolAdminAccount(
     email: input.email,
     password: input.password,
   };
+
+  const trimmedSchoolName = input.school_name?.trim();
+  if (trimmedSchoolName) {
+    payload.school_name = trimmedSchoolName;
+  }
 
   const trimmedFirst = input.first?.trim();
   if (trimmedFirst) {

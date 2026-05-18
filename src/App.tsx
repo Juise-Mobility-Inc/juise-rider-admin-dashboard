@@ -1144,6 +1144,8 @@ function App() {
 	const [password, setPassword] = useState("");
 	const [authBusy, setAuthBusy] = useState(false);
 	const [authError, setAuthError] = useState("");
+	const [isSignupSchoolModalOpen, setIsSignupSchoolModalOpen] = useState(false);
+	const [signupSchoolName, setSignupSchoolName] = useState("");
 	const [signupForm, setSignupForm] = useState<SignupFormState>({
 		school_id: "",
 		first: "",
@@ -2909,9 +2911,46 @@ function App() {
 				...current,
 				password: "",
 			}));
+			setSignupSchoolName("");
+			setIsSignupSchoolModalOpen(false);
 			setBanner({
 				tone: "success",
 				message: `Created school admin account for ${signupForm.school_id} as ${formatAdminIdentity(nextSession)}.`,
+			});
+		} catch (error) {
+			const message = getErrorMessage(error);
+			if (message.toLowerCase().includes("school_name")) {
+				setSignupSchoolName((current) => current || signupForm.school_id.trim());
+				setIsSignupSchoolModalOpen(true);
+				setAuthError("");
+			} else {
+				setAuthError(message);
+			}
+		} finally {
+			setAuthBusy(false);
+		}
+	}
+
+	async function handleCreateSignupSchool(event: FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		setAuthBusy(true);
+		setAuthError("");
+
+		try {
+			const nextSession = await createSchoolAdminAccount(authAppId, {
+				...signupForm,
+				school_name: signupSchoolName,
+			});
+			setSession(nextSession);
+			setSignupForm((current) => ({
+				...current,
+				password: "",
+			}));
+			setSignupSchoolName("");
+			setIsSignupSchoolModalOpen(false);
+			setBanner({
+				tone: "success",
+				message: `Created ${signupSchoolName.trim()} and school admin account for ${signupForm.school_id} as ${formatAdminIdentity(nextSession)}.`,
 			});
 		} catch (error) {
 			setAuthError(getErrorMessage(error));
@@ -2928,6 +2967,8 @@ function App() {
 			...current,
 			password: "",
 		}));
+		setSignupSchoolName("");
+		setIsSignupSchoolModalOpen(false);
 		setBanner({
 			tone: "info",
 			message: "Signed out.",
@@ -3828,56 +3869,57 @@ function App() {
 
 	if (!session) {
 		return (
-			<div className="login-shell">
-				<section className="login-panel login-hero">
-					<div className="login-hero-top">
-						<div className="login-hero-logo">
-							<div className="login-hero-logo-mark">J</div>
-							<span>Juise Rider Admin</span>
-						</div>
-					</div>
-					<div className="login-hero-bottom">
-						<h1>
-							Manage schools, terms, and <em>parking approvals</em> from one
-							place.
-						</h1>
-						<p className="hero-copy">
-							Sign in with an admin account from <code>{authAppId}</code> to
-							manage school-owned Juise Pack reservations and student
-							registrations.
-						</p>
-						<div className="hero-grid">
-							<div className="hero-card">
-								<div className="hero-card-icon">🏫</div>
-								<span>School profile</span>
-								<strong>
-									Edit the Nebula school record and branding fields.
-								</strong>
-							</div>
-							<div className="hero-card">
-								<div className="hero-card-icon">📅</div>
-								<span>Academic calendar</span>
-								<strong>
-									Define reservable terms that drive pack term requests.
-								</strong>
-							</div>
-							<div className="hero-card">
-								<div className="hero-card-icon">✅</div>
-								<span>Pending queue</span>
-								<strong>
-									Approve or deny student requests with device history.
-								</strong>
+			<>
+				<div className="login-shell">
+					<section className="login-panel login-hero">
+						<div className="login-hero-top">
+							<div className="login-hero-logo">
+								<div className="login-hero-logo-mark">J</div>
+								<span>Juise Rider Admin</span>
 							</div>
 						</div>
-					</div>
-				</section>
+						<div className="login-hero-bottom">
+							<h1>
+								Manage schools, terms, and <em>parking approvals</em> from one
+								place.
+							</h1>
+							<p className="hero-copy">
+								Sign in with an admin account from <code>{authAppId}</code> to
+								manage school-owned Juise Pack reservations and student
+								registrations.
+							</p>
+							<div className="hero-grid">
+								<div className="hero-card">
+									<div className="hero-card-icon">🏫</div>
+									<span>School profile</span>
+									<strong>
+										Edit the Nebula school record and branding fields.
+									</strong>
+								</div>
+								<div className="hero-card">
+									<div className="hero-card-icon">📅</div>
+									<span>Academic calendar</span>
+									<strong>
+										Define reservable terms that drive pack term requests.
+									</strong>
+								</div>
+								<div className="hero-card">
+									<div className="hero-card-icon">✅</div>
+									<span>Pending queue</span>
+									<strong>
+										Approve or deny student requests with device history.
+									</strong>
+								</div>
+							</div>
+						</div>
+					</section>
 
-				<section className="login-panel login-form-panel">
-					<div className="login-form-panel-inner">
-						<div className="login-form-brand">
-							<div className="login-form-brand-mark">J</div>
-							<span>Juise Rider Admin</span>
-						</div>
+					<section className="login-panel login-form-panel">
+						<div className="login-form-panel-inner">
+							<div className="login-form-brand">
+								<div className="login-form-brand-mark">J</div>
+								<span>Juise Rider Admin</span>
+							</div>
 
 						<div className="auth-switcher">
 							<button
@@ -3890,6 +3932,7 @@ function App() {
 								onClick={() => {
 									setAuthMode("signup");
 									setAuthError("");
+									setIsSignupSchoolModalOpen(false);
 								}}>
 								Create Account
 							</button>
@@ -3903,6 +3946,7 @@ function App() {
 								onClick={() => {
 									setAuthMode("login");
 									setAuthError("");
+									setIsSignupSchoolModalOpen(false);
 								}}>
 								Sign In
 							</button>
@@ -4059,7 +4103,67 @@ function App() {
 						)}
 					</div>
 				</section>
-			</div>
+				</div>
+				{isSignupSchoolModalOpen ? (
+					<div
+						className="management-modal-backdrop"
+						role="dialog"
+						aria-modal="true"
+						aria-label="Create school"
+						onClick={() => setIsSignupSchoolModalOpen(false)}>
+						<form
+							className="management-modal-sheet signup-school-modal"
+							onClick={(event) => event.stopPropagation()}
+							onSubmit={handleCreateSignupSchool}>
+							<div className="management-modal-header">
+								<div>
+									<p className="eyebrow">New school</p>
+									<h3>Create school profile</h3>
+								</div>
+								<button
+									className="text-button management-modal-close"
+									type="button"
+									onClick={() => setIsSignupSchoolModalOpen(false)}>
+									Close
+								</button>
+							</div>
+							<div className="form-grid">
+								<label className="field">
+									<span>School ID</span>
+									<input value={signupForm.school_id.trim()} disabled />
+								</label>
+								<label className="field">
+									<span>School name</span>
+									<input
+										value={signupSchoolName}
+										onChange={(event) =>
+											setSignupSchoolName(event.target.value)
+										}
+										placeholder="Oakland University"
+										required
+									/>
+								</label>
+							</div>
+							{authError ? <p className="error-text">{authError}</p> : null}
+							<div className="form-actions">
+								<button
+									className="secondary-button"
+									type="button"
+									onClick={() => setIsSignupSchoolModalOpen(false)}
+									disabled={authBusy}>
+									Cancel
+								</button>
+								<button
+									className="primary-button"
+									type="submit"
+									disabled={authBusy || !signupSchoolName.trim()}>
+									{authBusy ? "Creating..." : "Create School and Account"}
+								</button>
+							</div>
+						</form>
+					</div>
+				) : null}
+			</>
 		);
 	}
 
