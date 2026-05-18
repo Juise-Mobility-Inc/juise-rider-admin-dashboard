@@ -1437,12 +1437,16 @@ export async function uploadSchoolLogoImage(
   // The shared KCA proxy currently emits durable public URLs for
   // campaign-group entity uploads, so school logos use a dedicated
   // school_logo.* namespace within that public helper path.
-  const uploaded = await uploadUserEntityMedia(managedAppId, {
-    entityType: "campaign_group",
-    entityUUID: buildSchoolLogoEntityUUID(managedAppId, schoolId),
-    slot: "logo",
-    file,
-  });
+  const uploaded = await uploadUserEntityMediaViaProxy(
+    managedAppId,
+    {
+      entityType: "campaign_group",
+      entityUUID: buildSchoolLogoEntityUUID(managedAppId, schoolId),
+      slot: "logo",
+      file,
+    },
+    currentSession?.authAppId ?? managedAppId,
+  );
 
   const publicUrl =
     uploaded.public_url?.trim() || uploaded.media.public_url?.trim() || "";
