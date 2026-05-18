@@ -970,6 +970,27 @@
         resize: vertical;
 }
 
+.field small {
+        color: var(--muted);
+        line-height: 1.4;
+}
+
+.poi-radius-control {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 120px auto;
+        align-items: center;
+        gap: 12px;
+}
+
+.poi-radius-control input[type="range"] {
+        padding: 0;
+}
+
+.poi-radius-control span {
+        color: var(--text-strong);
+        font-weight: 800;
+}
+
 .checkbox-field {
         align-content: end;
 }

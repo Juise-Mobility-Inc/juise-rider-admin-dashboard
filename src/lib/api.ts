@@ -63,6 +63,7 @@ export interface SchoolPOI {
   description: string;
   lat: number;
   lng: number;
+  radius_meters: number;
   bonus_points: number;
   active: boolean;
   created_at: number;
@@ -259,6 +260,7 @@ export interface SchoolPOIWriteInput {
   description: string;
   lat: number;
   lng: number;
+  radius_meters: number;
   bonus_points: number;
 }
 
@@ -474,6 +476,7 @@ export interface StudentRouteHistoryVisitedPOI {
   description: string;
   lat: number;
   lng: number;
+  radius_meters?: number | null;
   bonus_points: number;
   visited_at: number;
   confidence_percent?: number | null;

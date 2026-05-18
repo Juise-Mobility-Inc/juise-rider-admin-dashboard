@@ -21,6 +21,7 @@ type POIDraft = {
   description: string;
   lat: string;
   lng: string;
+  radius_feet: string;
   bonus_points: string;
 };
 
@@ -48,12 +49,32 @@ const poiCsvColumns = [
   "description",
   "latitude",
   "longitude",
+  "radius_feet",
   "bonus_points",
 ] as const;
+
+const POI_RADIUS_MIN_FEET = 25;
+const POI_RADIUS_MAX_FEET = 16400;
 
 function resolvePoiNumber(value: string): number | null {
   const parsed = Number(value.trim());
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatPoiRadiusFeet(value: string) {
+  const parsed = resolvePoiNumber(value);
+  return parsed === null ? "250 ft" : `${Math.round(parsed).toLocaleString()} ft`;
+}
+
+function resolveImportedRadiusFeet(row: Record<string, string>) {
+  if (row.radius_feet || row.radius_ft || row.radius) {
+    return row.radius_feet ?? row.radius_ft ?? row.radius ?? "250";
+  }
+
+  const radiusMeters = Number(row.radius_meters ?? "");
+  return Number.isFinite(radiusMeters)
+    ? String(Math.round(radiusMeters * 3.28084))
+    : "250";
 }
 
 export function PoisScreen(props: Props) {
@@ -118,6 +139,7 @@ export function PoisScreen(props: Props) {
           poi.description,
           poi.lat,
           poi.lng,
+          poi.radius_feet,
           poi.bonus_points,
         ] satisfies CsvCell[],
     );
@@ -149,6 +171,7 @@ export function PoisScreen(props: Props) {
         description: row.description ?? "",
         lat: row.latitude ?? row.lat ?? "",
         lng: row.longitude ?? row.lng ?? "",
+        radius_feet: resolveImportedRadiusFeet(row),
         bonus_points: row.bonus_points ?? row.points ?? "0",
       }))
       .filter(
@@ -295,6 +318,7 @@ export function PoisScreen(props: Props) {
                     <tr>
                       <th>Name</th>
                       <th>Bonus</th>
+                      <th>Entry radius</th>
                       <th>Latitude</th>
                       <th>Longitude</th>
                       <th>Status</th>
@@ -314,6 +338,7 @@ export function PoisScreen(props: Props) {
                             <span>{poi.description.trim() || "No description"}</span>
                           </td>
                           <td>{poi.bonus_points || "0"}</td>
+                          <td>{formatPoiRadiusFeet(poi.radius_feet)}</td>
                           <td>{lat === null ? "-" : lat.toFixed(6)}</td>
                           <td>{lng === null ? "-" : lng.toFixed(6)}</td>
                           <td>
@@ -376,10 +401,11 @@ export function PoisScreen(props: Props) {
             <div className="management-import-body">
               <div className="management-import-instructions">
                 <h4>Required CSV headers</h4>
-                <code>title,description,latitude,longitude,bonus_points</code>
+                <code>title,description,latitude,longitude,radius_feet,bonus_points</code>
                 <p className="muted-text">
-                  Latitude and longitude must be decimal coordinates. Bonus
-                  points should be a whole number greater than or equal to 0.
+                  Latitude and longitude must be decimal coordinates. Radius is
+                  the entry distance in feet, and bonus points should be a whole
+                  number greater than or equal to 0.
                 </p>
               </div>
 
@@ -403,6 +429,7 @@ export function PoisScreen(props: Props) {
                       <tr>
                         <th>Title</th>
                         <th>Bonus</th>
+                        <th>Entry radius</th>
                         <th>Latitude</th>
                         <th>Longitude</th>
                       </tr>
@@ -415,6 +442,7 @@ export function PoisScreen(props: Props) {
                             <span>{poi.description || "No description"}</span>
                           </td>
                           <td>{poi.bonus_points || "0"}</td>
+                          <td>{poi.radius_feet || "250"}</td>
                           <td>{poi.lat || "-"}</td>
                           <td>{poi.lng || "-"}</td>
                         </tr>
@@ -479,6 +507,11 @@ export function PoisScreen(props: Props) {
                   disabled={false}
                   onChange={handlePoiLocationSelect}
                   value={selectedPoiLocation}
+                  radiusMeters={
+                    Number.isFinite(Number(selectedPoiDraft.radius_feet))
+                      ? Number(selectedPoiDraft.radius_feet) / 3.28084
+                      : undefined
+                  }
                   otherMarkers={otherMarkers}
                 />
               </div>
@@ -511,6 +544,41 @@ export function PoisScreen(props: Props) {
                       }
                       placeholder="25"
                     />
+                  </label>
+                  <label className="field field-span-2">
+                    <span>Entry radius</span>
+                    <div className="poi-radius-control">
+                      <input
+                        type="range"
+                        min={POI_RADIUS_MIN_FEET}
+                        max={POI_RADIUS_MAX_FEET}
+                        step={25}
+                        value={selectedPoiDraft.radius_feet || "250"}
+                        onChange={(event) =>
+                          patchPoi(selectedPoiDraft.id, {
+                            radius_feet: event.target.value,
+                          })
+                        }
+                      />
+                      <input
+                        type="number"
+                        min={POI_RADIUS_MIN_FEET}
+                        max={POI_RADIUS_MAX_FEET}
+                        step={25}
+                        value={selectedPoiDraft.radius_feet}
+                        onChange={(event) =>
+                          patchPoi(selectedPoiDraft.id, {
+                            radius_feet: event.target.value,
+                          })
+                        }
+                        placeholder="250"
+                      />
+                      <span>ft</span>
+                    </div>
+                    <small>
+                      Riders earn this POI when their route comes within this
+                      distance of the marker.
+                    </small>
                   </label>
                   <label className="field">
                     <span>Latitude</span>

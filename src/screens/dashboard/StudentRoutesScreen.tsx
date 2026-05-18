@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { LatLng, LatLngBounds } from "leaflet";
 import {
+  Circle,
   CircleMarker,
   MapContainer,
   Polygon,
@@ -622,43 +623,66 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
 
             {showPOIs &&
               selSess?.visited_pois.map((poi, i) => (
-                <CircleMarker
-                  key={`poi-${i}`}
-                  center={[poi.lat, poi.lng]}
-                  radius={10}
-                  pathOptions={{
-                    color: "#c87a00",
-                    fillColor: "#f6ae2d",
-                    fillOpacity: 0.95,
-                    weight: 2,
-                  }}
-                >
-                  <Popup>
-                    <strong>{poi.title || "Point of Interest"}</strong>
-                    <br />+{poi.bonus_points} pts
-                    {poi.description && (
-                      <>
-                        <br />
-                        {poi.description}
-                      </>
-                    )}
-                    {typeof poi.confidence_percent === "number" &&
-                      Number.isFinite(poi.confidence_percent) && (
+                <Fragment key={`poi-${i}`}>
+                  {typeof poi.radius_meters === "number" &&
+                  Number.isFinite(poi.radius_meters) &&
+                  poi.radius_meters > 0 ? (
+                    <Circle
+                      center={[poi.lat, poi.lng]}
+                      radius={poi.radius_meters}
+                      pathOptions={{
+                        color: "#f6ae2d",
+                        fillColor: "#f6ae2d",
+                        fillOpacity: 0.12,
+                        weight: 1,
+                      }}
+                    />
+                  ) : null}
+                  <CircleMarker
+                    center={[poi.lat, poi.lng]}
+                    radius={10}
+                    pathOptions={{
+                      color: "#c87a00",
+                      fillColor: "#f6ae2d",
+                      fillOpacity: 0.95,
+                      weight: 2,
+                    }}
+                  >
+                    <Popup>
+                      <strong>{poi.title || "Point of Interest"}</strong>
+                      <br />+{poi.bonus_points} pts
+                      {poi.description && (
                         <>
                           <br />
-                          Confidence: {fmtConfidence(poi.confidence_percent)}
+                          {poi.description}
                         </>
                       )}
-                    {poi.visited_at > 0 && (
-                      <>
-                        <br />
-                        <span style={{ color: "#888", fontSize: "0.82em" }}>
-                          {fmtShort(poi.visited_at)}
-                        </span>
-                      </>
-                    )}
-                  </Popup>
-                </CircleMarker>
+                      {typeof poi.radius_meters === "number" &&
+                        Number.isFinite(poi.radius_meters) && (
+                          <>
+                            <br />
+                            Entry radius:{" "}
+                            {Math.round(poi.radius_meters * 3.28084).toLocaleString()} ft
+                          </>
+                        )}
+                      {typeof poi.confidence_percent === "number" &&
+                        Number.isFinite(poi.confidence_percent) && (
+                          <>
+                            <br />
+                            Confidence: {fmtConfidence(poi.confidence_percent)}
+                          </>
+                        )}
+                      {poi.visited_at > 0 && (
+                        <>
+                          <br />
+                          <span style={{ color: "#888", fontSize: "0.82em" }}>
+                            {fmtShort(poi.visited_at)}
+                          </span>
+                        </>
+                      )}
+                    </Popup>
+                  </CircleMarker>
+                </Fragment>
               ))}
 
             {showPenalties &&

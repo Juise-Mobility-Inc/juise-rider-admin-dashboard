@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { Fragment, useEffect } from 'react'
 import { LatLngBounds, type LatLngLiteral } from 'leaflet'
 import {
+  Circle,
   CircleMarker,
   MapContainer,
   Popup,
@@ -19,6 +20,7 @@ export interface PackMapMarker extends PackMapPoint {
   label: string
   description?: string
   spotCount?: number
+  radiusMeters?: number
 }
 
 interface PackLocationPickerProps {
@@ -26,6 +28,7 @@ interface PackLocationPickerProps {
   onChange: (nextValue: PackMapPoint) => void
   disabled?: boolean
   otherMarkers?: PackMapMarker[]
+  radiusMeters?: number
 }
 
 interface PackLocationsMapProps {
@@ -72,16 +75,30 @@ function ClickToSelectPin(props: PackLocationPickerProps) {
   }, [map, props.value])
 
   return props.value ? (
-    <CircleMarker
-      center={props.value}
-      radius={10}
-      pathOptions={{
-        color: '#112d4e',
-        fillColor: '#f6ae2d',
-        fillOpacity: 0.95,
-        weight: 3,
-      }}
-    />
+    <>
+      {typeof props.radiusMeters === 'number' && Number.isFinite(props.radiusMeters) ? (
+        <Circle
+          center={props.value}
+          radius={props.radiusMeters}
+          pathOptions={{
+            color: '#f6ae2d',
+            fillColor: '#f6ae2d',
+            fillOpacity: 0.12,
+            weight: 2,
+          }}
+        />
+      ) : null}
+      <CircleMarker
+        center={props.value}
+        radius={10}
+        pathOptions={{
+          color: '#112d4e',
+          fillColor: '#f6ae2d',
+          fillOpacity: 0.95,
+          weight: 3,
+        }}
+      />
+    </>
   ) : null
 }
 
@@ -127,23 +144,36 @@ export function PackLocationPicker(props: PackLocationPickerProps) {
         <TileLayer attribution={TILE_LAYER_ATTRIBUTION} url={TILE_LAYER_URL} />
         <ClickToSelectPin {...props} />
         {(props.otherMarkers ?? []).map((marker) => (
-          <CircleMarker
-            key={marker.id}
-            center={marker}
-            radius={7}
-            pathOptions={{
-              color: '#112d4e',
-              fillColor: '#9ca3af',
-              fillOpacity: 0.55,
-              weight: 2,
-            }}
-          >
-            <Popup>
-              <strong>{marker.label}</strong>
-              {marker.description ? <div>{marker.description}</div> : null}
-              <div>{marker.lat.toFixed(6)}, {marker.lng.toFixed(6)}</div>
-            </Popup>
-          </CircleMarker>
+          <Fragment key={marker.id}>
+            {typeof marker.radiusMeters === 'number' && Number.isFinite(marker.radiusMeters) ? (
+              <Circle
+                center={marker}
+                radius={marker.radiusMeters}
+                pathOptions={{
+                  color: '#9ca3af',
+                  fillColor: '#9ca3af',
+                  fillOpacity: 0.08,
+                  weight: 1,
+                }}
+              />
+            ) : null}
+            <CircleMarker
+              center={marker}
+              radius={7}
+              pathOptions={{
+                color: '#112d4e',
+                fillColor: '#9ca3af',
+                fillOpacity: 0.55,
+                weight: 2,
+              }}
+            >
+              <Popup>
+                <strong>{marker.label}</strong>
+                {marker.description ? <div>{marker.description}</div> : null}
+                <div>{marker.lat.toFixed(6)}, {marker.lng.toFixed(6)}</div>
+              </Popup>
+            </CircleMarker>
+          </Fragment>
         ))}
       </MapContainer>
       <div className="pack-map-caption">
@@ -169,28 +199,41 @@ export function PackLocationsMap(props: PackLocationsMapProps) {
         <TileLayer attribution={TILE_LAYER_ATTRIBUTION} url={TILE_LAYER_URL} />
         <FitPackLocations markers={props.markers} />
         {props.markers.map((marker) => (
-          <CircleMarker
-            key={marker.id}
-            center={marker}
-            radius={9}
-            pathOptions={{
-              color: '#112d4e',
-              fillColor: '#27cc5e',
-              fillOpacity: 0.9,
-              weight: 3,
-            }}
-          >
-            <Popup>
-              <strong>{marker.label}</strong>
-              {marker.description ? <div>{marker.description}</div> : null}
-              {typeof marker.spotCount === 'number' ? (
-                <div>{marker.spotCount} spots</div>
-              ) : null}
-              <div>
-                {marker.lat.toFixed(6)}, {marker.lng.toFixed(6)}
-              </div>
-            </Popup>
-          </CircleMarker>
+          <Fragment key={marker.id}>
+            {typeof marker.radiusMeters === 'number' && Number.isFinite(marker.radiusMeters) ? (
+              <Circle
+                center={marker}
+                radius={marker.radiusMeters}
+                pathOptions={{
+                  color: '#27cc5e',
+                  fillColor: '#27cc5e',
+                  fillOpacity: 0.1,
+                  weight: 2,
+                }}
+              />
+            ) : null}
+            <CircleMarker
+              center={marker}
+              radius={9}
+              pathOptions={{
+                color: '#112d4e',
+                fillColor: '#27cc5e',
+                fillOpacity: 0.9,
+                weight: 3,
+              }}
+            >
+              <Popup>
+                <strong>{marker.label}</strong>
+                {marker.description ? <div>{marker.description}</div> : null}
+                {typeof marker.spotCount === 'number' ? (
+                  <div>{marker.spotCount} spots</div>
+                ) : null}
+                <div>
+                  {marker.lat.toFixed(6)}, {marker.lng.toFixed(6)}
+                </div>
+              </Popup>
+            </CircleMarker>
+          </Fragment>
         ))}
       </MapContainer>
       <div className="pack-map-caption">

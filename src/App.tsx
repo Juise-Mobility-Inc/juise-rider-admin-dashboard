@@ -203,6 +203,7 @@ interface POIDraft {
 	description: string;
 	lat: string;
 	lng: string;
+	radius_feet: string;
 	bonus_points: string;
 }
 
@@ -381,6 +382,7 @@ function poiToDraft(poi: SchoolPOI): POIDraft {
 		description: poi.description,
 		lat: formatCoordinateValue(poi.lat),
 		lng: formatCoordinateValue(poi.lng),
+		radius_feet: String(Math.round((poi.radius_meters ?? 75) * 3.28084)),
 		bonus_points: String(poi.bonus_points),
 	};
 }
@@ -393,6 +395,7 @@ function createEmptyPOIDraft(): POIDraft {
 		description: "",
 		lat: "",
 		lng: "",
+		radius_feet: "250",
 		bonus_points: "0",
 	};
 }
@@ -569,6 +572,21 @@ function parseCoordinateInput(value: string, label: string): number {
 		throw new Error(`${label} must be a valid number.`);
 	}
 	return parsed;
+}
+
+function parsePOIRadiusFeet(value: string, label: string): number {
+	const parsed = Number(value.trim());
+	if (!Number.isFinite(parsed)) {
+		throw new Error(`${label} must be a valid number.`);
+	}
+	if (parsed < 25 || parsed > 16400) {
+		throw new Error(`${label} must be between 25 ft and 16,400 ft.`);
+	}
+	return parsed;
+}
+
+function feetToMeters(feet: number) {
+	return feet / 3.28084;
 }
 
 function parseDateTimeLocalInput(value: string, label: string): number {
@@ -1189,7 +1207,7 @@ function App() {
 	const [qrActionTarget, setQrActionTarget] = useState("");
 
 	const [reservations, setReservations] = useState<PackSpotReservation[]>([]);
-	const [_dashboardHeaderCounts, setDashboardHeaderCounts] =
+	const [, setDashboardHeaderCounts] =
 		useState<HeaderDashboardCounts>({
 			studentCount: null,
 			pendingReservationCount: null,
@@ -1322,9 +1340,13 @@ function App() {
 				}
 
 				const bonusPoints = Number.parseInt(poi.bonus_points.trim(), 10);
+				const radiusFeet = Number(poi.radius_feet.trim());
 				const descriptionParts = [
 					poi.description.trim(),
 					Number.isFinite(bonusPoints) ? `${bonusPoints} bonus points` : "",
+					Number.isFinite(radiusFeet)
+						? `${Math.round(radiusFeet).toLocaleString()} ft entry radius`
+						: "",
 				].filter(Boolean);
 
 				return [
@@ -1334,6 +1356,9 @@ function App() {
 						description: descriptionParts.join(" · ") || undefined,
 						lat,
 						lng,
+						radiusMeters: Number.isFinite(radiusFeet)
+							? feetToMeters(radiusFeet)
+							: undefined,
 					},
 				];
 			}),
@@ -3290,6 +3315,10 @@ function App() {
 							`POI ${index + 1} bonus points must be a whole number greater than or equal to 0.`,
 						);
 					}
+					const radiusFeet = parsePOIRadiusFeet(
+						poi.radius_feet,
+						`POI ${index + 1} entry radius`,
+					);
 
 					return {
 						poi_uuid: poi.poi_uuid.trim() || undefined,
@@ -3297,6 +3326,7 @@ function App() {
 						description: poi.description.trim(),
 						lat,
 						lng,
+						radius_meters: feetToMeters(radiusFeet),
 						bonus_points: bonusPoints,
 					};
 				}),
