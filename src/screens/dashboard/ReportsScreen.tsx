@@ -442,6 +442,13 @@ function estimatePenaltySpeedMph(
   session: StudentRouteHistorySession,
   event: StudentRouteHistoryPenaltyEvent,
 ): number | null {
+  if (
+    typeof event.max_speed_mps === "number" &&
+    Number.isFinite(event.max_speed_mps)
+  ) {
+    return event.max_speed_mps * 2.2369362920544;
+  }
+
   const candidates = (session.points ?? []).filter(
     (point) =>
       typeof point.speed_mps === "number" &&

@@ -492,6 +492,7 @@ export interface StudentRouteHistoryPenaltyEvent {
   lat: number;
   lng: number;
   speed_limit_mph?: number | null;
+  max_speed_mps?: number | null;
   duration_ms: number;
   points_lost: number;
   occurred_at: number;
@@ -1968,13 +1969,59 @@ export async function fetchStudentRouteHistory(
     school_id: schoolId,
   });
 
-  return request<StudentRouteHistorySession[]>(
+  const sessions = await request<StudentRouteHistorySession[]>(
     "nebula",
     `/api/v1/apps/${encodeURIComponent(managedAppId)}/user/${encodeURIComponent(targetUserUUID)}/route-history?${search.toString()}`,
     {
       appIdHeader: managedAppId,
     },
   );
+
+  return normalizeStudentRouteHistorySessions(sessions);
+}
+
+function normalizeRouteUnixSeconds(value?: number | null): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+  return value > 9_999_999_999 ? Math.floor(value / 1000) : value;
+}
+
+function getRoutePointUnixSeconds(
+  point?: StudentRouteHistoryPoint | null,
+): number {
+  return normalizeRouteUnixSeconds(point?.timestamp);
+}
+
+function normalizeStudentRouteHistorySessions(
+  sessions: StudentRouteHistorySession[],
+): StudentRouteHistorySession[] {
+  return [...sessions]
+    .map((session) => {
+      const sortedPoints = [...(session.points ?? [])].sort(
+        (left, right) => left.timestamp - right.timestamp,
+      );
+      const firstPointStartedAt = getRoutePointUnixSeconds(sortedPoints[0]);
+      const lastPointEndedAt = getRoutePointUnixSeconds(
+        sortedPoints[sortedPoints.length - 1],
+      );
+      const startedAt =
+        firstPointStartedAt || normalizeRouteUnixSeconds(session.started_at);
+      const endedAt =
+        lastPointEndedAt || normalizeRouteUnixSeconds(session.ended_at);
+
+      return {
+        ...session,
+        started_at: startedAt,
+        ended_at: endedAt || session.ended_at,
+        duration_seconds:
+          startedAt && endedAt && endedAt >= startedAt
+            ? endedAt - startedAt
+            : session.duration_seconds,
+        points: sortedPoints,
+      };
+    })
+    .sort((left, right) => right.started_at - left.started_at);
 }
 
 export interface StudentParkingViolation {

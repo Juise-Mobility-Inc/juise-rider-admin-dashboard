@@ -9,6 +9,7 @@ import {
   Polyline,
   Popup,
   TileLayer,
+  Tooltip,
   useMap,
 } from "react-leaflet";
 import {
@@ -79,9 +80,17 @@ function fmtDur(s: number): string {
   return `${s}s`;
 }
 
+function normalizeUnixSeconds(value: number | null | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+  return value > 9_999_999_999 ? Math.floor(value / 1000) : value;
+}
+
 function fmtShort(ts: number): string {
-  if (!ts) return "—";
-  return new Date(ts * 1000).toLocaleString([], {
+  const seconds = normalizeUnixSeconds(ts);
+  if (!seconds) return "—";
+  return new Date(seconds * 1000).toLocaleString([], {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -90,8 +99,9 @@ function fmtShort(ts: number): string {
 }
 
 function fmtFull(ts: number): string {
-  if (!ts) return "—";
-  return new Date(ts * 1000).toLocaleString([], {
+  const seconds = normalizeUnixSeconds(ts);
+  if (!seconds) return "—";
+  return new Date(seconds * 1000).toLocaleString([], {
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -104,6 +114,106 @@ function fmtFull(ts: number): string {
 function fmtConfidence(value: number | null | undefined): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
   return `${Math.max(0, Math.min(100, Math.round(value)))}%`;
+}
+
+function fmtSpeed(mps: number | null | undefined): string {
+  if (typeof mps !== "number" || !Number.isFinite(mps)) return "—";
+  return `${(mps * 2.237).toFixed(1)} mph`;
+}
+
+function fmtElevation(meters: number | null | undefined): string {
+  if (typeof meters !== "number" || !Number.isFinite(meters)) return "—";
+  return `${Math.round(meters * 3.28084).toLocaleString()} ft`;
+}
+
+function fmtAccuracy(meters: number | null | undefined): string {
+  if (typeof meters !== "number" || !Number.isFinite(meters)) return "—";
+  return `±${Math.round(meters * 3.28084).toLocaleString()} ft`;
+}
+
+function getPenaltyMaxSpeedMps(
+  session: StudentRouteHistorySession,
+  event: StudentRouteHistorySession["penalty_events"][number],
+): number | null {
+  if (typeof event.max_speed_mps === "number" && Number.isFinite(event.max_speed_mps)) {
+    return event.max_speed_mps;
+  }
+  if (event.zone_type !== "speed_limit") {
+    return null;
+  }
+
+  const occurredAt = normalizeUnixSeconds(event.occurred_at);
+  if (!occurredAt) {
+    return null;
+  }
+
+  const durationSeconds =
+    typeof event.duration_ms === "number" && Number.isFinite(event.duration_ms)
+      ? Math.max(0, event.duration_ms / 1000)
+      : 0;
+  const startAt = occurredAt - 5;
+  const endAt = occurredAt + Math.max(durationSeconds, 120) + 5;
+
+  const speeds = session.points
+    .filter((point) => {
+      const pointAt = normalizeUnixSeconds(point.timestamp);
+      return pointAt >= startAt && pointAt <= endAt;
+    })
+    .flatMap((point) =>
+      typeof point.speed_mps === "number" && Number.isFinite(point.speed_mps)
+        ? [point.speed_mps]
+        : [],
+    );
+
+  if (speeds.length === 0) {
+    return null;
+  }
+  return Math.max(...speeds);
+}
+
+function getPenaltyMaxSpeedPoint(
+  session: StudentRouteHistorySession,
+  event: StudentRouteHistorySession["penalty_events"][number],
+): StudentRouteHistorySession["points"][number] | null {
+  if (event.zone_type !== "speed_limit") {
+    return null;
+  }
+
+  const occurredAt = normalizeUnixSeconds(event.occurred_at);
+  if (!occurredAt) {
+    return null;
+  }
+
+  const durationSeconds =
+    typeof event.duration_ms === "number" && Number.isFinite(event.duration_ms)
+      ? Math.max(0, event.duration_ms / 1000)
+      : 0;
+  const startAt = occurredAt - 5;
+  const endAt = occurredAt + Math.max(durationSeconds, 120) + 5;
+  const expectedMaxSpeed = getPenaltyMaxSpeedMps(session, event);
+
+  return (
+    session.points
+      .filter((point) => {
+        const pointAt = normalizeUnixSeconds(point.timestamp);
+        return (
+          pointAt >= startAt &&
+          pointAt <= endAt &&
+          typeof point.speed_mps === "number" &&
+          Number.isFinite(point.speed_mps)
+        );
+      })
+      .sort((left, right) => {
+        if (expectedMaxSpeed != null) {
+          const leftDelta = Math.abs((left.speed_mps ?? 0) - expectedMaxSpeed);
+          const rightDelta = Math.abs((right.speed_mps ?? 0) - expectedMaxSpeed);
+          if (leftDelta !== rightDelta) {
+            return leftDelta - rightDelta;
+          }
+        }
+        return (right.speed_mps ?? 0) - (left.speed_mps ?? 0);
+      })[0] ?? null
+  );
 }
 
 function fmtMs(ms: number | null | undefined): string {
@@ -152,6 +262,81 @@ interface Props {
   managedAppId: string;
 }
 type Seg = { color: string; positions: [number, number][] };
+type RouteHover = {
+  index: number;
+  point: StudentRouteHistorySession["points"][number];
+  distanceMeters: number;
+};
+
+function buildRouteDistances(
+  points: StudentRouteHistorySession["points"],
+): number[] {
+  if (!points.length) return [];
+  const distances = [0];
+  for (let i = 1; i < points.length; i++) {
+    const previous = points[i - 1];
+    const current = points[i];
+    distances.push(
+      distances[i - 1] +
+        new LatLng(previous.latitude, previous.longitude).distanceTo(
+          new LatLng(current.latitude, current.longitude),
+        ),
+    );
+  }
+  return distances;
+}
+
+function findNearestRouteHover(
+  session: StudentRouteHistorySession,
+  distances: number[],
+  latlng: LatLng,
+): RouteHover | null {
+  if (!session.points.length) return null;
+  let bestIndex = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  session.points.forEach((point, index) => {
+    const distance = latlng.distanceTo(
+      new LatLng(point.latitude, point.longitude),
+    );
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+  return {
+    index: bestIndex,
+    point: session.points[bestIndex],
+    distanceMeters: distances[bestIndex] ?? 0,
+  };
+}
+
+function getSessionStartedAt(session: StudentRouteHistorySession): number {
+  const firstPointTimestamp = session.points.find((point) =>
+    normalizeUnixSeconds(point.timestamp),
+  )?.timestamp;
+  return (
+    normalizeUnixSeconds(firstPointTimestamp) ||
+    normalizeUnixSeconds(session.started_at)
+  );
+}
+
+function getSessionEndedAt(session: StudentRouteHistorySession): number {
+  const lastPointTimestamp = [...session.points]
+    .reverse()
+    .find((point) => normalizeUnixSeconds(point.timestamp))?.timestamp;
+  return (
+    normalizeUnixSeconds(lastPointTimestamp) ||
+    normalizeUnixSeconds(session.ended_at)
+  );
+}
+
+function sortRouteSessions(
+  sessions: StudentRouteHistorySession[],
+): StudentRouteHistorySession[] {
+  return [...sessions].sort(
+    (left, right) => getSessionStartedAt(right) - getSessionStartedAt(left),
+  );
+}
 
 export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
   const [searchParams] = useSearchParams();
@@ -183,6 +368,10 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
   const [showPenalties, setShowPenalties] = useState(true);
   const [showZones, setShowZones] = useState(true);
   const [statsOpen, setStatsOpen] = useState(true);
+  const [routeHover, setRouteHover] = useState<RouteHover | null>(null);
+  const [selectedMaxSpeedPoint, setSelectedMaxSpeedPoint] = useState<
+    StudentRouteHistorySession["points"][number] | null
+  >(null);
 
   const [, setPOIs] = useState<SchoolPOI[]>([]);
 
@@ -290,15 +479,16 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
           activeSchoolId,
           u,
         );
-        setHistory(sessions);
+        const sortedSessions = sortRouteSessions(sessions);
+        setHistory(sortedSessions);
         const target = targetSessionId
-          ? sessions.find((s) => s.session_id === targetSessionId)
+          ? sortedSessions.find((s) => s.session_id === targetSessionId)
           : null;
         if (target) {
           setSelId(target.session_id);
           if (pinLat != null && pinLng != null) setFocusPin([pinLat, pinLng]);
-        } else if (sessions.length > 0) {
-          setSelId(sessions[0].session_id);
+        } else if (sortedSessions.length > 0) {
+          setSelId(sortedSessions[0].session_id);
         }
       } catch (e) {
         setHistErr(e instanceof Error ? e.message : "Failed to load routes");
@@ -387,10 +577,20 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
     ]);
   }, [selSess]);
 
+  const routeDistances = useMemo(
+    () => buildRouteDistances(selSess?.points ?? []),
+    [selSess],
+  );
+
   const dispZones = useMemo((): SchoolZone[] => {
     if (!selSess) return [];
     return selSess.school_zones?.length ? selSess.school_zones : zones;
   }, [selSess, zones]);
+
+  useEffect(() => {
+    setRouteHover(null);
+    setSelectedMaxSpeedPoint(null);
+  }, [selId, showRoute]);
 
   const hasGPS = !!(selSess && selSess.points.length > 0);
   const noStudent = !selUUID;
@@ -432,11 +632,20 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
     lat: number,
     lng: number,
     layer: "poi" | "penalty",
+    event?: StudentRouteHistorySession["penalty_events"][number],
   ) => {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
     setFocusPin([lat, lng]);
-    if (layer === "poi") setShowPOIs(true);
-    if (layer === "penalty") setShowPenalties(true);
+    if (layer === "poi") {
+      setShowPOIs(true);
+      setSelectedMaxSpeedPoint(null);
+    }
+    if (layer === "penalty") {
+      setShowPenalties(true);
+      setSelectedMaxSpeedPoint(
+        selSess && event ? getPenaltyMaxSpeedPoint(selSess, event) : null,
+      );
+    }
   };
 
   return (
@@ -480,12 +689,12 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                 const id = uuid(entry);
                 const active = id === selUUID;
                 return (
-                  <button
-                    key={id}
-                    className={`sr-student-row${active ? " sr-student-row--active" : ""}`}
-                    onClick={() => selectStudent(entry)}
-                  >
-                    <div className="sr-avatar">
+	                  <button
+	                    key={id}
+	                    className={`sr-student-row${active ? " sr-student-row--active" : ""}`}
+	                    onClick={() => selectStudent(entry)}
+	                  >
+	                    <div className="sr-avatar">
                       <span className="sr-avatar-initials">
                         {initials(entry)}
                       </span>
@@ -539,6 +748,27 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                         z.zone_type === "speed_limit" ? "6 4" : undefined,
                     }}
                   >
+                    <Tooltip
+                      sticky
+                      direction="top"
+                      opacity={1}
+                      className="sr-map-hover-tooltip"
+                    >
+                      <div className="sr-map-hover-card">
+                        <strong>
+                          {z.title ||
+                            (z.zone_type === "no_go"
+                              ? "No-go zone"
+                              : "Speed limit zone")}
+                        </strong>
+                        <span>
+                          {z.zone_type === "speed_limit" &&
+                          z.speed_limit_mph != null
+                            ? `Limit ${z.speed_limit_mph} mph`
+                            : "Penalty zone"}
+                        </span>
+                      </div>
+                    </Tooltip>
                     <Popup>
                       <strong>
                         {z.title ||
@@ -575,8 +805,51 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                     lineCap: "round",
                     lineJoin: "round",
                   }}
+                  eventHandlers={{
+                    mousemove: (event) => {
+                      if (!selSess) return;
+                      setRouteHover(
+                        findNearestRouteHover(
+                          selSess,
+                          routeDistances,
+                          event.latlng,
+                        ),
+                      );
+                    },
+                    mouseout: () => setRouteHover(null),
+                  }}
                 />
               ))}
+
+            {showRoute && routeHover ? (
+              <CircleMarker
+                center={[routeHover.point.latitude, routeHover.point.longitude]}
+                radius={7}
+                interactive={false}
+                pathOptions={{
+                  color: "#ffffff",
+                  fillColor: speedColor(routeHover.point.speed_mps),
+                  fillOpacity: 1,
+                  weight: 2.5,
+                }}
+              >
+                <Tooltip
+                  permanent
+                  direction="top"
+                  offset={[0, -10]}
+                  opacity={1}
+                  className="sr-map-hover-tooltip"
+                >
+                  <div className="sr-map-hover-card sr-map-hover-card--wide">
+                    <strong>{fmtFull(routeHover.point.timestamp)}</strong>
+                    <span>Speed {fmtSpeed(routeHover.point.speed_mps)}</span>
+                    <span>Distance {fmtDist(routeHover.distanceMeters)}</span>
+                    <span>Elevation {fmtElevation(routeHover.point.altitude)}</span>
+                    <span>Accuracy {fmtAccuracy(routeHover.point.accuracy)}</span>
+                  </div>
+                </Tooltip>
+              </CircleMarker>
+            ) : null}
 
             {showRoute && selSess && selSess.points.length > 0 && (
               <>
@@ -596,7 +869,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                   <Popup>
                     <strong>Ride started</strong>
                     <br />
-                    {fmtFull(selSess.started_at)}
+                    {fmtFull(getSessionStartedAt(selSess))}
                   </Popup>
                 </CircleMarker>
                 <CircleMarker
@@ -615,7 +888,9 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                   <Popup>
                     <strong>Ride ended</strong>
                     <br />
-                    {selSess.ended_at ? fmtFull(selSess.ended_at) : "—"}
+                    {getSessionEndedAt(selSess)
+                      ? fmtFull(getSessionEndedAt(selSess))
+                      : "—"}
                   </Popup>
                 </CircleMarker>
               </>
@@ -648,6 +923,19 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                       weight: 2,
                     }}
                   >
+                    <Tooltip
+                      sticky
+                      direction="top"
+                      opacity={1}
+                      className="sr-map-hover-tooltip"
+                    >
+                      <div className="sr-map-hover-card">
+                        <strong>{poi.title || "Point of Interest"}</strong>
+                        <span>Visited {fmtShort(poi.visited_at)}</span>
+                        <span>+{poi.bonus_points.toLocaleString()} pts</span>
+                        <span>Confidence {fmtConfidence(poi.confidence_percent)}</span>
+                      </div>
+                    </Tooltip>
                     <Popup>
                       <strong>{poi.title || "Point of Interest"}</strong>
                       <br />+{poi.bonus_points} pts
@@ -686,60 +974,131 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
               ))}
 
             {showPenalties &&
-              selSess?.penalty_events.map((ev, i) => (
-                <CircleMarker
-                  key={`pen-${i}`}
-                  center={[ev.lat, ev.lng]}
-                  radius={10}
-                  pathOptions={{
-                    color: "#9b1c1c",
-                    fillColor: "#e53e3e",
-                    fillOpacity: 0.95,
-                    weight: 2,
-                  }}
+              selSess?.penalty_events.map((ev, i) => {
+                const maxSpeedMps = getPenaltyMaxSpeedMps(selSess, ev);
+                return (
+                  <CircleMarker
+                    key={`pen-${i}`}
+                    center={[ev.lat, ev.lng]}
+                    radius={10}
+                    pathOptions={{
+                      color: "#9b1c1c",
+                      fillColor: "#e53e3e",
+                      fillOpacity: 0.95,
+                      weight: 2,
+                    }}
+                    eventHandlers={{
+                      click: () =>
+                        focusRouteEvent(ev.lat, ev.lng, "penalty", ev),
+                    }}
+                  >
+                    <Tooltip
+                      sticky
+                      direction="top"
+                      opacity={1}
+                      className="sr-map-hover-tooltip"
+                    >
+                      <div className="sr-map-hover-card">
+                        <strong>
+                          {ev.title ||
+                            (ev.zone_type === "no_go"
+                              ? "No-go zone"
+                              : "Speed limit zone")}
+                        </strong>
+                        <span>−{ev.points_lost.toLocaleString()} pts</span>
+                        <span>{fmtShort(ev.occurred_at)}</span>
+                        {ev.zone_type === "speed_limit" &&
+                        ev.speed_limit_mph != null ? (
+                          <span>Limit {ev.speed_limit_mph} mph</span>
+                        ) : null}
+                        {maxSpeedMps != null ? (
+                          <span>Max speed caught {fmtSpeed(maxSpeedMps)}</span>
+                        ) : null}
+                        <span>Duration {fmtMs(ev.duration_ms)}</span>
+                      </div>
+                    </Tooltip>
+                    <Popup>
+                      <strong>
+                        {ev.title ||
+                          (ev.zone_type === "no_go"
+                            ? "No-go zone"
+                            : "Speed limit zone")}
+                      </strong>
+                      <br />−{ev.points_lost} pts
+                      {ev.reason && (
+                        <>
+                          <br />
+                          {ev.reason}
+                        </>
+                      )}
+                      {ev.zone_type === "speed_limit" &&
+                        ev.speed_limit_mph != null && (
+                          <>
+                            <br />
+                            Limit: {ev.speed_limit_mph} mph
+                          </>
+                        )}
+                      {maxSpeedMps != null ? (
+                        <>
+                          <br />
+                          Max speed caught: {fmtSpeed(maxSpeedMps)}
+                        </>
+                      ) : null}
+                      {ev.duration_ms > 0 && (
+                        <>
+                          <br />
+                          Duration: {Math.round(ev.duration_ms / 1000)}s
+                        </>
+                      )}
+                      {typeof ev.confidence_percent === "number" &&
+                        Number.isFinite(ev.confidence_percent) && (
+                          <>
+                            <br />
+                            Confidence:{" "}
+                            {Math.max(
+                              0,
+                              Math.min(100, Math.round(ev.confidence_percent)),
+                            )}
+                            %
+                          </>
+                        )}
+                    </Popup>
+                  </CircleMarker>
+                );
+              })}
+
+            {showPenalties && selectedMaxSpeedPoint ? (
+              <CircleMarker
+                center={[
+                  selectedMaxSpeedPoint.latitude,
+                  selectedMaxSpeedPoint.longitude,
+                ]}
+                radius={8}
+                pathOptions={{
+                  color: "#ffffff",
+                  fillColor: "#111827",
+                  fillOpacity: 1,
+                  weight: 3,
+                }}
+              >
+                <Tooltip
+                  permanent
+                  direction="top"
+                  offset={[0, -10]}
+                  opacity={1}
+                  className="sr-map-hover-tooltip"
                 >
-                  <Popup>
-                    <strong>
-                      {ev.title ||
-                        (ev.zone_type === "no_go"
-                          ? "No-go zone"
-                          : "Speed limit zone")}
-                    </strong>
-                    <br />−{ev.points_lost} pts
-                    {ev.reason && (
-                      <>
-                        <br />
-                        {ev.reason}
-                      </>
-                    )}
-                    {ev.zone_type === "speed_limit" &&
-                      ev.speed_limit_mph != null && (
-                        <>
-                          <br />
-                          Limit: {ev.speed_limit_mph} mph
-                        </>
-                      )}
-                    {ev.duration_ms > 0 && (
-                      <>
-                        <br />
-                        Duration: {Math.round(ev.duration_ms / 1000)}s
-                      </>
-                    )}
-                    {typeof ev.confidence_percent === "number" &&
-                      Number.isFinite(ev.confidence_percent) && (
-                        <>
-                          <br />
-                          Confidence:{" "}
-                          {Math.max(
-                            0,
-                            Math.min(100, Math.round(ev.confidence_percent)),
-                          )}
-                          %
-                        </>
-                      )}
-                  </Popup>
-                </CircleMarker>
-              ))}
+                  <div className="sr-map-hover-card">
+                    <strong>Max speed sample</strong>
+                    <span>{fmtSpeed(selectedMaxSpeedPoint.speed_mps)}</span>
+                    <span>{fmtFull(selectedMaxSpeedPoint.timestamp)}</span>
+                    <span>
+                      Accuracy {fmtAccuracy(selectedMaxSpeedPoint.accuracy)}
+                    </span>
+                  </div>
+                </Tooltip>
+              </CircleMarker>
+            ) : null}
           </MapContainer>
 
           {/* Floating layer toggles */}
@@ -791,7 +1150,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                 onClick={() => setStatsOpen((v) => !v)}
               >
                 <span className="sr-stats-hd-title">
-                  {fmtShort(selSess.started_at)}
+                  {fmtShort(getSessionStartedAt(selSess))}
                 </span>
                 <span className="sr-stats-hd-icon">
                   {statsOpen ? "▾" : "▴"}
@@ -991,33 +1350,41 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                   </p>
                 ) : (
                   <div className="sr-event-button-list">
-                    {selSess.penalty_events.map((ev, index) => (
-                      <button
-                        key={`${ev.zone_uuid}-${ev.occurred_at}-${index}`}
-                        className="sr-event-button sr-event-button--penalty"
-                        type="button"
-                        onClick={() =>
-                          focusRouteEvent(ev.lat, ev.lng, "penalty")
-                        }
-                      >
-                        <span className="sr-event-button-top">
-                          <strong>
-                            {ev.title ||
-                              (ev.zone_type === "no_go"
-                                ? "No-go zone"
-                                : "Speed limit zone")}
-                          </strong>
-                          <em>−{ev.points_lost.toLocaleString()}</em>
-                        </span>
-                        <span className="sr-event-button-meta">
-                          Confidence {fmtConfidence(ev.confidence_percent)} ·
-                          Time spent {fmtMs(ev.duration_ms)}
-                        </span>
-                        <span className="sr-event-button-meta">
-                          {evidenceCountLabel(ev.evidence_point_count)}
-                        </span>
-                      </button>
-                    ))}
+                    {selSess.penalty_events.map((ev, index) => {
+                      const maxSpeedMps = getPenaltyMaxSpeedMps(selSess, ev);
+                      return (
+                        <button
+                          key={`${ev.zone_uuid}-${ev.occurred_at}-${index}`}
+                          className="sr-event-button sr-event-button--penalty"
+                          type="button"
+                          onClick={() =>
+                            focusRouteEvent(ev.lat, ev.lng, "penalty", ev)
+                          }
+                        >
+                          <span className="sr-event-button-top">
+                            <strong>
+                              {ev.title ||
+                                (ev.zone_type === "no_go"
+                                  ? "No-go zone"
+                                  : "Speed limit zone")}
+                            </strong>
+                            <em>−{ev.points_lost.toLocaleString()}</em>
+                          </span>
+                          <span className="sr-event-button-meta">
+                            Confidence {fmtConfidence(ev.confidence_percent)} ·
+                            Time spent {fmtMs(ev.duration_ms)}
+                          </span>
+                          {maxSpeedMps != null ? (
+                            <span className="sr-event-button-meta">
+                              Max speed caught {fmtSpeed(maxSpeedMps)}
+                            </span>
+                          ) : null}
+                          <span className="sr-event-button-meta">
+                            {evidenceCountLabel(ev.evidence_point_count)}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </section>
@@ -1060,7 +1427,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                     }}
                   >
                     <span className="sr-chip-date">
-                      {fmtShort(sess.started_at)}
+                      {fmtShort(getSessionStartedAt(sess))}
                     </span>
                     <span className="sr-chip-dist">
                       {fmtDist(sess.distance_meters)}

@@ -8505,6 +8505,44 @@
 .sr-val--green { color: #1a9e4a; }
 .sr-val--red   { color: #d63b2f; }
 
+.sr-map-hover-tooltip {
+        border: 1px solid rgba(17,45,78,0.14);
+        border-radius: 8px;
+        box-shadow: 0 8px 24px rgba(17,45,78,0.18);
+        padding: 0;
+}
+
+.sr-map-hover-tooltip::before {
+        display: none;
+}
+
+.sr-map-hover-card {
+        display: grid;
+        gap: 3px;
+        min-width: 150px;
+        max-width: 230px;
+        padding: 9px 10px;
+        color: var(--text);
+        line-height: 1.25;
+}
+
+.sr-map-hover-card--wide {
+        min-width: 190px;
+}
+
+.sr-map-hover-card strong {
+        color: var(--text-strong);
+        font-size: 0.78rem;
+        line-height: 1.25;
+}
+
+.sr-map-hover-card span {
+        color: var(--muted);
+        font-size: 0.7rem;
+        font-weight: 650;
+        white-space: nowrap;
+}
+
 /* Map empty-state overlays */
 .sr-map-overlay {
         position: absolute;

@@ -260,6 +260,13 @@ function estimatePenaltySpeedMph(
 	session: StudentRouteHistorySession,
 	event: StudentRouteHistorySession["penalty_events"][number],
 ): number | null {
+	if (
+		typeof event.max_speed_mps === "number" &&
+		Number.isFinite(event.max_speed_mps)
+	) {
+		return event.max_speed_mps * 2.2369362920544;
+	}
+
 	const candidates = (session.points ?? []).filter(
 		(point) =>
 			typeof point.speed_mps === "number" &&
@@ -1942,7 +1949,7 @@ export function StudentsScreen(props: Props) {
 																					</span>
 																					{event.zone_type === "speed_limit" ? (
 																						<span>
-																							Student speed:{" "}
+																							Max speed caught:{" "}
 																							{estimatedSpeedMph
 																								? formatSpeedMph(
 																										estimatedSpeedMph,
