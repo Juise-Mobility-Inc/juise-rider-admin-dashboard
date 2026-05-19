@@ -4389,9 +4389,8 @@ function App() {
                                 return (
                                         <MapOverviewScreen
                                                 activeSchoolId={activeSchoolId}
-                                                zoneMapPolygons={zoneMapPolygons}
-                                                poiDrafts={poiDrafts}
-                                                schoolPacks={schoolPacks}
+                                                managedAppId={context.managedAppId}
+                                                adminUserUUID={session?.claims.user_uuid ?? ""}
                                         />
                                 );
                         case "packs":
