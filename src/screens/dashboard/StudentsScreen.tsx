@@ -1891,6 +1891,35 @@ export function StudentsScreen(props: Props) {
                                                                                                                                                                                 onCopy={handleCopyUuid}
                                                                                                                                                                         />
                                                                                                                                                                 </div>
+                                                                                                                                                                {session.points.length > 0 &&
+                                                                                                                                                                (selectedStudentEntry?.membership
+                                                                                                                                                                        ?.user_uuid?.trim() ||
+                                                                                                                                                                        selectedStudentEntry?.user
+                                                                                                                                                                                ?.k_guid) ? (
+                                                                                                                                                                        <button
+                                                                                                                                                                                className="student-view-ride-btn"
+                                                                                                                                                                                type="button"
+                                                                                                                                                                                onClick={() => {
+                                                                                                                                                                                        const poiStudentUUID =
+                                                                                                                                                                                                selectedStudentEntry?.membership?.user_uuid?.trim() ||
+                                                                                                                                                                                                selectedStudentEntry?.user?.k_guid ||
+                                                                                                                                                                                                "";
+                                                                                                                                                                                        const params = new URLSearchParams(
+                                                                                                                                                                                                {
+                                                                                                                                                                                                        user: poiStudentUUID,
+                                                                                                                                                                                                        session: session.session_id,
+                                                                                                                                                                                                        lat: String(poi.lat),
+                                                                                                                                                                                                        lng: String(poi.lng),
+                                                                                                                                                                                                },
+                                                                                                                                                                                        );
+                                                                                                                                                                                        navigate(
+                                                                                                                                                                                                `/routes?${params.toString()}`,
+                                                                                                                                                                                        );
+                                                                                                                                                                                }}
+                                                                                                                                                                        >
+                                                                                                                                                                                View ride →
+                                                                                                                                                                        </button>
+                                                                                                                                                                ) : null}
                                                                                                                                                         </div>
                                                                                                                                                         <StudentEventMiniMap
                                                                                                                                                                 label={poi.title || "Visited POI"}
