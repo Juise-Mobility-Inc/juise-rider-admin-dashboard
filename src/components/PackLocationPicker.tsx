@@ -7,8 +7,8 @@ import {
   useRef,
   useState,
 } from 'react'
-import { DomEvent, LatLngBounds, divIcon, type LatLngLiteral } from 'leaflet'
-import { visitedPoiIcon, juisePackIcon } from '../lib/mapIcons'
+import { DomEvent, LatLngBounds, divIcon, type Icon, type LatLngLiteral } from 'leaflet'
+import { juisePackIcon } from '../lib/mapIcons'
 import {
   Circle,
   MapContainer,
@@ -39,10 +39,12 @@ interface PackLocationPickerProps {
   disabled?: boolean
   otherMarkers?: PackMapMarker[]
   radiusMeters?: number
+  markerIcon?: Icon
 }
 
 interface PackLocationsMapProps {
   markers: PackMapMarker[]
+  markerIcon?: Icon
 }
 
 const DEFAULT_CENTER: LatLngLiteral = {
@@ -329,7 +331,7 @@ function ClickToSelectPin(props: PackLocationPickerProps) {
       ) : null}
       <Marker
         position={props.value}
-        icon={juisePackIcon}
+        icon={props.markerIcon ?? juisePackIcon}
       />
     </>
   ) : null
@@ -668,7 +670,7 @@ export function PackLocationPicker(props: PackLocationPickerProps) {
             ) : null}
             <Marker
               position={marker}
-              icon={juisePackIcon}
+              icon={props.markerIcon ?? juisePackIcon}
             >
               <Popup>
                 <strong>{marker.label}</strong>
@@ -717,7 +719,7 @@ export function PackLocationsMap(props: PackLocationsMapProps) {
             ) : null}
             <Marker
               position={marker}
-              icon={juisePackIcon}
+              icon={props.markerIcon ?? juisePackIcon}
             >
               <Popup>
                 <strong>{marker.label}</strong>

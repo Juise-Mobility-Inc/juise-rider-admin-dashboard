@@ -6,6 +6,7 @@ import {
   type PackMapMarker,
   type PackMapPoint,
 } from "../../components/PackLocationPicker";
+import { visitedPoiIcon } from "../../lib/mapIcons";
 import {
   csvRowsToObjects,
   downloadCsv,
@@ -296,7 +297,7 @@ export function PoisScreen(props: Props) {
               </div>
               <span>{mappedCount} markers</span>
             </div>
-            <PackLocationsMap markers={poiMapMarkers} />
+            <PackLocationsMap markers={poiMapMarkers} markerIcon={visitedPoiIcon} />
           </div>
 
           <div className="management-table-card">
@@ -524,6 +525,7 @@ export function PoisScreen(props: Props) {
                       : undefined
                   }
                   otherMarkers={otherMarkers}
+                  markerIcon={visitedPoiIcon}
                 />
               </div>
 
