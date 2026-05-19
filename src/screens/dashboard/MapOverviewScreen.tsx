@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, Fragment } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   MapContainer,
   TileLayer,
@@ -48,6 +49,7 @@ export function MapOverviewScreen({
   managedAppId,
   adminUserUUID,
 }: Props) {
+  const navigate = useNavigate();
   const [zones, setZones] = useState<SchoolZone[]>([]);
   const [pois, setPois] = useState<SchoolPOI[]>([]);
   const [packs, setPacks] = useState<Pack[]>([]);
@@ -223,10 +225,19 @@ export function MapOverviewScreen({
                   <br />
                   ⛔ Students must not enter
                 </Tooltip>
-                <Popup>
-                  <strong>{z.title || "No-go zone"}</strong>
-                  {z.description ? <div>{z.description}</div> : null}
-                  <div style={{ color: "#b91c1c" }}>⛔ No-go zone</div>
+                <Popup minWidth={200} maxWidth={260}>
+                  <div className="mo-popup">
+                    <span className="mo-popup-badge mo-popup-badge--nogo">⛔ No-go zone</span>
+                    <div className="mo-popup-title">{z.title || "No-go zone"}</div>
+                    {z.description ? <div className="mo-popup-desc">{z.description}</div> : null}
+                    <div className="mo-popup-meta">Students must not enter this area</div>
+                    <button
+                      className="mo-popup-nav-btn mo-popup-nav-btn--nogo"
+                      onClick={() => navigate("/zones")}
+                    >
+                      Open Penalty Zones →
+                    </button>
+                  </div>
                 </Popup>
               </Polygon>
             ))}
@@ -251,16 +262,23 @@ export function MapOverviewScreen({
                     <> — {z.speed_limit_mph} mph</>
                   ) : null}
                 </Tooltip>
-                <Popup>
-                  <strong>{z.title || "Speed limit zone"}</strong>
-                  {z.description ? <div>{z.description}</div> : null}
-                  {z.speed_limit_mph != null ? (
-                    <div style={{ color: "#b45309" }}>
-                      🚦 {z.speed_limit_mph} mph limit
-                    </div>
-                  ) : (
-                    <div>Speed limit zone</div>
-                  )}
+                <Popup minWidth={200} maxWidth={260}>
+                  <div className="mo-popup">
+                    <span className="mo-popup-badge mo-popup-badge--speed">🚦 Speed limit zone</span>
+                    <div className="mo-popup-title">{z.title || "Speed limit zone"}</div>
+                    {z.description ? <div className="mo-popup-desc">{z.description}</div> : null}
+                    {z.speed_limit_mph != null ? (
+                      <div className="mo-popup-meta mo-popup-meta--speed">
+                        {z.speed_limit_mph} mph limit
+                      </div>
+                    ) : null}
+                    <button
+                      className="mo-popup-nav-btn mo-popup-nav-btn--speed"
+                      onClick={() => navigate("/zones")}
+                    >
+                      Open Penalty Zones →
+                    </button>
+                  </div>
                 </Popup>
               </Polygon>
             ))}
@@ -290,13 +308,24 @@ export function MapOverviewScreen({
                       </>
                     ) : null}
                   </Tooltip>
-                  <Popup>
-                    <strong>{poi.title || "Check-in spot"}</strong>
-                    {poi.description ? <div>{poi.description}</div> : null}
-                    {poi.bonus_points > 0 ? (
-                      <div>⭐ {poi.bonus_points} bonus points</div>
-                    ) : null}
-                    <div>Radius: {Math.round(poi.radius_meters * 3.281)} ft</div>
+                  <Popup minWidth={200} maxWidth={260}>
+                    <div className="mo-popup">
+                      <span className="mo-popup-badge mo-popup-badge--poi">⭐ Check-in spot</span>
+                      <div className="mo-popup-title">{poi.title || "Check-in spot"}</div>
+                      {poi.description ? <div className="mo-popup-desc">{poi.description}</div> : null}
+                      {poi.bonus_points > 0 ? (
+                        <div className="mo-popup-meta">{poi.bonus_points} bonus points on check-in</div>
+                      ) : null}
+                      <div className="mo-popup-meta">
+                        Radius: {Math.round(poi.radius_meters * 3.281)} ft
+                      </div>
+                      <button
+                        className="mo-popup-nav-btn mo-popup-nav-btn--poi"
+                        onClick={() => navigate("/pois")}
+                      >
+                        Open POI Setup →
+                      </button>
+                    </div>
                   </Popup>
                 </Marker>
               </Fragment>
@@ -314,13 +343,24 @@ export function MapOverviewScreen({
                   <br />
                   🅿 {pack.spot_count} spot{pack.spot_count !== 1 ? "s" : ""}
                 </Tooltip>
-                <Popup>
-                  <strong>{pack.name || "Juise Pack"}</strong>
-                  {pack.description ? <div>{pack.description}</div> : null}
-                  <div>
-                    🅿 {pack.spot_count} spot{pack.spot_count !== 1 ? "s" : ""}
+                <Popup minWidth={200} maxWidth={260}>
+                  <div className="mo-popup">
+                    <span className="mo-popup-badge mo-popup-badge--pack">🅿 Juise Pack</span>
+                    <div className="mo-popup-title">{pack.name || "Juise Pack"}</div>
+                    {pack.description ? <div className="mo-popup-desc">{pack.description}</div> : null}
+                    <div className="mo-popup-meta">
+                      {pack.spot_count} parking spot{pack.spot_count !== 1 ? "s" : ""}
+                    </div>
+                    <div className={`mo-popup-meta ${pack.active ? "mo-popup-meta--active" : "mo-popup-meta--inactive"}`}>
+                      {pack.active ? "✅ Active" : "⏸ Inactive"}
+                    </div>
+                    <button
+                      className="mo-popup-nav-btn mo-popup-nav-btn--pack"
+                      onClick={() => navigate("/packs")}
+                    >
+                      Open Juise Packs →
+                    </button>
                   </div>
-                  <div>{pack.active ? "✅ Active" : "⏸ Inactive"}</div>
                 </Popup>
               </Marker>
             ))}

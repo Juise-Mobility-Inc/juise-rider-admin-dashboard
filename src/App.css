@@ -9459,3 +9459,121 @@
         color: var(--muted, #6b7280);
         max-width: 260px;
 }
+
+/* ── Map overview — click popups ───────────────────────────────────── */
+.mo-popup {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-family: inherit;
+        min-width: 190px;
+}
+
+.mo-popup-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 99px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        width: fit-content;
+        margin-bottom: 2px;
+}
+
+.mo-popup-badge--nogo {
+        background: #fef2f2;
+        color: #b91c1c;
+}
+
+.mo-popup-badge--speed {
+        background: #fffbeb;
+        color: #92400e;
+}
+
+.mo-popup-badge--poi {
+        background: #f0fdf4;
+        color: #15803d;
+}
+
+.mo-popup-badge--pack {
+        background: #eff6ff;
+        color: #1d4ed8;
+}
+
+.mo-popup-title {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #111827;
+        line-height: 1.3;
+}
+
+.mo-popup-desc {
+        font-size: 0.8rem;
+        color: #6b7280;
+        line-height: 1.4;
+}
+
+.mo-popup-meta {
+        font-size: 0.8rem;
+        color: #374151;
+}
+
+.mo-popup-meta--speed {
+        font-weight: 600;
+        color: #92400e;
+}
+
+.mo-popup-meta--active {
+        color: #15803d;
+}
+
+.mo-popup-meta--inactive {
+        color: #9ca3af;
+}
+
+.mo-popup-nav-btn {
+        display: block;
+        width: 100%;
+        margin-top: 8px;
+        padding: 8px 12px;
+        border: none;
+        border-radius: 9px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-align: center;
+        letter-spacing: 0.01em;
+        transition: filter 0.12s ease, transform 0.1s ease;
+}
+
+.mo-popup-nav-btn:hover {
+        filter: brightness(1.08);
+        transform: translateY(-1px);
+}
+
+.mo-popup-nav-btn:active {
+        transform: translateY(0);
+}
+
+.mo-popup-nav-btn--nogo {
+        background: #b91c1c;
+        color: #fff;
+}
+
+.mo-popup-nav-btn--speed {
+        background: #b45309;
+        color: #fff;
+}
+
+.mo-popup-nav-btn--poi {
+        background: #15803d;
+        color: #fff;
+}
+
+.mo-popup-nav-btn--pack {
+        background: #1d4ed8;
+        color: #fff;
+}
