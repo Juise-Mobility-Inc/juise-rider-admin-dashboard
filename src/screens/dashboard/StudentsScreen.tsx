@@ -880,6 +880,7 @@ export function StudentsScreen(props: Props) {
 
         const [detailTab, setDetailTab] = useState<DetailTab>("profile");
         const [activitySubTab, setActivitySubTab] = useState<"speed" | "nogo" | "pois">("speed");
+        const [expandedActivityKey, setExpandedActivityKey] = useState<string | null>(null);
         const [allStudentExportBusy, setAllStudentExportBusy] = useState(false);
         const [allStudentExportProgress, setAllStudentExportProgress] =
                 useState<StudentExportProgress>({ completed: 0, total: 0 });
@@ -1848,89 +1849,192 @@ export function StudentsScreen(props: Props) {
                                                                                                                         No visited POIs recorded for this student yet.
                                                                                                                 </p>
                                                                                                         ) : (
-                                                                                                                <div className="stack-list">
-                                                                                                                        {visitedPoiVisits.map(
-                                                                                                                                ({ poi, session }, index) => (
-                                                                                                                                        <div
-                                                                                                                                                className="data-card"
-                                                                                                                                                key={`${session.session_id}-${poi.poi_uuid}-${poi.visited_at}-${index}`}
-                                                                                                                                        >
-                                                                                                                                                <div className="student-event-card">
-                                                                                                                                                        <div className="student-event-copy">
-                                                                                                                                                                <div className="reservation-card-top">
-                                                                                                                                                                        <strong>
-                                                                                                                                                                                {poi.title || "Visited POI"}
-                                                                                                                                                                        </strong>
-                                                                                                                                                                        <span className="student-badge student-badge-highlight">
-                                                                                                                                                                                +{poi.bonus_points} pts
-                                                                                                                                                                        </span>
-                                                                                                                                                                </div>
-                                                                                                                                                                <span>
-                                                                                                                                                                        {formatUnixTimestamp(poi.visited_at)}
-                                                                                                                                                                </span>
-                                                                                                                                                                <span>
-                                                                                                                                                                        Trip: {session.trip_mode || "Unknown"}{" "}
-                                                                                                                                                                        · Session{" "}
-                                                                                                                                                                        {formatUnixTimestamp(
-                                                                                                                                                                                session.started_at,
-                                                                                                                                                                        )}
-                                                                                                                                                                </span>
-                                                                                                                                                                <span>
-                                                                                                                                                                        {poi.description ||
-                                                                                                                                                                                "No POI description provided."}
-                                                                                                                                                                </span>
-                                                                                                                                                                <div className="uuid-copy-stack">
-                                                                                                                                                                        <UuidCopyField
-                                                                                                                                                                                label="poi_uuid"
-                                                                                                                                                                                value={poi.poi_uuid}
-                                                                                                                                                                                onCopy={handleCopyUuid}
-                                                                                                                                                                        />
-                                                                                                                                                                        <UuidCopyField
-                                                                                                                                                                                label="session_id"
-                                                                                                                                                                                value={session.session_id}
-                                                                                                                                                                                onCopy={handleCopyUuid}
-                                                                                                                                                                        />
-                                                                                                                                                                </div>
-                                                                                                                                                                {session.points.length > 0 &&
-                                                                                                                                                                (selectedStudentEntry?.membership
-                                                                                                                                                                        ?.user_uuid?.trim() ||
-                                                                                                                                                                        selectedStudentEntry?.user
-                                                                                                                                                                                ?.k_guid) ? (
-                                                                                                                                                                        <button
-                                                                                                                                                                                className="student-view-ride-btn"
-                                                                                                                                                                                type="button"
-                                                                                                                                                                                onClick={() => {
-                                                                                                                                                                                        const poiStudentUUID =
-                                                                                                                                                                                                selectedStudentEntry?.membership?.user_uuid?.trim() ||
-                                                                                                                                                                                                selectedStudentEntry?.user?.k_guid ||
-                                                                                                                                                                                                "";
-                                                                                                                                                                                        const params = new URLSearchParams(
-                                                                                                                                                                                                {
-                                                                                                                                                                                                        user: poiStudentUUID,
-                                                                                                                                                                                                        session: session.session_id,
-                                                                                                                                                                                                        lat: String(poi.lat),
-                                                                                                                                                                                                        lng: String(poi.lng),
-                                                                                                                                                                                                },
-                                                                                                                                                                                        );
-                                                                                                                                                                                        navigate(
-                                                                                                                                                                                                `/routes?${params.toString()}`,
-                                                                                                                                                                                        );
-                                                                                                                                                                                }}
-                                                                                                                                                                        >
-                                                                                                                                                                                View ride →
-                                                                                                                                                                        </button>
-                                                                                                                                                                ) : null}
-                                                                                                                                                        </div>
-                                                                                                                                                        <StudentEventMiniMap
-                                                                                                                                                                label={poi.title || "Visited POI"}
-                                                                                                                                                                lat={poi.lat}
-                                                                                                                                                                lng={poi.lng}
-                                                                                                                                                                tone="poi"
-                                                                                                                                                        />
-                                                                                                                                                </div>
-                                                                                                                                        </div>
-                                                                                                                                ),
-                                                                                                                        )}
+                                                                                                                <div className="act-table-wrap">
+                                                                                                                        <table className="act-table">
+                                                                                                                                <thead>
+                                                                                                                                        <tr>
+                                                                                                                                                <th>Date</th>
+                                                                                                                                                <th>POI Name</th>
+                                                                                                                                                <th>Bonus</th>
+                                                                                                                                                <th>Trip</th>
+                                                                                                                                                <th>Ride?</th>
+                                                                                                                                                <th></th>
+                                                                                                                                        </tr>
+                                                                                                                                </thead>
+                                                                                                                                {visitedPoiVisits.map(
+                                                                                                                                        ({ poi, session }, index) => {
+                                                                                                                                                const rowKey = `poi-${session.session_id}-${poi.poi_uuid}-${index}`;
+                                                                                                                                                const isOpen =
+                                                                                                                                                        expandedActivityKey ===
+                                                                                                                                                        rowKey;
+                                                                                                                                                const hasRide =
+                                                                                                                                                        session.points.length >
+                                                                                                                                                        0;
+                                                                                                                                                const poiStudentUUID =
+                                                                                                                                                        selectedStudentEntry
+                                                                                                                                                                ?.membership
+                                                                                                                                                                ?.user_uuid?.trim() ||
+                                                                                                                                                        selectedStudentEntry
+                                                                                                                                                                ?.user?.k_guid ||
+                                                                                                                                                        "";
+                                                                                                                                                return (
+                                                                                                                                                        <tbody
+                                                                                                                                                                key={
+                                                                                                                                                                        rowKey
+                                                                                                                                                                }
+                                                                                                                                                        >
+                                                                                                                                                                <tr
+                                                                                                                                                                        className={`act-row${isOpen ? " act-row-open" : ""}`}
+                                                                                                                                                                        onClick={() =>
+                                                                                                                                                                                setExpandedActivityKey(
+                                                                                                                                                                                        isOpen
+                                                                                                                                                                                                ? null
+                                                                                                                                                                                                : rowKey,
+                                                                                                                                                                                )
+                                                                                                                                                                        }
+                                                                                                                                                                >
+                                                                                                                                                                        <td className="act-col-date">
+                                                                                                                                                                                {formatUnixTimestamp(
+                                                                                                                                                                                        poi.visited_at,
+                                                                                                                                                                                )}
+                                                                                                                                                                        </td>
+                                                                                                                                                                        <td>
+                                                                                                                                                                                <strong>
+                                                                                                                                                                                        {poi.title ||
+                                                                                                                                                                                                "Visited POI"}
+                                                                                                                                                                                </strong>
+                                                                                                                                                                        </td>
+                                                                                                                                                                        <td>
+                                                                                                                                                                                <span className="student-badge student-badge-highlight">
+                                                                                                                                                                                        +
+                                                                                                                                                                                        {
+                                                                                                                                                                                                poi.bonus_points
+                                                                                                                                                                                        }{" "}
+                                                                                                                                                                                        pts
+                                                                                                                                                                                </span>
+                                                                                                                                                                        </td>
+                                                                                                                                                                        <td>
+                                                                                                                                                                                {session.trip_mode ||
+                                                                                                                                                                                        "—"}
+                                                                                                                                                                        </td>
+                                                                                                                                                                        <td>
+                                                                                                                                                                                {hasRide &&
+                                                                                                                                                                                poiStudentUUID ? (
+                                                                                                                                                                                        <span className="act-ride-pill">
+                                                                                                                                                                                                Has
+                                                                                                                                                                                                ride
+                                                                                                                                                                                        </span>
+                                                                                                                                                                                ) : (
+                                                                                                                                                                                        <span className="act-no-ride-pill">
+                                                                                                                                                                                                —
+                                                                                                                                                                                        </span>
+                                                                                                                                                                                )}
+                                                                                                                                                                        </td>
+                                                                                                                                                                        <td className="act-chevron">
+                                                                                                                                                                                {isOpen
+                                                                                                                                                                                        ? "▲"
+                                                                                                                                                                                        : "▼"}
+                                                                                                                                                                        </td>
+                                                                                                                                                                </tr>
+                                                                                                                                                                {isOpen && (
+                                                                                                                                                                        <tr className="act-detail-row">
+                                                                                                                                                                                <td
+                                                                                                                                                                                        colSpan={
+                                                                                                                                                                                                6
+                                                                                                                                                                                        }
+                                                                                                                                                                                >
+                                                                                                                                                                                        <div className="act-detail-cell">
+                                                                                                                                                                                                <div className="student-event-card">
+                                                                                                                                                                                                        <div className="student-event-copy">
+                                                                                                                                                                                                                <span>
+                                                                                                                                                                                                                        {poi.description ||
+                                                                                                                                                                                                                                "No POI description provided."}
+                                                                                                                                                                                                                </span>
+                                                                                                                                                                                                                <span>
+                                                                                                                                                                                                                        Trip:{" "}
+                                                                                                                                                                                                                        {session.trip_mode ||
+                                                                                                                                                                                                                                "Unknown"}{" "}
+                                                                                                                                                                                                                        · Session{" "}
+                                                                                                                                                                                                                        {formatUnixTimestamp(
+                                                                                                                                                                                                                                session.started_at,
+                                                                                                                                                                                                                        )}
+                                                                                                                                                                                                                </span>
+                                                                                                                                                                                                                <div className="uuid-copy-stack">
+                                                                                                                                                                                                                        <UuidCopyField
+                                                                                                                                                                                                                                label="poi_uuid"
+                                                                                                                                                                                                                                value={
+                                                                                                                                                                                                                                        poi.poi_uuid
+                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                                onCopy={
+                                                                                                                                                                                                                                        handleCopyUuid
+                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                        />
+                                                                                                                                                                                                                        <UuidCopyField
+                                                                                                                                                                                                                                label="session_id"
+                                                                                                                                                                                                                                value={
+                                                                                                                                                                                                                                        session.session_id
+                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                                onCopy={
+                                                                                                                                                                                                                                        handleCopyUuid
+                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                        />
+                                                                                                                                                                                                                </div>
+                                                                                                                                                                                                                {hasRide &&
+                                                                                                                                                                                                                poiStudentUUID ? (
+                                                                                                                                                                                                                        <button
+                                                                                                                                                                                                                                className="student-view-ride-btn"
+                                                                                                                                                                                                                                type="button"
+                                                                                                                                                                                                                                onClick={(
+                                                                                                                                                                                                                                        e,
+                                                                                                                                                                                                                                ) => {
+                                                                                                                                                                                                                                        e.stopPropagation();
+                                                                                                                                                                                                                                        const params =
+                                                                                                                                                                                                                                                new URLSearchParams(
+                                                                                                                                                                                                                                                        {
+                                                                                                                                                                                                                                                                user: poiStudentUUID,
+                                                                                                                                                                                                                                                                session: session.session_id,
+                                                                                                                                                                                                                                                                lat: String(
+                                                                                                                                                                                                                                                                        poi.lat,
+                                                                                                                                                                                                                                                                ),
+                                                                                                                                                                                                                                                                lng: String(
+                                                                                                                                                                                                                                                                        poi.lng,
+                                                                                                                                                                                                                                                                ),
+                                                                                                                                                                                                                                                        },
+                                                                                                                                                                                                                                                );
+                                                                                                                                                                                                                                        navigate(
+                                                                                                                                                                                                                                                `/routes?${params.toString()}`,
+                                                                                                                                                                                                                                        );
+                                                                                                                                                                                                                                }}
+                                                                                                                                                                                                                        >
+                                                                                                                                                                                                                                View
+                                                                                                                                                                                                                                ride
+                                                                                                                                                                                                                                →
+                                                                                                                                                                                                                        </button>
+                                                                                                                                                                                                                ) : null}
+                                                                                                                                                                                                        </div>
+                                                                                                                                                                                                        <StudentEventMiniMap
+                                                                                                                                                                                                                label={
+                                                                                                                                                                                                                        poi.title ||
+                                                                                                                                                                                                                        "Visited POI"
+                                                                                                                                                                                                                }
+                                                                                                                                                                                                                lat={
+                                                                                                                                                                                                                        poi.lat
+                                                                                                                                                                                                                }
+                                                                                                                                                                                                                lng={
+                                                                                                                                                                                                                        poi.lng
+                                                                                                                                                                                                                }
+                                                                                                                                                                                                                tone="poi"
+                                                                                                                                                                                                        />
+                                                                                                                                                                                                </div>
+                                                                                                                                                                                        </div>
+                                                                                                                                                                                </td>
+                                                                                                                                                                        </tr>
+                                                                                                                                                                )}
+                                                                                                                                                        </tbody>
+                                                                                                                                                );
+                                                                                                                                        },
+                                                                                                                                )}
+                                                                                                                        </table>
                                                                                                                 </div>
                                                                                                         )}
                                                                                                 </div>
@@ -2039,215 +2143,370 @@ export function StudentsScreen(props: Props) {
                                                                                                                         violations recorded for this student.
                                                                                                                 </p>
                                                                                                         ) : (
-                                                                                                                <div className="stack-list">
-                                                                                                                        {(activitySubTab === "speed"
-                                                                                                                                ? speedPenalties
-                                                                                                                                : noGoPenalties
-                                                                                                                        ).map(({ event, session }, index) =>
-                                                                                                                                (() => {
-                                                                                                                                        const matchingZone = resolvePenaltyZone(
-                                                                                                                                                session,
-                                                                                                                                                studentSchoolZones,
-                                                                                                                                                event.zone_uuid,
-                                                                                                                                        );
-                                                                                                                                        const estimatedSpeedMph =
-                                                                                                                                                event.zone_type === "speed_limit"
-                                                                                                                                                        ? estimatePenaltySpeedMph(session, event)
-                                                                                                                                                        : null;
-                                                                                                                                        const rideContext = buildRidePenaltyContext(
-                                                                                                                                                session,
-                                                                                                                                                event,
-                                                                                                                                        );
-                                                                                                                                        const confidenceLabel =
-                                                                                                                                                formatConfidencePercent(
-                                                                                                                                                        event.confidence_percent,
-                                                                                                                                                );
-                                                                                                                                        const nearestAccuracy =
-                                                                                                                                                typeof rideContext.nearestPoint
-                                                                                                                                                        ?.accuracy === "number" &&
-                                                                                                                                                Number.isFinite(
-                                                                                                                                                        rideContext.nearestPoint.accuracy,
-                                                                                                                                                )
-                                                                                                                                                        ? `±${Math.round(
-                                                                                                                                                                        rideContext.nearestPoint.accuracy,
-                                                                                                                                                                )} m`
-                                                                                                                                                        : "Accuracy unavailable";
-                                                                                                                                        const nearestSpeed =
-                                                                                                                                                typeof rideContext.nearestPoint
-                                                                                                                                                        ?.speed_mps === "number" &&
-                                                                                                                                                Number.isFinite(
-                                                                                                                                                        rideContext.nearestPoint.speed_mps,
-                                                                                                                                                )
-                                                                                                                                                        ? formatSpeedMph(
-                                                                                                                                                                        rideContext.nearestPoint.speed_mps *
+                                                                                                                <div className="act-table-wrap">
+                                                                                                                        <table className="act-table">
+                                                                                                                                <thead>
+                                                                                                                                        <tr>
+                                                                                                                                                <th>Date</th>
+                                                                                                                                                <th>Zone Name</th>
+                                                                                                                                                <th>Points</th>
+                                                                                                                                                <th>Confidence</th>
+                                                                                                                                                <th>Ride?</th>
+                                                                                                                                                <th></th>
+                                                                                                                                        </tr>
+                                                                                                                                </thead>
+                                                                                                                                {(activitySubTab === "speed"
+                                                                                                                                        ? speedPenalties
+                                                                                                                                        : noGoPenalties
+                                                                                                                                ).map(
+                                                                                                                                        (
+                                                                                                                                                { event, session },
+                                                                                                                                                index,
+                                                                                                                                        ) => {
+                                                                                                                                                const matchingZone =
+                                                                                                                                                        resolvePenaltyZone(
+                                                                                                                                                                session,
+                                                                                                                                                                studentSchoolZones,
+                                                                                                                                                                event.zone_uuid,
+                                                                                                                                                        );
+                                                                                                                                                const estimatedSpeedMph =
+                                                                                                                                                        event.zone_type ===
+                                                                                                                                                        "speed_limit"
+                                                                                                                                                                ? estimatePenaltySpeedMph(
+                                                                                                                                                                        session,
+                                                                                                                                                                        event,
+                                                                                                                                                                )
+                                                                                                                                                                : null;
+                                                                                                                                                const rideContext =
+                                                                                                                                                        buildRidePenaltyContext(
+                                                                                                                                                                session,
+                                                                                                                                                                event,
+                                                                                                                                                        );
+                                                                                                                                                const confidenceLabel =
+                                                                                                                                                        formatConfidencePercent(
+                                                                                                                                                                event.confidence_percent,
+                                                                                                                                                        );
+                                                                                                                                                const nearestAccuracy =
+                                                                                                                                                        typeof rideContext
+                                                                                                                                                                .nearestPoint
+                                                                                                                                                                ?.accuracy ===
+                                                                                                                                                                "number" &&
+                                                                                                                                                        Number.isFinite(
+                                                                                                                                                                rideContext
+                                                                                                                                                                        .nearestPoint
+                                                                                                                                                                        .accuracy,
+                                                                                                                                                        )
+                                                                                                                                                                ? `±${Math.round(
+                                                                                                                                                                                rideContext
+                                                                                                                                                                                        .nearestPoint
+                                                                                                                                                                                        .accuracy,
+                                                                                                                                                                        )} m`
+                                                                                                                                                                : "Accuracy unavailable";
+                                                                                                                                                const nearestSpeed =
+                                                                                                                                                        typeof rideContext
+                                                                                                                                                                .nearestPoint
+                                                                                                                                                                ?.speed_mps ===
+                                                                                                                                                                "number" &&
+                                                                                                                                                        Number.isFinite(
+                                                                                                                                                                rideContext
+                                                                                                                                                                        .nearestPoint
+                                                                                                                                                                        .speed_mps,
+                                                                                                                                                        )
+                                                                                                                                                                ? formatSpeedMph(
+                                                                                                                                                                        rideContext
+                                                                                                                                                                                .nearestPoint
+                                                                                                                                                                                .speed_mps *
                                                                                                                                                                                 2.2369362920544,
                                                                                                                                                                 )
-                                                                                                                                                        : estimatedSpeedMph
-                                                                                                                                                                ? formatSpeedMph(estimatedSpeedMph)
+                                                                                                                                                                : estimatedSpeedMph
+                                                                                                                                                                ? formatSpeedMph(
+                                                                                                                                                                        estimatedSpeedMph,
+                                                                                                                                                                )
                                                                                                                                                                 : "Speed unavailable";
-                                                                                                                                        const evidenceCount =
-                                                                                                                                                typeof event.evidence_point_count ===
-                                                                                                                                                        "number" &&
-                                                                                                                                                Number.isFinite(event.evidence_point_count)
-                                                                                                                                                        ? Math.max(
+                                                                                                                                                const evidenceCount =
+                                                                                                                                                        typeof event.evidence_point_count ===
+                                                                                                                                                                "number" &&
+                                                                                                                                                        Number.isFinite(
+                                                                                                                                                                event.evidence_point_count,
+                                                                                                                                                        )
+                                                                                                                                                                ? Math.max(
                                                                                                                                                                         0,
                                                                                                                                                                         Math.round(
                                                                                                                                                                                 event.evidence_point_count,
                                                                                                                                                                         ),
                                                                                                                                                                 )
-                                                                                                                                                        : null;
-
-                                                                                                                                        const studentUUID =
-                                                                                                                                                selectedStudentEntry?.membership?.user_uuid?.trim() ||
-                                                                                                                                                selectedStudentEntry?.user?.k_guid ||
-                                                                                                                                                "";
-                                                                                                                                        const hasRouteData = session.points.length > 0;
-
-                                                                                                                                        return (
-                                                                                                                                                <div
-                                                                                                                                                        className="data-card"
-                                                                                                                                                        key={`${session.session_id}-${event.zone_uuid}-${event.occurred_at}-${index}`}
-                                                                                                                                                >
-                                                                                                                                                        <div className="student-event-card">
-                                                                                                                                                                <div className="student-event-copy">
-                                                                                                                                                                        <div className="reservation-card-top">
+                                                                                                                                                                : null;
+                                                                                                                                                const studentUUID =
+                                                                                                                                                        selectedStudentEntry
+                                                                                                                                                                ?.membership
+                                                                                                                                                                ?.user_uuid?.trim() ||
+                                                                                                                                                        selectedStudentEntry
+                                                                                                                                                                ?.user?.k_guid ||
+                                                                                                                                                        "";
+                                                                                                                                                const hasRouteData =
+                                                                                                                                                        session.points.length >
+                                                                                                                                                        0;
+                                                                                                                                                const rowKey = `pen-${session.session_id}-${event.zone_uuid}-${event.occurred_at}-${index}`;
+                                                                                                                                                const isOpen =
+                                                                                                                                                        expandedActivityKey ===
+                                                                                                                                                        rowKey;
+                                                                                                                                                return (
+                                                                                                                                                        <tbody
+                                                                                                                                                                key={
+                                                                                                                                                                        rowKey
+                                                                                                                                                                }
+                                                                                                                                                        >
+                                                                                                                                                                <tr
+                                                                                                                                                                        className={`act-row${isOpen ? " act-row-open" : ""}`}
+                                                                                                                                                                        onClick={() =>
+                                                                                                                                                                                setExpandedActivityKey(
+                                                                                                                                                                                        isOpen
+                                                                                                                                                                                                ? null
+                                                                                                                                                                                                : rowKey,
+                                                                                                                                                                                )
+                                                                                                                                                                        }
+                                                                                                                                                                >
+                                                                                                                                                                        <td className="act-col-date">
+                                                                                                                                                                                {formatUnixTimestamp(
+                                                                                                                                                                                        event.occurred_at,
+                                                                                                                                                                                )}
+                                                                                                                                                                        </td>
+                                                                                                                                                                        <td>
                                                                                                                                                                                 <strong>
                                                                                                                                                                                         {event.title ||
                                                                                                                                                                                                 formatPenaltyZoneType(
                                                                                                                                                                                                         event.zone_type,
                                                                                                                                                                                                 )}
                                                                                                                                                                                 </strong>
+                                                                                                                                                                        </td>
+                                                                                                                                                                        <td>
                                                                                                                                                                                 <span className="student-badge student-badge-status-denied">
-                                                                                                                                                                                        -{event.points_lost} pts
+                                                                                                                                                                                        −
+                                                                                                                                                                                        {
+                                                                                                                                                                                                event.points_lost
+                                                                                                                                                                                        }{" "}
+                                                                                                                                                                                        pts
                                                                                                                                                                                 </span>
-                                                                                                                                                                        </div>
-                                                                                                                                                                        <span>
-                                                                                                                                                                                {formatUnixTimestamp(
-                                                                                                                                                                                        event.occurred_at,
+                                                                                                                                                                        </td>
+                                                                                                                                                                        <td>
+                                                                                                                                                                                {
+                                                                                                                                                                                        confidenceLabel
+                                                                                                                                                                                }
+                                                                                                                                                                        </td>
+                                                                                                                                                                        <td>
+                                                                                                                                                                                {hasRouteData ? (
+                                                                                                                                                                                        <span className="act-ride-pill">
+                                                                                                                                                                                                Has
+                                                                                                                                                                                                ride
+                                                                                                                                                                                        </span>
+                                                                                                                                                                                ) : (
+                                                                                                                                                                                        <span className="act-no-ride-pill">
+                                                                                                                                                                                                Auto
+                                                                                                                                                                                        </span>
                                                                                                                                                                                 )}
-                                                                                                                                                                        </span>
-                                                                                                                                                                        <span>
-                                                                                                                                                                                Type:{" "}
-                                                                                                                                                                                {formatPenaltyZoneType(
-                                                                                                                                                                                        event.zone_type,
-                                                                                                                                                                                )}
-                                                                                                                                                                                {event.speed_limit_mph
-                                                                                                                                                                                        ? ` · Limit ${event.speed_limit_mph} mph`
-                                                                                                                                                                                        : ""}
-                                                                                                                                                                        </span>
-                                                                                                                                                                        {event.zone_type === "speed_limit" ? (
-                                                                                                                                                                                <span>
-                                                                                                                                                                                        Max speed caught:{" "}
-                                                                                                                                                                                        {estimatedSpeedMph
-                                                                                                                                                                                                ? formatSpeedMph(
-                                                                                                                                                                                                                estimatedSpeedMph,
-                                                                                                                                                                                                        )
-                                                                                                                                                                                                : "Unavailable from route points"}
-                                                                                                                                                                                </span>
-                                                                                                                                                                        ) : null}
-                                                                                                                                                                        <span>
-                                                                                                                                                                                Reason:{" "}
-                                                                                                                                                                                {event.reason ||
-                                                                                                                                                                                        "No penalty reason provided."}
-                                                                                                                                                                        </span>
-                                                                                                                                                                        <span>
-                                                                                                                                                                                {event.description ||
-                                                                                                                                                                                        "No penalty description provided."}
-                                                                                                                                                                        </span>
-                                                                                                                                                                        <div className="student-ride-context">
-                                                                                                                                                                                <div className="student-ride-context-header">
-                                                                                                                                                                                        <strong>Ride Context</strong>
-                                                                                                                                                                                        <span className="student-badge student-badge-muted">
-                                                                                                                                                                                                Confidence {confidenceLabel}
-                                                                                                                                                                                        </span>
-                                                                                                                                                                                </div>
-                                                                                                                                                                                <div className="student-ride-context-grid">
-                                                                                                                                                                                        <span>
-                                                                                                                                                                                                Snippet{" "}
-                                                                                                                                                                                                {formatRideContextDistance(
-                                                                                                                                                                                                        rideContext.distanceMeters,
-                                                                                                                                                                                                )}{" "}
-                                                                                                                                                                                                ·{" "}
-                                                                                                                                                                                                {formatRideContextDuration(
-                                                                                                                                                                                                        rideContext.durationSeconds,
-                                                                                                                                                                                                )}
-                                                                                                                                                                                        </span>
-                                                                                                                                                                                        <span>
-                                                                                                                                                                                                {rideContext.pointCount.toLocaleString()}{" "}
-                                                                                                                                                                                                route samples near the penalty
-                                                                                                                                                                                        </span>
-                                                                                                                                                                                        <span>
-                                                                                                                                                                                                Evidence samples{" "}
-                                                                                                                                                                                                {evidenceCount == null
-                                                                                                                                                                                                        ? "Unavailable"
-                                                                                                                                                                                                        : evidenceCount.toLocaleString()}
-                                                                                                                                                                                        </span>
-                                                                                                                                                                                        <span>
-                                                                                                                                                                                                Nearest speed {nearestSpeed} ·{" "}
-                                                                                                                                                                                                {nearestAccuracy}
-                                                                                                                                                                                        </span>
-                                                                                                                                                                                        <span>
-                                                                                                                                                                                                Trip{" "}
-                                                                                                                                                                                                {session.trip_mode || "Unknown"}{" "}
-                                                                                                                                                                                                ·{" "}
-                                                                                                                                                                                                {formatUnixTimestamp(
-                                                                                                                                                                                                        session.started_at,
-                                                                                                                                                                                                )}
-                                                                                                                                                                                        </span>
-                                                                                                                                                                                </div>
-                                                                                                                                                                        </div>
-                                                                                                                                                                        <div className="uuid-copy-stack">
-                                                                                                                                                                                <UuidCopyField
-                                                                                                                                                                                        label="zone_uuid"
-                                                                                                                                                                                        value={event.zone_uuid}
-                                                                                                                                                                                        onCopy={handleCopyUuid}
-                                                                                                                                                                                />
-                                                                                                                                                                                <UuidCopyField
-                                                                                                                                                                                        label="session_id"
-                                                                                                                                                                                        value={session.session_id}
-                                                                                                                                                                                        onCopy={handleCopyUuid}
-                                                                                                                                                                                />
-                                                                                                                                                                        </div>
-                                                                                                                                                                        {hasRouteData && studentUUID ? (
-                                                                                                                                                                                <button
-                                                                                                                                                                                        className="student-view-ride-btn"
-                                                                                                                                                                                        type="button"
-                                                                                                                                                                                        onClick={() => {
-                                                                                                                                                                                                const params = new URLSearchParams({
-                                                                                                                                                                                                        user: studentUUID,
-                                                                                                                                                                                                        session: session.session_id,
-                                                                                                                                                                                                        lat: String(event.lat),
-                                                                                                                                                                                                        lng: String(event.lng),
-                                                                                                                                                                                                });
-                                                                                                                                                                                                navigate(`/routes?${params.toString()}`);
-                                                                                                                                                                                        }}
+                                                                                                                                                                        </td>
+                                                                                                                                                                        <td className="act-chevron">
+                                                                                                                                                                                {isOpen
+                                                                                                                                                                                        ? "▲"
+                                                                                                                                                                                        : "▼"}
+                                                                                                                                                                        </td>
+                                                                                                                                                                </tr>
+                                                                                                                                                                {isOpen && (
+                                                                                                                                                                        <tr className="act-detail-row">
+                                                                                                                                                                                <td
+                                                                                                                                                                                        colSpan={
+                                                                                                                                                                                                6
+                                                                                                                                                                                        }
                                                                                                                                                                                 >
-                                                                                                                                                                                        View ride →
-                                                                                                                                                                                </button>
-                                                                                                                                                                        ) : !hasRouteData ? (
-                                                                                                                                                                                <div className="student-no-ride-label">
-                                                                                                                                                                                        ⚡ Auto-reported — no recorded ride
-                                                                                                                                                                                </div>
-                                                                                                                                                                        ) : null}
-                                                                                                                                                                </div>
-                                                                                                                                                                <StudentEventMiniMap
-                                                                                                                                                                        label={
-                                                                                                                                                                                event.title ||
-                                                                                                                                                                                formatPenaltyZoneType(
-                                                                                                                                                                                        event.zone_type,
-                                                                                                                                                                                )
-                                                                                                                                                                        }
-                                                                                                                                                                        lat={event.lat}
-                                                                                                                                                                        lng={event.lng}
-                                                                                                                                                                        polygon={matchingZone?.polygon}
-                                                                                                                                                                        routePoints={rideContext.points}
-                                                                                                                                                                        tone="penalty"
-                                                                                                                                                                />
-                                                                                                                                                        </div>
-                                                                                                                                                </div>
-                                                                                                                                        );
-                                                                                                                                })(),
-                                                                                                                        )}
+                                                                                                                                                                                        <div className="act-detail-cell">
+                                                                                                                                                                                                <div className="student-event-card">
+                                                                                                                                                                                                        <div className="student-event-copy">
+                                                                                                                                                                                                                <span>
+                                                                                                                                                                                                                        Type:{" "}
+                                                                                                                                                                                                                        {formatPenaltyZoneType(
+                                                                                                                                                                                                                                event.zone_type,
+                                                                                                                                                                                                                        )}
+                                                                                                                                                                                                                        {event.speed_limit_mph
+                                                                                                                                                                                                                                ? ` · Limit ${event.speed_limit_mph} mph`
+                                                                                                                                                                                                                                : ""}
+                                                                                                                                                                                                                </span>
+                                                                                                                                                                                                                {event.zone_type ===
+                                                                                                                                                                                                                "speed_limit" ? (
+                                                                                                                                                                                                                        <span>
+                                                                                                                                                                                                                                Max
+                                                                                                                                                                                                                                speed
+                                                                                                                                                                                                                                caught:{" "}
+                                                                                                                                                                                                                                {estimatedSpeedMph
+                                                                                                                                                                                                                                        ? formatSpeedMph(
+                                                                                                                                                                                                                                                estimatedSpeedMph,
+                                                                                                                                                                                                                                        )
+                                                                                                                                                                                                                                        : "Unavailable from route points"}
+                                                                                                                                                                                                                        </span>
+                                                                                                                                                                                                                ) : null}
+                                                                                                                                                                                                                <span>
+                                                                                                                                                                                                                        Reason:{" "}
+                                                                                                                                                                                                                        {event.reason ||
+                                                                                                                                                                                                                                "No penalty reason provided."}
+                                                                                                                                                                                                                </span>
+                                                                                                                                                                                                                <span>
+                                                                                                                                                                                                                        {event.description ||
+                                                                                                                                                                                                                                "No penalty description provided."}
+                                                                                                                                                                                                                </span>
+                                                                                                                                                                                                                <div className="student-ride-context">
+                                                                                                                                                                                                                        <div className="student-ride-context-header">
+                                                                                                                                                                                                                                <strong>
+                                                                                                                                                                                                                                        Ride
+                                                                                                                                                                                                                                        Context
+                                                                                                                                                                                                                                </strong>
+                                                                                                                                                                                                                                <span className="student-badge student-badge-muted">
+                                                                                                                                                                                                                                        Confidence{" "}
+                                                                                                                                                                                                                                        {
+                                                                                                                                                                                                                                                confidenceLabel
+                                                                                                                                                                                                                                        }
+                                                                                                                                                                                                                                </span>
+                                                                                                                                                                                                                        </div>
+                                                                                                                                                                                                                        <div className="student-ride-context-grid">
+                                                                                                                                                                                                                                <span>
+                                                                                                                                                                                                                                        Snippet{" "}
+                                                                                                                                                                                                                                        {formatRideContextDistance(
+                                                                                                                                                                                                                                                rideContext.distanceMeters,
+                                                                                                                                                                                                                                        )}{" "}
+                                                                                                                                                                                                                                        ·{" "}
+                                                                                                                                                                                                                                        {formatRideContextDuration(
+                                                                                                                                                                                                                                                rideContext.durationSeconds,
+                                                                                                                                                                                                                                        )}
+                                                                                                                                                                                                                                </span>
+                                                                                                                                                                                                                                <span>
+                                                                                                                                                                                                                                        {rideContext.pointCount.toLocaleString()}{" "}
+                                                                                                                                                                                                                                        route
+                                                                                                                                                                                                                                        samples
+                                                                                                                                                                                                                                        near
+                                                                                                                                                                                                                                        the
+                                                                                                                                                                                                                                        penalty
+                                                                                                                                                                                                                                </span>
+                                                                                                                                                                                                                                <span>
+                                                                                                                                                                                                                                        Evidence
+                                                                                                                                                                                                                                        samples{" "}
+                                                                                                                                                                                                                                        {evidenceCount ==
+                                                                                                                                                                                                                                        null
+                                                                                                                                                                                                                                                ? "Unavailable"
+                                                                                                                                                                                                                                                : evidenceCount.toLocaleString()}
+                                                                                                                                                                                                                                </span>
+                                                                                                                                                                                                                                <span>
+                                                                                                                                                                                                                                        Nearest
+                                                                                                                                                                                                                                        speed{" "}
+                                                                                                                                                                                                                                        {
+                                                                                                                                                                                                                                                nearestSpeed
+                                                                                                                                                                                                                                        }{" "}
+                                                                                                                                                                                                                                        ·{" "}
+                                                                                                                                                                                                                                        {
+                                                                                                                                                                                                                                                nearestAccuracy
+                                                                                                                                                                                                                                        }
+                                                                                                                                                                                                                                </span>
+                                                                                                                                                                                                                                <span>
+                                                                                                                                                                                                                                        Trip{" "}
+                                                                                                                                                                                                                                        {session.trip_mode ||
+                                                                                                                                                                                                                                                "Unknown"}{" "}
+                                                                                                                                                                                                                                        ·{" "}
+                                                                                                                                                                                                                                        {formatUnixTimestamp(
+                                                                                                                                                                                                                                                session.started_at,
+                                                                                                                                                                                                                                        )}
+                                                                                                                                                                                                                                </span>
+                                                                                                                                                                                                                        </div>
+                                                                                                                                                                                                                </div>
+                                                                                                                                                                                                                <div className="uuid-copy-stack">
+                                                                                                                                                                                                                        <UuidCopyField
+                                                                                                                                                                                                                                label="zone_uuid"
+                                                                                                                                                                                                                                value={
+                                                                                                                                                                                                                                        event.zone_uuid
+                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                                onCopy={
+                                                                                                                                                                                                                                        handleCopyUuid
+                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                        />
+                                                                                                                                                                                                                        <UuidCopyField
+                                                                                                                                                                                                                                label="session_id"
+                                                                                                                                                                                                                                value={
+                                                                                                                                                                                                                                        session.session_id
+                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                                onCopy={
+                                                                                                                                                                                                                                        handleCopyUuid
+                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                        />
+                                                                                                                                                                                                                </div>
+                                                                                                                                                                                                                {hasRouteData &&
+                                                                                                                                                                                                                studentUUID ? (
+                                                                                                                                                                                                                        <button
+                                                                                                                                                                                                                                className="student-view-ride-btn"
+                                                                                                                                                                                                                                type="button"
+                                                                                                                                                                                                                                onClick={(
+                                                                                                                                                                                                                                        e,
+                                                                                                                                                                                                                                ) => {
+                                                                                                                                                                                                                                        e.stopPropagation();
+                                                                                                                                                                                                                                        const params =
+                                                                                                                                                                                                                                                new URLSearchParams(
+                                                                                                                                                                                                                                                        {
+                                                                                                                                                                                                                                                                user: studentUUID,
+                                                                                                                                                                                                                                                                session: session.session_id,
+                                                                                                                                                                                                                                                                lat: String(
+                                                                                                                                                                                                                                                                        event.lat,
+                                                                                                                                                                                                                                                                ),
+                                                                                                                                                                                                                                                                lng: String(
+                                                                                                                                                                                                                                                                        event.lng,
+                                                                                                                                                                                                                                                                ),
+                                                                                                                                                                                                                                                        },
+                                                                                                                                                                                                                                                );
+                                                                                                                                                                                                                                        navigate(
+                                                                                                                                                                                                                                                `/routes?${params.toString()}`,
+                                                                                                                                                                                                                                        );
+                                                                                                                                                                                                                                }}
+                                                                                                                                                                                                                        >
+                                                                                                                                                                                                                                View
+                                                                                                                                                                                                                                ride
+                                                                                                                                                                                                                                →
+                                                                                                                                                                                                                        </button>
+                                                                                                                                                                                                                ) : !hasRouteData ? (
+                                                                                                                                                                                                                        <div className="student-no-ride-label">
+                                                                                                                                                                                                                                ⚡
+                                                                                                                                                                                                                                Auto-reported
+                                                                                                                                                                                                                                —
+                                                                                                                                                                                                                                no
+                                                                                                                                                                                                                                recorded
+                                                                                                                                                                                                                                ride
+                                                                                                                                                                                                                        </div>
+                                                                                                                                                                                                                ) : null}
+                                                                                                                                                                                                        </div>
+                                                                                                                                                                                                        <StudentEventMiniMap
+                                                                                                                                                                                                                label={
+                                                                                                                                                                                                                        event.title ||
+                                                                                                                                                                                                                        formatPenaltyZoneType(
+                                                                                                                                                                                                                                event.zone_type,
+                                                                                                                                                                                                                        )
+                                                                                                                                                                                                                }
+                                                                                                                                                                                                                lat={
+                                                                                                                                                                                                                        event.lat
+                                                                                                                                                                                                                }
+                                                                                                                                                                                                                lng={
+                                                                                                                                                                                                                        event.lng
+                                                                                                                                                                                                                }
+                                                                                                                                                                                                                polygon={
+                                                                                                                                                                                                                        matchingZone?.polygon
+                                                                                                                                                                                                                }
+                                                                                                                                                                                                                routePoints={
+                                                                                                                                                                                                                        rideContext.points
+                                                                                                                                                                                                                }
+                                                                                                                                                                                                                tone="penalty"
+                                                                                                                                                                                                        />
+                                                                                                                                                                                                </div>
+                                                                                                                                                                                        </div>
+                                                                                                                                                                                </td>
+                                                                                                                                                                        </tr>
+                                                                                                                                                                )}
+                                                                                                                                                        </tbody>
+                                                                                                                                                );
+                                                                                                                                        },
+                                                                                                                                )}
+                                                                                                                        </table>
                                                                                                                 </div>
                                                                                                         )}
                                                                                                 </div>

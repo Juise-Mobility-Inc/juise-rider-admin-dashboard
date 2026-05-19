@@ -6671,6 +6671,105 @@
         display: inline-block;
 }
 
+/* ── Activity sub-tab tables ──────────────────────────────── */
+.act-table-wrap {
+        overflow-x: auto;
+        margin: 0;
+        border-radius: 8px;
+        border: 1.5px solid var(--panel-border, rgba(0,0,0,0.10));
+}
+
+.act-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.82rem;
+}
+
+.act-table thead tr {
+        background: rgba(17,45,78,0.04);
+        border-bottom: 1.5px solid var(--panel-border, rgba(0,0,0,0.10));
+}
+
+.act-table th {
+        padding: 8px 12px;
+        text-align: left;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--muted, #888);
+        white-space: nowrap;
+}
+
+.act-row {
+        cursor: pointer;
+        transition: background 0.1s;
+}
+
+.act-row:hover {
+        background: rgba(17,45,78,0.04);
+}
+
+.act-row-open {
+        background: rgba(17,45,78,0.05);
+}
+
+.act-table tbody + tbody .act-row td,
+.act-table tbody .act-row td {
+        border-top: 1px solid var(--panel-border, rgba(0,0,0,0.08));
+}
+
+.act-table td {
+        padding: 9px 12px;
+        vertical-align: middle;
+}
+
+.act-col-date {
+        white-space: nowrap;
+        color: var(--muted, #888);
+        font-size: 0.78rem;
+}
+
+.act-chevron {
+        text-align: right !important;
+        color: var(--muted, #888);
+        font-size: 0.65rem;
+        padding-right: 14px !important;
+        width: 28px;
+        user-select: none;
+}
+
+.act-detail-row td {
+        padding: 0;
+        border-top: none !important;
+        border-bottom: 2px solid var(--panel-border, rgba(0,0,0,0.10));
+}
+
+.act-detail-cell {
+        padding: 16px 18px 20px;
+        background: rgba(17,45,78,0.025);
+}
+
+.act-ride-pill {
+        display: inline-block;
+        padding: 2px 9px;
+        border-radius: 20px;
+        background: rgba(37,99,235,0.10);
+        color: var(--accent, #2563eb);
+        font-size: 0.72rem;
+        font-weight: 600;
+}
+
+.act-no-ride-pill {
+        display: inline-block;
+        padding: 2px 9px;
+        border-radius: 20px;
+        background: rgba(0,0,0,0.06);
+        color: var(--muted, #888);
+        font-size: 0.72rem;
+        font-weight: 500;
+}
+
 .student-event-map-shell {
         display: grid;
         gap: 8px;
