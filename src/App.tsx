@@ -162,10 +162,6 @@ const dashboardSections: Array<{
         },
 ];
 
-const visibleDashboardSections = dashboardSections.filter(
-        ({ section }) => section !== "terms",
-);
-
 const sectionPathByName: Record<Section, string> = Object.fromEntries(
         dashboardSections.map(({ section, path }) => [section, path]),
 ) as Record<Section, string>;

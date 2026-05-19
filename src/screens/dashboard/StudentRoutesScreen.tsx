@@ -325,10 +325,7 @@ function exportRideGPS(
   downloadCSV(`${studentName}_ride_${rideNum}.csv`, [headers, ...rows]);
 }
 
-function evidenceCountLabel(value: number | null | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "Evidence —";
-  return `${Math.max(0, Math.round(value)).toLocaleString()} evidence samples`;
-}
+
 
 function MapFitter({ points }: { points: [number, number][] }) {
   const map = useMap();
