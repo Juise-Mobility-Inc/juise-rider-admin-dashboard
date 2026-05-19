@@ -693,7 +693,7 @@
         gap: 1px;
         margin-left: 14px;
         padding-left: 10px;
-        border-left: 1.5px solid rgba(255, 255, 255, 0.09);
+        border-left: 1.5px solid var(--sidebar-border);
         margin-bottom: 6px;
         margin-top: 1px;
 }
@@ -709,12 +709,12 @@
         word-break: break-word;
         background: transparent;
         border: none;
-        color: rgba(255, 255, 255, 0.72);
+        color: var(--sidebar-muted);
         transition: background 0.12s ease, color 0.12s ease;
 }
 
 .nav-sub-item:hover {
-        background: rgba(255, 255, 255, 0.07);
+        background: var(--sidebar-item-hover-bg);
         color: var(--sidebar-text);
 }
 
@@ -749,7 +749,7 @@
         border-radius: 7px;
         background: transparent;
         border: none;
-        color: rgba(255, 255, 255, 0.35);
+        color: var(--sidebar-border);
         cursor: pointer;
         font-size: 0.95rem;
         flex-shrink: 0;
@@ -757,7 +757,7 @@
 }
 
 .nav-sub-chevron:hover {
-        background: rgba(255, 255, 255, 0.07);
+        background: var(--sidebar-item-hover-bg);
         color: var(--sidebar-text);
 }
 
@@ -767,7 +767,7 @@
         gap: 1px;
         margin-left: 10px;
         padding-left: 8px;
-        border-left: 1px dashed rgba(255, 255, 255, 0.07);
+        border-left: 1px dashed var(--sidebar-border);
         margin-top: 1px;
         margin-bottom: 2px;
 }
@@ -783,18 +783,21 @@
         word-break: break-word;
         background: transparent;
         border: none;
-        color: rgba(255, 255, 255, 0.4);
-        transition: background 0.12s ease, color 0.12s ease;
+        color: var(--sidebar-muted);
+        opacity: 0.7;
+        transition: background 0.12s ease, color 0.12s ease, opacity 0.12s ease;
 }
 
 .nav-leaf-item:hover {
-        background: rgba(255, 255, 255, 0.05);
-        color: rgba(255, 255, 255, 0.72);
+        background: var(--sidebar-item-hover-bg);
+        color: var(--sidebar-text);
+        opacity: 1;
 }
 
 .nav-leaf-item-active {
         background: var(--sidebar-item-active-bg) !important;
         color: var(--sidebar-item-active-text) !important;
+        opacity: 1 !important;
         font-weight: 500;
 }
 
