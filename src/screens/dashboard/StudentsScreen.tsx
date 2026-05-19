@@ -879,6 +879,7 @@ export function StudentsScreen(props: Props) {
         } = props;
 
         const [detailTab, setDetailTab] = useState<DetailTab>("profile");
+        const [activitySubTab, setActivitySubTab] = useState<"speed" | "nogo" | "pois">("speed");
         const [allStudentExportBusy, setAllStudentExportBusy] = useState(false);
         const [allStudentExportProgress, setAllStudentExportProgress] =
                 useState<StudentExportProgress>({ completed: 0, total: 0 });
@@ -1256,6 +1257,12 @@ export function StudentsScreen(props: Props) {
                                                                                 (left, right) =>
                                                                                         right.event.occurred_at - left.event.occurred_at,
                                                                         );
+                                                                const speedPenalties = penaltyEvents.filter(
+                                                                        ({ event }) => event.zone_type === "speed_limit",
+                                                                );
+                                                                const noGoPenalties = penaltyEvents.filter(
+                                                                        ({ event }) => event.zone_type !== "speed_limit",
+                                                                );
 
                                                                 return (
                                                                         <>
@@ -1739,9 +1746,49 @@ export function StudentsScreen(props: Props) {
                                                                                         )}
 
                                                                                         {detailTab === "activity" && (
+                                                                                                <div className="student-activity-subtabs">
+                                                                                                        <button
+                                                                                                                type="button"
+                                                                                                                className={`student-subtab-btn${activitySubTab === "speed" ? " student-tab-btn-active" : ""}`}
+                                                                                                                onClick={() => setActivitySubTab("speed")}
+                                                                                                        >
+                                                                                                                Speed Zones
+                                                                                                                {speedPenalties.length > 0 && (
+                                                                                                                        <span className="student-tab-count">
+                                                                                                                                {speedPenalties.length}
+                                                                                                                        </span>
+                                                                                                                )}
+                                                                                                        </button>
+                                                                                                        <button
+                                                                                                                type="button"
+                                                                                                                className={`student-subtab-btn${activitySubTab === "nogo" ? " student-tab-btn-active" : ""}`}
+                                                                                                                onClick={() => setActivitySubTab("nogo")}
+                                                                                                        >
+                                                                                                                No-Go Zones
+                                                                                                                {noGoPenalties.length > 0 && (
+                                                                                                                        <span className="student-tab-count">
+                                                                                                                                {noGoPenalties.length}
+                                                                                                                        </span>
+                                                                                                                )}
+                                                                                                        </button>
+                                                                                                        <button
+                                                                                                                type="button"
+                                                                                                                className={`student-subtab-btn${activitySubTab === "pois" ? " student-tab-btn-active" : ""}`}
+                                                                                                                onClick={() => setActivitySubTab("pois")}
+                                                                                                        >
+                                                                                                                POIs Visited
+                                                                                                                {visitedPoiVisits.length > 0 && (
+                                                                                                                        <span className="student-tab-count">
+                                                                                                                                {visitedPoiVisits.length}
+                                                                                                                        </span>
+                                                                                                                )}
+                                                                                                        </button>
+                                                                                                </div>
+                                                                                        )}
+                                                                                        {detailTab === "activity" && activitySubTab === "pois" && (
                                                                                                 <div className="data-section">
                                                                                                         <div className="data-section-header">
-                                                                                                                <h4>Visited POIs</h4>
+                                                                                                                <h4>POIs Visited</h4>
                                                                                                                 <span>{visitedPoiVisits.length}</span>
                                                                                                         </div>
                                                                                                         {studentBusy ? (
@@ -1815,26 +1862,47 @@ export function StudentsScreen(props: Props) {
                                                                                                 </div>
                                                                                         )}
 
-                                                                                        {detailTab === "activity" && (
+                                                                                        {detailTab === "activity" && activitySubTab !== "pois" && (
                                                                                                 <div className="data-section">
                                                                                                         <div className="data-section-header">
-                                                                                                                <h4>Route penalties</h4>
-                                                                                                                <span>{penaltyEvents.length}</span>
+                                                                                                                <h4>
+                                                                                                                        {activitySubTab === "speed"
+                                                                                                                                ? "Speed zone violations"
+                                                                                                                                : "No-go zone violations"}
+                                                                                                                </h4>
+                                                                                                                <span>
+                                                                                                                        {activitySubTab === "speed"
+                                                                                                                                ? speedPenalties.length
+                                                                                                                                : noGoPenalties.length}
+                                                                                                                </span>
                                                                                                         </div>
                                                                                                         {studentBusy ? (
                                                                                                                 <p className="muted-text">Loading route history…</p>
                                                                                                         ) : studentRouteHistoryError ? (
                                                                                                                 <p className="muted-text">
-                                                                                                                        Penalty events unavailable right now:{" "}
+                                                                                                                        {activitySubTab === "speed"
+                                                                                                                                ? "Speed zone violations"
+                                                                                                                                : "No-go zone violations"}{" "}
+                                                                                                                        unavailable right now:{" "}
                                                                                                                         {studentRouteHistoryError}
                                                                                                                 </p>
-                                                                                                        ) : penaltyEvents.length === 0 ? (
+                                                                                                        ) : (activitySubTab === "speed"
+                                                                                                                        ? speedPenalties
+                                                                                                                        : noGoPenalties
+                                                                                                        ).length === 0 ? (
                                                                                                                 <p className="muted-text">
-                                                                                                                        No route penalty events recorded for this student.
+                                                                                                                        No{" "}
+                                                                                                                        {activitySubTab === "speed"
+                                                                                                                                ? "speed zone"
+                                                                                                                                : "no-go zone"}{" "}
+                                                                                                                        violations recorded for this student.
                                                                                                                 </p>
                                                                                                         ) : (
                                                                                                                 <div className="stack-list">
-                                                                                                                        {penaltyEvents.map(({ event, session }, index) =>
+                                                                                                                        {(activitySubTab === "speed"
+                                                                                                                                ? speedPenalties
+                                                                                                                                : noGoPenalties
+                                                                                                                        ).map(({ event, session }, index) =>
                                                                                                                                 (() => {
                                                                                                                                         const matchingZone = resolvePenaltyZone(
                                                                                                                                                 session,
