@@ -456,6 +456,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
   // lat/lng to fly to once the right session is loaded
   const [focusPin, setFocusPin] = useState<[number, number] | null>(null);
 
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showRoute, setShowRoute] = useState(true);
   const [showPOIs, setShowPOIs] = useState(true);
   const [showPenalties, setShowPenalties] = useState(true);
@@ -746,66 +747,90 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
       {/* ══ Top row: sidebar + map ══ */}
       <div className="sr-main-row">
         {/* ── Student sidebar ── */}
-        <aside className="sr-sidebar">
-          <div className="sr-sidebar-head">
-            <span className="sr-eyebrow">Students</span>
-            {!rosterBusy && roster.length > 0 && (
-              <span className="sr-count">{roster.length}</span>
+        <aside className={`sr-sidebar${sidebarOpen ? "" : " sr-sidebar--collapsed"}`}>
+          {/* Toggle button — always visible */}
+          <button
+            className="sr-sidebar-toggle"
+            type="button"
+            onClick={() => setSidebarOpen((v) => !v)}
+            title={sidebarOpen ? "Hide student list" : "Show student list"}
+          >
+            {sidebarOpen ? (
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 12L6 8l4-4"/>
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 4l4 4-4 4"/>
+              </svg>
             )}
-          </div>
-          <div className="sr-search-wrap">
-            <input
-              className="sr-search"
-              type="search"
-              placeholder="Search…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          {rosterErr && <p className="sr-sidebar-err">{rosterErr}</p>}
+            {!sidebarOpen && roster.length > 0 && (
+              <span className="sr-sidebar-toggle-count">{roster.length}</span>
+            )}
+          </button>
 
-          <div className="sr-student-list">
-            {rosterBusy && (
-              <div className="sr-skel-list">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="sr-skel-row" />
-                ))}
-              </div>
-            )}
-            {!rosterBusy && filtered.length === 0 && !rosterErr && (
-              <p className="sr-empty-hint">
-                {search ? "No match." : "No students."}
-              </p>
-            )}
-            {!rosterBusy &&
-              filtered.map((entry) => {
-                const id = uuid(entry);
-                const active = id === selUUID;
-                return (
-                          <button
-                            key={id}
-                            className={`sr-student-row${active ? " sr-student-row--active" : ""}`}
-                            onClick={() => selectStudent(entry)}
-                          >
-                            <div className="sr-avatar">
-                      <span className="sr-avatar-initials">
-                        {initials(entry)}
-                      </span>
-                      {active && <span className="sr-avatar-dot" />}
-                    </div>
-                    <div className="sr-student-text">
-                      <span className="sr-student-name">{fullName(entry)}</span>
-                      {subline(entry) && (
-                        <span className="sr-student-sub">{subline(entry)}</span>
+          {/* Collapsible body */}
+          <div className="sr-sidebar-body">
+            <div className="sr-sidebar-head">
+              <span className="sr-eyebrow">Students</span>
+              {!rosterBusy && roster.length > 0 && (
+                <span className="sr-count">{roster.length}</span>
+              )}
+            </div>
+            <div className="sr-search-wrap">
+              <input
+                className="sr-search"
+                type="search"
+                placeholder="Search…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            {rosterErr && <p className="sr-sidebar-err">{rosterErr}</p>}
+
+            <div className="sr-student-list">
+              {rosterBusy && (
+                <div className="sr-skel-list">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="sr-skel-row" />
+                  ))}
+                </div>
+              )}
+              {!rosterBusy && filtered.length === 0 && !rosterErr && (
+                <p className="sr-empty-hint">
+                  {search ? "No match." : "No students."}
+                </p>
+              )}
+              {!rosterBusy &&
+                filtered.map((entry) => {
+                  const id = uuid(entry);
+                  const active = id === selUUID;
+                  return (
+                    <button
+                      key={id}
+                      className={`sr-student-row${active ? " sr-student-row--active" : ""}`}
+                      onClick={() => selectStudent(entry)}
+                    >
+                      <div className="sr-avatar">
+                        <span className="sr-avatar-initials">
+                          {initials(entry)}
+                        </span>
+                        {active && <span className="sr-avatar-dot" />}
+                      </div>
+                      <div className="sr-student-text">
+                        <span className="sr-student-name">{fullName(entry)}</span>
+                        {subline(entry) && (
+                          <span className="sr-student-sub">{subline(entry)}</span>
+                        )}
+                      </div>
+                      {active && histBusy && <span className="sr-spinner" />}
+                      {active && !histBusy && history.length > 0 && (
+                        <span className="sr-ride-count">{history.length}</span>
                       )}
-                    </div>
-                    {active && histBusy && <span className="sr-spinner" />}
-                    {active && !histBusy && history.length > 0 && (
-                      <span className="sr-ride-count">{history.length}</span>
-                    )}
-                  </button>
-                );
-              })}
+                    </button>
+                  );
+                })}
+            </div>
           </div>
         </aside>
 
