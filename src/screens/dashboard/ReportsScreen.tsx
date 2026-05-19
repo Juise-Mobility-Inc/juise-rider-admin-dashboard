@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   fetchAdminSchoolPacks,
@@ -846,6 +846,15 @@ export function ReportsScreen({
     completed: 0,
     total: 0,
   });
+  const autoTriggered = useRef(false);
+  useEffect(() => {
+    if (!autoTriggered.current && activeSchoolId) {
+      autoTriggered.current = true;
+      void handleBuildDataset();
+    }
+    // handleBuildDataset is a hoisted function — safe to call here
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSchoolId]);
 
   const dateRange = useMemo(
     () => buildDateRange(fromDate, toDate),

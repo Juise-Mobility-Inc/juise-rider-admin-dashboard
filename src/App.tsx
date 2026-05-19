@@ -1130,6 +1130,13 @@ function resolveSectionFromPathname(pathname: string): Section | null {
 function App() {
         const location = useLocation();
         const navigate = useNavigate();
+        const [openNavGroups, setOpenNavGroups] = useState({
+                campusSetup: true,
+                juisePacks: true,
+                campusInfo: true,
+                parkingEnforcement: true,
+                penaltyReports: true,
+        });
         const [initialSession] = useState<AdminSession | null>(() =>
                 readDashboardSession(),
         );
@@ -4518,16 +4525,78 @@ function App() {
                                 </div>
 
                                 <nav className="section-nav">
-                                        {visibleDashboardSections.map(({ section, label, path }) => (
-                                                <NavLink
-                                                        key={section}
-                                                        to={path}
-                                                        className={({ isActive }) =>
-                                                                isActive ? "nav-button nav-button-active" : "nav-button"
-                                                        }>
-                                                        {label}
-                                                </NavLink>
-                                        ))}
+                                        {/* Top-level flat links */}
+                                        <NavLink to="/dashboard" className={({ isActive }) => isActive ? "nav-button nav-button-active" : "nav-button"}>Dashboard</NavLink>
+                                        <NavLink to="/map-overview" className={({ isActive }) => isActive ? "nav-button nav-button-active" : "nav-button"}>Map Overview</NavLink>
+
+                                        {/* Campus Setup group */}
+                                        <div className="nav-group">
+                                                <button className="nav-group-header" type="button" onClick={() => setOpenNavGroups(p => ({ ...p, campusSetup: !p.campusSetup }))}>
+                                                        <span>Campus Setup</span>
+                                                        <span className={`nav-group-chevron${openNavGroups.campusSetup ? " nav-group-chevron-open" : ""}`}>›</span>
+                                                </button>
+                                                {openNavGroups.campusSetup && (
+                                                        <div className="nav-group-items">
+                                                                <NavLink to="/school" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active" : "nav-sub-item"}>Profile</NavLink>
+                                                                <NavLink to="/zones" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active" : "nav-sub-item"}>Penalty Zones</NavLink>
+                                                                <NavLink to="/pois" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active" : "nav-sub-item"}>POI Setup</NavLink>
+                                                                <NavLink to="/challenges" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active" : "nav-sub-item"}>Challenges and Campaigns</NavLink>
+                                                                <NavLink to="/notifications" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active" : "nav-sub-item"}>Notifications</NavLink>
+                                                                <div className="nav-sub-group">
+                                                                        <div className="nav-sub-group-row">
+                                                                                <NavLink to="/packs" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active nav-sub-item-grow" : "nav-sub-item nav-sub-item-grow"}>Juise Packs</NavLink>
+                                                                                <button className="nav-sub-chevron" type="button" onClick={() => setOpenNavGroups(p => ({ ...p, juisePacks: !p.juisePacks }))}>
+                                                                                        <span className={`nav-group-chevron${openNavGroups.juisePacks ? " nav-group-chevron-open" : ""}`}>›</span>
+                                                                                </button>
+                                                                        </div>
+                                                                        {openNavGroups.juisePacks && (
+                                                                                <div className="nav-leaf-items">
+                                                                                        <NavLink to="/reservations" className={({ isActive }) => isActive ? "nav-leaf-item nav-leaf-item-active" : "nav-leaf-item"}>Juise Pack Reservation Requests</NavLink>
+                                                                                </div>
+                                                                        )}
+                                                                </div>
+                                                        </div>
+                                                )}
+                                        </div>
+
+                                        {/* Campus Information group */}
+                                        <div className="nav-group">
+                                                <button className="nav-group-header" type="button" onClick={() => setOpenNavGroups(p => ({ ...p, campusInfo: !p.campusInfo }))}>
+                                                        <span>Campus Information</span>
+                                                        <span className={`nav-group-chevron${openNavGroups.campusInfo ? " nav-group-chevron-open" : ""}`}>›</span>
+                                                </button>
+                                                {openNavGroups.campusInfo && (
+                                                        <div className="nav-group-items">
+                                                                <NavLink to="/students" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active" : "nav-sub-item"}>Student Information</NavLink>
+                                                                <NavLink to="/routes" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active" : "nav-sub-item"}>Recorded Routes</NavLink>
+                                                        </div>
+                                                )}
+                                        </div>
+
+                                        {/* Parking and Ride Enforcement group */}
+                                        <div className="nav-group">
+                                                <button className="nav-group-header" type="button" onClick={() => setOpenNavGroups(p => ({ ...p, parkingEnforcement: !p.parkingEnforcement }))}>
+                                                        <span>Parking and Ride Enforcement</span>
+                                                        <span className={`nav-group-chevron${openNavGroups.parkingEnforcement ? " nav-group-chevron-open" : ""}`}>›</span>
+                                                </button>
+                                                {openNavGroups.parkingEnforcement && (
+                                                        <div className="nav-group-items">
+                                                                <div className="nav-sub-group">
+                                                                        <div className="nav-sub-group-row">
+                                                                                <NavLink to="/penalty-reports" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active nav-sub-item-grow" : "nav-sub-item nav-sub-item-grow"}>Parking Enforcement Reports</NavLink>
+                                                                                <button className="nav-sub-chevron" type="button" onClick={() => setOpenNavGroups(p => ({ ...p, penaltyReports: !p.penaltyReports }))}>
+                                                                                        <span className={`nav-group-chevron${openNavGroups.penaltyReports ? " nav-group-chevron-open" : ""}`}>›</span>
+                                                                                </button>
+                                                                        </div>
+                                                                        {openNavGroups.penaltyReports && (
+                                                                                <div className="nav-leaf-items">
+                                                                                        <NavLink to="/violation-fees" className={({ isActive }) => isActive ? "nav-leaf-item nav-leaf-item-active" : "nav-leaf-item"}>Violation Fee Setup</NavLink>
+                                                                                </div>
+                                                                        )}
+                                                                </div>
+                                                        </div>
+                                                )}
+                                        </div>
                                 </nav>
 
                                 <div className="sidebar-footer">
