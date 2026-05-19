@@ -685,7 +685,7 @@ function renderZonePolygon(zone: SchoolZoneMapPolygon, props?: PolygonGroupProps
   }
 
   const palette = getZonePalette(zone.zoneType, zone.highlighted)
-  const showPointMarkers = zone.highlighted || zone.points.length < 3
+  const showPointMarkers = zone.points.length < 3
   const dragHandleIcon = createHandleIcon(palette.stroke, '#112d4e', zone.highlighted ? 18 : 16)
   const insertHandleIcon = createHandleIcon('#ffffff', palette.stroke, 12)
   const segmentInsertHandles = props?.editable ? getSegmentInsertHandles(zone.points) : []
