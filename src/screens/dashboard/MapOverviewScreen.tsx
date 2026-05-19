@@ -7,6 +7,7 @@ import {
   CircleMarker,
   Popup,
   Tooltip,
+  useMap,
 } from "react-leaflet";
 import {
   fetchSchoolZones,
@@ -16,6 +17,16 @@ import {
   type SchoolPOI,
   type Pack,
 } from "../../lib/api";
+
+function MapInvalidator() {
+  const map = useMap();
+  useEffect(() => {
+    map.invalidateSize();
+    const t = setTimeout(() => map.invalidateSize(), 200);
+    return () => clearTimeout(t);
+  }, [map]);
+  return null;
+}
 
 interface Props {
   activeSchoolId: string;
@@ -187,6 +198,7 @@ export function MapOverviewScreen({
           scrollWheelZoom
         >
           <TileLayer attribution={TILE_ATTR} url={TILE_URL} />
+          <MapInvalidator />
 
           {showNoGoZones &&
             noGoZones.map((z) => (
