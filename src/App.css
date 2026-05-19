@@ -6750,14 +6750,24 @@
         background: rgba(17,45,78,0.025);
 }
 
-.act-ride-pill {
-        display: inline-block;
-        padding: 2px 9px;
-        border-radius: 20px;
-        background: rgba(37,99,235,0.10);
+.act-visit-ride-btn {
+        appearance: none;
+        border: none;
+        background: none;
+        padding: 0;
+        margin: 0;
         color: var(--accent, #2563eb);
-        font-size: 0.72rem;
+        font-size: 0.78rem;
         font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+        text-decoration: none;
+        transition: opacity 0.13s;
+}
+
+.act-visit-ride-btn:hover {
+        opacity: 0.7;
+        text-decoration: underline;
 }
 
 .act-no-ride-pill {
