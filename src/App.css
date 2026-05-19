@@ -6576,6 +6576,35 @@
         line-height: 1.35;
 }
 
+.student-view-ride-btn {
+        align-self: flex-start;
+        margin-top: 6px;
+        padding: 5px 14px;
+        border: none;
+        border-radius: 20px;
+        background: var(--accent, #2563eb);
+        color: #fff;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.15s;
+}
+
+.student-view-ride-btn:hover {
+        opacity: 0.85;
+}
+
+.student-no-ride-label {
+        margin-top: 6px;
+        padding: 5px 12px;
+        border-radius: 20px;
+        background: var(--panel-border, rgba(0,0,0,0.08));
+        color: var(--muted, #888);
+        font-size: 0.78rem;
+        font-weight: 500;
+        display: inline-block;
+}
+
 .student-event-map-shell {
         display: grid;
         gap: 8px;

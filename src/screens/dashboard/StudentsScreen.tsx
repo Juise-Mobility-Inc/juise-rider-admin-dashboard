@@ -1892,33 +1892,12 @@ export function StudentsScreen(props: Props) {
                                                                                                                                                 selectedStudentEntry?.membership?.user_uuid?.trim() ||
                                                                                                                                                 selectedStudentEntry?.user?.k_guid ||
                                                                                                                                                 "";
+                                                                                                                                        const hasRouteData = session.points.length > 0;
 
                                                                                                                                         return (
                                                                                                                                                 <div
                                                                                                                                                         className="data-card"
                                                                                                                                                         key={`${session.session_id}-${event.zone_uuid}-${event.occurred_at}-${index}`}
-                                                                                                                                                        style={{
-                                                                                                                                                                cursor: studentUUID
-                                                                                                                                                                        ? "pointer"
-                                                                                                                                                                        : undefined,
-                                                                                                                                                        }}
-                                                                                                                                                        title={
-                                                                                                                                                                studentUUID
-                                                                                                                                                                        ? "View on Student Routes map"
-                                                                                                                                                                        : undefined
-                                                                                                                                                        }
-                                                                                                                                                        onClick={() => {
-                                                                                                                                                                if (!studentUUID) return;
-                                                                                                                                                                const params = new URLSearchParams({
-                                                                                                                                                                        user: studentUUID,
-                                                                                                                                                                        session: session.session_id,
-                                                                                                                                                                        lat: String(event.lat),
-                                                                                                                                                                        lng: String(event.lng),
-                                                                                                                                                                });
-                                                                                                                                                                navigate(
-                                                                                                                                                                        `/routes?${params.toString()}`,
-                                                                                                                                                                );
-                                                                                                                                                        }}
                                                                                                                                                 >
                                                                                                                                                         <div className="student-event-card">
                                                                                                                                                                 <div className="student-event-copy">
@@ -2020,6 +1999,27 @@ export function StudentsScreen(props: Props) {
                                                                                                                                                                                         onCopy={handleCopyUuid}
                                                                                                                                                                                 />
                                                                                                                                                                         </div>
+                                                                                                                                                                        {hasRouteData && studentUUID ? (
+                                                                                                                                                                                <button
+                                                                                                                                                                                        className="student-view-ride-btn"
+                                                                                                                                                                                        type="button"
+                                                                                                                                                                                        onClick={() => {
+                                                                                                                                                                                                const params = new URLSearchParams({
+                                                                                                                                                                                                        user: studentUUID,
+                                                                                                                                                                                                        session: session.session_id,
+                                                                                                                                                                                                        lat: String(event.lat),
+                                                                                                                                                                                                        lng: String(event.lng),
+                                                                                                                                                                                                });
+                                                                                                                                                                                                navigate(`/routes?${params.toString()}`);
+                                                                                                                                                                                        }}
+                                                                                                                                                                                >
+                                                                                                                                                                                        View ride →
+                                                                                                                                                                                </button>
+                                                                                                                                                                        ) : !hasRouteData ? (
+                                                                                                                                                                                <div className="student-no-ride-label">
+                                                                                                                                                                                        ⚡ Auto-reported — no recorded ride
+                                                                                                                                                                                </div>
+                                                                                                                                                                        ) : null}
                                                                                                                                                                 </div>
                                                                                                                                                                 <StudentEventMiniMap
                                                                                                                                                                         label={
