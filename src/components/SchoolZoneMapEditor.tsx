@@ -55,14 +55,14 @@ const TILE_LAYER_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 function getZonePalette(zoneType: SchoolZoneMapPolygon['zoneType'], highlighted = false) {
   if (zoneType === 'no_go') {
     return {
-      stroke: highlighted ? '#ff5c5c' : '#f48b82',
-      fill: highlighted ? '#ff5c5c' : '#f5b8b1',
+      stroke: highlighted ? '#b91c1c' : '#dc2626',
+      fill: highlighted ? '#ef4444' : '#f87171',
     }
   }
 
   return {
-    stroke: highlighted ? '#eec253' : '#f3d88f',
-    fill: highlighted ? '#eec253' : '#f6e6b0',
+    stroke: highlighted ? '#b45309' : '#d97706',
+    fill: highlighted ? '#f59e0b' : '#fbbf24',
   }
 }
 
@@ -707,7 +707,7 @@ function renderZonePolygon(zone: SchoolZoneMapPolygon, props?: PolygonGroupProps
           pathOptions={{
             color: palette.stroke,
             fillColor: palette.fill,
-            fillOpacity: zone.highlighted ? 0.28 : 0.18,
+            fillOpacity: zone.highlighted ? 0.50 : 0.35,
             weight: zone.highlighted ? 4 : 3,
           }}
           positions={zone.points}
