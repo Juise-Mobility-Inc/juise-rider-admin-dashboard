@@ -246,6 +246,79 @@ function zoneTitle(z: { title?: string | null; zone_type: string }): string {
   return "Zone";
 }
 
+function safeFilename(s: string): string {
+  return s.replace(/[^a-z0-9]/gi, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
+}
+
+function downloadCSV(filename: string, rows: string[][]): void {
+  const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+  const csv = rows.map((r) => r.map(escape).join(",")).join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportAllRidesSummary(
+  entry: SchoolStudentRosterEntry | null,
+  sessions: StudentRouteHistorySession[],
+): void {
+  const studentName = entry ? safeFilename(fullName(entry)) : "student";
+  const headers = [
+    "Ride #",
+    "Date",
+    "Distance (mi)",
+    "Duration",
+    "Points Earned",
+    "Points Lost",
+    "Check-in Spots",
+    "Violations",
+    "GPS Points",
+  ];
+  const rows = sessions.map((sess, idx) => [
+    String(idx + 1),
+    fmtFull(getSessionStartedAt(sess)),
+    (sess.distance_meters / 1609.344).toFixed(2),
+    fmtDur(sess.duration_seconds),
+    String(sess.bonus_points),
+    String(sess.penalty_points),
+    String(sess.visited_pois.length),
+    String(sess.penalty_events.length),
+    String(sess.points.length),
+  ]);
+  downloadCSV(`${studentName}_all_rides.csv`, [headers, ...rows]);
+}
+
+function exportRideGPS(
+  entry: SchoolStudentRosterEntry | null,
+  sess: StudentRouteHistorySession,
+  rideNum: number,
+): void {
+  const studentName = entry ? safeFilename(fullName(entry)) : "student";
+  const headers = [
+    "Timestamp",
+    "Latitude",
+    "Longitude",
+    "Speed (mph)",
+    "Altitude (ft)",
+    "Accuracy (ft)",
+  ];
+  const rows = sess.points.map((pt) => [
+    fmtFull(pt.timestamp),
+    String(pt.latitude),
+    String(pt.longitude),
+    pt.speed_mps != null ? (pt.speed_mps * 2.237).toFixed(2) : "",
+    pt.altitude != null ? Math.round(pt.altitude * 3.28084).toString() : "",
+    pt.accuracy != null ? Math.round(pt.accuracy * 3.28084).toString() : "",
+  ]);
+  downloadCSV(`${studentName}_ride_${rideNum}.csv`, [headers, ...rows]);
+}
+
 function evidenceCountLabel(value: number | null | undefined): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "Evidence —";
   return `${Math.max(0, Math.round(value)).toLocaleString()} evidence samples`;
@@ -1316,9 +1389,29 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
         <aside className="sr-context-panel">
           <div className="sr-context-head">
             <span className="sr-eyebrow">Ride Summary</span>
-            {selSess && (
-              <span className="sr-count">{fmtShort(selSess.started_at)}</span>
-            )}
+            <div className="sr-context-head-actions">
+              {selSess && (
+                <span className="sr-count">{fmtShort(selSess.started_at)}</span>
+              )}
+              {selSess && (
+                <button
+                  className="sr-dl-btn sr-dl-btn--icon"
+                  type="button"
+                  title="Download this ride's GPS data as CSV"
+                  onClick={() => {
+                    const rideNum = history.findIndex(
+                      (s) => s.session_id === selSess.session_id,
+                    ) + 1;
+                    exportRideGPS(selEntry, selSess, rideNum);
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8 2v9M4 8l4 4 4-4"/><rect x="2" y="13" width="12" height="1.5" rx="0.75" fill="currentColor" stroke="none"/>
+                  </svg>
+                  Export ride
+                </button>
+              )}
+            </div>
           </div>
 
           {!selSess ? (
@@ -1487,9 +1580,24 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
               {histErr && <span className="sr-err-inline">{histErr}</span>}
               {histBusy && <span className="sr-muted-inline">Loading…</span>}
             </div>
-            {history.length > 3 && (
-              <span className="sr-ride-hint">Scroll to see all ›</span>
-            )}
+            <div className="sr-ride-bar-head-right">
+              {history.length > 3 && (
+                <span className="sr-ride-hint">Scroll to see all ›</span>
+              )}
+              {history.length > 0 && (
+                <button
+                  className="sr-dl-btn"
+                  type="button"
+                  title="Download all rides as CSV"
+                  onClick={() => exportAllRidesSummary(selEntry, history)}
+                >
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8 2v9M4 8l4 4 4-4"/><rect x="2" y="13" width="12" height="1.5" rx="0.75" fill="currentColor" stroke="none"/>
+                  </svg>
+                  Download all rides
+                </button>
+              )}
+            </div>
           </div>
 
           {noRides && !histBusy && (
@@ -1504,15 +1612,37 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                 const active = sess.session_id === selId;
                 const rideNum = idx + 1;
                 return (
-                  <button
+                  <div
                     key={sess.session_id}
-                    data-active={active ? "true" : "false"}
                     className={`sr-ride-chip${active ? " sr-ride-chip--active" : ""}`}
                     onClick={() => {
                       if (!didDrag.current) setSelId(sess.session_id);
                     }}
+                    data-active={active ? "true" : "false"}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") setSelId(sess.session_id);
+                    }}
                   >
-                    <span className="sr-chip-num">Ride #{rideNum}</span>
+                    <div className="sr-chip-top-row">
+                      <span className="sr-chip-num">Ride #{rideNum}</span>
+                      {sess.points.length > 0 && (
+                        <button
+                          className="sr-chip-dl-btn"
+                          type="button"
+                          title={`Download Ride #${rideNum} GPS data`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            exportRideGPS(selEntry, sess, rideNum);
+                          }}
+                        >
+                          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M8 2v9M4 8l4 4 4-4"/><rect x="2" y="13" width="12" height="1.5" rx="0.75" fill="currentColor" stroke="none"/>
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                     <span className="sr-chip-date">
                       {fmtShort(getSessionStartedAt(sess))}
                     </span>
@@ -1545,7 +1675,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                         <span className="sr-badge sr-badge--muted">no GPS</span>
                       )}
                     </span>
-                  </button>
+                  </div>
                 );
               })}
             </div>

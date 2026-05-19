@@ -8923,6 +8923,91 @@
 .sr-zone-chip--no_go     .sr-zone-chip-limit { background: rgba(229,62,62,0.14); color: #9b1c1c; }
 .sr-zone-chip--speed_limit .sr-zone-chip-limit { background: rgba(246,174,45,0.18); color: #7a5200; }
 
+/* ── Download buttons ── */
+
+/* Context panel head actions row */
+.sr-context-head-actions {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        flex-shrink: 0;
+}
+
+/* Main download button (ride bar + context panel) */
+.sr-dl-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 11px;
+        background: var(--surface-elevated);
+        border: 1.5px solid var(--border-muted);
+        border-radius: 8px;
+        font: inherit;
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: var(--navy);
+        cursor: pointer;
+        transition: background 0.13s, border-color 0.13s, box-shadow 0.13s;
+        white-space: nowrap;
+        flex-shrink: 0;
+}
+.sr-dl-btn:hover {
+        background: rgba(17,45,78,0.06);
+        border-color: var(--navy);
+        box-shadow: 0 2px 8px rgba(17,45,78,0.1);
+}
+.sr-dl-btn:active { transform: scale(0.97); }
+
+/* Compact icon-only variant */
+.sr-dl-btn--icon {
+        padding: 4px 9px;
+        font-size: 0.68rem;
+}
+
+/* Ride bar head right-side slot */
+.sr-ride-bar-head-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-shrink: 0;
+}
+
+/* Per-chip top row (ride # + download icon) */
+.sr-chip-top-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 4px;
+}
+
+/* Per-chip icon-only download button */
+.sr-chip-dl-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        border: 1.5px solid transparent;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+        font: inherit;
+        transition: background 0.12s, border-color 0.12s, color 0.12s;
+        flex-shrink: 0;
+        padding: 0;
+}
+.sr-chip-dl-btn:hover {
+        background: rgba(17,45,78,0.08);
+        border-color: rgba(17,45,78,0.18);
+        color: var(--navy);
+}
+.sr-ride-chip--active .sr-chip-dl-btn:hover {
+        background: rgba(246,174,45,0.2);
+        border-color: rgba(246,174,45,0.5);
+        color: #7a5200;
+}
+
 /* ── Responsive ── */
 @media (max-width: 860px) {
         .sr-main-row {
