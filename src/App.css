@@ -6629,6 +6629,37 @@
         opacity: 0.85;
 }
 
+.section-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+}
+
+.section-dl-btn {
+        appearance: none;
+        border: 1.5px solid var(--panel-border, rgba(0,0,0,0.12));
+        border-radius: 20px;
+        background: transparent;
+        color: var(--muted, #888);
+        font-size: 0.72rem;
+        font-weight: 700;
+        padding: 3px 10px;
+        cursor: pointer;
+        transition: background 0.13s, color 0.13s, border-color 0.13s;
+        white-space: nowrap;
+}
+
+.section-dl-btn:hover:not(:disabled) {
+        background: var(--navy, #112d4e);
+        color: #fff;
+        border-color: var(--navy, #112d4e);
+}
+
+.section-dl-btn:disabled {
+        opacity: 0.35;
+        cursor: default;
+}
+
 .student-no-ride-label {
         margin-top: 6px;
         padding: 5px 12px;

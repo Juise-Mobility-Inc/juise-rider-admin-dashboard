@@ -1789,7 +1789,52 @@ export function StudentsScreen(props: Props) {
                                                                                                 <div className="data-section">
                                                                                                         <div className="data-section-header">
                                                                                                                 <h4>POIs Visited</h4>
-                                                                                                                <span>{visitedPoiVisits.length}</span>
+                                                                                                                <div className="section-header-actions">
+                                                                                                                        <span>{visitedPoiVisits.length}</span>
+                                                                                                                        <button
+                                                                                                                                className="section-dl-btn"
+                                                                                                                                type="button"
+                                                                                                                                title="Download POI visits as CSV"
+                                                                                                                                disabled={visitedPoiVisits.length === 0}
+                                                                                                                                onClick={() => {
+                                                                                                                                        const header = [
+                                                                                                                                                "visited_at",
+                                                                                                                                                "poi_title",
+                                                                                                                                                "description",
+                                                                                                                                                "bonus_points",
+                                                                                                                                                "lat",
+                                                                                                                                                "lng",
+                                                                                                                                                "poi_uuid",
+                                                                                                                                                "trip_mode",
+                                                                                                                                                "session_started_at",
+                                                                                                                                                "session_id",
+                                                                                                                                        ] as const;
+                                                                                                                                        const csvRows: CsvCell[][] = visitedPoiVisits.map(
+                                                                                                                                                ({ poi, session }) => [
+                                                                                                                                                        formatUnixTimestamp(poi.visited_at),
+                                                                                                                                                        poi.title ?? "",
+                                                                                                                                                        poi.description ?? "",
+                                                                                                                                                        poi.bonus_points,
+                                                                                                                                                        poi.lat,
+                                                                                                                                                        poi.lng,
+                                                                                                                                                        poi.poi_uuid,
+                                                                                                                                                        session.trip_mode ?? "",
+                                                                                                                                                        formatUnixTimestamp(session.started_at),
+                                                                                                                                                        session.session_id,
+                                                                                                                                                ],
+                                                                                                                                        );
+                                                                                                                                        downloadCsv(
+                                                                                                                                                sanitizeCsvFilename(
+                                                                                                                                                        `${fullName || "student"}-poi-visits`,
+                                                                                                                                                        "student-poi-visits",
+                                                                                                                                                ),
+                                                                                                                                                [header, ...csvRows],
+                                                                                                                                        );
+                                                                                                                                }}
+                                                                                                                        >
+                                                                                                                                ↓ CSV
+                                                                                                                        </button>
+                                                                                                                </div>
                                                                                                         </div>
                                                                                                         {studentBusy ? (
                                                                                                                 <p className="muted-text">Loading route history…</p>
@@ -1870,11 +1915,78 @@ export function StudentsScreen(props: Props) {
                                                                                                                                 ? "Speed zone violations"
                                                                                                                                 : "No-go zone violations"}
                                                                                                                 </h4>
-                                                                                                                <span>
-                                                                                                                        {activitySubTab === "speed"
-                                                                                                                                ? speedPenalties.length
-                                                                                                                                : noGoPenalties.length}
-                                                                                                                </span>
+                                                                                                                <div className="section-header-actions">
+                                                                                                                        <span>
+                                                                                                                                {activitySubTab === "speed"
+                                                                                                                                        ? speedPenalties.length
+                                                                                                                                        : noGoPenalties.length}
+                                                                                                                        </span>
+                                                                                                                        <button
+                                                                                                                                className="section-dl-btn"
+                                                                                                                                type="button"
+                                                                                                                                title="Download violations as CSV"
+                                                                                                                                disabled={
+                                                                                                                                        (activitySubTab === "speed"
+                                                                                                                                                ? speedPenalties
+                                                                                                                                                : noGoPenalties
+                                                                                                                                        ).length === 0
+                                                                                                                                }
+                                                                                                                                onClick={() => {
+                                                                                                                                        const events =
+                                                                                                                                                activitySubTab === "speed"
+                                                                                                                                                        ? speedPenalties
+                                                                                                                                                        : noGoPenalties;
+                                                                                                                                        const label =
+                                                                                                                                                activitySubTab === "speed"
+                                                                                                                                                        ? "speed-violations"
+                                                                                                                                                        : "nogo-violations";
+                                                                                                                                        const header = [
+                                                                                                                                                "occurred_at",
+                                                                                                                                                "title",
+                                                                                                                                                "zone_type",
+                                                                                                                                                "points_lost",
+                                                                                                                                                "speed_limit_mph",
+                                                                                                                                                "confidence_pct",
+                                                                                                                                                "evidence_samples",
+                                                                                                                                                "reason",
+                                                                                                                                                "description",
+                                                                                                                                                "lat",
+                                                                                                                                                "lng",
+                                                                                                                                                "zone_uuid",
+                                                                                                                                                "session_id",
+                                                                                                                                        ] as const;
+                                                                                                                                        const csvRows: CsvCell[][] = events.map(
+                                                                                                                                                ({ event, session }) => [
+                                                                                                                                                        formatUnixTimestamp(event.occurred_at),
+                                                                                                                                                        event.title ??
+                                                                                                                                                                formatPenaltyZoneType(
+                                                                                                                                                                        event.zone_type,
+                                                                                                                                                                ),
+                                                                                                                                                        event.zone_type,
+                                                                                                                                                        event.points_lost,
+                                                                                                                                                        event.speed_limit_mph ?? "",
+                                                                                                                                                        event.confidence_percent ?? "",
+                                                                                                                                                        event.evidence_point_count ?? "",
+                                                                                                                                                        event.reason ?? "",
+                                                                                                                                                        event.description ?? "",
+                                                                                                                                                        event.lat,
+                                                                                                                                                        event.lng,
+                                                                                                                                                        event.zone_uuid,
+                                                                                                                                                        session.session_id,
+                                                                                                                                                ],
+                                                                                                                                        );
+                                                                                                                                        downloadCsv(
+                                                                                                                                                sanitizeCsvFilename(
+                                                                                                                                                        `${fullName || "student"}-${label}`,
+                                                                                                                                                        `student-${label}`,
+                                                                                                                                                ),
+                                                                                                                                                [header, ...csvRows],
+                                                                                                                                        );
+                                                                                                                                }}
+                                                                                                                        >
+                                                                                                                                ↓ CSV
+                                                                                                                        </button>
+                                                                                                                </div>
                                                                                                         </div>
                                                                                                         {studentBusy ? (
                                                                                                                 <p className="muted-text">Loading route history…</p>
