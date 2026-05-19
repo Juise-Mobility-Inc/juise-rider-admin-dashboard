@@ -8607,12 +8607,6 @@
         min-width: 0;          /* allow flex child to shrink; without this the bar expands to chip total width */
 }
 
-.sr-ride-bar-head {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-}
-
 .sr-ride-bar-empty {
         font-size: 0.79rem;
         color: var(--muted);
@@ -8730,6 +8724,204 @@
 .sr-badge--red   { background: rgba(229,62,62,0.12);  color: #9b1c1c; }
 .sr-badge--gold  { background: rgba(246,174,45,0.18); color: #7a5200; }
 .sr-badge--muted { background: rgba(0,0,0,0.06);      color: var(--muted); }
+
+/* ── Ride bar head improvements ── */
+.sr-ride-bar-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 16px 8px;
+}
+.sr-ride-bar-head-left {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+}
+.sr-ride-hint {
+        font-size: 0.68rem;
+        font-weight: 700;
+        color: var(--muted);
+        letter-spacing: 0.03em;
+        white-space: nowrap;
+        flex-shrink: 0;
+}
+
+/* ── Ride chip improvements ── */
+.sr-chip-num {
+        font-size: 0.64rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+}
+.sr-ride-chip--active .sr-chip-num {
+        color: #9a6800;
+}
+.sr-chip-row {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+}
+.sr-chip-sep {
+        color: var(--border-muted);
+        font-size: 0.8rem;
+}
+
+/* ── Ride summary strip ── */
+.sr-summary-strip {
+        display: flex;
+        align-items: stretch;
+        gap: 0;
+        background: var(--surface-elevated);
+        border: 1px solid var(--border-muted);
+        border-radius: 10px;
+        overflow: hidden;
+        flex-shrink: 0;
+}
+.sr-summary-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        flex: 1;
+        padding: 10px 6px;
+        min-width: 0;
+}
+.sr-summary-item--green { background: rgba(39,204,94,0.07); }
+.sr-summary-item--red   { background: rgba(229,62,62,0.07); }
+.sr-summary-val {
+        font-size: 1rem;
+        font-weight: 800;
+        color: var(--text-strong);
+        line-height: 1;
+}
+.sr-summary-item--green .sr-summary-val { color: #1a7a38; }
+.sr-summary-item--red   .sr-summary-val { color: #9b1c1c; }
+.sr-summary-label {
+        font-size: 0.62rem;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        white-space: nowrap;
+}
+.sr-summary-divider {
+        width: 1px;
+        background: var(--border-muted);
+        flex-shrink: 0;
+}
+
+/* ── Context section icons ── */
+.sr-section-icon {
+        display: inline-block;
+        margin-right: 5px;
+        font-style: normal;
+}
+.sr-section-icon--poi     { color: #c87a00; }
+.sr-section-icon--penalty { color: #c53030; }
+.sr-section-icon--zone    { color: #7c3aed; }
+
+/* ── Jump-to-map label ── */
+.sr-jump-label {
+        font-size: 0.68rem;
+        font-weight: 700;
+        color: var(--navy);
+        opacity: 0.6;
+        letter-spacing: 0.02em;
+        transition: opacity 0.12s;
+}
+.sr-event-button:hover .sr-jump-label { opacity: 1; }
+
+/* ── Secondary muted text ── */
+.sr-muted-secondary {
+        color: var(--muted);
+        font-size: 0.68rem;
+        opacity: 0.75;
+}
+
+/* ── Event badge row (type pill + time) ── */
+.sr-event-badge-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+}
+.sr-event-type-badge {
+        font-size: 0.6rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: rgba(197,48,48,0.12);
+        color: #9b1c1c;
+        white-space: nowrap;
+}
+.sr-event-button--poi .sr-event-type-badge {
+        background: rgba(246,174,45,0.18);
+        color: #7a5200;
+}
+
+/* ── "Clean ride" empty state ── */
+.sr-context-empty--clean {
+        color: #1a7a38;
+        font-weight: 600;
+}
+
+/* ── Safety zone chips (context panel) ── */
+.sr-zone-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+}
+.sr-zone-chip {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 10px;
+        border-radius: 8px;
+        background: var(--surface-elevated);
+        border: 1px solid var(--border-muted);
+        font-size: 0.76rem;
+}
+.sr-zone-chip--no_go {
+        background: rgba(229,62,62,0.06);
+        border-color: rgba(197,48,48,0.2);
+}
+.sr-zone-chip--speed_limit {
+        background: rgba(246,174,45,0.06);
+        border-color: rgba(217,119,6,0.2);
+}
+.sr-zone-chip-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        flex-shrink: 0;
+}
+.sr-zone-chip--no_go     .sr-zone-chip-dot { background: #e53e3e; }
+.sr-zone-chip--speed_limit .sr-zone-chip-dot { background: #f6ae2d; }
+.sr-zone-chip-name {
+        flex: 1;
+        min-width: 0;
+        color: var(--text-strong);
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+}
+.sr-zone-chip-limit {
+        font-size: 0.62rem;
+        font-weight: 800;
+        padding: 2px 6px;
+        border-radius: 999px;
+        white-space: nowrap;
+        flex-shrink: 0;
+}
+.sr-zone-chip--no_go     .sr-zone-chip-limit { background: rgba(229,62,62,0.14); color: #9b1c1c; }
+.sr-zone-chip--speed_limit .sr-zone-chip-limit { background: rgba(246,174,45,0.18); color: #7a5200; }
 
 /* ── Responsive ── */
 @media (max-width: 860px) {

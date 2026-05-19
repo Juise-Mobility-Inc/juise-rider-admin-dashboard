@@ -226,6 +226,26 @@ function fmtMs(ms: number | null | undefined): string {
   return `${seconds}s`;
 }
 
+function penaltyLabel(zoneType: string): string {
+  if (zoneType === "no_go") return "Restricted area";
+  if (zoneType === "speed_limit") return "Speed limit";
+  return zoneType;
+}
+
+function penaltyTitle(ev: { title?: string | null; zone_type: string }): string {
+  if (ev.title?.trim()) return ev.title.trim();
+  if (ev.zone_type === "no_go") return "Entered Restricted Area";
+  if (ev.zone_type === "speed_limit") return "Speeding";
+  return "Penalty";
+}
+
+function zoneTitle(z: { title?: string | null; zone_type: string }): string {
+  if (z.title?.trim()) return z.title.trim();
+  if (z.zone_type === "no_go") return "No-go area";
+  if (z.zone_type === "speed_limit") return "Speed limit area";
+  return "Zone";
+}
+
 function evidenceCountLabel(value: number | null | undefined): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "Evidence —";
   return `${Math.max(0, Math.round(value)).toLocaleString()} evidence samples`;
@@ -600,28 +620,28 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
   const layerToggles = [
     {
       key: "route",
-      label: "Route",
+      label: "Route path",
       active: showRoute,
       toggle: () => setShowRoute((v) => !v),
       color: "#3b6fb5",
     },
     {
       key: "pois",
-      label: "POIs",
+      label: "Check-in spots",
       active: showPOIs,
       toggle: () => setShowPOIs((v) => !v),
       color: "#f6ae2d",
     },
     {
       key: "penalties",
-      label: "Penalties",
+      label: "Violations",
       active: showPenalties,
       toggle: () => setShowPenalties((v) => !v),
       color: "#e53e3e",
     },
     {
       key: "zones",
-      label: "Zones",
+      label: "Safety zones",
       active: showZones,
       toggle: () => setShowZones((v) => !v),
       color: "#8b3dff",
@@ -689,12 +709,12 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                 const id = uuid(entry);
                 const active = id === selUUID;
                 return (
-	                  <button
-	                    key={id}
-	                    className={`sr-student-row${active ? " sr-student-row--active" : ""}`}
-	                    onClick={() => selectStudent(entry)}
-	                  >
-	                    <div className="sr-avatar">
+                          <button
+                            key={id}
+                            className={`sr-student-row${active ? " sr-student-row--active" : ""}`}
+                            onClick={() => selectStudent(entry)}
+                          >
+                            <div className="sr-avatar">
                       <span className="sr-avatar-initials">
                         {initials(entry)}
                       </span>
@@ -739,13 +759,13 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                       p.lng,
                     ])}
                     pathOptions={{
-                      color: z.zone_type === "no_go" ? "#e53e3e" : "#f6ae2d",
+                      color: z.zone_type === "no_go" ? "#c53030" : "#d97706",
                       fillColor:
                         z.zone_type === "no_go" ? "#e53e3e" : "#f6ae2d",
-                      fillOpacity: 0.12,
-                      weight: 2,
+                      fillOpacity: z.zone_type === "no_go" ? 0.22 : 0.15,
+                      weight: z.zone_type === "no_go" ? 3 : 2.5,
                       dashArray:
-                        z.zone_type === "speed_limit" ? "6 4" : undefined,
+                        z.zone_type === "speed_limit" ? "8 5" : undefined,
                     }}
                   >
                     <Tooltip
@@ -755,27 +775,18 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                       className="sr-map-hover-tooltip"
                     >
                       <div className="sr-map-hover-card">
-                        <strong>
-                          {z.title ||
-                            (z.zone_type === "no_go"
-                              ? "No-go zone"
-                              : "Speed limit zone")}
-                        </strong>
+                        <strong>{zoneTitle(z)}</strong>
                         <span>
-                          {z.zone_type === "speed_limit" &&
-                          z.speed_limit_mph != null
-                            ? `Limit ${z.speed_limit_mph} mph`
-                            : "Penalty zone"}
+                          {z.zone_type === "no_go"
+                            ? "⛔ Students must not enter this area"
+                            : z.speed_limit_mph != null
+                              ? `Speed limit: ${z.speed_limit_mph} mph`
+                              : "Speed limit zone"}
                         </span>
                       </div>
                     </Tooltip>
                     <Popup>
-                      <strong>
-                        {z.title ||
-                          (z.zone_type === "no_go"
-                            ? "No-go zone"
-                            : "Speed limit zone")}
-                      </strong>
+                      <strong>{zoneTitle(z)}</strong>
                       {z.description && (
                         <>
                           <br />
@@ -786,9 +797,15 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                         z.speed_limit_mph != null && (
                           <>
                             <br />
-                            Limit: {z.speed_limit_mph} mph
+                            Speed limit: {z.speed_limit_mph} mph
                           </>
                         )}
+                      {z.zone_type === "no_go" && (
+                        <>
+                          <br />
+                          Students must not enter this area.
+                        </>
+                      )}
                     </Popup>
                   </Polygon>
                 ))}
@@ -1168,21 +1185,21 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                       value: fmtDur(selSess.duration_seconds),
                     },
                     {
-                      label: "Points",
+                      label: "Points earned",
                       value: `+${selSess.bonus_points}`,
                       cls: "sr-val--green",
                     },
                     ...(selSess.penalty_points > 0
                       ? [
                           {
-                            label: "Penalties",
+                            label: "Points lost",
                             value: `−${selSess.penalty_points}`,
                             cls: "sr-val--red",
                           },
                         ]
                       : []),
                     {
-                      label: "POI visits",
+                      label: "Spots visited",
                       value: String(selSess.visited_pois.length),
                     },
                     {
@@ -1190,7 +1207,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                       value: `${(selSess.top_speed_mps * 2.237).toFixed(1)} mph`,
                     },
                     {
-                      label: "GPS samples",
+                      label: "GPS data points",
                       value: selSess.points.length.toLocaleString(),
                     },
                   ].map((s) => (
@@ -1298,24 +1315,47 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
 
         <aside className="sr-context-panel">
           <div className="sr-context-head">
-            <span className="sr-eyebrow">Route Details</span>
+            <span className="sr-eyebrow">Ride Summary</span>
             {selSess && (
               <span className="sr-count">{fmtShort(selSess.started_at)}</span>
             )}
           </div>
+
           {!selSess ? (
             <p className="sr-context-empty">
-              Select a ride to see POI and penalty events.
+              Select a ride below to see check-in spots, violations, and active safety zones.
             </p>
           ) : (
             <>
+              {/* At-a-glance points strip */}
+              <div className="sr-summary-strip">
+                <div className="sr-summary-item sr-summary-item--green">
+                  <span className="sr-summary-val">+{selSess.bonus_points}</span>
+                  <span className="sr-summary-label">pts earned</span>
+                </div>
+                <div className="sr-summary-divider" />
+                <div className={`sr-summary-item${selSess.penalty_points > 0 ? " sr-summary-item--red" : ""}`}>
+                  <span className="sr-summary-val">−{selSess.penalty_points}</span>
+                  <span className="sr-summary-label">pts lost</span>
+                </div>
+                <div className="sr-summary-divider" />
+                <div className="sr-summary-item">
+                  <span className="sr-summary-val">{fmtDist(selSess.distance_meters)}</span>
+                  <span className="sr-summary-label">distance</span>
+                </div>
+              </div>
+
+              {/* Check-in spots (POIs) */}
               <section className="sr-context-section">
                 <div className="sr-context-section-head">
-                  <strong>POIs</strong>
-                  <span>{selSess.visited_pois.length.toLocaleString()}</span>
+                  <strong>
+                    <span className="sr-section-icon sr-section-icon--poi">★</span>
+                    Check-in Spots
+                  </strong>
+                  <span>{selSess.visited_pois.length}</span>
                 </div>
                 {selSess.visited_pois.length === 0 ? (
-                  <p className="sr-context-empty">No POI hits on this ride.</p>
+                  <p className="sr-context-empty">No check-in spots visited on this ride.</p>
                 ) : (
                   <div className="sr-event-button-list">
                     {selSess.visited_pois.map((poi, index) => (
@@ -1327,26 +1367,33 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                       >
                         <span className="sr-event-button-top">
                           <strong>{poi.title || "Point of Interest"}</strong>
-                          <em>+{poi.bonus_points.toLocaleString()}</em>
+                          <em>+{poi.bonus_points.toLocaleString()} pts</em>
                         </span>
                         <span className="sr-event-button-meta">
-                          Confidence {fmtConfidence(poi.confidence_percent)} ·{" "}
-                          {fmtShort(poi.visited_at)}
+                          Visited {fmtShort(poi.visited_at)}
                         </span>
+                        <span className="sr-event-button-meta sr-muted-secondary">
+                          Confidence: {fmtConfidence(poi.confidence_percent)}
+                        </span>
+                        <span className="sr-jump-label">↗ Jump to map</span>
                       </button>
                     ))}
                   </div>
                 )}
               </section>
 
+              {/* Violations (penalties) */}
               <section className="sr-context-section">
                 <div className="sr-context-section-head">
-                  <strong>Penalties</strong>
-                  <span>{selSess.penalty_events.length.toLocaleString()}</span>
+                  <strong>
+                    <span className="sr-section-icon sr-section-icon--penalty">⚠</span>
+                    Violations
+                  </strong>
+                  <span>{selSess.penalty_events.length}</span>
                 </div>
                 {selSess.penalty_events.length === 0 ? (
-                  <p className="sr-context-empty">
-                    No penalty events on this ride.
+                  <p className="sr-context-empty sr-context-empty--clean">
+                    No violations — clean ride!
                   </p>
                 ) : (
                   <div className="sr-event-button-list">
@@ -1362,32 +1409,65 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                           }
                         >
                           <span className="sr-event-button-top">
-                            <strong>
-                              {ev.title ||
-                                (ev.zone_type === "no_go"
-                                  ? "No-go zone"
-                                  : "Speed limit zone")}
-                            </strong>
-                            <em>−{ev.points_lost.toLocaleString()}</em>
+                            <strong>{penaltyTitle(ev)}</strong>
+                            <em>−{ev.points_lost.toLocaleString()} pts</em>
                           </span>
-                          <span className="sr-event-button-meta">
-                            Confidence {fmtConfidence(ev.confidence_percent)} ·
-                            Time spent {fmtMs(ev.duration_ms)}
+                          <span className="sr-event-badge-row">
+                            <span className="sr-event-type-badge">{penaltyLabel(ev.zone_type)}</span>
+                            <span className="sr-event-button-meta">{fmtShort(ev.occurred_at)}</span>
                           </span>
-                          {maxSpeedMps != null ? (
+                          {ev.duration_ms > 0 && (
                             <span className="sr-event-button-meta">
-                              Max speed caught {fmtSpeed(maxSpeedMps)}
+                              Duration: {fmtMs(ev.duration_ms)}
                             </span>
-                          ) : null}
-                          <span className="sr-event-button-meta">
-                            {evidenceCountLabel(ev.evidence_point_count)}
-                          </span>
+                          )}
+                          {maxSpeedMps != null && (
+                            <span className="sr-event-button-meta">
+                              Max speed: {fmtSpeed(maxSpeedMps)}
+                              {ev.speed_limit_mph != null
+                                ? ` (limit: ${ev.speed_limit_mph} mph)`
+                                : ""}
+                            </span>
+                          )}
+                          <span className="sr-jump-label">↗ Jump to map</span>
                         </button>
                       );
                     })}
                   </div>
                 )}
               </section>
+
+              {/* Active safety zones on this session */}
+              {dispZones.filter((z) => z.active).length > 0 && (
+                <section className="sr-context-section">
+                  <div className="sr-context-section-head">
+                    <strong>
+                      <span className="sr-section-icon sr-section-icon--zone">◉</span>
+                      Safety Zones
+                    </strong>
+                    <span>{dispZones.filter((z) => z.active).length}</span>
+                  </div>
+                  <div className="sr-zone-list">
+                    {dispZones
+                      .filter((z) => z.active)
+                      .map((z) => (
+                        <div
+                          key={z.zone_uuid}
+                          className={`sr-zone-chip sr-zone-chip--${z.zone_type}`}
+                        >
+                          <span className="sr-zone-chip-dot" />
+                          <span className="sr-zone-chip-name">{zoneTitle(z)}</span>
+                          {z.zone_type === "speed_limit" && z.speed_limit_mph != null && (
+                            <span className="sr-zone-chip-limit">{z.speed_limit_mph} mph</span>
+                          )}
+                          {z.zone_type === "no_go" && (
+                            <span className="sr-zone-chip-limit">no entry</span>
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                </section>
+              )}
             </>
           )}
         </aside>
@@ -1397,14 +1477,19 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
       {selUUID && (
         <div className="sr-ride-bar">
           <div className="sr-ride-bar-head">
-            <span className="sr-eyebrow">
-              {selEntry ? `${firstName(selEntry)}'s rides` : "Rides"}
-            </span>
-            {!histBusy && history.length > 0 && (
-              <span className="sr-count">{history.length}</span>
+            <div className="sr-ride-bar-head-left">
+              <span className="sr-eyebrow">
+                {selEntry ? `${firstName(selEntry)}'s Ride History` : "Ride History"}
+              </span>
+              {!histBusy && history.length > 0 && (
+                <span className="sr-count">{history.length} rides</span>
+              )}
+              {histErr && <span className="sr-err-inline">{histErr}</span>}
+              {histBusy && <span className="sr-muted-inline">Loading…</span>}
+            </div>
+            {history.length > 3 && (
+              <span className="sr-ride-hint">Scroll to see all ›</span>
             )}
-            {histErr && <span className="sr-err-inline">{histErr}</span>}
-            {histBusy && <span className="sr-muted-inline">Loading…</span>}
           </div>
 
           {noRides && !histBusy && (
@@ -1415,8 +1500,9 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
 
           {history.length > 0 && (
             <div className="sr-ride-scroll" ref={rideScrollRef}>
-              {history.map((sess) => {
+              {history.map((sess, idx) => {
                 const active = sess.session_id === selId;
+                const rideNum = idx + 1;
                 return (
                   <button
                     key={sess.session_id}
@@ -1426,29 +1512,33 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                       if (!didDrag.current) setSelId(sess.session_id);
                     }}
                   >
+                    <span className="sr-chip-num">Ride #{rideNum}</span>
                     <span className="sr-chip-date">
                       {fmtShort(getSessionStartedAt(sess))}
                     </span>
-                    <span className="sr-chip-dist">
-                      {fmtDist(sess.distance_meters)}
-                    </span>
-                    <span className="sr-chip-dur">
-                      {fmtDur(sess.duration_seconds)}
+                    <span className="sr-chip-row">
+                      <span className="sr-chip-dist">
+                        {fmtDist(sess.distance_meters)}
+                      </span>
+                      <span className="sr-chip-sep">·</span>
+                      <span className="sr-chip-dur">
+                        {fmtDur(sess.duration_seconds)}
+                      </span>
                     </span>
                     <span className="sr-chip-badges">
                       {sess.bonus_points > 0 && (
                         <span className="sr-badge sr-badge--green">
-                          +{sess.bonus_points}
+                          +{sess.bonus_points} pts
                         </span>
                       )}
                       {sess.penalty_events.length > 0 && (
                         <span className="sr-badge sr-badge--red">
-                          {sess.penalty_events.length}⚠
+                          {sess.penalty_events.length} violation{sess.penalty_events.length !== 1 ? "s" : ""}
                         </span>
                       )}
                       {sess.visited_pois.length > 0 && (
                         <span className="sr-badge sr-badge--gold">
-                          {sess.visited_pois.length}★
+                          {sess.visited_pois.length} spot{sess.visited_pois.length !== 1 ? "s" : ""}
                         </span>
                       )}
                       {sess.points.length === 0 && (
