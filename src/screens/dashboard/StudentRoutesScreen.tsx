@@ -460,7 +460,8 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
   const [showRoute, setShowRoute] = useState(true);
   const [showPOIs, setShowPOIs] = useState(true);
   const [showPenalties, setShowPenalties] = useState(true);
-  const [showZones, setShowZones] = useState(true);
+  const [showNoGoZones, setShowNoGoZones] = useState(true);
+  const [showSpeedZones, setShowSpeedZones] = useState(true);
   const [statsOpen, setStatsOpen] = useState(true);
   const [routeHover, setRouteHover] = useState<RouteHover | null>(null);
   const [selectedMaxSpeedPoint, setSelectedMaxSpeedPoint] = useState<
@@ -714,11 +715,18 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
       color: "#e53e3e",
     },
     {
-      key: "zones",
-      label: "Safety zones",
-      active: showZones,
-      toggle: () => setShowZones((v) => !v),
-      color: "#8b3dff",
+      key: "nogo",
+      label: "No-go zones",
+      active: showNoGoZones,
+      toggle: () => setShowNoGoZones((v) => !v),
+      color: "#e53e3e",
+    },
+    {
+      key: "speed",
+      label: "Speed limit zones",
+      active: showSpeedZones,
+      toggle: () => setShowSpeedZones((v) => !v),
+      color: "#f6ae2d",
     },
   ];
 
@@ -846,10 +854,14 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
             <MapFitter points={routePts} />
             {focusPin && <PenaltyFocuser lat={focusPin[0]} lng={focusPin[1]} />}
 
-            {showZones &&
-              dispZones
-                .filter((z) => z.active && z.polygon.length >= 3)
-                .map((z) => (
+            {dispZones
+              .filter((z) => {
+                if (!z.active || z.polygon.length < 3) return false;
+                if (z.zone_type === "no_go") return showNoGoZones;
+                if (z.zone_type === "speed_limit") return showSpeedZones;
+                return false;
+              })
+              .map((z) => (
                   <Polygon
                     key={z.zone_uuid}
                     positions={z.polygon.map((p): [number, number] => [
@@ -857,13 +869,11 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                       p.lng,
                     ])}
                     pathOptions={{
-                      color: z.zone_type === "no_go" ? "#c53030" : "#d97706",
+                      color: z.zone_type === "no_go" ? "#b91c1c" : "#b45309",
                       fillColor:
-                        z.zone_type === "no_go" ? "#e53e3e" : "#f6ae2d",
-                      fillOpacity: z.zone_type === "no_go" ? 0.22 : 0.15,
-                      weight: z.zone_type === "no_go" ? 3 : 2.5,
-                      dashArray:
-                        z.zone_type === "speed_limit" ? "8 5" : undefined,
+                        z.zone_type === "no_go" ? "#ef4444" : "#f59e0b",
+                      fillOpacity: z.zone_type === "no_go" ? 0.35 : 0.25,
+                      weight: z.zone_type === "no_go" ? 3.5 : 3,
                     }}
                   >
                     <Tooltip
