@@ -4,11 +4,15 @@ import {
   TileLayer,
   Polygon,
   Circle,
-  CircleMarker,
+  Marker,
   Popup,
   Tooltip,
   useMap,
 } from "react-leaflet";
+import {
+  unvisitedPoiIcon,
+  juisePackIcon,
+} from "../../lib/mapIcons";
 import {
   fetchSchoolZones,
   fetchSchoolPOIs,
@@ -274,15 +278,9 @@ export function MapOverviewScreen({
                     weight: 2,
                   }}
                 />
-                <CircleMarker
-                  center={[poi.lat, poi.lng]}
-                  radius={8}
-                  pathOptions={{
-                    color: "#15803d",
-                    fillColor: "#27cc5e",
-                    fillOpacity: 0.95,
-                    weight: 2,
-                  }}
+                <Marker
+                  position={[poi.lat, poi.lng]}
+                  icon={unvisitedPoiIcon}
                 >
                   <Tooltip sticky direction="top">
                     <strong>{poi.title || "Check-in spot"}</strong>
@@ -300,22 +298,16 @@ export function MapOverviewScreen({
                     ) : null}
                     <div>Radius: {Math.round(poi.radius_meters * 3.281)} ft</div>
                   </Popup>
-                </CircleMarker>
+                </Marker>
               </Fragment>
             ))}
 
           {showPacks &&
             packsWithLocation.map((pack) => (
-              <CircleMarker
+              <Marker
                 key={pack.pack_uuid}
-                center={[pack.location!.lat, pack.location!.lng]}
-                radius={11}
-                pathOptions={{
-                  color: "#1d4ed8",
-                  fillColor: "#3b82f6",
-                  fillOpacity: 0.9,
-                  weight: 2.5,
-                }}
+                position={[pack.location!.lat, pack.location!.lng]}
+                icon={juisePackIcon}
               >
                 <Tooltip sticky direction="top">
                   <strong>{pack.name || "Juise Pack"}</strong>
@@ -330,7 +322,7 @@ export function MapOverviewScreen({
                   </div>
                   <div>{pack.active ? "✅ Active" : "⏸ Inactive"}</div>
                 </Popup>
-              </CircleMarker>
+              </Marker>
             ))}
         </MapContainer>
 

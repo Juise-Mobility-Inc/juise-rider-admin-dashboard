@@ -5,6 +5,7 @@ import {
   Circle,
   CircleMarker,
   MapContainer,
+  Marker,
   Polygon,
   Polyline,
   Popup,
@@ -12,6 +13,11 @@ import {
   Tooltip,
   useMap,
 } from "react-leaflet";
+import {
+  visitedPoiIcon,
+  noGoPenaltyIcon,
+  speedPenaltyIcon,
+} from "../../lib/mapIcons";
 import {
   fetchSchoolPOIs,
   fetchSchoolStudentRoster,
@@ -1038,15 +1044,9 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                       }}
                     />
                   ) : null}
-                  <CircleMarker
-                    center={[poi.lat, poi.lng]}
-                    radius={10}
-                    pathOptions={{
-                      color: "#c87a00",
-                      fillColor: "#f6ae2d",
-                      fillOpacity: 0.95,
-                      weight: 2,
-                    }}
+                  <Marker
+                    position={[poi.lat, poi.lng]}
+                    icon={visitedPoiIcon}
                   >
                     <Tooltip
                       sticky
@@ -1094,7 +1094,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                         </>
                       )}
                     </Popup>
-                  </CircleMarker>
+                  </Marker>
                 </Fragment>
               ))}
 
@@ -1102,16 +1102,10 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
               selSess?.penalty_events.map((ev, i) => {
                 const maxSpeedMps = getPenaltyMaxSpeedMps(selSess, ev);
                 return (
-                  <CircleMarker
+                  <Marker
                     key={`pen-${i}`}
-                    center={[ev.lat, ev.lng]}
-                    radius={10}
-                    pathOptions={{
-                      color: "#9b1c1c",
-                      fillColor: "#e53e3e",
-                      fillOpacity: 0.95,
-                      weight: 2,
-                    }}
+                    position={[ev.lat, ev.lng]}
+                    icon={ev.zone_type === "no_go" ? noGoPenaltyIcon : speedPenaltyIcon}
                     eventHandlers={{
                       click: () =>
                         focusRouteEvent(ev.lat, ev.lng, "penalty", ev),
@@ -1188,7 +1182,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                           </>
                         )}
                     </Popup>
-                  </CircleMarker>
+                  </Marker>
                 );
               })}
 

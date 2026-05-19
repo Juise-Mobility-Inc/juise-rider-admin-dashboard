@@ -8,9 +8,9 @@ import {
   useState,
 } from 'react'
 import { DomEvent, LatLngBounds, divIcon, type LatLngLiteral } from 'leaflet'
+import { visitedPoiIcon, juisePackIcon } from '../lib/mapIcons'
 import {
   Circle,
-  CircleMarker,
   MapContainer,
   Marker,
   Popup,
@@ -327,15 +327,9 @@ function ClickToSelectPin(props: PackLocationPickerProps) {
           }}
         />
       ) : null}
-      <CircleMarker
-        center={props.value}
-        radius={10}
-        pathOptions={{
-          color: '#112d4e',
-          fillColor: '#f6ae2d',
-          fillOpacity: 0.95,
-          weight: 3,
-        }}
+      <Marker
+        position={props.value}
+        icon={juisePackIcon}
       />
     </>
   ) : null
@@ -672,22 +666,16 @@ export function PackLocationPicker(props: PackLocationPickerProps) {
                 }}
               />
             ) : null}
-            <CircleMarker
-              center={marker}
-              radius={7}
-              pathOptions={{
-                color: '#112d4e',
-                fillColor: '#9ca3af',
-                fillOpacity: 0.55,
-                weight: 2,
-              }}
+            <Marker
+              position={marker}
+              icon={juisePackIcon}
             >
               <Popup>
                 <strong>{marker.label}</strong>
                 {marker.description ? <div>{marker.description}</div> : null}
                 <div>{marker.lat.toFixed(6)}, {marker.lng.toFixed(6)}</div>
               </Popup>
-            </CircleMarker>
+            </Marker>
           </Fragment>
         ))}
       </MapContainer>
@@ -727,15 +715,9 @@ export function PackLocationsMap(props: PackLocationsMapProps) {
                 }}
               />
             ) : null}
-            <CircleMarker
-              center={marker}
-              radius={9}
-              pathOptions={{
-                color: '#112d4e',
-                fillColor: '#27cc5e',
-                fillOpacity: 0.9,
-                weight: 3,
-              }}
+            <Marker
+              position={marker}
+              icon={juisePackIcon}
             >
               <Popup>
                 <strong>{marker.label}</strong>
@@ -747,7 +729,7 @@ export function PackLocationsMap(props: PackLocationsMapProps) {
                   {marker.lat.toFixed(6)}, {marker.lng.toFixed(6)}
                 </div>
               </Popup>
-            </CircleMarker>
+            </Marker>
           </Fragment>
         ))}
       </MapContainer>
