@@ -970,66 +970,6 @@ function getIncomeCategoryAmount(
         );
 }
 
-function IncomeOverviewSection({
-        summary,
-        loading,
-        error,
-}: {
-        summary: SchoolIncomeSummary | null;
-        loading: boolean;
-        error: string;
-}) {
-        const currency = summary?.currency || "USD";
-        return (
-                <article className="dashboard-card dashboard-income-overview-card">
-                        <div className="reports-visual-heading-row">
-                                <div className="reports-visual-heading">
-                                        <h3>Income</h3>
-                                </div>
-                                {summary ? (
-                                        <small className="dashboard-income-updated">
-                                                Updated{" "}
-                                                {new Date(summary.generated_at * 1000).toLocaleTimeString([], {
-                                                        hour: "numeric",
-                                                        minute: "2-digit",
-                                                })}
-                                        </small>
-                                ) : null}
-                        </div>
-                        {error ? <p className="error-text">{error}</p> : null}
-                        {loading && !summary ? (
-                                <p className="muted-text">Loading income totals...</p>
-                        ) : null}
-                        <div className="dashboard-income-window-grid dashboard-income-window-grid-compact">
-                                <DashboardMiniKpi
-                                        label="Today"
-                                        value={formatCurrencyCents(
-                                                summary?.windows.today.total_cents ?? 0,
-                                                currency,
-                                        )}
-                                        detail="Since 12:00 AM"
-                                />
-                                <DashboardMiniKpi
-                                        label="Past 7 days"
-                                        value={formatCurrencyCents(
-                                                summary?.windows.past_week.total_cents ?? 0,
-                                                currency,
-                                        )}
-                                        detail="Rolling week"
-                                />
-                                <DashboardMiniKpi
-                                        label="Lifetime"
-                                        value={formatCurrencyCents(
-                                                summary?.windows.lifetime.total_cents ?? 0,
-                                                currency,
-                                        )}
-                                        detail="All collected"
-                                />
-                        </div>
-                </article>
-        );
-}
-
 function IncomeSummarySection({
         summary,
         loading,
@@ -1619,14 +1559,6 @@ export function DashboardScreen({
                                                 </div>
                                         ) : null}
                                 </div>
-                        ) : null}
-
-                        {activeSchoolId ? (
-                                <IncomeOverviewSection
-                                        summary={incomeSummary}
-                                        loading={incomeLoading}
-                                        error={incomeError}
-                                />
                         ) : null}
 
                         {visuals ? (
