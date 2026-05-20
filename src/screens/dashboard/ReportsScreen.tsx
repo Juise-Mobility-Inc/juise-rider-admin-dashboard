@@ -29,6 +29,10 @@ import {
   sanitizeCsvFilename,
   type CsvCell,
 } from "../../lib/csv";
+import {
+  getRouteHistoryEarnedPoints,
+  getRouteHistoryNetPoints,
+} from "../../lib/routeHistoryPoints";
 
 type ReportLoadStatus = "idle" | "loading" | "ready" | "error";
 
@@ -218,6 +222,7 @@ const routeSessionColumns = [
   "duration_minutes",
   "top_speed_mph",
   "average_speed_mph",
+  "earned_points",
   "bonus_points",
   "penalty_points",
   "net_points",
@@ -1427,9 +1432,10 @@ export function ReportsScreen({
         duration_minutes: minutesFromSeconds(session.duration_seconds),
         top_speed_mph: mphFromMetersPerSecond(session.top_speed_mps),
         average_speed_mph: mphFromMetersPerSecond(session.average_speed_mps),
+        earned_points: getRouteHistoryEarnedPoints(session),
         bonus_points: session.bonus_points,
         penalty_points: session.penalty_points,
-        net_points: session.bonus_points - session.penalty_points,
+        net_points: getRouteHistoryNetPoints(session),
         poi_visit_count: session.visited_pois.length,
         ride_penalty_count: session.penalty_events.length,
         route_point_count: session.points.length,

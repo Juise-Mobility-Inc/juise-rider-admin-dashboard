@@ -25,6 +25,7 @@ import {
   noGoPenaltyIcon,
   speedPenaltyIcon,
 } from "../../lib/mapIcons";
+import { getRouteHistoryEarnedPoints } from "../../lib/routeHistoryPoints";
 import {
   fetchSchoolPOIs,
   fetchSchoolStudentRoster,
@@ -710,6 +711,9 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
   const noStudent = !selUUID;
   const noRides = !!(selUUID && !histBusy && history.length === 0 && !histErr);
   const noGPS = !!(selSess && selSess.points.length === 0);
+  const selectedEarnedPoints = selSess
+    ? getRouteHistoryEarnedPoints(selSess)
+    : 0;
 
   const layerToggles = [
     {
@@ -1334,7 +1338,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                     },
                     {
                       label: "Points earned",
-                      value: `+${selSess.bonus_points}`,
+                      value: `+${selectedEarnedPoints.toLocaleString()}`,
                       cls: "sr-val--green",
                     },
                     ...(selSess.penalty_points > 0
@@ -1519,7 +1523,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
               <div className="sr-summary-strip">
                 <div className="sr-summary-item sr-summary-item--green">
                   <span className="sr-summary-val">
-                    +{selSess.bonus_points}
+                    +{selectedEarnedPoints.toLocaleString()}
                   </span>
                   <span className="sr-summary-label">pts earned</span>
                 </div>
@@ -1815,9 +1819,9 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                       </span>
                     </span>
                     <span className="sr-chip-badges">
-                      {sess.bonus_points > 0 && (
+                      {getRouteHistoryEarnedPoints(sess) > 0 && (
                         <span className="sr-badge sr-badge--green">
-                          +{sess.bonus_points} pts
+                          +{getRouteHistoryEarnedPoints(sess).toLocaleString()} pts
                         </span>
                       )}
                       {sess.penalty_events.length > 0 && (

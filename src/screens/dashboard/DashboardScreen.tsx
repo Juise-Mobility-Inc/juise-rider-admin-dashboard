@@ -2,8 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Link, useNavigate } from "react-router-dom";
 
 import {
-        fetchPendingReservations,
-        fetchSchoolIncomeSummary,
+	fetchPendingReservations,
+	fetchSchoolIncomeSummary,
         fetchSchoolPOIs,
         fetchSchoolRegisteredDevices,
         fetchSchoolStudentRoster,
@@ -14,8 +14,9 @@ import {
         type SchoolIncomeWindow,
         type SchoolStudentRosterEntry,
         type StudentParkingViolation,
-        type StudentRouteHistorySession,
+	type StudentRouteHistorySession,
 } from "../../lib/api";
+import { getRouteHistoryEarnedPoints } from "../../lib/routeHistoryPoints";
 
 type DashboardLoadStatus = "idle" | "loading" | "ready" | "error";
 type LeaderboardWindow = "today" | "week" | "all";
@@ -396,17 +397,8 @@ function isInRange(timestamp: number, from: number, to?: number): boolean {
         return typeof to === "number" ? timestamp < to : true;
 }
 
-function isManualRoute(session: StudentRouteHistorySession): boolean {
-        return session.tracking_source.trim().toLowerCase() !== "auto";
-}
-
-function calculateEarnedPoints(session: StudentRouteHistorySession): number {
-        const routePointPoints = isManualRoute(session) ? session.points.length : 0;
-        return routePointPoints + session.bonus_points;
-}
-
 function filterSessions(
-        bundle: StudentActivityBundle,
+	bundle: StudentActivityBundle,
         from?: number,
         to?: number,
 ): StudentRouteHistorySession[] {
@@ -463,12 +455,12 @@ function buildLeaderboard(
         to?: number,
 ): LeaderboardEntry[] {
         return students
-                .map((bundle) => {
-                        const sessions = filterSessions(bundle, from, to);
-                        const earnedPoints = sessions.reduce(
-                                (sum, session) => sum + calculateEarnedPoints(session),
-                                0,
-                        );
+			.map((bundle) => {
+				const sessions = filterSessions(bundle, from, to);
+				const earnedPoints = sessions.reduce(
+					(sum, session) => sum + getRouteHistoryEarnedPoints(session),
+					0,
+				);
                         const bonusPoints = sessions.reduce(
                                 (sum, session) => sum + session.bonus_points,
                                 0,
@@ -790,10 +782,10 @@ function buildDashboardVisuals(dataset: DashboardDataset): DashboardVisuals {
         const weekSessions = allSessions.filter((session) =>
                 isInRange(session.started_at, weekStart),
         );
-        const earnedPoints = allSessions.reduce(
-                (sum, session) => sum + calculateEarnedPoints(session),
-                0,
-        );
+	const earnedPoints = allSessions.reduce(
+		(sum, session) => sum + getRouteHistoryEarnedPoints(session),
+		0,
+	);
         const ridePenaltyRecords = getRidePenaltyRecords(dataset.students);
         const weeklyRidePenaltyRecords = getRidePenaltyRecords(
                 dataset.students,

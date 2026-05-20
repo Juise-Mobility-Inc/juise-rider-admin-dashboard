@@ -12,6 +12,10 @@ import {
         sanitizeCsvFilename,
         type CsvCell,
 } from "../../lib/csv";
+import {
+        getRouteHistoryEarnedPoints,
+        getRouteHistoryNetPoints,
+} from "../../lib/routeHistoryPoints";
 
 import {
         fetchAdminSchoolPacks,
@@ -132,6 +136,7 @@ const studentExportColumns = [
         "summary_total_reservations",
         "summary_total_devices",
         "summary_total_membership_terms",
+        "summary_total_earned_points",
         "summary_total_bonus_points",
         "summary_total_penalty_points",
         "summary_total_distance_miles",
@@ -158,6 +163,7 @@ const studentExportColumns = [
         "session_duration_minutes",
         "session_top_speed_mph",
         "session_average_speed_mph",
+        "session_earned_points",
         "session_bonus_points",
         "session_penalty_points",
         "session_total_point_delta",
@@ -622,6 +628,10 @@ function buildStudentExportRows({
                 (sum, session) => sum + session.bonus_points,
                 0,
         );
+        const totalEarnedPoints = routeHistory.reduce(
+                (sum, session) => sum + getRouteHistoryEarnedPoints(session),
+                0,
+        );
         const totalPenaltyPoints = routeHistory.reduce(
                 (sum, session) => sum + session.penalty_points,
                 0,
@@ -666,6 +676,7 @@ function buildStudentExportRows({
                         summary_total_reservations: reservations.length,
                         summary_total_devices: profile?.devices.length ?? 0,
                         summary_total_membership_terms: entry.membership.terms.length,
+                        summary_total_earned_points: totalEarnedPoints,
                         summary_total_bonus_points: totalBonusPoints,
                         summary_total_penalty_points: totalPenaltyPoints,
                         summary_total_distance_miles: milesFromMeters(totalDistanceMeters),
@@ -717,9 +728,10 @@ function buildStudentExportRows({
                         session_average_speed_mph: mphFromMetersPerSecond(
                                 session.average_speed_mps,
                         ),
+                        session_earned_points: getRouteHistoryEarnedPoints(session),
                         session_bonus_points: session.bonus_points,
                         session_penalty_points: session.penalty_points,
-                        session_total_point_delta: session.bonus_points - session.penalty_points,
+                        session_total_point_delta: getRouteHistoryNetPoints(session),
                         session_point_count: session.points.length,
                 });
 
