@@ -19,6 +19,7 @@ import {
         fetchAdminSchoolPacks,
         fetchNebulaUser,
         fetchPendingReservations,
+        fetchSchoolParkingViolations,
         fetchSchoolRegisteredDevices,
         fetchSchool,
         fetchSchoolChallengeParticipants,
@@ -1233,6 +1234,7 @@ function App() {
 
         const [reservations, setReservations] = useState<PackSpotReservation[]>([]);
         const [pendingVehicleCount, setPendingVehicleCount] = useState<number | null>(null);
+        const [openEnforcementCount, setOpenEnforcementCount] = useState<number | null>(null);
         const [, setDashboardHeaderCounts] = useState<HeaderDashboardCounts>({
                 studentCount: null,
                 pendingReservationCount: null,
@@ -2115,6 +2117,7 @@ function App() {
                         pendingReservationCount: null,
                 });
                 setPendingVehicleCount(null);
+                setOpenEnforcementCount(null);
         }, [activeSchoolId, context.managedAppId]);
 
         useEffect(() => {
@@ -2129,6 +2132,28 @@ function App() {
                         })
                         .catch(() => {
                                 if (!cancelled) setPendingVehicleCount(null);
+                        });
+                return () => { cancelled = true; };
+        }, [session, activeSchoolId, context.managedAppId]);
+
+        useEffect(() => {
+                if (!session || !activeSchoolId) {
+                        setOpenEnforcementCount(null);
+                        return;
+                }
+                const openTokens = ["reported", "awaiting_payment", "appealed", "under_review"];
+                let cancelled = false;
+                fetchSchoolParkingViolations(context.managedAppId, activeSchoolId)
+                        .then((violations) => {
+                                if (!cancelled) {
+                                        const count = violations.filter((v) =>
+                                                openTokens.includes((v.status ?? "reported").trim().toLowerCase()),
+                                        ).length;
+                                        setOpenEnforcementCount(count);
+                                }
+                        })
+                        .catch(() => {
+                                if (!cancelled) setOpenEnforcementCount(null);
                         });
                 return () => { cancelled = true; };
         }, [session, activeSchoolId, context.managedAppId]);
@@ -4646,7 +4671,12 @@ function App() {
                                         {/* Parking and Ride Enforcement group */}
                                         <div className="nav-group">
                                                 <button className="nav-group-header" type="button" onClick={() => setOpenNavGroups(p => ({ ...p, parkingEnforcement: !p.parkingEnforcement }))}>
-                                                        <span>Parking and Ride Enforcement</span>
+                                                        <span className="nav-group-header-label">
+                                                                Parking and Ride Enforcement
+                                                                {openEnforcementCount !== null && openEnforcementCount > 0 && (
+                                                                        <span className="nav-badge">{openEnforcementCount}</span>
+                                                                )}
+                                                        </span>
                                                         <span className={`nav-group-chevron${openNavGroups.parkingEnforcement ? " nav-group-chevron-open" : ""}`}>›</span>
                                                 </button>
                                                 {openNavGroups.parkingEnforcement && (
