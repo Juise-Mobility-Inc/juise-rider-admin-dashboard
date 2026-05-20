@@ -596,6 +596,30 @@ interface RouteHistorySummary {
   total_point_count: number;
 }
 
+export interface SchoolIncomeCategoryTotal {
+  key: string;
+  label: string;
+  amount_cents: number;
+}
+
+export interface SchoolIncomeWindow {
+  total_cents: number;
+  categories: SchoolIncomeCategoryTotal[];
+}
+
+export interface SchoolIncomeSummary {
+  app_id: string;
+  school_id: string;
+  currency: string;
+  generated_at: number;
+  windows: {
+    today: SchoolIncomeWindow;
+    past_week: SchoolIncomeWindow;
+    lifetime: SchoolIncomeWindow;
+    pending: SchoolIncomeWindow;
+  };
+}
+
 const sharedManagedAppIds = ["juise-admin-app", "juise-customer-app"] as const;
 
 function buildManagedAppCandidates(managedAppId: string): string[] {
@@ -2420,6 +2444,30 @@ function buildManagedSchoolSearch(managedAppId: string, options?: Record<string,
     }
   });
   return search.toString();
+}
+
+export async function fetchSchoolIncomeSummary(
+  managedAppId: string,
+  schoolId: string,
+  options: { todayStart?: number; pastWeekStart?: number } = {},
+): Promise<SchoolIncomeSummary> {
+  const search = buildManagedSchoolSearch(managedAppId, {
+    today_start:
+      typeof options.todayStart === "number"
+        ? String(Math.floor(options.todayStart))
+        : undefined,
+    past_week_start:
+      typeof options.pastWeekStart === "number"
+        ? String(Math.floor(options.pastWeekStart))
+        : undefined,
+  });
+  return request<SchoolIncomeSummary>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/income-summary?${search}`,
+    {
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
 }
 
 export async function fetchRegisteredDeviceFeeRules(
