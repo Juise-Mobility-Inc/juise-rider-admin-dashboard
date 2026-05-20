@@ -5,6 +5,7 @@ import {
   declineSchoolRegisteredDevice,
   fetchRegisteredDeviceFeeRules,
   fetchSchoolRegisteredDevices,
+  signSchoolMedia,
   type RegisteredDevice,
   type RegisteredDeviceFeeRule,
   type RegisteredDeviceReviewEntry,
@@ -64,7 +65,6 @@ function getStatusClass(device: RegisteredDevice) {
   if (device.registration_status === "declined") return "reg-status reg-status-declined";
   if (device.registration_status === "pending") return "reg-status reg-status-pending";
   if (device.payment_status === "awaiting_payment") return "reg-status reg-status-payment";
-  if (device.qr_unlocked_at) return "reg-status reg-status-approved";
   return "reg-status reg-status-approved";
 }
 
@@ -102,6 +102,7 @@ function getInitials(name: string) {
 export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Props) {
   const [entries, setEntries] = useState<RegisteredDeviceReviewEntry[]>([]);
   const [rules, setRules] = useState<RegisteredDeviceFeeRule[]>([]);
+  const [devicePhotoUrls, setDevicePhotoUrls] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState("pending");
   const [manualAmounts, setManualAmounts] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -122,6 +123,7 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
     if (!activeSchoolId || !managedAppId) {
       setEntries([]);
       setRules([]);
+      setDevicePhotoUrls({});
       return;
     }
     setBusy(true);
@@ -133,6 +135,28 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
       ]);
       setEntries(nextEntries);
       setRules(nextRules);
+
+      // Collect one object_key per device (first active media asset)
+      const deviceKeyMap: Record<string, string> = {};
+      for (const entry of nextEntries) {
+        const asset = entry.device_media.find((m) => m.active && m.object_key?.trim());
+        if (asset) {
+          deviceKeyMap[entry.device.registered_device_uuid] = asset.object_key;
+        }
+      }
+      const uniqueKeys = Object.values(deviceKeyMap);
+      if (uniqueKeys.length > 0) {
+        const signed: Record<string, string> = await signSchoolMedia(activeSchoolId, uniqueKeys).catch(() => ({}));
+        const photoUrls: Record<string, string> = {};
+        for (const [deviceUUID, objectKey] of Object.entries(deviceKeyMap)) {
+          if (signed[objectKey]) {
+            photoUrls[deviceUUID] = signed[objectKey];
+          }
+        }
+        setDevicePhotoUrls(photoUrls);
+      } else {
+        setDevicePhotoUrls({});
+      }
     } catch (nextError) {
       setError(getErrorMessage(nextError));
     } finally {
@@ -238,11 +262,20 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
           const deviceLabel = formatDevice(device);
           const statusLabel = getStatusLabel(device);
           const statusClass = getStatusClass(device);
+          const photoUrl = devicePhotoUrls[deviceUUID];
 
           return (
             <article className="reg-card" key={deviceUUID}>
               <div className="reg-card-top">
-                <div className="reg-card-avatar">{initials || "?"}</div>
+                {photoUrl ? (
+                  <img
+                    className="reg-card-photo"
+                    src={photoUrl}
+                    alt={deviceLabel}
+                  />
+                ) : (
+                  <div className="reg-card-avatar">{initials || "?"}</div>
+                )}
                 <div className="reg-card-info">
                   <div className="reg-card-title-row">
                     <strong className="reg-card-device">{deviceLabel}</strong>
