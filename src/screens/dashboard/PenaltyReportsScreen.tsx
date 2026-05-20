@@ -207,6 +207,17 @@ function normalizeStatusValue(value: string): string {
                 .replace(/[\s-]+/g, "_");
 }
 
+function isOpenParkingViolationStatus(status: string): boolean {
+        const normalizedStatus = normalizeStatusValue(status);
+        if (!normalizedStatus) {
+                return true;
+        }
+        if (openStatusTokens.includes(normalizedStatus)) {
+                return true;
+        }
+        return !["dismissed", "paid", "resolved", "closed"].includes(normalizedStatus);
+}
+
 function matchParkingViolationFeeRule(
         rules: ParkingViolationFeeRule[],
         report: StudentParkingViolation | null,
@@ -539,7 +550,6 @@ export function PenaltyReportsScreen({
                 const isResolved = !isOpenReport(target);
                 if (isResolved) setListMode("history");
                 setSelectedReportId(target.violation_uuid);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         }, [reports]);
 
         const refreshMedia = useCallback(
@@ -721,8 +731,8 @@ export function PenaltyReportsScreen({
                         const normalizedViolationType =
                                 normalizeViolationType(violationTypeDraft);
                         const parsedPaymentAmountCents = parseCurrencyCents(paymentAmountDraft);
-                        const isRequestingPayment =
-                                normalizeStatusValue(nextStatus) === "awaiting_payment";
+                        const normalizedStatus = normalizeStatusValue(nextStatus);
+                        const isRequestingPayment = normalizedStatus === "awaiting_payment";
                         const hasMatchedRule = Boolean(matchedFeeRule);
                         let paymentAmountCents: number | undefined;
                         if (isRequestingPayment && !normalizedViolationType) {
@@ -768,7 +778,7 @@ export function PenaltyReportsScreen({
                                         payment_amount_cents: paymentAmountCents,
                                         payment_requested_at: options?.paymentRequestedAt ?? null,
                                         payment_collected_at: options?.paymentCollectedAt ?? null,
-                                        active: options?.active,
+                                        active: options?.active ?? isOpenParkingViolationStatus(nextStatus),
                                 },
                         );
                         setReports((current) =>
