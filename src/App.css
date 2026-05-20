@@ -837,20 +837,6 @@
         box-shadow: 0 10px 24px rgba(1, 12, 5, 0.16) !important;
 }
 
-/* Dashboard global reports footer button */
-.dashboard-global-reports-footer {
-        margin-top: 16px;
-}
-
-.dashboard-global-reports-btn {
-        display: block;
-        text-align: center;
-        text-decoration: none;
-        padding: 13px 20px;
-        font-weight: 600;
-        letter-spacing: 0.02em;
-}
-
 .sidebar .text-button {
         justify-self: start;
         padding: 7px 10px;

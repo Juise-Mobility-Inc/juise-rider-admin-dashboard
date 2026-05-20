@@ -1160,7 +1160,7 @@ function RidePenaltySection({ visuals }: { visuals: DashboardVisuals }) {
 		<article className="dashboard-card dashboard-penalty-card">
 			<div className="reports-visual-heading-row">
 				<div className="reports-visual-heading">
-					<h3>Ride penalties faced</h3>
+					<h3>Ride Penalties</h3>
 					<p>Speed-limit and no-go events students have hit during rides.</p>
 				</div>
 				<DashboardSectionArrow to="/zones" label="Open School Zones" />
@@ -1239,8 +1239,8 @@ function ActivePenaltyReportsSection({
 		<article className="dashboard-card dashboard-penalty-card">
 			<div className="reports-visual-heading-row">
 				<div className="reports-visual-heading">
-					<h3>Active penalty reports</h3>
-					<p>Reports still marked active and ready for review.</p>
+					<h3>Parking Enforcement Reports</h3>
+					<p>Reports by Parking Enforcement</p>
 				</div>
 				<DashboardSectionArrow to="/penalty-reports" label="Penalty Reports" />
 			</div>
@@ -1764,14 +1764,6 @@ export function DashboardScreen({
 							)}
 							detail="Latest refresh"
 						/>
-					</div>
-
-					<div className="dashboard-global-reports-footer">
-						<Link
-							to="/reports"
-							className="primary-button full-width-button dashboard-global-reports-btn">
-							Build Global Reports
-						</Link>
 					</div>
 				</>
 			) : null}
