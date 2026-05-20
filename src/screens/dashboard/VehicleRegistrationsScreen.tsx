@@ -52,30 +52,27 @@ function formatDevice(device: RegisteredDevice) {
   );
 }
 
-function formatStatus(device: RegisteredDevice) {
-  if (device.registration_status === "declined") {
-    return "Declined";
-  }
-  if (device.registration_status === "pending") {
-    return "Pending";
-  }
-  if (device.payment_status === "awaiting_payment") {
-    return "Payment due";
-  }
-  if (device.qr_unlocked_at) {
-    return "QR ready";
-  }
+function getStatusLabel(device: RegisteredDevice) {
+  if (device.registration_status === "declined") return "Declined";
+  if (device.registration_status === "pending") return "Pending";
+  if (device.payment_status === "awaiting_payment") return "Payment due";
+  if (device.qr_unlocked_at) return "QR ready";
   return "Approved";
+}
+
+function getStatusClass(device: RegisteredDevice) {
+  if (device.registration_status === "declined") return "reg-status reg-status-declined";
+  if (device.registration_status === "pending") return "reg-status reg-status-pending";
+  if (device.payment_status === "awaiting_payment") return "reg-status reg-status-payment";
+  if (device.qr_unlocked_at) return "reg-status reg-status-approved";
+  return "reg-status reg-status-approved";
 }
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Something went wrong.";
 }
 
-function findMatchedRule(
-  device: RegisteredDevice,
-  rules: RegisteredDeviceFeeRule[],
-) {
+function findMatchedRule(device: RegisteredDevice, rules: RegisteredDeviceFeeRule[]) {
   const deviceType = device.device_type.trim().toLowerCase();
   const powertrainType = (device.powertrain_type || "non_electric").trim();
   return [...rules]
@@ -87,10 +84,19 @@ function findMatchedRule(
     )
     .sort((left, right) => {
       const leftScore = (left.device_type ? 2 : 0) + (left.powertrain_type ? 1 : 0);
-      const rightScore =
-        (right.device_type ? 2 : 0) + (right.powertrain_type ? 1 : 0);
+      const rightScore = (right.device_type ? 2 : 0) + (right.powertrain_type ? 1 : 0);
       return rightScore - leftScore;
     })[0];
+}
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
 }
 
 export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Props) {
@@ -178,12 +184,7 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
     setError("");
     setSuccess("");
     try {
-      await declineSchoolRegisteredDevice(
-        managedAppId,
-        activeSchoolId,
-        deviceUUID,
-        note,
-      );
+      await declineSchoolRegisteredDevice(managedAppId, activeSchoolId, deviceUUID, note);
       setSuccess("Vehicle registration declined.");
       await refresh();
     } catch (nextError) {
@@ -224,70 +225,91 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
 
       {error ? <p className="error-text">{error}</p> : null}
       {success ? <p className="success-text">{success}</p> : null}
-      {busy ? <p className="muted-text">Loading registrations...</p> : null}
+      {busy ? <p className="muted-text">Loading registrations…</p> : null}
 
-      <div className="fee-rule-list">
+      <div className="reg-card-list">
         {sortedEntries.map((entry) => {
           const device = entry.device;
           const deviceUUID = device.registered_device_uuid;
           const matchedRule = findMatchedRule(device, rules);
           const isBusy = busyId.startsWith(deviceUUID);
+          const studentName = formatName(entry);
+          const initials = getInitials(studentName);
+          const deviceLabel = formatDevice(device);
+          const statusLabel = getStatusLabel(device);
+          const statusClass = getStatusClass(device);
+
           return (
-            <article className="fee-rule-card" key={deviceUUID}>
-              <div>
-                <strong>{formatDevice(device)}</strong>
-                <p className="muted-text">
-                  {formatName(entry)} · {device.device_type || "device"} ·{" "}
-                  {device.powertrain_type || "non_electric"}
-                </p>
-                <p className="muted-text">
-                  Serial {device.serial_number || "not set"} · Color{" "}
-                  {device.color || "not set"} · {formatStatus(device)}
-                </p>
-                {device.review_note ? (
-                  <p className="muted-text">Review note: {device.review_note}</p>
-                ) : null}
-                {device.registration_fee_amount_cents ? (
-                  <p className="muted-text">
-                    Fee snapshot: {formatCurrency(device.registration_fee_amount_cents)}
-                  </p>
-                ) : null}
+            <article className="reg-card" key={deviceUUID}>
+              <div className="reg-card-top">
+                <div className="reg-card-avatar">{initials || "?"}</div>
+                <div className="reg-card-info">
+                  <div className="reg-card-title-row">
+                    <strong className="reg-card-device">{deviceLabel}</strong>
+                    <span className={statusClass}>{statusLabel}</span>
+                  </div>
+                  <span className="reg-card-student">{studentName}</span>
+                  <div className="reg-card-chips">
+                    {device.device_type ? (
+                      <span className="reg-chip">{device.device_type}</span>
+                    ) : null}
+                    {device.powertrain_type ? (
+                      <span className="reg-chip">{device.powertrain_type}</span>
+                    ) : null}
+                    {device.color ? (
+                      <span className="reg-chip">{device.color}</span>
+                    ) : null}
+                    {device.serial_number ? (
+                      <span className="reg-chip reg-chip-muted">
+                        SN: {device.serial_number}
+                      </span>
+                    ) : null}
+                    {matchedRule ? (
+                      <span className="reg-chip reg-chip-fee">
+                        {matchedRule.label || "Fee"} · {formatCurrency(matchedRule.amount_cents)}
+                      </span>
+                    ) : null}
+                    {device.registration_fee_amount_cents ? (
+                      <span className="reg-chip reg-chip-fee">
+                        Snapshot: {formatCurrency(device.registration_fee_amount_cents)}
+                      </span>
+                    ) : null}
+                  </div>
+                  {device.review_note ? (
+                    <p className="reg-card-note">{device.review_note}</p>
+                  ) : null}
+                </div>
               </div>
-              <div className="form-stack">
-                <label className="form-field">
-                  Review note
-                  <input
-                    value={notes[deviceUUID] ?? ""}
-                    onChange={(event) =>
-                      setNotes((current) => ({
-                        ...current,
-                        [deviceUUID]: event.target.value,
-                      }))
-                    }
-                    placeholder="Optional approval note, required to decline"
-                  />
-                </label>
-                <label className="form-field">
-                  Manual fee
-                  <input
-                    value={manualAmounts[deviceUUID] ?? ""}
-                    onChange={(event) =>
-                      setManualAmounts((current) => ({
-                        ...current,
-                        [deviceUUID]: event.target.value,
-                      }))
-                    }
-                    placeholder="25.00"
-                  />
-                </label>
-                <p className="muted-text">
-                  Matched fee:{" "}
-                  {matchedRule
-                    ? `${matchedRule.label || "Registration fee"} (${formatCurrency(
-                        matchedRule.amount_cents,
-                      )})`
-                    : "No active match"}
-                </p>
+
+              <div className="reg-card-actions">
+                <div className="reg-card-fields">
+                  <label className="field">
+                    <span>Review note</span>
+                    <input
+                      value={notes[deviceUUID] ?? ""}
+                      onChange={(event) =>
+                        setNotes((current) => ({
+                          ...current,
+                          [deviceUUID]: event.target.value,
+                        }))
+                      }
+                      placeholder="Optional approval note, required to decline"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Manual fee</span>
+                    <input
+                      value={manualAmounts[deviceUUID] ?? ""}
+                      onChange={(event) =>
+                        setManualAmounts((current) => ({
+                          ...current,
+                          [deviceUUID]: event.target.value,
+                        }))
+                      }
+                      placeholder="$25.00"
+                    />
+                  </label>
+                </div>
                 <div className="inline-actions">
                   <button
                     className="primary-button"

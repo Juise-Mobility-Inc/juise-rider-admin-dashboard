@@ -101,6 +101,8 @@ export function RegistrationFeesScreen({ activeSchoolId, managedAppId }: Props) 
     [rules],
   );
 
+  const activeCount = useMemo(() => rules.filter((r) => r.active).length, [rules]);
+
   async function refreshRules() {
     if (!activeSchoolId || !managedAppId) {
       setRules([]);
@@ -163,11 +165,7 @@ export function RegistrationFeesScreen({ activeSchoolId, managedAppId }: Props) 
     setError("");
     setSuccess("");
     try {
-      await deleteRegisteredDeviceFeeRule(
-        managedAppId,
-        activeSchoolId,
-        rule.fee_rule_uuid,
-      );
+      await deleteRegisteredDeviceFeeRule(managedAppId, activeSchoolId, rule.fee_rule_uuid);
       setRules((current) =>
         current.map((candidate) =>
           candidate.fee_rule_uuid === rule.fee_rule_uuid
@@ -202,8 +200,8 @@ export function RegistrationFeesScreen({ activeSchoolId, managedAppId }: Props) 
       <div className="settings-grid">
         <div className="settings-card">
           <h3>{draft.fee_rule_uuid ? "Edit fee rule" : "New fee rule"}</h3>
-          <label className="form-field">
-            Device type
+          <label className="field">
+            <span>Device type</span>
             <select
               value={draft.device_type}
               onChange={(event) =>
@@ -217,8 +215,8 @@ export function RegistrationFeesScreen({ activeSchoolId, managedAppId }: Props) 
               ))}
             </select>
           </label>
-          <label className="form-field">
-            Powertrain
+          <label className="field">
+            <span>Powertrain</span>
             <select
               value={draft.powertrain_type}
               onChange={(event) =>
@@ -235,18 +233,18 @@ export function RegistrationFeesScreen({ activeSchoolId, managedAppId }: Props) 
               ))}
             </select>
           </label>
-          <label className="form-field">
-            Amount
+          <label className="field">
+            <span>Amount</span>
             <input
               value={draft.amount}
               onChange={(event) =>
                 setDraft((current) => ({ ...current, amount: event.target.value }))
               }
-              placeholder="25.00"
+              placeholder="$25.00"
             />
           </label>
-          <label className="form-field">
-            Label
+          <label className="field">
+            <span>Label</span>
             <input
               value={draft.label}
               onChange={(event) =>
@@ -268,11 +266,20 @@ export function RegistrationFeesScreen({ activeSchoolId, managedAppId }: Props) 
           {error ? <p className="error-text">{error}</p> : null}
           {success ? <p className="success-text">{success}</p> : null}
           <div className="modal-actions">
-            <button className="primary-button" type="button" disabled={busy} onClick={() => void handleSave()}>
-              {busy ? "Saving..." : "Save rule"}
+            <button
+              className="primary-button"
+              type="button"
+              disabled={busy}
+              onClick={() => void handleSave()}
+            >
+              {busy ? "Saving…" : "Save rule"}
             </button>
             {draft.fee_rule_uuid ? (
-              <button className="secondary-button" type="button" onClick={() => setDraft(emptyDraft)}>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setDraft(emptyDraft)}
+              >
                 Cancel edit
               </button>
             ) : null}
@@ -280,23 +287,49 @@ export function RegistrationFeesScreen({ activeSchoolId, managedAppId }: Props) 
         </div>
 
         <div className="settings-card">
-          <h3>Active rules</h3>
+          <div className="settings-card-header-row">
+            <h3>Fee rules</h3>
+            {activeCount > 0 ? (
+              <span className="fee-rule-active-badge">{activeCount} active</span>
+            ) : null}
+          </div>
           <div className="fee-rule-list">
             {sortedRules.map((rule) => (
-              <article className="fee-rule-card" key={rule.fee_rule_uuid}>
-                <div>
-                  <strong>{rule.label || "Registration fee"}</strong>
-                  <p className="muted-text">
-                    {formatValue(rule.device_type)} device ·{" "}
-                    {formatValue(rule.powertrain_type)} powertrain
-                  </p>
+              <article
+                className={`fee-rule-card${rule.active ? "" : " fee-rule-card-inactive"}`}
+                key={rule.fee_rule_uuid}
+              >
+                <div className="fee-rule-card-top">
+                  <div className="fee-rule-card-info">
+                    <strong>{rule.label || "Registration fee"}</strong>
+                    <div className="fee-rule-chips">
+                      <span className="reg-chip">
+                        {formatValue(rule.device_type)} device
+                      </span>
+                      <span className="reg-chip">
+                        {formatValue(rule.powertrain_type)} powertrain
+                      </span>
+                      {!rule.active ? (
+                        <span className="reg-chip reg-chip-muted">Inactive</span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <span className="fee-rule-amount">{formatCurrency(rule.amount_cents)}</span>
                 </div>
-                <span>{formatCurrency(rule.amount_cents)}</span>
                 <div className="inline-actions">
-                  <button className="secondary-button" type="button" onClick={() => setDraft(draftFromRule(rule))}>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => setDraft(draftFromRule(rule))}
+                  >
                     Edit
                   </button>
-                  <button className="danger-button" type="button" disabled={busy || !rule.active} onClick={() => void handleDelete(rule)}>
+                  <button
+                    className="danger-button"
+                    type="button"
+                    disabled={busy || !rule.active}
+                    onClick={() => void handleDelete(rule)}
+                  >
                     Delete
                   </button>
                 </div>

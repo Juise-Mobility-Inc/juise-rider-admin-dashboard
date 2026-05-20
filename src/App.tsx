@@ -19,6 +19,7 @@ import {
         fetchAdminSchoolPacks,
         fetchNebulaUser,
         fetchPendingReservations,
+        fetchSchoolRegisteredDevices,
         fetchSchool,
         fetchSchoolChallengeParticipants,
         fetchSchoolChallenges,
@@ -1147,6 +1148,7 @@ function App() {
                 parkingEnforcement: true,
                 vehicleRegistrations: true,
                 penaltyReports: true,
+                vehicles: true,
         });
         const [initialSession] = useState<AdminSession | null>(() =>
                 readDashboardSession(),
@@ -1230,6 +1232,7 @@ function App() {
         const [qrActionTarget, setQrActionTarget] = useState("");
 
         const [reservations, setReservations] = useState<PackSpotReservation[]>([]);
+        const [pendingVehicleCount, setPendingVehicleCount] = useState<number | null>(null);
         const [, setDashboardHeaderCounts] = useState<HeaderDashboardCounts>({
                 studentCount: null,
                 pendingReservationCount: null,
@@ -2111,7 +2114,24 @@ function App() {
                         studentCount: null,
                         pendingReservationCount: null,
                 });
+                setPendingVehicleCount(null);
         }, [activeSchoolId, context.managedAppId]);
+
+        useEffect(() => {
+                if (!session || !activeSchoolId) {
+                        setPendingVehicleCount(null);
+                        return;
+                }
+                let cancelled = false;
+                fetchSchoolRegisteredDevices(context.managedAppId, activeSchoolId, "pending")
+                        .then((results) => {
+                                if (!cancelled) setPendingVehicleCount(results.length);
+                        })
+                        .catch(() => {
+                                if (!cancelled) setPendingVehicleCount(null);
+                        });
+                return () => { cancelled = true; };
+        }, [session, activeSchoolId, context.managedAppId]);
 
         useEffect(() => {
                 if (!schoolStudentRosterReady) {
@@ -4567,19 +4587,25 @@ function App() {
                                                                 <NavLink to="/pois" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active" : "nav-sub-item"}>POI Setup</NavLink>
                                                                 <NavLink to="/challenges" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active" : "nav-sub-item"}>Challenges and Campaigns</NavLink>
                                                                 <NavLink to="/notifications" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active" : "nav-sub-item"}>Notifications</NavLink>
-                                                                <div className="nav-sub-group">
-                                                                        <div className="nav-sub-group-row">
-                                                                                <NavLink to="/packs" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active nav-sub-item-grow" : "nav-sub-item nav-sub-item-grow"}>Juise Packs</NavLink>
-                                                                                <button className="nav-sub-chevron" type="button" onClick={() => setOpenNavGroups(p => ({ ...p, juisePacks: !p.juisePacks }))}>
-                                                                                        <span className={`nav-group-chevron${openNavGroups.juisePacks ? " nav-group-chevron-open" : ""}`}>›</span>
-                                                                                </button>
-                                                                        </div>
-                                                                        {openNavGroups.juisePacks && (
-                                                                                <div className="nav-leaf-items">
-                                                                                        <NavLink to="/reservations" className={({ isActive }) => isActive ? "nav-leaf-item nav-leaf-item-active" : "nav-leaf-item"}>Juise Pack Reservation Requests</NavLink>
-                                                                                </div>
-                                                                        )}
-                                                                </div>
+                                                        </div>
+                                                )}
+                                        </div>
+
+                                        {/* Juise Packs section */}
+                                        <div className="nav-group">
+                                                <button className="nav-group-header" type="button" onClick={() => setOpenNavGroups(p => ({ ...p, juisePacks: !p.juisePacks }))}>
+                                                        <span className="nav-group-header-label">
+                                                                Juise Packs
+                                                                {reservations.length > 0 && (
+                                                                        <span className="nav-badge">{reservations.length}</span>
+                                                                )}
+                                                        </span>
+                                                        <span className={`nav-group-chevron${openNavGroups.juisePacks ? " nav-group-chevron-open" : ""}`}>›</span>
+                                                </button>
+                                                {openNavGroups.juisePacks && (
+                                                        <div className="nav-group-items">
+                                                                <NavLink to="/packs" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active" : "nav-sub-item"}>Manage Juise Packs</NavLink>
+                                                                <NavLink to="/reservations" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active" : "nav-sub-item"}>View Parking Reservations</NavLink>
                                                         </div>
                                                 )}
                                         </div>
@@ -4594,19 +4620,25 @@ function App() {
                                                         <div className="nav-group-items">
                                                                 <NavLink to="/students" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active" : "nav-sub-item"}>Student Information</NavLink>
                                                                 <NavLink to="/routes" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active" : "nav-sub-item"}>Recorded Routes</NavLink>
-                                                                <div className="nav-sub-group">
-                                                                        <div className="nav-sub-group-row">
-                                                                                <NavLink to="/vehicle-registrations" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active nav-sub-item-grow" : "nav-sub-item nav-sub-item-grow"}>Vehicle Registrations</NavLink>
-                                                                                <button className="nav-sub-chevron" type="button" onClick={() => setOpenNavGroups(p => ({ ...p, vehicleRegistrations: !p.vehicleRegistrations }))}>
-                                                                                        <span className={`nav-group-chevron${openNavGroups.vehicleRegistrations ? " nav-group-chevron-open" : ""}`}>›</span>
-                                                                                </button>
-                                                                        </div>
-                                                                        {openNavGroups.vehicleRegistrations && (
-                                                                                <div className="nav-leaf-items">
-                                                                                        <NavLink to="/registration-fees" className={({ isActive }) => isActive ? "nav-leaf-item nav-leaf-item-active" : "nav-leaf-item"}>Registration Fee Setup</NavLink>
-                                                                                </div>
-                                                                        )}
-                                                                </div>
+                                                        </div>
+                                                )}
+                                        </div>
+
+                                        {/* Vehicles section */}
+                                        <div className="nav-group">
+                                                <button className="nav-group-header" type="button" onClick={() => setOpenNavGroups(p => ({ ...p, vehicles: !p.vehicles }))}>
+                                                        <span className="nav-group-header-label">
+                                                                Vehicles
+                                                                {pendingVehicleCount !== null && pendingVehicleCount > 0 && (
+                                                                        <span className="nav-badge">{pendingVehicleCount}</span>
+                                                                )}
+                                                        </span>
+                                                        <span className={`nav-group-chevron${openNavGroups.vehicles ? " nav-group-chevron-open" : ""}`}>›</span>
+                                                </button>
+                                                {openNavGroups.vehicles && (
+                                                        <div className="nav-group-items">
+                                                                <NavLink to="/vehicle-registrations" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active" : "nav-sub-item"}>View Vehicle Registrations</NavLink>
+                                                                <NavLink to="/registration-fees" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active" : "nav-sub-item"}>Registration Fees</NavLink>
                                                         </div>
                                                 )}
                                         </div>
