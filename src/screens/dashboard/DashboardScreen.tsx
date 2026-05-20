@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import {
@@ -326,12 +326,12 @@ function FitText({
         className?: string;
 }) {
         const ref = useRef<HTMLElement>(null);
-        useEffect(() => {
+        useLayoutEffect(() => {
                 const el = ref.current;
                 if (!el) return;
                 let size = maxFontSize;
                 el.style.fontSize = `${size}px`;
-                while (el.scrollWidth > el.offsetWidth && size > 12) {
+                while (el.scrollWidth > el.offsetWidth && size > 8) {
                         size -= 1;
                         el.style.fontSize = `${size}px`;
                 }
@@ -340,7 +340,7 @@ function FitText({
                 <strong
                         ref={ref}
                         className={className}
-                        style={{ whiteSpace: "nowrap", display: "block", overflow: "hidden" }}>
+                        style={{ whiteSpace: "nowrap", display: "block", overflow: "visible" }}>
                         {children}
                 </strong>
         );

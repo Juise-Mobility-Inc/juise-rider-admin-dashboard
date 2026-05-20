@@ -1472,7 +1472,6 @@
 .stat-value,
 .stat-card strong {
         overflow: hidden;
-        text-overflow: ellipsis;
 }
 
 .school-profile-card {
