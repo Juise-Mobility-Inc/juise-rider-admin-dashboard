@@ -44,13 +44,13 @@ const DEFAULT_CENTER: [number, number] = [39.8283, -98.5795];
 const DEFAULT_ZOOM = 4;
 
 function speedColor(mps: number | null | undefined): string {
-  if (mps == null) return "#3b6fb5";
+  if (mps == null) return "#1a4d99";
   const mph = mps * 2.237;
-  if (mph < 5) return "#27cc5e";
-  if (mph < 10) return "#a8d63c";
-  if (mph < 15) return "#f6ae2d";
-  if (mph < 20) return "#ff6b35";
-  return "#e53e3e";
+  if (mph < 5) return "#0a6b2e";
+  if (mph < 10) return "#4a7a00";
+  if (mph < 15) return "#b07800";
+  if (mph < 20) return "#b54000";
+  return "#991010";
 }
 
 function fullName(e: SchoolStudentRosterEntry): string {
@@ -721,7 +721,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
       label: "Route path",
       active: showRoute,
       toggle: () => setShowRoute((v) => !v),
-      color: "#3b6fb5",
+      color: "#1a4d99",
     },
     {
       key: "pois",
@@ -971,8 +971,8 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                   positions={seg.positions}
                   pathOptions={{
                     color: seg.color,
-                    weight: 4,
-                    opacity: 0.9,
+                    weight: 5,
+                    opacity: 1,
                     lineCap: "round",
                     lineJoin: "round",
                   }}
