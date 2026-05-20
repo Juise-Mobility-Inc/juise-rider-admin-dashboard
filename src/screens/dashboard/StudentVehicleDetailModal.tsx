@@ -73,6 +73,15 @@ function resolveDeviceQrDescriptor(device: RegisteredDevice): QrDescriptor {
   };
 }
 
+function isDeviceQrUnlocked(device: RegisteredDevice): boolean {
+  return Boolean(
+    device.qr_unlocked_at &&
+      device.registration_status === "approved" &&
+      ((device.payment_status ?? "not_required") === "not_required" ||
+        device.payment_status === "paid"),
+  );
+}
+
 function resolveBikeIndexMetadata(
   device: RegisteredDevice,
 ): Record<string, unknown> {
@@ -112,6 +121,7 @@ export function StudentVehicleDetailModal({
   formatUnixTimestamp,
 }: Props) {
   const qrDescriptor = useMemo(() => resolveDeviceQrDescriptor(device), [device]);
+  const qrUnlocked = isDeviceQrUnlocked(device);
   const bikeIndexMetadata = useMemo(() => resolveBikeIndexMetadata(device), [device]);
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [qrBusy, setQrBusy] = useState(false);
@@ -269,7 +279,7 @@ export function StudentVehicleDetailModal({
             <div className="data-section-header">
               <h4>Device QR code</h4>
             </div>
-            {qrDataUrl ? (
+            {qrUnlocked && qrDataUrl ? (
               <img
                 className="vehicle-modal-qr-image"
                 src={qrDataUrl}
@@ -277,11 +287,17 @@ export function StudentVehicleDetailModal({
               />
             ) : (
               <div className="vehicle-modal-qr-placeholder">
-                {qrBusy ? "Generating QR…" : "QR preview unavailable"}
+                {!qrUnlocked
+                  ? "QR locked until approval and payment"
+                  : qrBusy
+                    ? "Generating QR…"
+                    : "QR preview unavailable"}
               </div>
             )}
             <p className="vehicle-modal-qr-meta">
-              {qrDescriptor.isGenerated
+              {!qrUnlocked
+                ? "Pending, declined, and payment-due devices are not valid for enforcement scans."
+                : qrDescriptor.isGenerated
                 ? `No saved QR payload was found, so this QR was generated from the ${qrDescriptor.source}.`
                 : `Using the saved ${qrDescriptor.source} value for this device.`}
             </p>
@@ -290,7 +306,7 @@ export function StudentVehicleDetailModal({
                 className="secondary-button"
                 type="button"
                 onClick={handleDownloadQr}
-                disabled={!qrDataUrl}
+                disabled={!qrUnlocked || !qrDataUrl}
               >
                 {qrDescriptor.isGenerated ? "Download generated QR" : "Download QR"}
               </button>
@@ -298,6 +314,7 @@ export function StudentVehicleDetailModal({
                 className="secondary-button"
                 type="button"
                 onClick={() => void onCopy("device scan value", qrDescriptor.value)}
+                disabled={!qrUnlocked}
               >
                 Copy scan value
               </button>
@@ -338,6 +355,18 @@ export function StudentVehicleDetailModal({
             <div className="detail-row">
               <span>Powertrain</span>
               <strong>{device.powertrain_type || "non_electric"}</strong>
+            </div>
+            <div className="detail-row">
+              <span>Registration</span>
+              <strong>{device.registration_status || "approved"}</strong>
+            </div>
+            <div className="detail-row">
+              <span>Payment</span>
+              <strong>{device.payment_status || "not_required"}</strong>
+            </div>
+            <div className="detail-row">
+              <span>QR access</span>
+              <strong>{qrUnlocked ? "Unlocked" : "Locked"}</strong>
             </div>
             <div className="detail-row">
               <span>Make &amp; model</span>

@@ -88,12 +88,14 @@ import { NotificationsScreen } from "./screens/dashboard/NotificationsScreen";
 import { PacksScreen } from "./screens/dashboard/PacksScreen";
 import { PenaltyReportsScreen } from "./screens/dashboard/PenaltyReportsScreen";
 import { PoisScreen } from "./screens/dashboard/PoisScreen";
+import { RegistrationFeesScreen } from "./screens/dashboard/RegistrationFeesScreen";
 import { ReportsScreen } from "./screens/dashboard/ReportsScreen";
 import { StudentRoutesScreen } from "./screens/dashboard/StudentRoutesScreen";
 import { ReservationsScreen } from "./screens/dashboard/ReservationsScreen";
 import { SchoolProfileScreen } from "./screens/dashboard/SchoolProfileScreen";
 import { StudentVehicleDetailModal } from "./screens/dashboard/StudentVehicleDetailModal";
 import { StudentsScreen } from "./screens/dashboard/StudentsScreen";
+import { VehicleRegistrationsScreen } from "./screens/dashboard/VehicleRegistrationsScreen";
 import { ViolationFeesScreen } from "./screens/dashboard/ViolationFeesScreen";
 import { ZonesScreen } from "./screens/dashboard/ZonesScreen";
 import { MapOverviewScreen } from "./screens/dashboard/MapOverviewScreen";
@@ -116,6 +118,8 @@ type Section =
         | "challenges"
         | "students"
         | "notifications"
+        | "vehicleRegistrations"
+        | "registrationFees"
         | "penaltyReports"
         | "violationFees"
         | "reports"
@@ -141,6 +145,16 @@ const dashboardSections: Array<{
         { section: "challenges", label: "Challenges", path: "/challenges" },
         { section: "students", label: "Students", path: "/students" },
         { section: "notifications", label: "Notifications", path: "/notifications" },
+        {
+                section: "vehicleRegistrations",
+                label: "Vehicle Registrations",
+                path: "/vehicle-registrations",
+        },
+        {
+                section: "registrationFees",
+                label: "Registration Fees",
+                path: "/registration-fees",
+        },
         {
                 section: "penaltyReports",
                 label: "Penalty Reports",
@@ -1131,6 +1145,7 @@ function App() {
                 juisePacks: true,
                 campusInfo: true,
                 parkingEnforcement: true,
+                vehicleRegistrations: true,
                 penaltyReports: true,
         });
         const [initialSession] = useState<AdminSession | null>(() =>
@@ -4355,6 +4370,20 @@ function App() {
                                                 formatNebulaUserName={formatNebulaUserName}
                                         />
                                 );
+                        case "vehicleRegistrations":
+                                return (
+                                        <VehicleRegistrationsScreen
+                                                activeSchoolId={activeSchoolId}
+                                                managedAppId={context.managedAppId}
+                                        />
+                                );
+                        case "registrationFees":
+                                return (
+                                        <RegistrationFeesScreen
+                                                activeSchoolId={activeSchoolId}
+                                                managedAppId={context.managedAppId}
+                                        />
+                                );
                         case "penaltyReports":
                                 return (
                                         <PenaltyReportsScreen
@@ -4565,6 +4594,19 @@ function App() {
                                                         <div className="nav-group-items">
                                                                 <NavLink to="/students" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active" : "nav-sub-item"}>Student Information</NavLink>
                                                                 <NavLink to="/routes" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active" : "nav-sub-item"}>Recorded Routes</NavLink>
+                                                                <div className="nav-sub-group">
+                                                                        <div className="nav-sub-group-row">
+                                                                                <NavLink to="/vehicle-registrations" className={({ isActive }) => isActive ? "nav-sub-item nav-sub-item-active nav-sub-item-grow" : "nav-sub-item nav-sub-item-grow"}>Vehicle Registrations</NavLink>
+                                                                                <button className="nav-sub-chevron" type="button" onClick={() => setOpenNavGroups(p => ({ ...p, vehicleRegistrations: !p.vehicleRegistrations }))}>
+                                                                                        <span className={`nav-group-chevron${openNavGroups.vehicleRegistrations ? " nav-group-chevron-open" : ""}`}>›</span>
+                                                                                </button>
+                                                                        </div>
+                                                                        {openNavGroups.vehicleRegistrations && (
+                                                                                <div className="nav-leaf-items">
+                                                                                        <NavLink to="/registration-fees" className={({ isActive }) => isActive ? "nav-leaf-item nav-leaf-item-active" : "nav-leaf-item"}>Registration Fee Setup</NavLink>
+                                                                                </div>
+                                                                        )}
+                                                                </div>
                                                         </div>
                                                 )}
                                         </div>

@@ -1,4 +1,11 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useSearchParams } from "react-router-dom";
 import { LatLng, LatLngBounds } from "leaflet";
 import {
@@ -141,7 +148,10 @@ function getPenaltyMaxSpeedMps(
   session: StudentRouteHistorySession,
   event: StudentRouteHistorySession["penalty_events"][number],
 ): number | null {
-  if (typeof event.max_speed_mps === "number" && Number.isFinite(event.max_speed_mps)) {
+  if (
+    typeof event.max_speed_mps === "number" &&
+    Number.isFinite(event.max_speed_mps)
+  ) {
     return event.max_speed_mps;
   }
   if (event.zone_type !== "speed_limit") {
@@ -212,7 +222,9 @@ function getPenaltyMaxSpeedPoint(
       .sort((left, right) => {
         if (expectedMaxSpeed != null) {
           const leftDelta = Math.abs((left.speed_mps ?? 0) - expectedMaxSpeed);
-          const rightDelta = Math.abs((right.speed_mps ?? 0) - expectedMaxSpeed);
+          const rightDelta = Math.abs(
+            (right.speed_mps ?? 0) - expectedMaxSpeed,
+          );
           if (leftDelta !== rightDelta) {
             return leftDelta - rightDelta;
           }
@@ -238,7 +250,10 @@ function penaltyLabel(zoneType: string): string {
   return zoneType;
 }
 
-function penaltyTitle(ev: { title?: string | null; zone_type: string }): string {
+function penaltyTitle(ev: {
+  title?: string | null;
+  zone_type: string;
+}): string {
   if (ev.title?.trim()) return ev.title.trim();
   if (ev.zone_type === "no_go") return "Entered Restricted Area";
   if (ev.zone_type === "speed_limit") return "Speeding";
@@ -253,7 +268,10 @@ function zoneTitle(z: { title?: string | null; zone_type: string }): string {
 }
 
 function safeFilename(s: string): string {
-  return s.replace(/[^a-z0-9]/gi, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
+  return s
+    .replace(/[^a-z0-9]/gi, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
 }
 
 function downloadCSV(filename: string, rows: string[][]): void {
@@ -324,8 +342,6 @@ function exportRideGPS(
   ]);
   downloadCSV(`${studentName}_ride_${rideNum}.csv`, [headers, ...rows]);
 }
-
-
 
 function MapFitter({ points }: { points: [number, number][] }) {
   const map = useMap();
@@ -758,7 +774,9 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
       {/* ══ Top row: sidebar + map ══ */}
       <div className="sr-main-row">
         {/* ── Student sidebar ── */}
-        <aside className={`sr-sidebar${sidebarOpen ? "" : " sr-sidebar--collapsed"}`}>
+        <aside
+          className={`sr-sidebar${sidebarOpen ? "" : " sr-sidebar--collapsed"}`}
+        >
           {/* Toggle button — always visible */}
           <button
             className="sr-sidebar-toggle"
@@ -767,12 +785,30 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
             title={sidebarOpen ? "Hide student list" : "Show student list"}
           >
             {sidebarOpen ? (
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10 12L6 8l4-4"/>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M10 12L6 8l4-4" />
               </svg>
             ) : (
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M6 4l4 4-4 4"/>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M6 4l4 4-4 4" />
               </svg>
             )}
             {!sidebarOpen && roster.length > 0 && (
@@ -829,9 +865,13 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                         {active && <span className="sr-avatar-dot" />}
                       </div>
                       <div className="sr-student-text">
-                        <span className="sr-student-name">{fullName(entry)}</span>
+                        <span className="sr-student-name">
+                          {fullName(entry)}
+                        </span>
                         {subline(entry) && (
-                          <span className="sr-student-sub">{subline(entry)}</span>
+                          <span className="sr-student-sub">
+                            {subline(entry)}
+                          </span>
                         )}
                       </div>
                       {active && histBusy && <span className="sr-spinner" />}
@@ -865,61 +905,60 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                 return false;
               })
               .map((z) => (
-                  <Polygon
-                    key={z.zone_uuid}
-                    positions={z.polygon.map((p): [number, number] => [
-                      p.lat,
-                      p.lng,
-                    ])}
-                    pathOptions={{
-                      color: z.zone_type === "no_go" ? "#b91c1c" : "#b45309",
-                      fillColor:
-                        z.zone_type === "no_go" ? "#ef4444" : "#f59e0b",
-                      fillOpacity: z.zone_type === "no_go" ? 0.35 : 0.25,
-                      weight: z.zone_type === "no_go" ? 3.5 : 3,
-                    }}
+                <Polygon
+                  key={z.zone_uuid}
+                  positions={z.polygon.map((p): [number, number] => [
+                    p.lat,
+                    p.lng,
+                  ])}
+                  pathOptions={{
+                    color: z.zone_type === "no_go" ? "#b91c1c" : "#b45309",
+                    fillColor: z.zone_type === "no_go" ? "#ef4444" : "#f59e0b",
+                    fillOpacity: z.zone_type === "no_go" ? 0.35 : 0.25,
+                    weight: z.zone_type === "no_go" ? 3.5 : 3,
+                  }}
+                >
+                  <Tooltip
+                    sticky
+                    direction="top"
+                    opacity={1}
+                    className="sr-map-hover-tooltip"
                   >
-                    <Tooltip
-                      sticky
-                      direction="top"
-                      opacity={1}
-                      className="sr-map-hover-tooltip"
-                    >
-                      <div className="sr-map-hover-card">
-                        <strong>{zoneTitle(z)}</strong>
-                        <span>
-                          {z.zone_type === "no_go"
-                            ? "⛔ Students must not enter this area"
-                            : z.speed_limit_mph != null
-                              ? `Speed limit: ${z.speed_limit_mph} mph`
-                              : "Speed limit zone"}
-                        </span>
-                      </div>
-                    </Tooltip>
-                    <Popup>
+                    <div className="sr-map-hover-card">
                       <strong>{zoneTitle(z)}</strong>
-                      {z.description && (
+                      <span>
+                        {z.zone_type === "no_go"
+                          ? "⛔ Students must not enter this area"
+                          : z.speed_limit_mph != null
+                            ? `Speed limit: ${z.speed_limit_mph} mph`
+                            : "Speed limit zone"}
+                      </span>
+                    </div>
+                  </Tooltip>
+                  <Popup>
+                    <strong>{zoneTitle(z)}</strong>
+                    {z.description && (
+                      <>
+                        <br />
+                        {z.description}
+                      </>
+                    )}
+                    {z.zone_type === "speed_limit" &&
+                      z.speed_limit_mph != null && (
                         <>
                           <br />
-                          {z.description}
+                          Speed limit: {z.speed_limit_mph} mph
                         </>
                       )}
-                      {z.zone_type === "speed_limit" &&
-                        z.speed_limit_mph != null && (
-                          <>
-                            <br />
-                            Speed limit: {z.speed_limit_mph} mph
-                          </>
-                        )}
-                      {z.zone_type === "no_go" && (
-                        <>
-                          <br />
-                          Students must not enter this area.
-                        </>
-                      )}
-                    </Popup>
-                  </Polygon>
-                ))}
+                    {z.zone_type === "no_go" && (
+                      <>
+                        <br />
+                        Students must not enter this area.
+                      </>
+                    )}
+                  </Popup>
+                </Polygon>
+              ))}
 
             {showRoute &&
               segments.map((seg, i) => (
@@ -972,8 +1011,12 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                     <strong>{fmtFull(routeHover.point.timestamp)}</strong>
                     <span>Speed {fmtSpeed(routeHover.point.speed_mps)}</span>
                     <span>Distance {fmtDist(routeHover.distanceMeters)}</span>
-                    <span>Elevation {fmtElevation(routeHover.point.altitude)}</span>
-                    <span>Accuracy {fmtAccuracy(routeHover.point.accuracy)}</span>
+                    <span>
+                      Elevation {fmtElevation(routeHover.point.altitude)}
+                    </span>
+                    <span>
+                      Accuracy {fmtAccuracy(routeHover.point.accuracy)}
+                    </span>
                   </div>
                 </Tooltip>
               </CircleMarker>
@@ -1041,10 +1084,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                       }}
                     />
                   ) : null}
-                  <Marker
-                    position={[poi.lat, poi.lng]}
-                    icon={visitedPoiIcon}
-                  >
+                  <Marker position={[poi.lat, poi.lng]} icon={visitedPoiIcon}>
                     <Tooltip
                       sticky
                       direction="top"
@@ -1055,7 +1095,9 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                         <strong>{poi.title || "Point of Interest"}</strong>
                         <span>Visited {fmtShort(poi.visited_at)}</span>
                         <span>+{poi.bonus_points.toLocaleString()} pts</span>
-                        <span>Confidence {fmtConfidence(poi.confidence_percent)}</span>
+                        <span>
+                          Confidence {fmtConfidence(poi.confidence_percent)}
+                        </span>
                       </div>
                     </Tooltip>
                     <Popup>
@@ -1072,7 +1114,10 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                           <>
                             <br />
                             Entry radius:{" "}
-                            {Math.round(poi.radius_meters * 3.28084).toLocaleString()} ft
+                            {Math.round(
+                              poi.radius_meters * 3.28084,
+                            ).toLocaleString()}{" "}
+                            ft
                           </>
                         )}
                       {typeof poi.confidence_percent === "number" &&
@@ -1102,7 +1147,11 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                   <Marker
                     key={`pen-${i}`}
                     position={[ev.lat, ev.lng]}
-                    icon={ev.zone_type === "no_go" ? noGoPenaltyIcon : speedPenaltyIcon}
+                    icon={
+                      ev.zone_type === "no_go"
+                        ? noGoPenaltyIcon
+                        : speedPenaltyIcon
+                    }
                     eventHandlers={{
                       click: () =>
                         focusRouteEvent(ev.lat, ev.lng, "penalty", ev),
@@ -1425,14 +1474,33 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                   type="button"
                   title="Download this ride's GPS data as CSV"
                   onClick={() => {
-                    const rideNum = history.findIndex(
-                      (s) => s.session_id === selSess.session_id,
-                    ) + 1;
+                    const rideNum =
+                      history.findIndex(
+                        (s) => s.session_id === selSess.session_id,
+                      ) + 1;
                     exportRideGPS(selEntry, selSess, rideNum);
                   }}
                 >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M8 2v9M4 8l4 4 4-4"/><rect x="2" y="13" width="12" height="1.5" rx="0.75" fill="currentColor" stroke="none"/>
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M8 2v9M4 8l4 4 4-4" />
+                    <rect
+                      x="2"
+                      y="13"
+                      width="12"
+                      height="1.5"
+                      rx="0.75"
+                      fill="currentColor"
+                      stroke="none"
+                    />
                   </svg>
                   Export ride
                 </button>
@@ -1442,24 +1510,33 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
 
           {!selSess ? (
             <p className="sr-context-empty">
-              Select a ride below to see check-in spots, violations, and active safety zones.
+              Select a ride below to see check-in spots, violations, and active
+              safety zones.
             </p>
           ) : (
             <>
               {/* At-a-glance points strip */}
               <div className="sr-summary-strip">
                 <div className="sr-summary-item sr-summary-item--green">
-                  <span className="sr-summary-val">+{selSess.bonus_points}</span>
+                  <span className="sr-summary-val">
+                    +{selSess.bonus_points}
+                  </span>
                   <span className="sr-summary-label">pts earned</span>
                 </div>
                 <div className="sr-summary-divider" />
-                <div className={`sr-summary-item${selSess.penalty_points > 0 ? " sr-summary-item--red" : ""}`}>
-                  <span className="sr-summary-val">−{selSess.penalty_points}</span>
+                <div
+                  className={`sr-summary-item${selSess.penalty_points > 0 ? " sr-summary-item--red" : ""}`}
+                >
+                  <span className="sr-summary-val">
+                    −{selSess.penalty_points}
+                  </span>
                   <span className="sr-summary-label">pts lost</span>
                 </div>
                 <div className="sr-summary-divider" />
                 <div className="sr-summary-item">
-                  <span className="sr-summary-val">{fmtDist(selSess.distance_meters)}</span>
+                  <span className="sr-summary-val">
+                    {fmtDist(selSess.distance_meters)}
+                  </span>
                   <span className="sr-summary-label">distance</span>
                 </div>
               </div>
@@ -1468,13 +1545,17 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
               <section className="sr-context-section">
                 <div className="sr-context-section-head">
                   <strong>
-                    <span className="sr-section-icon sr-section-icon--poi">★</span>
+                    <span className="sr-section-icon sr-section-icon--poi">
+                      ★
+                    </span>
                     Check-in Spots
                   </strong>
                   <span>{selSess.visited_pois.length}</span>
                 </div>
                 {selSess.visited_pois.length === 0 ? (
-                  <p className="sr-context-empty">No check-in spots visited on this ride.</p>
+                  <p className="sr-context-empty">
+                    No check-in spots visited on this ride.
+                  </p>
                 ) : (
                   <div className="sr-event-button-list">
                     {selSess.visited_pois.map((poi, index) => (
@@ -1505,7 +1586,9 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
               <section className="sr-context-section">
                 <div className="sr-context-section-head">
                   <strong>
-                    <span className="sr-section-icon sr-section-icon--penalty">⚠</span>
+                    <span className="sr-section-icon sr-section-icon--penalty">
+                      ⚠
+                    </span>
                     Violations
                   </strong>
                   <span>{selSess.penalty_events.length}</span>
@@ -1532,8 +1615,12 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                             <em>−{ev.points_lost.toLocaleString()} pts</em>
                           </span>
                           <span className="sr-event-badge-row">
-                            <span className="sr-event-type-badge">{penaltyLabel(ev.zone_type)}</span>
-                            <span className="sr-event-button-meta">{fmtShort(ev.occurred_at)}</span>
+                            <span className="sr-event-type-badge">
+                              {penaltyLabel(ev.zone_type)}
+                            </span>
+                            <span className="sr-event-button-meta">
+                              {fmtShort(ev.occurred_at)}
+                            </span>
                           </span>
                           {ev.duration_ms > 0 && (
                             <span className="sr-event-button-meta">
@@ -1561,7 +1648,9 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                 <section className="sr-context-section">
                   <div className="sr-context-section-head">
                     <strong>
-                      <span className="sr-section-icon sr-section-icon--zone">◉</span>
+                      <span className="sr-section-icon sr-section-icon--zone">
+                        ◉
+                      </span>
                       Safety Zones
                     </strong>
                     <span>{dispZones.filter((z) => z.active).length}</span>
@@ -1575,10 +1664,15 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                           className={`sr-zone-chip sr-zone-chip--${z.zone_type}`}
                         >
                           <span className="sr-zone-chip-dot" />
-                          <span className="sr-zone-chip-name">{zoneTitle(z)}</span>
-                          {z.zone_type === "speed_limit" && z.speed_limit_mph != null && (
-                            <span className="sr-zone-chip-limit">{z.speed_limit_mph} mph</span>
-                          )}
+                          <span className="sr-zone-chip-name">
+                            {zoneTitle(z)}
+                          </span>
+                          {z.zone_type === "speed_limit" &&
+                            z.speed_limit_mph != null && (
+                              <span className="sr-zone-chip-limit">
+                                {z.speed_limit_mph} mph
+                              </span>
+                            )}
                           {z.zone_type === "no_go" && (
                             <span className="sr-zone-chip-limit">no entry</span>
                           )}
@@ -1598,7 +1692,9 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
           <div className="sr-ride-bar-head">
             <div className="sr-ride-bar-head-left">
               <span className="sr-eyebrow">
-                {selEntry ? `${firstName(selEntry)}'s Ride History` : "Ride History"}
+                {selEntry
+                  ? `${firstName(selEntry)}'s Ride History`
+                  : "Ride History"}
               </span>
               {!histBusy && history.length > 0 && (
                 <span className="sr-count">{history.length} rides</span>
@@ -1617,8 +1713,26 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                   title="Download all rides as CSV"
                   onClick={() => exportAllRidesSummary(selEntry, history)}
                 >
-                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M8 2v9M4 8l4 4 4-4"/><rect x="2" y="13" width="12" height="1.5" rx="0.75" fill="currentColor" stroke="none"/>
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M8 2v9M4 8l4 4 4-4" />
+                    <rect
+                      x="2"
+                      y="13"
+                      width="12"
+                      height="1.5"
+                      rx="0.75"
+                      fill="currentColor"
+                      stroke="none"
+                    />
                   </svg>
                   Download all rides
                 </button>
@@ -1648,7 +1762,8 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") setSelId(sess.session_id);
+                      if (e.key === "Enter" || e.key === " ")
+                        setSelId(sess.session_id);
                     }}
                   >
                     <div className="sr-chip-top-row">
@@ -1663,8 +1778,26 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                             exportRideGPS(selEntry, sess, rideNum);
                           }}
                         >
-                          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M8 2v9M4 8l4 4 4-4"/><rect x="2" y="13" width="12" height="1.5" rx="0.75" fill="currentColor" stroke="none"/>
+                          <svg
+                            width="11"
+                            height="11"
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M8 2v9M4 8l4 4 4-4" />
+                            <rect
+                              x="2"
+                              y="13"
+                              width="12"
+                              height="1.5"
+                              rx="0.75"
+                              fill="currentColor"
+                              stroke="none"
+                            />
                           </svg>
                         </button>
                       )}
@@ -1689,12 +1822,14 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                       )}
                       {sess.penalty_events.length > 0 && (
                         <span className="sr-badge sr-badge--red">
-                          {sess.penalty_events.length} violation{sess.penalty_events.length !== 1 ? "s" : ""}
+                          {sess.penalty_events.length} violation
+                          {sess.penalty_events.length !== 1 ? "s" : ""}
                         </span>
                       )}
                       {sess.visited_pois.length > 0 && (
                         <span className="sr-badge sr-badge--gold">
-                          {sess.visited_pois.length} spot{sess.visited_pois.length !== 1 ? "s" : ""}
+                          {sess.visited_pois.length} spot
+                          {sess.visited_pois.length !== 1 ? "s" : ""}
                         </span>
                       )}
                       {sess.points.length === 0 && (

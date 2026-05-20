@@ -1381,6 +1381,7 @@ export function StudentsScreen(props: Props) {
                                                                                         </div>
                                                                                 )}
 
+
                                                                                 <div className="student-tabs-bar">
                                                                                         <button
                                                                                                 type="button"
@@ -1635,7 +1636,7 @@ export function StudentsScreen(props: Props) {
                                                                                                                 </div>
                                                                                                         )}
                                                                                                 </div>
-                                                                                        )}
+ 
 
                                                                                         {detailTab === "records" && (
                                                                                                 <div className="data-section">
