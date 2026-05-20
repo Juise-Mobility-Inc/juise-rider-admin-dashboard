@@ -928,16 +928,19 @@ function DashboardKpi({
         label,
         value,
         detail,
+        to,
 }: {
         label: string;
         value: string;
         detail: string;
+        to?: string;
 }) {
         return (
                 <article className="dashboard-kpi">
                         <span>{label}</span>
                         <strong>{value}</strong>
                         <small>{detail}</small>
+                        {to ? <DashboardSectionArrow to={to} label={`Go to ${label}`} /> : null}
                 </article>
         );
 }
@@ -1564,11 +1567,11 @@ export function DashboardScreen({
                         {visuals ? (
                                 <>
                                         <div className="dashboard-summary-row">
-                                                <div className="dashboard-summary-stat">
+                                                <Link className="dashboard-summary-stat dashboard-summary-stat-link" to="/students">
                                                         <span className="dashboard-summary-label">Registered students</span>
                                                         <strong className="dashboard-summary-value">{visuals.rosterCount.toLocaleString()}</strong>
-                                                        <small className="dashboard-summary-detail">Students under this school</small>
-                                                </div>
+                                                        <small className="dashboard-summary-detail">Students under this school →</small>
+                                                </Link>
                                                 <div className="dashboard-summary-divider" />
                                                 <div className="dashboard-summary-stat">
                                                         <span className="dashboard-summary-label">Total registered devices</span>
@@ -1578,13 +1581,13 @@ export function DashboardScreen({
                                                         <small className="dashboard-summary-detail">All vehicle registrations</small>
                                                 </div>
                                                 <div className="dashboard-summary-divider" />
-                                                <div className="dashboard-summary-stat dashboard-summary-stat-pending">
+                                                <Link className="dashboard-summary-stat dashboard-summary-stat-pending dashboard-summary-stat-link" to="/vehicle-registrations">
                                                         <span className="dashboard-summary-label">Pending review</span>
                                                         <strong className="dashboard-summary-value">
                                                                 {devicePendingCount !== null ? devicePendingCount.toLocaleString() : "—"}
                                                         </strong>
-                                                        <small className="dashboard-summary-detail">Devices awaiting approval</small>
-                                                </div>
+                                                        <small className="dashboard-summary-detail">Devices awaiting approval →</small>
+                                                </Link>
                                         </div>
 
                                         <div className="dashboard-hero-grid">
@@ -1609,11 +1612,13 @@ export function DashboardScreen({
                                                         label="Rides today"
                                                         value={visuals.ridesToday.toLocaleString()}
                                                         detail={`${visuals.activeRidersToday.toLocaleString()} active riders`}
+                                                        to="/routes"
                                                 />
                                                 <DashboardKpi
                                                         label="Rides yesterday"
                                                         value={visuals.ridesYesterday.toLocaleString()}
                                                         detail="Daily comparison"
+                                                        to="/routes"
                                                 />
                                                 <DashboardKpi
                                                         label="This week"
@@ -1621,11 +1626,13 @@ export function DashboardScreen({
                                                         detail={`${visuals.activeRidersThisWeek.toLocaleString()} riders · ${formatMiles(
                                                                 visuals.distanceMetersThisWeek,
                                                         )} mi`}
+                                                        to="/routes"
                                                 />
                                                 <DashboardKpi
                                                         label="POI visits"
                                                         value={visuals.poiVisits.toLocaleString()}
                                                         detail={`${visuals.poiRankings.filter((point) => point.visits > 0).length.toLocaleString()} POIs getting the most traffic`}
+                                                        to="/pois"
                                                 />
                                         </div>
 

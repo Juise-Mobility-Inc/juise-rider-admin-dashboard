@@ -4481,6 +4481,21 @@
         padding: 16px 20px;
 }
 
+.dashboard-summary-stat-link {
+        text-decoration: none;
+        color: inherit;
+        cursor: pointer;
+        transition: background 0.15s;
+}
+
+.dashboard-summary-stat-link:hover {
+        background: rgba(0, 0, 0, 0.03);
+}
+
+.dashboard-summary-stat-link:hover .dashboard-summary-detail {
+        text-decoration: underline;
+}
+
 .dashboard-summary-stat-pending .dashboard-summary-value {
         color: #b45309;
 }
