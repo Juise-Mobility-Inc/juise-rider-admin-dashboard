@@ -437,8 +437,60 @@ export interface RegisteredDevice {
   color: string;
   metadata?: Record<string, unknown>;
   active: boolean;
+  registration_status?: string;
+  payment_status?: string;
+  review_note?: string;
+  reviewed_by_user_uuid?: string | null;
+  reviewed_at?: number | null;
+  registration_fee_amount_cents?: number | null;
+  registration_fee_rule_uuid?: string | null;
+  registration_fee_source?: string;
+  registration_payment_requested_at?: number | null;
+  registration_payment_collected_at?: number | null;
+  registration_payment_transaction_id?: string | null;
+  registration_payment_error?: string;
+  qr_unlocked_at?: number | null;
   created_at: number;
   updated_at: number;
+}
+
+export interface RegisteredDeviceReviewEntry {
+  managed_app_id: string;
+  school_id: string;
+  device: RegisteredDevice;
+  device_media: UserMediaAsset[];
+  student: {
+    user: NebulaUser;
+    membership?: UserSchoolMembership | null;
+    profile_image_object_key?: string;
+  };
+}
+
+export interface RegisteredDeviceFeeRule {
+  fee_rule_uuid: string;
+  app_id: string;
+  school_id: string;
+  device_type?: string | null;
+  powertrain_type?: string | null;
+  amount_cents: number;
+  label: string;
+  active: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface RegisteredDeviceFeeRuleInput {
+  device_type?: string | null;
+  powertrain_type?: string | null;
+  amount_cents: number;
+  label: string;
+  active?: boolean;
+}
+
+export interface RegisteredDeviceApprovalInput {
+  fee_mode: "matched" | "manual" | "waive";
+  amount_cents?: number | null;
+  note?: string;
 }
 
 export interface StudentProfileBundle {
@@ -2353,6 +2405,139 @@ export async function deleteParkingViolationFeeRule(
     `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violation-fee-rules/${encodeURIComponent(feeRuleUUID)}?${search.toString()}`,
     {
       method: "DELETE",
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+function buildManagedSchoolSearch(managedAppId: string, options?: Record<string, string | undefined>) {
+  const search = new URLSearchParams({
+    managed_app_id: managedAppId,
+  });
+  Object.entries(options ?? {}).forEach(([key, value]) => {
+    if (value?.trim()) {
+      search.set(key, value.trim());
+    }
+  });
+  return search.toString();
+}
+
+export async function fetchRegisteredDeviceFeeRules(
+  managedAppId: string,
+  schoolId: string,
+  options: { includeInactive?: boolean } = {},
+): Promise<RegisteredDeviceFeeRule[]> {
+  const search = buildManagedSchoolSearch(managedAppId, {
+    include_inactive: options.includeInactive ? "true" : undefined,
+  });
+  return request<RegisteredDeviceFeeRule[]>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/registered-device-fee-rules?${search}`,
+    {
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function createRegisteredDeviceFeeRule(
+  managedAppId: string,
+  schoolId: string,
+  input: RegisteredDeviceFeeRuleInput,
+): Promise<RegisteredDeviceFeeRule> {
+  const search = buildManagedSchoolSearch(managedAppId);
+  return request<RegisteredDeviceFeeRule>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/registered-device-fee-rules?${search}`,
+    {
+      method: "POST",
+      body: input,
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function updateRegisteredDeviceFeeRule(
+  managedAppId: string,
+  schoolId: string,
+  feeRuleUUID: string,
+  input: RegisteredDeviceFeeRuleInput,
+): Promise<RegisteredDeviceFeeRule> {
+  const search = buildManagedSchoolSearch(managedAppId);
+  return request<RegisteredDeviceFeeRule>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/registered-device-fee-rules/${encodeURIComponent(feeRuleUUID)}?${search}`,
+    {
+      method: "PUT",
+      body: input,
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function deleteRegisteredDeviceFeeRule(
+  managedAppId: string,
+  schoolId: string,
+  feeRuleUUID: string,
+): Promise<RegisteredDeviceFeeRule> {
+  const search = buildManagedSchoolSearch(managedAppId);
+  return request<RegisteredDeviceFeeRule>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/registered-device-fee-rules/${encodeURIComponent(feeRuleUUID)}?${search}`,
+    {
+      method: "DELETE",
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function fetchSchoolRegisteredDevices(
+  managedAppId: string,
+  schoolId: string,
+  status?: string,
+): Promise<RegisteredDeviceReviewEntry[]> {
+  const search = buildManagedSchoolSearch(managedAppId, {
+    status,
+  });
+  return request<RegisteredDeviceReviewEntry[]>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/registered-devices?${search}`,
+    {
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function approveSchoolRegisteredDevice(
+  managedAppId: string,
+  schoolId: string,
+  registeredDeviceUUID: string,
+  input: RegisteredDeviceApprovalInput,
+): Promise<RegisteredDevice> {
+  const search = buildManagedSchoolSearch(managedAppId);
+  return request<RegisteredDevice>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/registered-devices/${encodeURIComponent(registeredDeviceUUID)}/approve?${search}`,
+    {
+      method: "POST",
+      body: input,
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function declineSchoolRegisteredDevice(
+  managedAppId: string,
+  schoolId: string,
+  registeredDeviceUUID: string,
+  note: string,
+): Promise<RegisteredDevice> {
+  const search = buildManagedSchoolSearch(managedAppId);
+  return request<RegisteredDevice>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/registered-devices/${encodeURIComponent(registeredDeviceUUID)}/decline?${search}`,
+    {
+      method: "POST",
+      body: { note },
       appIdHeader: currentSession?.authAppId ?? managedAppId,
     },
   );

@@ -10026,3 +10026,67 @@
 	background: #1d4ed8;
 	color: #fff;
 }
+
+.settings-grid {
+	display: grid;
+	grid-template-columns: minmax(280px, 0.85fr) minmax(320px, 1.15fr);
+	gap: 1rem;
+	align-items: start;
+}
+
+.settings-card,
+.fee-rule-card {
+	border: 1px solid var(--panel-border);
+	border-radius: 14px;
+	background: var(--panel-bg);
+	box-shadow: var(--panel-shadow);
+	padding: 1rem;
+}
+
+.form-stack,
+.fee-rule-list {
+	display: grid;
+	gap: 0.75rem;
+}
+
+.fee-rule-card {
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: start;
+}
+
+.fee-rule-card > .form-stack {
+	grid-column: 1 / -1;
+}
+
+.inline-actions,
+.segmented-control {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	align-items: center;
+}
+
+.segmented-control {
+	margin: 1rem 0;
+}
+
+.segmented-control button {
+	border: 1px solid var(--panel-border);
+	border-radius: 999px;
+	background: var(--panel-bg);
+	color: var(--text);
+	padding: 0.45rem 0.8rem;
+}
+
+.segmented-control .segment-active {
+	border-color: var(--panel-border-accent, rgba(22, 66, 91, 0.42));
+	background: rgba(44, 124, 92, 0.11);
+	color: var(--text-strong);
+}
+
+@media (max-width: 900px) {
+	.settings-grid,
+	.fee-rule-card {
+		grid-template-columns: 1fr;
+	}
+}

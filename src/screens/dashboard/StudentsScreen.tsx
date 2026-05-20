@@ -1284,13 +1284,7 @@ export function StudentsScreen(props: Props) {
 								const noGoPenalties = penaltyEvents.filter(
 									({ event }) => event.zone_type !== "speed_limit",
 								);
-								const backgroundPenaltyEvents = penaltyEvents.filter(
-									({ session }) => isBackgroundPenaltySession(session),
-								);
-								const trackedRidePenaltyEvents =
-									penaltyEvents.length - backgroundPenaltyEvents.length;
-
-								return (
+									return (
 									<>
 										<div className="student-detail-header">
 											<div className="student-detail-avatar">
@@ -1596,6 +1590,10 @@ export function StudentsScreen(props: Props) {
 																					{device.active
 																						? "Active"
 																						: "Inactive"}
+																					{" · "}
+																					{device.registration_status || "approved"}
+																					{" · "}
+																					{device.payment_status || "not_required"}
 																				</span>
 																				<span className="device-card-open">
 																					View device details
