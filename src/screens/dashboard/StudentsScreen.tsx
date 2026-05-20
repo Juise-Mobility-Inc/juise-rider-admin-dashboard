@@ -1636,7 +1636,7 @@ export function StudentsScreen(props: Props) {
                                                                                                                 </div>
                                                                                                         )}
                                                                                                 </div>
- 
+                                                                                        )}
 
                                                                                         {detailTab === "records" && (
                                                                                                 <div className="data-section">
