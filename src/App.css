@@ -1,9 +1,10 @@
 .login-shell {
         min-height: 100svh;
-        display: grid;
-        grid-template-columns: minmax(0, 1.2fr) minmax(400px, 480px);
-        gap: 0;
-        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #fff;
+        padding: 40px 20px;
 }
 
 .login-panel,
@@ -32,223 +33,44 @@
         background: initial;
 }
 
-/* ── HERO ─────────────────────────────────── */
-.login-hero {
-        background:
-                radial-gradient(
-                        ellipse at 80% 0%,
-                        rgba(246, 174, 45, 0.28) 0%,
-                        transparent 50%
-                ),
-                radial-gradient(
-                        ellipse at 20% 100%,
-                        rgba(246, 174, 45, 0.14) 0%,
-                        transparent 45%
-                ),
-                radial-gradient(
-                        ellipse at 0% 40%,
-                        rgba(56, 120, 180, 0.18) 0%,
-                        transparent 40%
-                ),
-                linear-gradient(155deg, #0e2240 0%, #081628 60%, #050f1c 100%);
-        color: #f5efe5;
-        position: relative;
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        padding: 52px 56px;
-}
-
-.login-hero::before {
-        content: "";
-        position: absolute;
-        top: -120px;
-        right: -120px;
-        width: 520px;
-        height: 520px;
-        border-radius: 50%;
-        background: radial-gradient(
-                circle,
-                rgba(246, 174, 45, 0.12) 0%,
-                transparent 70%
-        );
-        pointer-events: none;
-}
-
-.login-hero::after {
-        content: "";
-        position: absolute;
-        bottom: -80px;
-        left: -60px;
-        width: 360px;
-        height: 360px;
-        border-radius: 50%;
-        background: radial-gradient(
-                circle,
-                rgba(56, 120, 200, 0.12) 0%,
-                transparent 70%
-        );
-        pointer-events: none;
-}
-
-.login-hero-top {
-        position: relative;
-        z-index: 1;
-}
-
-.login-hero-logo {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 56px;
-}
-
-.login-hero-logo-mark {
-        width: 38px;
-        height: 38px;
-        border-radius: 10px;
-        background: linear-gradient(135deg, #f6ae2d, #e8961a);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.1rem;
-        font-weight: 900;
-        color: #050f1c;
-        letter-spacing: -0.03em;
-        flex-shrink: 0;
-        box-shadow: 0 4px 16px rgba(246, 174, 45, 0.4);
-}
-
-.login-hero-logo span {
-        font-size: 0.75rem;
-        font-weight: 700;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: rgba(245, 239, 229, 0.55);
-}
-
-.login-hero-bottom {
-        position: relative;
-        z-index: 1;
-}
-
-.login-hero h1 {
-        color: #f5efe5;
-        font-size: clamp(2rem, 3.2vw, 3.2rem);
-        line-height: 0.96;
-        letter-spacing: -0.05em;
-        margin-bottom: 20px;
-        max-width: 18ch;
-}
-
-.login-hero h1 em {
-        font-style: normal;
-        background: linear-gradient(120deg, #f6ae2d, #ffd166);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-}
-
-.login-form-panel {
-        display: flex;
-        flex-direction: column;
-        background: #fff;
-        border-left: 1px solid rgba(17, 45, 78, 0.08);
-}
-
-.login-form-panel-inner {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        flex: 1;
-        padding: 56px 52px;
-        max-width: 440px;
-        margin: 0 auto;
+/* ── LOGIN CENTERED CARD ─────────────────── */
+.login-center-card {
         width: 100%;
-}
-
-.login-form-brand {
+        max-width: 420px;
         display: flex;
+        flex-direction: column;
         align-items: center;
-        gap: 10px;
-        margin-bottom: 48px;
 }
 
-.login-form-brand-mark {
-        width: 34px;
-        height: 34px;
-        border-radius: 9px;
-        background: linear-gradient(135deg, #f6ae2d, #e8961a);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1rem;
-        font-weight: 900;
-        color: #050f1c;
-        box-shadow: 0 3px 12px rgba(246, 174, 45, 0.35);
+.login-brand-icon {
+        width: 88px;
+        height: 88px;
+        border-radius: 22px;
+        margin-bottom: 18px;
+        box-shadow: 0 4px 24px rgba(246, 174, 45, 0.22);
 }
 
-.login-form-brand span {
-        font-size: 0.75rem;
-        font-weight: 700;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
+.login-brand-title {
+        font-size: 1.35rem;
+        font-weight: 800;
+        letter-spacing: -0.035em;
+        color: #112d4e;
+        margin-bottom: 36px;
+        text-align: center;
+}
+
+.login-initializing-text {
         color: var(--muted);
+        font-size: 0.9rem;
 }
 
-.hero-copy {
-        max-width: 42rem;
-        color: rgba(245, 239, 229, 0.72);
-        font-size: 1.05rem;
-        line-height: 1.6;
-        margin-bottom: 52px;
+.login-center-card .auth-switcher {
+        width: 100%;
+        margin-bottom: 28px;
 }
 
-.hero-grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 12px;
-}
-
-.hero-card {
-        border-radius: 18px;
-        padding: 20px;
-        background: rgba(255, 255, 255, 0.055);
-        border: 1px solid rgba(255, 255, 255, 0.09);
-        backdrop-filter: blur(18px);
-        transition: background 0.2s;
-}
-
-.hero-card:hover {
-        background: rgba(255, 255, 255, 0.09);
-}
-
-.hero-card-icon {
-        width: 32px;
-        height: 32px;
-        border-radius: 8px;
-        background: rgba(246, 174, 45, 0.18);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 14px;
-        font-size: 1rem;
-}
-
-.hero-card span {
-        display: block;
-        font-size: 0.73rem;
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        color: rgba(245, 239, 229, 0.5);
-        margin-bottom: 6px;
-}
-
-.hero-card strong {
-        color: rgba(245, 239, 229, 0.88);
-        font-size: 0.88rem;
-        line-height: 1.4;
+.login-center-card .login-form {
+        width: 100%;
 }
 
 /* ── AUTH SWITCHER ────────────────────────── */
@@ -261,7 +83,7 @@
         padding: 4px;
 }
 
-.login-form-panel .nav-button {
+.login-center-card .nav-button {
         flex: 1;
         background: transparent;
         color: var(--muted);
@@ -278,14 +100,14 @@
         letter-spacing: 0.01em;
 }
 
-.login-form-panel .nav-button:hover {
+.login-center-card .nav-button:hover {
         background: rgba(17, 45, 78, 0.05);
         color: var(--text-strong);
         box-shadow: none;
         transform: none;
 }
 
-.login-form-panel .nav-button-active {
+.login-center-card .nav-button-active {
         background: #fff;
         color: var(--text-strong);
         box-shadow:
@@ -294,7 +116,7 @@
         border: none;
 }
 
-.login-form-panel .nav-button-active:hover {
+.login-center-card .nav-button-active:hover {
         background: #fff;
         transform: none;
 }
