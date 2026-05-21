@@ -1,7 +1,7 @@
 import type { SchoolColorScheme } from "./api";
 
 export const juiseColors = {
-  red: "#FF5C5C",
+  red: "#D61A1A",
   green: "#27CC5E",
   mediumgreen: "#28AE4C",
   darkGreen: "#03200D",
@@ -9,8 +9,9 @@ export const juiseColors = {
   mediumGrey: "#1e2124",
   gold: "#EEC253",
   lightGrey: "#424549",
-  text: "#E6EAE8",
-  fadedText: "#b5b5b5",
+  white: "#F9F9F9",
+  offWhite: "#E6EAE8",
+  fadedText: "##E6EAE8",
   disabledText: "#999999",
 } as const;
 
@@ -18,10 +19,10 @@ const schoolColorHexPattern = /^#(?:[0-9a-fA-F]{6})$/;
 
 export const defaultSchoolColorScheme: Required<SchoolColorScheme> = {
   primary: juiseColors.green,
-  secondary: juiseColors.mediumGrey,
+  secondary: juiseColors.darkGrey,
   accent: juiseColors.gold,
-  background: juiseColors.darkGreen,
-  text: juiseColors.text,
+  background: juiseColors.offWhite,
+  text: juiseColors.darkGrey,
 };
 
 export type DashboardThemeColors = Required<SchoolColorScheme> & {
@@ -68,7 +69,11 @@ export function hexToRgba(color: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${Math.min(1, Math.max(0, alpha))})`;
 }
 
-export function mixHexColors(base: string, tint: string, weight: number): string {
+export function mixHexColors(
+  base: string,
+  tint: string,
+  weight: number,
+): string {
   const normalizedWeight = Math.min(1, Math.max(0, weight));
   const baseRgb = hexToRgb(base);
   const tintRgb = hexToRgb(tint);
@@ -98,7 +103,10 @@ export function getRelativeLuminance(color: string): number {
   return 0.2126 * sr + 0.7152 * sg + 0.0722 * sb;
 }
 
-export function getContrastRatio(foreground: string, background: string): number {
+export function getContrastRatio(
+  foreground: string,
+  background: string,
+): number {
   const foregroundLuminance = getRelativeLuminance(foreground);
   const backgroundLuminance = getRelativeLuminance(background);
   const lighter = Math.max(foregroundLuminance, backgroundLuminance);
@@ -115,8 +123,10 @@ export function getReadableTextColor(
     minimumContrast?: number;
   } = {},
 ): string {
-  const preferredColor = resolveOptionalHexColor(options.preferred ?? undefined);
-  const lightColor = resolveHexColor(options.light, juiseColors.text);
+  const preferredColor = resolveOptionalHexColor(
+    options.preferred ?? undefined,
+  );
+  const lightColor = resolveHexColor(options.light, juiseColors.white);
   const darkColor = resolveHexColor(options.dark, juiseColors.darkGrey);
   const minimumContrast = options.minimumContrast ?? 4.5;
   const candidates = Array.from(
