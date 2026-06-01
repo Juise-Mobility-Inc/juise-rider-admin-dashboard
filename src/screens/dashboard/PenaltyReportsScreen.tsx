@@ -17,8 +17,11 @@ import {
         type ParkingViolationFeeRule,
         updateSchoolParkingViolation,
         uploadSchoolParkingViolationMedia,
+        fetchStudentRouteHistory,
         type UploadedEntityMedia,
         type UserMediaAsset,
+        type StudentRouteHistorySession,
+        type StudentRouteHistoryPenaltyEvent,
 } from "../../lib/api";
 
 type Props = {
@@ -367,6 +370,38 @@ function formatHistoryEvent(
         }
 }
 
+function formatZoneType(zoneType: string): string {
+        if (zoneType === "no_go") return "No-Go Zone";
+        if (zoneType === "speed_limit") return "Speed Limit";
+        return formatStatus(zoneType);
+}
+
+function formatDurationMs(ms: number): string {
+        if (ms < 1000) return "<1s";
+        const secs = Math.round(ms / 1000);
+        if (secs < 60) return `${secs}s`;
+        const mins = Math.floor(secs / 60);
+        const rem = secs % 60;
+        return rem === 0 ? `${mins}m` : `${mins}m ${rem}s`;
+}
+
+function formatMph(mps: number | null | undefined): string {
+        if (mps == null) return "—";
+        return `${(mps * 2.237).toFixed(1)} mph`;
+}
+
+function formatDistanceMeters(m: number): string {
+        if (m >= 1609) return `${(m / 1609).toFixed(1)} mi`;
+        return `${Math.round(m)} m`;
+}
+
+interface FlatRidePenalty {
+        id: string;
+        session: StudentRouteHistorySession;
+        event: StudentRouteHistoryPenaltyEvent;
+        student: SchoolStudentRosterEntry | null;
+}
+
 export function PenaltyReportsScreen({
         activeSchoolId,
         managedAppId,
@@ -385,7 +420,11 @@ export function PenaltyReportsScreen({
         const [history, setHistory] = useState<StudentParkingViolationHistoryEvent[]>(
                 [],
         );
-        const [listMode, setListMode] = useState<"open" | "history">("open");
+        const [listMode, setListMode] = useState<"open" | "history" | "ride">("open");
+        const [rideSessions, setRideSessions] = useState<StudentRouteHistorySession[]>([]);
+        const [rideLoadBusy, setRideLoadBusy] = useState(false);
+        const [rideLoaded, setRideLoaded] = useState(false);
+        const [selectedRideKey, setSelectedRideKey] = useState("");
         const [detailTab, setDetailTab] = useState<"details" | "photos" | "history">(
                 "details",
         );
@@ -485,6 +524,35 @@ export function PenaltyReportsScreen({
                         selectedReport,
                         violationTypeDraft,
                 ],
+        );
+
+        const rideViolations = useMemo((): FlatRidePenalty[] => {
+                const items: FlatRidePenalty[] = [];
+                for (const session of rideSessions) {
+                        const student =
+                                studentRoster.find(
+                                        (e) =>
+                                                (e.membership.user_uuid?.trim() || e.user.k_guid) ===
+                                                session.user_uuid,
+                                ) ?? null;
+                        for (const event of session.penalty_events) {
+                                items.push({
+                                        id: `${session.session_id}__${event.zone_uuid}__${event.occurred_at}`,
+                                        session,
+                                        event,
+                                        student,
+                                });
+                        }
+                }
+                return items.sort((a, b) => b.event.occurred_at - a.event.occurred_at);
+        }, [rideSessions, studentRoster]);
+
+        const selectedRideItem = useMemo(
+                () =>
+                        rideViolations.find((rv) => rv.id === selectedRideKey) ??
+                        rideViolations[0] ??
+                        null,
+                [rideViolations, selectedRideKey],
         );
 
         const refreshReports = useCallback(async () => {
@@ -595,9 +663,52 @@ export function PenaltyReportsScreen({
                 [activeSchoolId, managedAppId],
         );
 
+        const loadRideSessions = useCallback(async () => {
+                if (
+                        rideLoaded ||
+                        rideLoadBusy ||
+                        !activeSchoolId ||
+                        !managedAppId ||
+                        studentRoster.length === 0
+                ) {
+                        return;
+                }
+                setRideLoadBusy(true);
+                try {
+                        const results = await Promise.all(
+                                studentRoster.map((entry) =>
+                                        fetchStudentRouteHistory(
+                                                managedAppId,
+                                                activeSchoolId,
+                                                entry.membership.user_uuid?.trim() || entry.user.k_guid,
+                                        ).catch(() => [] as StudentRouteHistorySession[]),
+                                ),
+                        );
+                        setRideSessions(
+                                results.flat().filter((s) => s.penalty_events.length > 0),
+                        );
+                        setRideLoaded(true);
+                } catch {
+                        // silently fail — individual student errors are caught above
+                } finally {
+                        setRideLoadBusy(false);
+                }
+        }, [activeSchoolId, managedAppId, studentRoster, rideLoaded, rideLoadBusy]);
+
         useEffect(() => {
                 void refreshReports();
         }, [refreshReports]);
+
+        useEffect(() => {
+                if (listMode === "ride") {
+                        void loadRideSessions();
+                }
+        }, [listMode, loadRideSessions]);
+
+        useEffect(() => {
+                setRideLoaded(false);
+                setRideSessions([]);
+        }, [activeSchoolId]);
 
         useEffect(() => {
                 void refreshFeeRules();
@@ -848,8 +959,25 @@ export function PenaltyReportsScreen({
                         <div className="penalty-reports-layout">
                                 <aside className="penalty-reports-list">
                                         <div className="penalty-reports-list-header">
-                                                <strong>{openReports.length.toLocaleString()} open</strong>
-                                                <span>{reports.length.toLocaleString()} total</span>
+                                                {listMode === "ride" ? (
+                                                        <>
+                                                                <strong>
+                                                                        {rideViolations.length.toLocaleString()} events
+                                                                </strong>
+                                                                <span>
+                                                                        {rideSessions.length.toLocaleString()} sessions
+                                                                </span>
+                                                        </>
+                                                ) : (
+                                                        <>
+                                                                <strong>
+                                                                        {openReports.length.toLocaleString()} open
+                                                                </strong>
+                                                                <span>
+                                                                        {reports.length.toLocaleString()} total
+                                                                </span>
+                                                        </>
+                                                )}
                                         </div>
                                         <div className="penalty-report-list-tabs">
                                                 <button
@@ -872,8 +1000,78 @@ export function PenaltyReportsScreen({
                                                         onClick={() => setListMode("history")}>
                                                         History
                                                 </button>
+                                                <button
+                                                        className={
+                                                                listMode === "ride"
+                                                                        ? "penalty-report-list-tab penalty-report-list-tab-active"
+                                                                        : "penalty-report-list-tab"
+                                                        }
+                                                        type="button"
+                                                        onClick={() => setListMode("ride")}>
+                                                        Ride
+                                                </button>
                                         </div>
-                                        {loadBusy ? (
+                                        {listMode === "ride" ? (
+                                                rideLoadBusy ? (
+                                                        <p className="muted-text">Loading ride violations…</p>
+                                                ) : rideViolations.length === 0 && rideLoaded ? (
+                                                        <p className="empty-state">No tracked ride violations found.</p>
+                                                ) : rideViolations.length === 0 ? (
+                                                        <p className="empty-state">Select Ride to load tracked violations.</p>
+                                                ) : (
+                                                        rideViolations.map((rv) => (
+                                                                <button
+                                                                        key={rv.id}
+                                                                        className={
+                                                                                selectedRideItem?.id === rv.id
+                                                                                        ? "penalty-report-list-item penalty-report-list-item-active"
+                                                                                        : "penalty-report-list-item"
+                                                                        }
+                                                                        type="button"
+                                                                        onClick={() => setSelectedRideKey(rv.id)}>
+                                                                        <div className="vr-list-item-row">
+                                                                                <strong>
+                                                                                        {rv.event.title ||
+                                                                                                formatZoneType(rv.event.zone_type)}
+                                                                                </strong>
+                                                                                <span
+                                                                                        className={`vr-list-type-badge vr-badge-${rv.event.zone_type.replace(/_/g, "-")}`}>
+                                                                                        {rv.event.zone_type === "no_go"
+                                                                                                ? "No-Go"
+                                                                                                : rv.event.zone_type === "speed_limit"
+                                                                                                        ? "Speed"
+                                                                                                        : formatStatus(rv.event.zone_type)}
+                                                                                </span>
+                                                                        </div>
+                                                                        <div className="ride-viol-meta">
+                                                                                <span className="ride-viol-pts">
+                                                                                        −{rv.event.points_lost} pts
+                                                                                </span>
+                                                                                {rv.event.duration_ms > 0 && (
+                                                                                        <span className="ride-viol-duration">
+                                                                                                {formatDurationMs(rv.event.duration_ms)}
+                                                                                        </span>
+                                                                                )}
+                                                                                {rv.event.max_speed_mps != null && (
+                                                                                        <span className="ride-viol-speed">
+                                                                                                {formatMph(rv.event.max_speed_mps)}
+                                                                                        </span>
+                                                                                )}
+                                                                        </div>
+                                                                        <div className="vr-list-item-row">
+                                                                                <span className="ride-viol-student">
+                                                                                        {rv.student
+                                                                                                ? `${rv.student.user.first_name?.trim() ?? ""} ${rv.student.user.last_name?.trim() ?? ""}`.trim() ||
+                                                                                                        rv.student.user.username ||
+                                                                                                        "Student"
+                                                                                                : "Unknown student"}
+                                                                                </span>
+                                                                                <small>{formatDateTime(rv.event.occurred_at)}</small>
+                                                                        </div>
+                                                                </button>
+                                                        ))
+                                                )
+                                        ) : loadBusy ? (
                                                 <p className="muted-text">Loading reports...</p>
                                         ) : visibleReports.length === 0 ? (
                                                 <p className="empty-state">
@@ -912,7 +1110,180 @@ export function PenaltyReportsScreen({
                                         )}
                                 </aside>
 
-                                {selectedReport ? (
+                                {listMode === "ride" ? (
+                                        selectedRideItem ? (
+                                                <article className="penalty-report-detail">
+                                                        <div className="penalty-report-detail-header">
+                                                                <div>
+                                                                        <p className="eyebrow">Ride Violation</p>
+                                                                        <h3>
+                                                                                {selectedRideItem.event.title ||
+                                                                                        formatZoneType(
+                                                                                                selectedRideItem.event.zone_type,
+                                                                                        )}
+                                                                        </h3>
+                                                                </div>
+                                                                <span
+                                                                        className={`vr-list-type-badge vr-badge-${selectedRideItem.event.zone_type.replace(/_/g, "-")}`}>
+                                                                        {selectedRideItem.event.zone_type === "no_go"
+                                                                                ? "No-Go Zone"
+                                                                                : selectedRideItem.event.zone_type ===
+                                                                                          "speed_limit"
+                                                                                        ? "Speed Limit"
+                                                                                        : formatStatus(
+                                                                                                  selectedRideItem.event.zone_type,
+                                                                                          )}
+                                                                </span>
+                                                        </div>
+
+                                                        <div className="penalty-report-detail-grid">
+                                                                <div className="penalty-report-student-card">
+                                                                        <div className="penalty-report-student-avatar">
+                                                                                {selectedRideItem.student
+                                                                                        ? getStudentInitials(
+                                                                                                  selectedRideItem.student,
+                                                                                          ) || "?"
+                                                                                        : "?"}
+                                                                        </div>
+                                                                        <div className="penalty-report-student-copy">
+                                                                                <span>Student</span>
+                                                                                <strong>
+                                                                                        {formatStudentName(
+                                                                                                selectedRideItem.student,
+                                                                                        )}
+                                                                                </strong>
+                                                                                <small>
+                                                                                        ID:{" "}
+                                                                                        {selectedRideItem.student?.membership
+                                                                                                .student_id || "Unavailable"}
+                                                                                </small>
+                                                                        </div>
+                                                                        <button
+                                                                                className="secondary-button penalty-report-student-link"
+                                                                                type="button"
+                                                                                disabled={!selectedRideItem.student}
+                                                                                onClick={() => {
+                                                                                        if (selectedRideItem.student) {
+                                                                                                onOpenStudent(
+                                                                                                        selectedRideItem.student
+                                                                                                                .membership
+                                                                                                                .membership_uuid,
+                                                                                                );
+                                                                                        }
+                                                                                }}>
+                                                                                View Student
+                                                                        </button>
+                                                                </div>
+
+                                                                <div className="ride-viol-info-card">
+                                                                        <span>Points lost</span>
+                                                                        <strong className="ride-viol-pts-big">
+                                                                                −{selectedRideItem.event.points_lost}
+                                                                        </strong>
+                                                                        <small>from this violation</small>
+                                                                </div>
+
+                                                                <div className="ride-viol-info-card">
+                                                                        <span>Time in zone</span>
+                                                                        <strong>
+                                                                                {selectedRideItem.event.duration_ms > 0
+                                                                                        ? formatDurationMs(
+                                                                                                  selectedRideItem.event
+                                                                                                          .duration_ms,
+                                                                                          )
+                                                                                        : "—"}
+                                                                        </strong>
+                                                                        <small>
+                                                                                {formatDateTime(
+                                                                                        selectedRideItem.event.occurred_at,
+                                                                                )}
+                                                                        </small>
+                                                                </div>
+
+                                                                {selectedRideItem.event.zone_type === "speed_limit" ? (
+                                                                        <>
+                                                                                <div className="ride-viol-info-card">
+                                                                                        <span>Max speed</span>
+                                                                                        <strong>
+                                                                                                {formatMph(
+                                                                                                        selectedRideItem.event
+                                                                                                                .max_speed_mps,
+                                                                                                )}
+                                                                                        </strong>
+                                                                                        <small>during violation</small>
+                                                                                </div>
+                                                                                <div className="ride-viol-info-card">
+                                                                                        <span>Speed limit</span>
+                                                                                        <strong>
+                                                                                                {selectedRideItem.event
+                                                                                                        .speed_limit_mph != null
+                                                                                                        ? `${selectedRideItem.event.speed_limit_mph} mph`
+                                                                                                        : "—"}
+                                                                                        </strong>
+                                                                                        <small>zone limit</small>
+                                                                                </div>
+                                                                        </>
+                                                                ) : null}
+
+                                                                <div className="ride-viol-info-card ride-viol-full">
+                                                                        <span>Ride session</span>
+                                                                        <strong>
+                                                                                {formatDateTime(
+                                                                                        selectedRideItem.session.started_at,
+                                                                                )}
+                                                                        </strong>
+                                                                        <small>
+                                                                                {formatDistanceMeters(
+                                                                                        selectedRideItem.session.distance_meters,
+                                                                                )}{" "}
+                                                                                ·{" "}
+                                                                                {formatDurationMs(
+                                                                                        selectedRideItem.session
+                                                                                                .duration_seconds * 1000,
+                                                                                )}{" "}
+                                                                                ·{" "}
+                                                                                {selectedRideItem.session.trip_mode || "ride"}
+                                                                        </small>
+                                                                </div>
+
+                                                                {selectedRideItem.event.description ? (
+                                                                        <div className="ride-viol-info-card ride-viol-full">
+                                                                                <span>Zone description</span>
+                                                                                <p className="ride-viol-desc">
+                                                                                        {selectedRideItem.event.description}
+                                                                                </p>
+                                                                        </div>
+                                                                ) : null}
+
+                                                                {selectedRideItem.event.confidence_percent != null ? (
+                                                                        <div className="ride-viol-info-card">
+                                                                                <span>Confidence</span>
+                                                                                <strong>
+                                                                                        {Math.round(
+                                                                                                selectedRideItem.event
+                                                                                                        .confidence_percent,
+                                                                                        )}
+                                                                                        %
+                                                                                </strong>
+                                                                                <small>
+                                                                                        {selectedRideItem.event
+                                                                                                .evidence_point_count != null
+                                                                                                ? `${selectedRideItem.event.evidence_point_count} GPS points`
+                                                                                                : "detection score"}
+                                                                                </small>
+                                                                        </div>
+                                                                ) : null}
+                                                        </div>
+                                                </article>
+                                        ) : (
+                                                <article className="penalty-report-detail penalty-report-detail-empty">
+                                                        <strong>Select a ride violation</strong>
+                                                        <p className="muted-text">
+                                                                Choose a violation from the list to view details.
+                                                        </p>
+                                                </article>
+                                        )
+                                ) : selectedReport ? (
                                         <article className="penalty-report-detail">
                                                 <div className="penalty-report-detail-header">
                                                         <div>
