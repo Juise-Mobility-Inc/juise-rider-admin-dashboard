@@ -2,8 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Link, useNavigate } from "react-router-dom";
 
 import {
-	fetchPendingReservations,
-	fetchSchoolIncomeSummary,
+        fetchPendingReservations,
+        fetchSchoolIncomeSummary,
         fetchSchoolPOIs,
         fetchSchoolRegisteredDevices,
         fetchSchoolStudentRoster,
@@ -14,7 +14,7 @@ import {
         type SchoolIncomeWindow,
         type SchoolStudentRosterEntry,
         type StudentParkingViolation,
-	type StudentRouteHistorySession,
+        type StudentRouteHistorySession,
 } from "../../lib/api";
 import { getRouteHistoryEarnedPoints } from "../../lib/routeHistoryPoints";
 
@@ -398,7 +398,7 @@ function isInRange(timestamp: number, from: number, to?: number): boolean {
 }
 
 function filterSessions(
-	bundle: StudentActivityBundle,
+        bundle: StudentActivityBundle,
         from?: number,
         to?: number,
 ): StudentRouteHistorySession[] {
@@ -455,12 +455,12 @@ function buildLeaderboard(
         to?: number,
 ): LeaderboardEntry[] {
         return students
-			.map((bundle) => {
-				const sessions = filterSessions(bundle, from, to);
-				const earnedPoints = sessions.reduce(
-					(sum, session) => sum + getRouteHistoryEarnedPoints(session),
-					0,
-				);
+                        .map((bundle) => {
+                                const sessions = filterSessions(bundle, from, to);
+                                const earnedPoints = sessions.reduce(
+                                        (sum, session) => sum + getRouteHistoryEarnedPoints(session),
+                                        0,
+                                );
                         const bonusPoints = sessions.reduce(
                                 (sum, session) => sum + session.bonus_points,
                                 0,
@@ -782,10 +782,10 @@ function buildDashboardVisuals(dataset: DashboardDataset): DashboardVisuals {
         const weekSessions = allSessions.filter((session) =>
                 isInRange(session.started_at, weekStart),
         );
-	const earnedPoints = allSessions.reduce(
-		(sum, session) => sum + getRouteHistoryEarnedPoints(session),
-		0,
-	);
+        const earnedPoints = allSessions.reduce(
+                (sum, session) => sum + getRouteHistoryEarnedPoints(session),
+                0,
+        );
         const ridePenaltyRecords = getRidePenaltyRecords(dataset.students);
         const weeklyRidePenaltyRecords = getRidePenaltyRecords(
                 dataset.students,
@@ -927,14 +927,19 @@ function DashboardKpi({
         detail: string;
         to?: string;
 }) {
-        return (
-                <article className="dashboard-kpi">
+        const card = (
+                <article className={`dashboard-kpi${to ? " dashboard-kpi--clickable" : ""}`}>
                         <span>{label}</span>
                         <strong>{value}</strong>
                         <small>{detail}</small>
-                        {to ? <DashboardSectionArrow to={to} label={`Go to ${label}`} /> : null}
+                        {to ? <span className="dashboard-kpi-arrow" aria-hidden>→</span> : null}
                 </article>
         );
+        return to ? (
+                <Link to={to} className="dashboard-kpi-link">
+                        {card}
+                </Link>
+        ) : card;
 }
 
 function DashboardMiniKpi({
@@ -1604,13 +1609,13 @@ export function DashboardScreen({
                                                         label="Rides today"
                                                         value={visuals.ridesToday.toLocaleString()}
                                                         detail={`${visuals.activeRidersToday.toLocaleString()} active riders`}
-                                                        to="/routes"
+                                                        to="/routes?dateFilter=today"
                                                 />
                                                 <DashboardKpi
                                                         label="Rides yesterday"
                                                         value={visuals.ridesYesterday.toLocaleString()}
                                                         detail="Daily comparison"
-                                                        to="/routes"
+                                                        to="/routes?dateFilter=yesterday"
                                                 />
                                                 <DashboardKpi
                                                         label="This week"
@@ -1618,13 +1623,13 @@ export function DashboardScreen({
                                                         detail={`${visuals.activeRidersThisWeek.toLocaleString()} riders · ${formatMiles(
                                                                 visuals.distanceMetersThisWeek,
                                                         )} mi`}
-                                                        to="/routes"
+                                                        to="/routes?dateFilter=week"
                                                 />
                                                 <DashboardKpi
                                                         label="POI visits"
                                                         value={visuals.poiVisits.toLocaleString()}
                                                         detail={`${visuals.poiRankings.filter((point) => point.visits > 0).length.toLocaleString()} POIs getting the most traffic`}
-                                                        to="/pois"
+                                                        to="/routes?tab=pois&contentFilter=pois"
                                                 />
                                         </div>
 

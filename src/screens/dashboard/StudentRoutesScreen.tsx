@@ -419,6 +419,10 @@ function zoneTitle(z: { title?: string | null; zone_type: string }): string {
   return "Zone";
 }
 
+type DateFilter = "all" | "today" | "yesterday" | "week";
+type SourceFilter = "all" | "tracked" | "background";
+type ContentFilter = "all" | "violations" | "pois";
+
 function isTrackedRideSession(session: StudentRouteHistorySession): boolean {
   return session.tracking_source.trim().toLowerCase() !== "auto";
 }
@@ -895,7 +899,24 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
 
   const [detailTab, setDetailTab] = useState<
     "violations" | "pois" | "zones" | "map" | "downloads"
-  >("violations");
+  >(() => {
+    const t = searchParams.get("tab");
+    return t === "pois" || t === "zones" || t === "map" || t === "downloads"
+      ? t
+      : "violations";
+  });
+
+  const [dateFilter, setDateFilter] = useState<DateFilter>(() => {
+    const d = searchParams.get("dateFilter");
+    return d === "today" || d === "yesterday" || d === "week" ? d : "all";
+  });
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
+  const [contentFilter, setContentFilter] = useState<ContentFilter>(() => {
+    const c = searchParams.get("contentFilter");
+    return c === "violations" || c === "pois" ? c : "all";
+  });
+  const [sessionSearch, setSessionSearch] = useState("");
+
   const [showRoute, setShowRoute] = useState(true);
   const [showPOIs, setShowPOIs] = useState(true);
   const [showPenalties, setShowPenalties] = useState(true);
@@ -1088,6 +1109,76 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
     0,
   );
 
+  const filteredHistory = useMemo(() => {
+    const now = new Date();
+    const todayStart =
+      new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() /
+      1000;
+    const yesterdayStart = todayStart - 86400;
+    const weekStart = todayStart - 6 * 86400;
+
+    let result = history;
+
+    if (dateFilter === "today") {
+      result = result.filter((s) => getSessionStartedAt(s) >= todayStart);
+    } else if (dateFilter === "yesterday") {
+      result = result.filter((s) => {
+        const t = getSessionStartedAt(s);
+        return t >= yesterdayStart && t < todayStart;
+      });
+    } else if (dateFilter === "week") {
+      result = result.filter((s) => getSessionStartedAt(s) >= weekStart);
+    }
+
+    if (sourceFilter === "tracked") {
+      result = result.filter(isTrackedRideSession);
+    } else if (sourceFilter === "background") {
+      result = result.filter((s) => !isTrackedRideSession(s));
+    }
+
+    if (contentFilter === "violations") {
+      result = result.filter((s) => s.penalty_events.length > 0);
+    } else if (contentFilter === "pois") {
+      result = result.filter((s) => s.visited_pois.length > 0);
+    }
+
+    const q = sessionSearch.trim().toLowerCase();
+    if (q) {
+      result = result.filter((s) => {
+        const d = new Date(getSessionStartedAt(s) * 1000).toLocaleDateString(
+          "en-US",
+          { month: "short", day: "numeric", year: "numeric" },
+        );
+        return (
+          d.toLowerCase().includes(q) ||
+          (s.trip_mode ?? "").toLowerCase().includes(q)
+        );
+      });
+    }
+
+    return result;
+  }, [history, dateFilter, sourceFilter, contentFilter, sessionSearch]);
+
+  const noMatchingRides = !!(
+    selUUID &&
+    !histBusy &&
+    history.length > 0 &&
+    filteredHistory.length === 0
+  );
+
+  const filteredViolationCount = filteredHistory.reduce(
+    (t, s) => t + s.penalty_events.length,
+    0,
+  );
+  const filteredPoiCount = filteredHistory.reduce(
+    (t, s) => t + s.visited_pois.length,
+    0,
+  );
+  const filteredGpsPointCount = filteredHistory.reduce(
+    (t, s) => t + s.points.length,
+    0,
+  );
+
   const layerToggles = [
     {
       key: "route",
@@ -1221,30 +1312,88 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
           </strong>
           <div className="sr-session-list-head-right">
             {!histBusy && history.length > 0 && (
-              <span className="sr-count">{history.length}</span>
+              <span className="sr-count">
+                {filteredHistory.length}
+                {filteredHistory.length !== history.length
+                  ? `/${history.length}`
+                  : ""}
+              </span>
             )}
             {histBusy && <span className="sr-muted-inline">Loading…</span>}
             {histErr && <span className="sr-err-inline">{histErr}</span>}
           </div>
         </div>
 
-        {selEntry && !histBusy && history.length > 0 && (
+        {/* ── Session filter bar ── */}
+        <div className="sr-session-filter">
+          <div className="sr-filter-pills">
+            {(["all", "today", "yesterday", "week"] as const).map((f) => (
+              <button
+                key={f}
+                type="button"
+                className={`sr-filter-pill${dateFilter === f ? " sr-filter-pill--active" : ""}`}
+                onClick={() => setDateFilter(f)}
+              >
+                {f === "all"
+                  ? "All"
+                  : f === "today"
+                    ? "Today"
+                    : f === "yesterday"
+                      ? "Yesterday"
+                      : "This week"}
+              </button>
+            ))}
+          </div>
+          <div className="sr-filter-row">
+            <select
+              className="sr-filter-select"
+              value={sourceFilter}
+              onChange={(e) =>
+                setSourceFilter(e.target.value as SourceFilter)
+              }
+            >
+              <option value="all">All rides</option>
+              <option value="tracked">Tracked only</option>
+              <option value="background">Background only</option>
+            </select>
+            <select
+              className="sr-filter-select"
+              value={contentFilter}
+              onChange={(e) =>
+                setContentFilter(e.target.value as ContentFilter)
+              }
+            >
+              <option value="all">All content</option>
+              <option value="violations">Has violations</option>
+              <option value="pois">Has check-ins</option>
+            </select>
+          </div>
+          <input
+            type="search"
+            className="sr-filter-search"
+            placeholder="Search by date or mode…"
+            value={sessionSearch}
+            onChange={(e) => setSessionSearch(e.target.value)}
+          />
+        </div>
+
+        {selEntry && !histBusy && filteredHistory.length > 0 && (
           <div className="sr-session-mini-stats">
             <div className="sr-session-mini-stat">
               <span>Violations</span>
               <strong
-                className={studentViolationCount > 0 ? "sr-val--red" : ""}
+                className={filteredViolationCount > 0 ? "sr-val--red" : ""}
               >
-                {studentViolationCount}
+                {filteredViolationCount}
               </strong>
             </div>
             <div className="sr-session-mini-stat">
               <span>Check-ins</span>
-              <strong>{studentPoiCount}</strong>
+              <strong>{filteredPoiCount}</strong>
             </div>
             <div className="sr-session-mini-stat">
               <span>GPS pts</span>
-              <strong>{studentGpsPointCount.toLocaleString()}</strong>
+              <strong>{filteredGpsPointCount.toLocaleString()}</strong>
             </div>
           </div>
         )}
@@ -1259,9 +1408,14 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
             No rides recorded yet.
           </p>
         )}
+        {noMatchingRides && (
+          <p className="sr-context-empty sr-context-empty--padded">
+            No rides match the current filters.
+          </p>
+        )}
 
         <div className="sr-session-item-list">
-          {history.map((sess, idx) => {
+          {filteredHistory.map((sess, idx) => {
             const active = sess.session_id === selId;
             const rideNum = idx + 1;
             const earnedPts = getRouteHistoryEarnedPoints(sess);
