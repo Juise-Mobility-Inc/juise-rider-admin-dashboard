@@ -93,6 +93,7 @@ import { PoisScreen } from "./screens/dashboard/PoisScreen";
 import { RegistrationFeesScreen } from "./screens/dashboard/RegistrationFeesScreen";
 import { ReportsScreen } from "./screens/dashboard/ReportsScreen";
 import { StudentRoutesScreen } from "./screens/dashboard/StudentRoutesScreen";
+import { StudentRideViolationsScreen } from "./screens/dashboard/StudentRideViolationsScreen";
 import { ReservationsScreen } from "./screens/dashboard/ReservationsScreen";
 import { SchoolProfileScreen } from "./screens/dashboard/SchoolProfileScreen";
 import { StudentVehicleDetailModal } from "./screens/dashboard/StudentVehicleDetailModal";
@@ -123,6 +124,7 @@ type Section =
 	| "vehicleRegistrations"
 	| "registrationFees"
 	| "penaltyReports"
+	| "studentRideViolations"
 	| "violationFees"
 	| "reports"
 	| "routes"
@@ -161,6 +163,11 @@ const dashboardSections: Array<{
 		section: "penaltyReports",
 		label: "Penalty Reports",
 		path: "/penalty-reports",
+	},
+	{
+		section: "studentRideViolations",
+		label: "Student Ride Violations",
+		path: "/student-ride-violations",
 	},
 	{
 		section: "violationFees",
@@ -4409,6 +4416,13 @@ function App() {
 						onOpenStudentDevice={handleOpenStudentDeviceFromPenaltyReport}
 					/>
 				);
+			case "studentRideViolations":
+				return (
+					<StudentRideViolationsScreen
+						activeSchoolId={activeSchoolId}
+						managedAppId={context.managedAppId}
+					/>
+				);
 			case "violationFees":
 				return (
 					<ViolationFeesScreen
@@ -4808,6 +4822,15 @@ function App() {
 											: "nav-sub-item"
 									}>
 									Parking Enforcement Reports
+								</NavLink>
+								<NavLink
+									to="/student-ride-violations"
+									className={({ isActive }) =>
+										isActive
+											? "nav-sub-item nav-sub-item-active"
+											: "nav-sub-item"
+									}>
+									Student Ride Violations
 								</NavLink>
 								<NavLink
 									to="/violation-fees"

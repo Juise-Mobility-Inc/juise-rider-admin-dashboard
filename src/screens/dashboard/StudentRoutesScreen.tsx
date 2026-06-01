@@ -25,6 +25,7 @@ import {
   noGoPenaltyIcon,
   speedPenaltyIcon,
 } from "../../lib/mapIcons";
+import { downloadCsv, sanitizeCsvFilename, type CsvCell } from "../../lib/csv";
 import { getRouteHistoryEarnedPoints } from "../../lib/routeHistoryPoints";
 import {
   fetchSchoolPOIs,
@@ -145,6 +146,167 @@ function fmtAccuracy(meters: number | null | undefined): string {
   return `±${Math.round(meters * 3.28084).toLocaleString()} ft`;
 }
 
+function confidenceLabel(score: number): string {
+  if (score >= 85) return "High";
+  if (score >= 65) return "Good";
+  if (score >= 45) return "Moderate";
+  return "Low";
+}
+
+function scoreAccuracy(meters: number | null): number {
+  if (meters == null || !Number.isFinite(meters)) return 55;
+  if (meters <= 10) return 100;
+  if (meters <= 25) return 85;
+  if (meters <= 50) return 65;
+  if (meters <= 100) return 40;
+  return 20;
+}
+
+function scoreNoGoDuration(seconds: number): number {
+  if (seconds >= 60) return 100;
+  if (seconds >= 30) return 85;
+  if (seconds >= 15) return 65;
+  if (seconds >= 5) return 40;
+  return 20;
+}
+
+function scoreSpeedDuration(seconds: number): number {
+  if (seconds >= 45) return 100;
+  if (seconds >= 20) return 80;
+  if (seconds >= 10) return 55;
+  if (seconds >= 5) return 35;
+  return 15;
+}
+
+function scoreSpeedOverLimit(overLimitMph: number | null): number {
+  if (overLimitMph == null || !Number.isFinite(overLimitMph)) return 45;
+  if (overLimitMph >= 8) return 100;
+  if (overLimitMph >= 5) return 80;
+  if (overLimitMph >= 3) return 60;
+  if (overLimitMph > 0) return 35;
+  return 10;
+}
+
+function getPenaltyWindowPoints(
+  session: StudentRouteHistorySession,
+  event: StudentRouteHistorySession["penalty_events"][number],
+): StudentRouteHistorySession["points"] {
+  const occurredAt = normalizeUnixSeconds(event.occurred_at);
+  if (!occurredAt) return [];
+
+  const durationSeconds =
+    typeof event.duration_ms === "number" && Number.isFinite(event.duration_ms)
+      ? Math.max(0, event.duration_ms / 1000)
+      : 0;
+  const startAt = occurredAt - 5;
+  const endAt = occurredAt + Math.max(durationSeconds, 120) + 5;
+
+  return session.points.filter((point) => {
+    const pointAt = normalizeUnixSeconds(point.timestamp);
+    return pointAt >= startAt && pointAt <= endAt;
+  });
+}
+
+function estimateSpeedingSeconds(
+  points: StudentRouteHistorySession["points"],
+  speedLimitMph: number | null | undefined,
+): number | null {
+  if (
+    typeof speedLimitMph !== "number" ||
+    !Number.isFinite(speedLimitMph) ||
+    points.length === 0
+  ) {
+    return null;
+  }
+
+  const speedLimitMps = speedLimitMph / 2.2369362920544;
+  const sortedPoints = [...points]
+    .filter((point) => normalizeUnixSeconds(point.timestamp))
+    .sort(
+      (left, right) =>
+        normalizeUnixSeconds(left.timestamp) - normalizeUnixSeconds(right.timestamp),
+    );
+
+  let totalSeconds = 0;
+  for (let index = 0; index < sortedPoints.length; index += 1) {
+    const point = sortedPoints[index];
+    if (
+      typeof point.speed_mps !== "number" ||
+      !Number.isFinite(point.speed_mps) ||
+      point.speed_mps <= speedLimitMps
+    ) {
+      continue;
+    }
+
+    const currentAt = normalizeUnixSeconds(point.timestamp);
+    const nextAt = normalizeUnixSeconds(sortedPoints[index + 1]?.timestamp);
+    const previousAt = normalizeUnixSeconds(sortedPoints[index - 1]?.timestamp);
+    const sampleSeconds = nextAt
+      ? Math.max(1, Math.min(15, nextAt - currentAt))
+      : previousAt
+        ? Math.max(1, Math.min(15, currentAt - previousAt))
+        : 1;
+    totalSeconds += sampleSeconds;
+  }
+
+  return totalSeconds;
+}
+
+function averageAccuracyMeters(
+  points: StudentRouteHistorySession["points"],
+): number | null {
+  const accuracies = points.flatMap((point) =>
+    typeof point.accuracy === "number" && Number.isFinite(point.accuracy)
+      ? [point.accuracy]
+      : [],
+  );
+  if (accuracies.length === 0) return null;
+  return accuracies.reduce((sum, value) => sum + value, 0) / accuracies.length;
+}
+
+function getPenaltyConfidence(
+  session: StudentRouteHistorySession,
+  event: StudentRouteHistorySession["penalty_events"][number],
+) {
+  const points = getPenaltyWindowPoints(session, event);
+  const avgAccuracyMeters = averageAccuracyMeters(points);
+  const durationSeconds =
+    typeof event.duration_ms === "number" && Number.isFinite(event.duration_ms)
+      ? Math.max(0, event.duration_ms / 1000)
+      : 0;
+  const maxSpeedMps = getPenaltyMaxSpeedMps(session, event);
+  const maxOverLimitMph =
+    event.zone_type === "speed_limit" &&
+    typeof event.speed_limit_mph === "number" &&
+    Number.isFinite(event.speed_limit_mph) &&
+    maxSpeedMps != null
+      ? Math.max(0, maxSpeedMps * 2.2369362920544 - event.speed_limit_mph)
+      : null;
+  const overLimitSeconds =
+    event.zone_type === "speed_limit"
+      ? estimateSpeedingSeconds(points, event.speed_limit_mph) ?? durationSeconds
+      : null;
+
+  const accuracyScore = scoreAccuracy(avgAccuracyMeters);
+  const score =
+    event.zone_type === "speed_limit"
+      ? Math.round(
+          accuracyScore * 0.25 +
+            scoreSpeedDuration(overLimitSeconds ?? durationSeconds) * 0.4 +
+            scoreSpeedOverLimit(maxOverLimitMph) * 0.35,
+        )
+      : Math.round(accuracyScore * 0.45 + scoreNoGoDuration(durationSeconds) * 0.55);
+
+  return {
+    score: Math.max(0, Math.min(100, score)),
+    label: confidenceLabel(score),
+    avgAccuracyMeters,
+    durationSeconds,
+    overLimitSeconds,
+    maxOverLimitMph,
+  };
+}
+
 function getPenaltyMaxSpeedMps(
   session: StudentRouteHistorySession,
   event: StudentRouteHistorySession["penalty_events"][number],
@@ -164,18 +326,7 @@ function getPenaltyMaxSpeedMps(
     return null;
   }
 
-  const durationSeconds =
-    typeof event.duration_ms === "number" && Number.isFinite(event.duration_ms)
-      ? Math.max(0, event.duration_ms / 1000)
-      : 0;
-  const startAt = occurredAt - 5;
-  const endAt = occurredAt + Math.max(durationSeconds, 120) + 5;
-
-  const speeds = session.points
-    .filter((point) => {
-      const pointAt = normalizeUnixSeconds(point.timestamp);
-      return pointAt >= startAt && pointAt <= endAt;
-    })
+  const speeds = getPenaltyWindowPoints(session, event)
     .flatMap((point) =>
       typeof point.speed_mps === "number" && Number.isFinite(point.speed_mps)
         ? [point.speed_mps]
@@ -268,80 +419,346 @@ function zoneTitle(z: { title?: string | null; zone_type: string }): string {
   return "Zone";
 }
 
-function safeFilename(s: string): string {
-  return s
-    .replace(/[^a-z0-9]/gi, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_|_$/g, "");
+function isTrackedRideSession(session: StudentRouteHistorySession): boolean {
+  return session.tracking_source.trim().toLowerCase() !== "auto";
 }
 
-function downloadCSV(filename: string, rows: string[][]): void {
-  const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
-  const csv = rows.map((r) => r.map(escape).join(",")).join("\r\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+const rideSummaryCsvHeaders = [
+  "student_name",
+  "student_id_or_email",
+  "user_uuid",
+  "ride_number",
+  "session_id",
+  "ride_started_at",
+  "ride_ended_at",
+  "tracking_source",
+  "trip_mode",
+  "distance_miles",
+  "duration_seconds",
+  "top_speed_mph",
+  "average_speed_mph",
+  "points_earned",
+  "points_lost",
+  "check_in_spots",
+  "violations",
+  "gps_points",
+] as const;
+
+const gpsCsvHeaders = [
+  ...rideSummaryCsvHeaders.slice(0, 9),
+  "point_id",
+  "point_timestamp",
+  "latitude",
+  "longitude",
+  "speed_mph",
+  "altitude_ft",
+  "accuracy_ft",
+  "heading",
+] as const;
+
+const poiCsvHeaders = [
+  ...rideSummaryCsvHeaders.slice(0, 9),
+  "poi_uuid",
+  "title",
+  "description",
+  "visited_at",
+  "bonus_points",
+  "confidence_percent",
+  "radius_ft",
+  "latitude",
+  "longitude",
+] as const;
+
+const violationCsvHeaders = [
+  ...rideSummaryCsvHeaders.slice(0, 9),
+  "violation_type",
+  "title",
+  "reason",
+  "occurred_at",
+  "points_lost",
+  "speed_limit_mph",
+  "max_speed_mph",
+  "backend_confidence_percent",
+  "derived_confidence_percent",
+  "derived_confidence_label",
+  "avg_gps_accuracy_ft",
+  "duration_seconds",
+  "over_limit_seconds",
+  "max_over_limit_mph",
+  "evidence_point_count",
+  "latitude",
+  "longitude",
+  "zone_uuid",
+  "zone_title",
+] as const;
+
+function csvStudentName(entry: SchoolStudentRosterEntry | null): string {
+  return entry ? fullName(entry) : "Student";
+}
+
+function csvStudentSubline(entry: SchoolStudentRosterEntry | null): string {
+  return entry ? subline(entry) : "";
+}
+
+function csvStudentUUID(
+  entry: SchoolStudentRosterEntry | null,
+  session?: StudentRouteHistorySession,
+): string {
+  return entry ? uuid(entry) : (session?.user_uuid ?? "");
+}
+
+function exportFilename(
+  entry: SchoolStudentRosterEntry | null,
+  suffix: string,
+): string {
+  return sanitizeCsvFilename(`${csvStudentName(entry)}-${suffix}`);
+}
+
+function ridePrefixRow(
+  entry: SchoolStudentRosterEntry | null,
+  session: StudentRouteHistorySession,
+  rideNum: number,
+): CsvCell[] {
+  return [
+    csvStudentName(entry),
+    csvStudentSubline(entry),
+    csvStudentUUID(entry, session),
+    rideNum,
+    session.session_id,
+    fmtFull(getSessionStartedAt(session)),
+    getSessionEndedAt(session) ? fmtFull(getSessionEndedAt(session)) : "",
+    session.tracking_source,
+    session.trip_mode,
+  ];
+}
+
+function rideSummaryRow(
+  entry: SchoolStudentRosterEntry | null,
+  session: StudentRouteHistorySession,
+  rideNum: number,
+): CsvCell[] {
+  return [
+    ...ridePrefixRow(entry, session, rideNum),
+    (session.distance_meters / 1609.344).toFixed(2),
+    session.duration_seconds,
+    (session.top_speed_mps * 2.2369362920544).toFixed(1),
+    (session.average_speed_mps * 2.2369362920544).toFixed(1),
+    getRouteHistoryEarnedPoints(session),
+    session.penalty_points,
+    session.visited_pois.length,
+    session.penalty_events.length,
+    session.points.length,
+  ];
+}
+
+function gpsRowsForSession(
+  entry: SchoolStudentRosterEntry | null,
+  session: StudentRouteHistorySession,
+  rideNum: number,
+): CsvCell[][] {
+  const prefix = ridePrefixRow(entry, session, rideNum);
+  return session.points.map((point) => [
+    ...prefix,
+    point.id,
+    fmtFull(point.timestamp),
+    point.latitude,
+    point.longitude,
+    typeof point.speed_mps === "number"
+      ? (point.speed_mps * 2.2369362920544).toFixed(2)
+      : "",
+    typeof point.altitude === "number"
+      ? Math.round(point.altitude * 3.28084)
+      : "",
+    typeof point.accuracy === "number"
+      ? Math.round(point.accuracy * 3.28084)
+      : "",
+    point.heading ?? "",
+  ]);
+}
+
+function poiRowsForSession(
+  entry: SchoolStudentRosterEntry | null,
+  session: StudentRouteHistorySession,
+  rideNum: number,
+): CsvCell[][] {
+  const prefix = ridePrefixRow(entry, session, rideNum);
+  return session.visited_pois.map((poi) => [
+    ...prefix,
+    poi.poi_uuid,
+    poi.title,
+    poi.description,
+    fmtFull(poi.visited_at),
+    poi.bonus_points,
+    poi.confidence_percent ?? "",
+    typeof poi.radius_meters === "number"
+      ? Math.round(poi.radius_meters * 3.28084)
+      : "",
+    poi.lat,
+    poi.lng,
+  ]);
+}
+
+function resolvePenaltyZone(
+  session: StudentRouteHistorySession,
+  event: StudentRouteHistorySession["penalty_events"][number],
+  zones: SchoolZone[],
+): SchoolZone | null {
+  return (
+    session.school_zones?.find((zone) => zone.zone_uuid === event.zone_uuid) ??
+    zones.find((zone) => zone.zone_uuid === event.zone_uuid) ??
+    null
+  );
+}
+
+function violationRowsForSession(
+  entry: SchoolStudentRosterEntry | null,
+  session: StudentRouteHistorySession,
+  rideNum: number,
+  zones: SchoolZone[],
+): CsvCell[][] {
+  const prefix = ridePrefixRow(entry, session, rideNum);
+  return session.penalty_events.map((event) => {
+    const maxSpeedMps = getPenaltyMaxSpeedMps(session, event);
+    const confidence = getPenaltyConfidence(session, event);
+    const zone = resolvePenaltyZone(session, event, zones);
+    return [
+      ...prefix,
+      penaltyLabel(event.zone_type),
+      penaltyTitle(event),
+      event.reason,
+      fmtFull(event.occurred_at),
+      event.points_lost,
+      event.speed_limit_mph ?? "",
+      maxSpeedMps == null ? "" : (maxSpeedMps * 2.2369362920544).toFixed(1),
+      event.confidence_percent ?? "",
+      confidence.score,
+      confidence.label,
+      confidence.avgAccuracyMeters == null
+        ? ""
+        : Math.round(confidence.avgAccuracyMeters * 3.28084),
+      Math.round(confidence.durationSeconds),
+      confidence.overLimitSeconds == null
+        ? ""
+        : Math.round(confidence.overLimitSeconds),
+      confidence.maxOverLimitMph == null
+        ? ""
+        : confidence.maxOverLimitMph.toFixed(1),
+      event.evidence_point_count ?? "",
+      event.lat,
+      event.lng,
+      event.zone_uuid,
+      zone ? zoneTitle(zone) : event.title,
+    ];
+  });
+}
+
+function exportRideSummary(
+  entry: SchoolStudentRosterEntry | null,
+  session: StudentRouteHistorySession,
+  rideNum: number,
+): void {
+  downloadCsv(exportFilename(entry, `ride-${rideNum}-summary`), [
+    rideSummaryCsvHeaders,
+    rideSummaryRow(entry, session, rideNum),
+  ]);
 }
 
 function exportAllRidesSummary(
   entry: SchoolStudentRosterEntry | null,
   sessions: StudentRouteHistorySession[],
 ): void {
-  const studentName = entry ? safeFilename(fullName(entry)) : "student";
-  const headers = [
-    "Ride #",
-    "Date",
-    "Distance (mi)",
-    "Duration",
-    "Points Earned",
-    "Points Lost",
-    "Check-in Spots",
-    "Violations",
-    "GPS Points",
-  ];
-  const rows = sessions.map((sess, idx) => [
-    String(idx + 1),
-    fmtFull(getSessionStartedAt(sess)),
-    (sess.distance_meters / 1609.344).toFixed(2),
-    fmtDur(sess.duration_seconds),
-    String(sess.bonus_points),
-    String(sess.penalty_points),
-    String(sess.visited_pois.length),
-    String(sess.penalty_events.length),
-    String(sess.points.length),
+  downloadCsv(exportFilename(entry, "all-rides-summary"), [
+    rideSummaryCsvHeaders,
+    ...sessions.map((session, index) =>
+      rideSummaryRow(entry, session, index + 1),
+    ),
   ]);
-  downloadCSV(`${studentName}_all_rides.csv`, [headers, ...rows]);
 }
 
 function exportRideGPS(
   entry: SchoolStudentRosterEntry | null,
-  sess: StudentRouteHistorySession,
+  session: StudentRouteHistorySession,
   rideNum: number,
 ): void {
-  const studentName = entry ? safeFilename(fullName(entry)) : "student";
-  const headers = [
-    "Timestamp",
-    "Latitude",
-    "Longitude",
-    "Speed (mph)",
-    "Altitude (ft)",
-    "Accuracy (ft)",
-  ];
-  const rows = sess.points.map((pt) => [
-    fmtFull(pt.timestamp),
-    String(pt.latitude),
-    String(pt.longitude),
-    pt.speed_mps != null ? (pt.speed_mps * 2.237).toFixed(2) : "",
-    pt.altitude != null ? Math.round(pt.altitude * 3.28084).toString() : "",
-    pt.accuracy != null ? Math.round(pt.accuracy * 3.28084).toString() : "",
+  downloadCsv(exportFilename(entry, `ride-${rideNum}-gps-points`), [
+    gpsCsvHeaders,
+    ...gpsRowsForSession(entry, session, rideNum),
   ]);
-  downloadCSV(`${studentName}_ride_${rideNum}.csv`, [headers, ...rows]);
+}
+
+function exportAllGPS(
+  entry: SchoolStudentRosterEntry | null,
+  sessions: StudentRouteHistorySession[],
+): void {
+  downloadCsv(exportFilename(entry, "all-gps-points"), [
+    gpsCsvHeaders,
+    ...sessions.flatMap((session, index) =>
+      gpsRowsForSession(entry, session, index + 1),
+    ),
+  ]);
+}
+
+function exportRidePOIs(
+  entry: SchoolStudentRosterEntry | null,
+  session: StudentRouteHistorySession,
+  rideNum: number,
+): void {
+  downloadCsv(exportFilename(entry, `ride-${rideNum}-check-ins`), [
+    poiCsvHeaders,
+    ...poiRowsForSession(entry, session, rideNum),
+  ]);
+}
+
+function exportAllPOIs(
+  entry: SchoolStudentRosterEntry | null,
+  sessions: StudentRouteHistorySession[],
+): void {
+  downloadCsv(exportFilename(entry, "all-check-ins"), [
+    poiCsvHeaders,
+    ...sessions.flatMap((session, index) =>
+      poiRowsForSession(entry, session, index + 1),
+    ),
+  ]);
+}
+
+function exportRideViolations(
+  entry: SchoolStudentRosterEntry | null,
+  session: StudentRouteHistorySession,
+  rideNum: number,
+  zones: SchoolZone[],
+): void {
+  downloadCsv(exportFilename(entry, `ride-${rideNum}-violations`), [
+    violationCsvHeaders,
+    ...violationRowsForSession(entry, session, rideNum, zones),
+  ]);
+}
+
+function exportAllViolations(
+  entry: SchoolStudentRosterEntry | null,
+  sessions: StudentRouteHistorySession[],
+  zones: SchoolZone[],
+): void {
+  downloadCsv(exportFilename(entry, "all-violations"), [
+    violationCsvHeaders,
+    ...sessions.flatMap((session, index) =>
+      violationRowsForSession(entry, session, index + 1, zones),
+    ),
+  ]);
+}
+
+function exportTrackedRideViolations(
+  entry: SchoolStudentRosterEntry | null,
+  sessions: StudentRouteHistorySession[],
+  zones: SchoolZone[],
+): void {
+  downloadCsv(exportFilename(entry, "tracked-ride-violations"), [
+    violationCsvHeaders,
+    ...sessions.flatMap((session, index) =>
+      isTrackedRideSession(session)
+        ? violationRowsForSession(entry, session, index + 1, zones)
+        : [],
+    ),
+  ]);
 }
 
 function MapFitter({ points }: { points: [number, number][] }) {
@@ -714,6 +1131,29 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
   const selectedEarnedPoints = selSess
     ? getRouteHistoryEarnedPoints(selSess)
     : 0;
+  const selectedRideNum = selSess
+    ? history.findIndex((session) => session.session_id === selSess.session_id) + 1
+    : 0;
+  const studentViolationCount = history.reduce(
+    (total, session) => total + session.penalty_events.length,
+    0,
+  );
+  const studentPoiCount = history.reduce(
+    (total, session) => total + session.visited_pois.length,
+    0,
+  );
+  const studentGpsPointCount = history.reduce(
+    (total, session) => total + session.points.length,
+    0,
+  );
+  const trackedRideCount = history.filter(isTrackedRideSession).length;
+  const backgroundRideCount = history.length - trackedRideCount;
+  const trackedViolationCount = history.reduce(
+    (total, session) =>
+      total +
+      (isTrackedRideSession(session) ? session.penalty_events.length : 0),
+    0,
+  );
 
   const layerToggles = [
     {
@@ -775,6 +1215,149 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
 
   return (
     <div className="sr-layout">
+      <section className="sr-data-dashboard" aria-label="Recorded routes exports">
+        <div className="sr-data-dashboard-head">
+          <div>
+            <span className="sr-eyebrow">Recorded Routes</span>
+            <h2>Data Downloads</h2>
+            <p>
+              {selEntry
+                ? `${fullName(selEntry)} ride exports are separated for review and reporting.`
+                : "Select a student to prepare route, violation, POI, and GPS exports."}
+            </p>
+          </div>
+          {selEntry ? (
+            <span className="sr-data-student-chip">
+              {fullName(selEntry)}
+              {subline(selEntry) ? ` · ${subline(selEntry)}` : ""}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="sr-data-stat-grid">
+          <div className="sr-data-stat-card">
+            <span>Total rides</span>
+            <strong>{history.length.toLocaleString()}</strong>
+          </div>
+          <div className="sr-data-stat-card">
+            <span>Tracked rides</span>
+            <strong>{trackedRideCount.toLocaleString()}</strong>
+          </div>
+          <div className="sr-data-stat-card">
+            <span>Background rides</span>
+            <strong>{backgroundRideCount.toLocaleString()}</strong>
+          </div>
+          <div className="sr-data-stat-card sr-data-stat-card--danger">
+            <span>Tracked violations</span>
+            <strong>{trackedViolationCount.toLocaleString()}</strong>
+          </div>
+          <div className="sr-data-stat-card">
+            <span>POIs</span>
+            <strong>{studentPoiCount.toLocaleString()}</strong>
+          </div>
+          <div className="sr-data-stat-card">
+            <span>GPS points</span>
+            <strong>{studentGpsPointCount.toLocaleString()}</strong>
+          </div>
+        </div>
+
+        <div className="sr-data-export-grid">
+          <div className="sr-data-export-group">
+            <span className="sr-csv-group-label">Selected ride</span>
+            <div className="sr-csv-actions">
+              <button
+                className="sr-dl-btn"
+                type="button"
+                disabled={!selSess}
+                onClick={() =>
+                  selSess && exportRideSummary(selEntry, selSess, selectedRideNum)
+                }
+              >
+                Ride summary
+              </button>
+              <button
+                className="sr-dl-btn"
+                type="button"
+                disabled={!selSess || selSess.points.length === 0}
+                onClick={() =>
+                  selSess && exportRideGPS(selEntry, selSess, selectedRideNum)
+                }
+              >
+                GPS points
+              </button>
+              <button
+                className="sr-dl-btn"
+                type="button"
+                disabled={!selSess || selSess.penalty_events.length === 0}
+                onClick={() =>
+                  selSess &&
+                  exportRideViolations(selEntry, selSess, selectedRideNum, zones)
+                }
+              >
+                Violations
+              </button>
+              <button
+                className="sr-dl-btn"
+                type="button"
+                disabled={!selSess || selSess.visited_pois.length === 0}
+                onClick={() =>
+                  selSess && exportRidePOIs(selEntry, selSess, selectedRideNum)
+                }
+              >
+                POIs
+              </button>
+            </div>
+          </div>
+          <div className="sr-data-export-group">
+            <span className="sr-csv-group-label">Selected student</span>
+            <div className="sr-csv-actions">
+              <button
+                className="sr-dl-btn"
+                type="button"
+                disabled={history.length === 0}
+                onClick={() => exportAllRidesSummary(selEntry, history)}
+              >
+                All ride summaries
+              </button>
+              <button
+                className="sr-dl-btn"
+                type="button"
+                disabled={trackedViolationCount === 0}
+                onClick={() =>
+                  exportTrackedRideViolations(selEntry, history, zones)
+                }
+              >
+                Tracked violations
+              </button>
+              <button
+                className="sr-dl-btn"
+                type="button"
+                disabled={studentViolationCount === 0}
+                onClick={() => exportAllViolations(selEntry, history, zones)}
+              >
+                All violations
+              </button>
+              <button
+                className="sr-dl-btn"
+                type="button"
+                disabled={studentPoiCount === 0}
+                onClick={() => exportAllPOIs(selEntry, history)}
+              >
+                All POIs
+              </button>
+              <button
+                className="sr-dl-btn"
+                type="button"
+                disabled={studentGpsPointCount === 0}
+                onClick={() => exportAllGPS(selEntry, history)}
+              >
+                All GPS
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ══ Top row: sidebar + map ══ */}
       <div className="sr-main-row">
         {/* ── Student sidebar ── */}
@@ -1147,6 +1730,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
             {showPenalties &&
               selSess?.penalty_events.map((ev, i) => {
                 const maxSpeedMps = getPenaltyMaxSpeedMps(selSess, ev);
+                const confidence = getPenaltyConfidence(selSess, ev);
                 return (
                   <Marker
                     key={`pen-${i}`}
@@ -1184,6 +1768,9 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                           <span>Max speed caught {fmtSpeed(maxSpeedMps)}</span>
                         ) : null}
                         <span>Duration {fmtMs(ev.duration_ms)}</span>
+                        <span>
+                          Confidence {confidence.score}% ({confidence.label})
+                        </span>
                       </div>
                     </Tooltip>
                     <Popup>
@@ -1219,11 +1806,38 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                           Duration: {Math.round(ev.duration_ms / 1000)}s
                         </>
                       )}
+                      <>
+                        <br />
+                        Derived confidence: {confidence.score}% (
+                        {confidence.label})
+                        <br />
+                        Avg GPS accuracy:{" "}
+                        {fmtAccuracy(confidence.avgAccuracyMeters)}
+                      </>
+                      {ev.zone_type === "speed_limit" ? (
+                        <>
+                          <br />
+                          Time over limit:{" "}
+                          {fmtMs((confidence.overLimitSeconds ?? 0) * 1000)}
+                          {confidence.maxOverLimitMph != null ? (
+                            <>
+                              <br />
+                              Max over limit:{" "}
+                              {confidence.maxOverLimitMph.toFixed(1)} mph
+                            </>
+                          ) : null}
+                        </>
+                      ) : confidence.durationSeconds > 0 ? (
+                        <>
+                          <br />
+                          Time in zone: {fmtMs(confidence.durationSeconds * 1000)}
+                        </>
+                      ) : null}
                       {typeof ev.confidence_percent === "number" &&
                         Number.isFinite(ev.confidence_percent) && (
                           <>
                             <br />
-                            Confidence:{" "}
+                            Backend confidence:{" "}
                             {Math.max(
                               0,
                               Math.min(100, Math.round(ev.confidence_percent)),
@@ -1472,43 +2086,6 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
               {selSess && (
                 <span className="sr-count">{fmtShort(selSess.started_at)}</span>
               )}
-              {selSess && (
-                <button
-                  className="sr-dl-btn sr-dl-btn--icon"
-                  type="button"
-                  title="Download this ride's GPS data as CSV"
-                  onClick={() => {
-                    const rideNum =
-                      history.findIndex(
-                        (s) => s.session_id === selSess.session_id,
-                      ) + 1;
-                    exportRideGPS(selEntry, selSess, rideNum);
-                  }}
-                >
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M8 2v9M4 8l4 4 4-4" />
-                    <rect
-                      x="2"
-                      y="13"
-                      width="12"
-                      height="1.5"
-                      rx="0.75"
-                      fill="currentColor"
-                      stroke="none"
-                    />
-                  </svg>
-                  Export ride
-                </button>
-              )}
             </div>
           </div>
 
@@ -1544,6 +2121,102 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                   <span className="sr-summary-label">distance</span>
                 </div>
               </div>
+
+              <section className="sr-csv-panel" aria-label="CSV exports">
+                <div className="sr-context-section-head">
+                  <strong>CSV Exports</strong>
+                  <span>separated files</span>
+                </div>
+                <div className="sr-csv-group">
+                  <span className="sr-csv-group-label">Selected ride</span>
+                  <div className="sr-csv-actions">
+                    <button
+                      className="sr-dl-btn"
+                      type="button"
+                      disabled={!selSess}
+                      onClick={() =>
+                        selSess &&
+                        exportRideSummary(selEntry, selSess, selectedRideNum)
+                      }
+                    >
+                      Ride summary
+                    </button>
+                    <button
+                      className="sr-dl-btn"
+                      type="button"
+                      disabled={!selSess || selSess.points.length === 0}
+                      onClick={() =>
+                        selSess && exportRideGPS(selEntry, selSess, selectedRideNum)
+                      }
+                    >
+                      GPS points
+                    </button>
+                    <button
+                      className="sr-dl-btn"
+                      type="button"
+                      disabled={!selSess || selSess.penalty_events.length === 0}
+                      onClick={() =>
+                        selSess &&
+                        exportRideViolations(
+                          selEntry,
+                          selSess,
+                          selectedRideNum,
+                          zones,
+                        )
+                      }
+                    >
+                      Violations
+                    </button>
+                    <button
+                      className="sr-dl-btn"
+                      type="button"
+                      disabled={!selSess || selSess.visited_pois.length === 0}
+                      onClick={() =>
+                        selSess && exportRidePOIs(selEntry, selSess, selectedRideNum)
+                      }
+                    >
+                      POIs
+                    </button>
+                  </div>
+                </div>
+                <div className="sr-csv-group">
+                  <span className="sr-csv-group-label">Selected student</span>
+                  <div className="sr-csv-actions">
+                    <button
+                      className="sr-dl-btn"
+                      type="button"
+                      disabled={history.length === 0}
+                      onClick={() => exportAllRidesSummary(selEntry, history)}
+                    >
+                      All ride summaries
+                    </button>
+                    <button
+                      className="sr-dl-btn"
+                      type="button"
+                      disabled={studentGpsPointCount === 0}
+                      onClick={() => exportAllGPS(selEntry, history)}
+                    >
+                      All GPS
+                    </button>
+                    <button
+                      className="sr-dl-btn"
+                      type="button"
+                      disabled={studentViolationCount === 0}
+                      onClick={() => exportAllViolations(selEntry, history, zones)}
+                    >
+                      All violations
+                    </button>
+                    <button
+                      className="sr-dl-btn"
+                      type="button"
+                      disabled={studentPoiCount === 0}
+                      onClick={() => exportAllPOIs(selEntry, history)}
+                    >
+                      All POIs
+                    </button>
+                  </div>
+                </div>
+              </section>
 
               {/* Check-in spots (POIs) */}
               <section className="sr-context-section">
@@ -1605,6 +2278,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                   <div className="sr-event-button-list">
                     {selSess.penalty_events.map((ev, index) => {
                       const maxSpeedMps = getPenaltyMaxSpeedMps(selSess, ev);
+                      const confidence = getPenaltyConfidence(selSess, ev);
                       return (
                         <button
                           key={`${ev.zone_uuid}-${ev.occurred_at}-${index}`}
@@ -1639,6 +2313,24 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                                 : ""}
                             </span>
                           )}
+                          <span className="sr-event-button-meta sr-muted-secondary">
+                            Confidence: {confidence.score}% ({confidence.label}) ·
+                            GPS {fmtAccuracy(confidence.avgAccuracyMeters)}
+                          </span>
+                          {ev.zone_type === "speed_limit" ? (
+                            <span className="sr-event-button-meta sr-muted-secondary">
+                              Over limit:{" "}
+                              {fmtMs((confidence.overLimitSeconds ?? 0) * 1000)}
+                              {confidence.maxOverLimitMph != null
+                                ? ` · max +${confidence.maxOverLimitMph.toFixed(1)} mph`
+                                : ""}
+                            </span>
+                          ) : confidence.durationSeconds > 0 ? (
+                            <span className="sr-event-button-meta sr-muted-secondary">
+                              Time in zone:{" "}
+                              {fmtMs(confidence.durationSeconds * 1000)}
+                            </span>
+                          ) : null}
                           <span className="sr-jump-label">↗ Jump to map</span>
                         </button>
                       );
@@ -1709,37 +2401,6 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
             <div className="sr-ride-bar-head-right">
               {history.length > 3 && (
                 <span className="sr-ride-hint">Scroll to see all ›</span>
-              )}
-              {history.length > 0 && (
-                <button
-                  className="sr-dl-btn"
-                  type="button"
-                  title="Download all rides as CSV"
-                  onClick={() => exportAllRidesSummary(selEntry, history)}
-                >
-                  <svg
-                    width="13"
-                    height="13"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M8 2v9M4 8l4 4 4-4" />
-                    <rect
-                      x="2"
-                      y="13"
-                      width="12"
-                      height="1.5"
-                      rx="0.75"
-                      fill="currentColor"
-                      stroke="none"
-                    />
-                  </svg>
-                  Download all rides
-                </button>
               )}
             </div>
           </div>
