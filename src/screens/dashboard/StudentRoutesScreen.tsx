@@ -893,13 +893,14 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
   // lat/lng to fly to once the right session is loaded
   const [focusPin, setFocusPin] = useState<[number, number] | null>(null);
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [detailTab, setDetailTab] = useState<
+    "violations" | "pois" | "zones" | "map" | "downloads"
+  >("violations");
   const [showRoute, setShowRoute] = useState(true);
   const [showPOIs, setShowPOIs] = useState(true);
   const [showPenalties, setShowPenalties] = useState(true);
   const [showNoGoZones, setShowNoGoZones] = useState(true);
   const [showSpeedZones, setShowSpeedZones] = useState(true);
-  const [statsOpen, setStatsOpen] = useState(true);
   const [routeHover, setRouteHover] = useState<RouteHover | null>(null);
   const [selectedMaxSpeedPoint, setSelectedMaxSpeedPoint] = useState<
     StudentRouteHistorySession["points"][number] | null
@@ -907,61 +908,6 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
 
   const [, setPOIs] = useState<SchoolPOI[]>([]);
 
-  // Ride strip: ref + drag state
-  const rideScrollRef = useRef<HTMLDivElement>(null);
-  const didDrag = useRef(false);
-
-  // Attach native drag-scroll + wheel-to-scroll once the strip is in the DOM.
-  // Native listeners are needed because:
-  //  - wheel needs { passive: false } so preventDefault() actually works
-  //  - mousedown on child <button>s bubbles up but setPointerCapture on the
-  //    React-synthetic layer gets blocked; document-level listeners avoid this
-  useEffect(() => {
-    const el = rideScrollRef.current;
-    if (!el) return;
-
-    let active = false;
-    let startX = 0;
-    let scrollL = 0;
-
-    const onMD = (e: MouseEvent) => {
-      if (!el.contains(e.target as Node)) return;
-      active = true;
-      didDrag.current = false;
-      startX = e.clientX;
-      scrollL = el.scrollLeft;
-      el.style.cursor = "grabbing";
-    };
-    const onMM = (e: MouseEvent) => {
-      if (!active) return;
-      const dx = e.clientX - startX;
-      if (Math.abs(dx) > 4) didDrag.current = true;
-      el.scrollLeft = scrollL - dx * 2;
-    };
-    const onMU = () => {
-      active = false;
-      el.style.cursor = "";
-    };
-    const onWheel = (e: WheelEvent) => {
-      if (!el.contains(e.target as Node) && e.target !== el) return;
-      e.preventDefault();
-      // vertical wheel scrolls horizontally; horizontal trackpad gesture passes through
-      el.scrollLeft +=
-        Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
-    };
-
-    document.addEventListener("mousedown", onMD);
-    document.addEventListener("mousemove", onMM);
-    document.addEventListener("mouseup", onMU);
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => {
-      document.removeEventListener("mousedown", onMD);
-      document.removeEventListener("mousemove", onMM);
-      document.removeEventListener("mouseup", onMU);
-      el.removeEventListener("wheel", onWheel);
-    };
-    // re-run whenever the ride list appears (history.length 0→N renders the div)
-  }, [history.length]);
 
   useEffect(() => {
     let dead = false;
@@ -1049,19 +995,6 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roster, rosterBusy]);
 
-  // scroll the selected ride chip into view whenever it changes
-  useEffect(() => {
-    if (!selId || !rideScrollRef.current) return;
-    const chip = rideScrollRef.current.querySelector<HTMLElement>(
-      "[data-active='true']",
-    );
-    if (!chip) return;
-    // Scroll only the strip container horizontally — never the page
-    const container = rideScrollRef.current;
-    const targetLeft =
-      chip.offsetLeft - container.offsetWidth / 2 + chip.offsetWidth / 2;
-    container.scrollTo({ left: Math.max(0, targetLeft), behavior: "smooth" });
-  }, [selId]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -1215,923 +1148,961 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
 
   return (
     <div className="sr-layout">
-      <section className="sr-data-dashboard" aria-label="Recorded routes exports">
-        <div className="sr-data-dashboard-head">
-          <div>
-            <span className="sr-eyebrow">Recorded Routes</span>
-            <h2>Data Downloads</h2>
-            <p>
-              {selEntry
-                ? `${fullName(selEntry)} ride exports are separated for review and reporting.`
-                : "Select a student to prepare route, violation, POI, and GPS exports."}
-            </p>
-          </div>
-          {selEntry ? (
-            <span className="sr-data-student-chip">
-              {fullName(selEntry)}
-              {subline(selEntry) ? ` · ${subline(selEntry)}` : ""}
-            </span>
-          ) : null}
-        </div>
-
-        <div className="sr-data-stat-grid">
-          <div className="sr-data-stat-card">
-            <span>Total rides</span>
-            <strong>{history.length.toLocaleString()}</strong>
-          </div>
-          <div className="sr-data-stat-card">
-            <span>Tracked rides</span>
-            <strong>{trackedRideCount.toLocaleString()}</strong>
-          </div>
-          <div className="sr-data-stat-card">
-            <span>Background rides</span>
-            <strong>{backgroundRideCount.toLocaleString()}</strong>
-          </div>
-          <div className="sr-data-stat-card sr-data-stat-card--danger">
-            <span>Tracked violations</span>
-            <strong>{trackedViolationCount.toLocaleString()}</strong>
-          </div>
-          <div className="sr-data-stat-card">
-            <span>POIs</span>
-            <strong>{studentPoiCount.toLocaleString()}</strong>
-          </div>
-          <div className="sr-data-stat-card">
-            <span>GPS points</span>
-            <strong>{studentGpsPointCount.toLocaleString()}</strong>
-          </div>
-        </div>
-
-        <div className="sr-data-export-grid">
-          <div className="sr-data-export-group">
-            <span className="sr-csv-group-label">Selected ride</span>
-            <div className="sr-csv-actions">
-              <button
-                className="sr-dl-btn"
-                type="button"
-                disabled={!selSess}
-                onClick={() =>
-                  selSess && exportRideSummary(selEntry, selSess, selectedRideNum)
-                }
-              >
-                Ride summary
-              </button>
-              <button
-                className="sr-dl-btn"
-                type="button"
-                disabled={!selSess || selSess.points.length === 0}
-                onClick={() =>
-                  selSess && exportRideGPS(selEntry, selSess, selectedRideNum)
-                }
-              >
-                GPS points
-              </button>
-              <button
-                className="sr-dl-btn"
-                type="button"
-                disabled={!selSess || selSess.penalty_events.length === 0}
-                onClick={() =>
-                  selSess &&
-                  exportRideViolations(selEntry, selSess, selectedRideNum, zones)
-                }
-              >
-                Violations
-              </button>
-              <button
-                className="sr-dl-btn"
-                type="button"
-                disabled={!selSess || selSess.visited_pois.length === 0}
-                onClick={() =>
-                  selSess && exportRidePOIs(selEntry, selSess, selectedRideNum)
-                }
-              >
-                POIs
-              </button>
-            </div>
-          </div>
-          <div className="sr-data-export-group">
-            <span className="sr-csv-group-label">Selected student</span>
-            <div className="sr-csv-actions">
-              <button
-                className="sr-dl-btn"
-                type="button"
-                disabled={history.length === 0}
-                onClick={() => exportAllRidesSummary(selEntry, history)}
-              >
-                All ride summaries
-              </button>
-              <button
-                className="sr-dl-btn"
-                type="button"
-                disabled={trackedViolationCount === 0}
-                onClick={() =>
-                  exportTrackedRideViolations(selEntry, history, zones)
-                }
-              >
-                Tracked violations
-              </button>
-              <button
-                className="sr-dl-btn"
-                type="button"
-                disabled={studentViolationCount === 0}
-                onClick={() => exportAllViolations(selEntry, history, zones)}
-              >
-                All violations
-              </button>
-              <button
-                className="sr-dl-btn"
-                type="button"
-                disabled={studentPoiCount === 0}
-                onClick={() => exportAllPOIs(selEntry, history)}
-              >
-                All POIs
-              </button>
-              <button
-                className="sr-dl-btn"
-                type="button"
-                disabled={studentGpsPointCount === 0}
-                onClick={() => exportAllGPS(selEntry, history)}
-              >
-                All GPS
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ══ Top row: sidebar + map ══ */}
-      <div className="sr-main-row">
-        {/* ── Student sidebar ── */}
-        <aside
-          className={`sr-sidebar${sidebarOpen ? "" : " sr-sidebar--collapsed"}`}
-        >
-          {/* Toggle button — always visible */}
-          <button
-            className="sr-sidebar-toggle"
-            type="button"
-            onClick={() => setSidebarOpen((v) => !v)}
-            title={sidebarOpen ? "Hide student list" : "Show student list"}
-          >
-            {sidebarOpen ? (
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M10 12L6 8l4-4" />
-              </svg>
-            ) : (
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M6 4l4 4-4 4" />
-              </svg>
+      {/* ── Col 1: Student roster ── */}
+      <aside className="sr-sidebar">
+        <div className="sr-sidebar-body">
+          <div className="sr-sidebar-head">
+            <span className="sr-eyebrow">Students</span>
+            {!rosterBusy && roster.length > 0 && (
+              <span className="sr-count">{roster.length}</span>
             )}
-            {!sidebarOpen && roster.length > 0 && (
-              <span className="sr-sidebar-toggle-count">{roster.length}</span>
-            )}
-          </button>
-
-          {/* Collapsible body */}
-          <div className="sr-sidebar-body">
-            <div className="sr-sidebar-head">
-              <span className="sr-eyebrow">Students</span>
-              {!rosterBusy && roster.length > 0 && (
-                <span className="sr-count">{roster.length}</span>
-              )}
-            </div>
-            <div className="sr-search-wrap">
-              <input
-                className="sr-search"
-                type="search"
-                placeholder="Search…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            {rosterErr && <p className="sr-sidebar-err">{rosterErr}</p>}
-
-            <div className="sr-student-list">
-              {rosterBusy && (
-                <div className="sr-skel-list">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="sr-skel-row" />
-                  ))}
-                </div>
-              )}
-              {!rosterBusy && filtered.length === 0 && !rosterErr && (
-                <p className="sr-empty-hint">
-                  {search ? "No match." : "No students."}
-                </p>
-              )}
-              {!rosterBusy &&
-                filtered.map((entry) => {
-                  const id = uuid(entry);
-                  const active = id === selUUID;
-                  return (
-                    <button
-                      key={id}
-                      className={`sr-student-row${active ? " sr-student-row--active" : ""}`}
-                      onClick={() => selectStudent(entry)}
-                    >
-                      <div className="sr-avatar">
-                        <span className="sr-avatar-initials">
-                          {initials(entry)}
-                        </span>
-                        {active && <span className="sr-avatar-dot" />}
-                      </div>
-                      <div className="sr-student-text">
-                        <span className="sr-student-name">
-                          {fullName(entry)}
-                        </span>
-                        {subline(entry) && (
-                          <span className="sr-student-sub">
-                            {subline(entry)}
-                          </span>
-                        )}
-                      </div>
-                      {active && histBusy && <span className="sr-spinner" />}
-                      {active && !histBusy && history.length > 0 && (
-                        <span className="sr-ride-count">{history.length}</span>
-                      )}
-                    </button>
-                  );
-                })}
-            </div>
           </div>
-        </aside>
-
-        {/* ── Map panel ── */}
-        <div className="sr-map-panel">
-          <MapContainer
-            center={DEFAULT_CENTER}
-            zoom={DEFAULT_ZOOM}
-            className="sr-map"
-            zoomControl={true}
-          >
-            <TileLayer attribution={TILE_ATTR} url={TILE_URL} />
-            <MapFitter points={routePts} />
-            {focusPin && <PenaltyFocuser lat={focusPin[0]} lng={focusPin[1]} />}
-
-            {dispZones
-              .filter((z) => {
-                if (!z.active || z.polygon.length < 3) return false;
-                if (z.zone_type === "no_go") return showNoGoZones;
-                if (z.zone_type === "speed_limit") return showSpeedZones;
-                return false;
-              })
-              .map((z) => (
-                <Polygon
-                  key={z.zone_uuid}
-                  positions={z.polygon.map((p): [number, number] => [
-                    p.lat,
-                    p.lng,
-                  ])}
-                  pathOptions={{
-                    color: z.zone_type === "no_go" ? "#b91c1c" : "#b45309",
-                    fillColor: z.zone_type === "no_go" ? "#ef4444" : "#f59e0b",
-                    fillOpacity: z.zone_type === "no_go" ? 0.35 : 0.25,
-                    weight: z.zone_type === "no_go" ? 3.5 : 3,
-                  }}
-                >
-                  <Tooltip
-                    sticky
-                    direction="top"
-                    opacity={1}
-                    className="sr-map-hover-tooltip"
-                  >
-                    <div className="sr-map-hover-card">
-                      <strong>{zoneTitle(z)}</strong>
-                      <span>
-                        {z.zone_type === "no_go"
-                          ? "⛔ Students must not enter this area"
-                          : z.speed_limit_mph != null
-                            ? `Speed limit: ${z.speed_limit_mph} mph`
-                            : "Speed limit zone"}
-                      </span>
-                    </div>
-                  </Tooltip>
-                  <Popup>
-                    <strong>{zoneTitle(z)}</strong>
-                    {z.description && (
-                      <>
-                        <br />
-                        {z.description}
-                      </>
-                    )}
-                    {z.zone_type === "speed_limit" &&
-                      z.speed_limit_mph != null && (
-                        <>
-                          <br />
-                          Speed limit: {z.speed_limit_mph} mph
-                        </>
-                      )}
-                    {z.zone_type === "no_go" && (
-                      <>
-                        <br />
-                        Students must not enter this area.
-                      </>
-                    )}
-                  </Popup>
-                </Polygon>
-              ))}
-
-            {showRoute &&
-              segments.map((seg, i) => (
-                <Polyline
-                  key={i}
-                  positions={seg.positions}
-                  pathOptions={{
-                    color: seg.color,
-                    weight: 5,
-                    opacity: 1,
-                    lineCap: "round",
-                    lineJoin: "round",
-                  }}
-                  eventHandlers={{
-                    mousemove: (event) => {
-                      if (!selSess) return;
-                      setRouteHover(
-                        findNearestRouteHover(
-                          selSess,
-                          routeDistances,
-                          event.latlng,
-                        ),
-                      );
-                    },
-                    mouseout: () => setRouteHover(null),
-                  }}
-                />
-              ))}
-
-            {showRoute && routeHover ? (
-              <CircleMarker
-                center={[routeHover.point.latitude, routeHover.point.longitude]}
-                radius={7}
-                interactive={false}
-                pathOptions={{
-                  color: "#ffffff",
-                  fillColor: speedColor(routeHover.point.speed_mps),
-                  fillOpacity: 1,
-                  weight: 2.5,
-                }}
-              >
-                <Tooltip
-                  permanent
-                  direction="top"
-                  offset={[0, -10]}
-                  opacity={1}
-                  className="sr-map-hover-tooltip"
-                >
-                  <div className="sr-map-hover-card sr-map-hover-card--wide">
-                    <strong>{fmtFull(routeHover.point.timestamp)}</strong>
-                    <span>Speed {fmtSpeed(routeHover.point.speed_mps)}</span>
-                    <span>Distance {fmtDist(routeHover.distanceMeters)}</span>
-                    <span>
-                      Elevation {fmtElevation(routeHover.point.altitude)}
-                    </span>
-                    <span>
-                      Accuracy {fmtAccuracy(routeHover.point.accuracy)}
-                    </span>
-                  </div>
-                </Tooltip>
-              </CircleMarker>
-            ) : null}
-
-            {showRoute && selSess && selSess.points.length > 0 && (
-              <>
-                <CircleMarker
-                  center={[
-                    selSess.points[0].latitude,
-                    selSess.points[0].longitude,
-                  ]}
-                  radius={9}
-                  pathOptions={{
-                    color: "#fff",
-                    fillColor: "#27cc5e",
-                    fillOpacity: 1,
-                    weight: 2.5,
-                  }}
-                >
-                  <Popup>
-                    <strong>Ride started</strong>
-                    <br />
-                    {fmtFull(getSessionStartedAt(selSess))}
-                  </Popup>
-                </CircleMarker>
-                <CircleMarker
-                  center={[
-                    selSess.points[selSess.points.length - 1].latitude,
-                    selSess.points[selSess.points.length - 1].longitude,
-                  ]}
-                  radius={9}
-                  pathOptions={{
-                    color: "#fff",
-                    fillColor: "#112d4e",
-                    fillOpacity: 1,
-                    weight: 2.5,
-                  }}
-                >
-                  <Popup>
-                    <strong>Ride ended</strong>
-                    <br />
-                    {getSessionEndedAt(selSess)
-                      ? fmtFull(getSessionEndedAt(selSess))
-                      : "—"}
-                  </Popup>
-                </CircleMarker>
-              </>
+          <div className="sr-search-wrap">
+            <input
+              className="sr-search"
+              type="search"
+              placeholder="Search…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {rosterErr && <p className="sr-sidebar-err">{rosterErr}</p>}
+          <div className="sr-student-list">
+            {rosterBusy && (
+              <div className="sr-skel-list">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="sr-skel-row" />
+                ))}
+              </div>
             )}
-
-            {showPOIs &&
-              selSess?.visited_pois.map((poi, i) => (
-                <Fragment key={`poi-${i}`}>
-                  {typeof poi.radius_meters === "number" &&
-                  Number.isFinite(poi.radius_meters) &&
-                  poi.radius_meters > 0 ? (
-                    <Circle
-                      center={[poi.lat, poi.lng]}
-                      radius={poi.radius_meters}
-                      pathOptions={{
-                        color: "#f6ae2d",
-                        fillColor: "#f6ae2d",
-                        fillOpacity: 0.12,
-                        weight: 1,
-                      }}
-                    />
-                  ) : null}
-                  <Marker position={[poi.lat, poi.lng]} icon={visitedPoiIcon}>
-                    <Tooltip
-                      sticky
-                      direction="top"
-                      opacity={1}
-                      className="sr-map-hover-tooltip"
-                    >
-                      <div className="sr-map-hover-card">
-                        <strong>{poi.title || "Point of Interest"}</strong>
-                        <span>Visited {fmtShort(poi.visited_at)}</span>
-                        <span>+{poi.bonus_points.toLocaleString()} pts</span>
-                        <span>
-                          Confidence {fmtConfidence(poi.confidence_percent)}
-                        </span>
-                      </div>
-                    </Tooltip>
-                    <Popup>
-                      <strong>{poi.title || "Point of Interest"}</strong>
-                      <br />+{poi.bonus_points} pts
-                      {poi.description && (
-                        <>
-                          <br />
-                          {poi.description}
-                        </>
-                      )}
-                      {typeof poi.radius_meters === "number" &&
-                        Number.isFinite(poi.radius_meters) && (
-                          <>
-                            <br />
-                            Entry radius:{" "}
-                            {Math.round(
-                              poi.radius_meters * 3.28084,
-                            ).toLocaleString()}{" "}
-                            ft
-                          </>
-                        )}
-                      {typeof poi.confidence_percent === "number" &&
-                        Number.isFinite(poi.confidence_percent) && (
-                          <>
-                            <br />
-                            Confidence: {fmtConfidence(poi.confidence_percent)}
-                          </>
-                        )}
-                      {poi.visited_at > 0 && (
-                        <>
-                          <br />
-                          <span style={{ color: "#888", fontSize: "0.82em" }}>
-                            {fmtShort(poi.visited_at)}
-                          </span>
-                        </>
-                      )}
-                    </Popup>
-                  </Marker>
-                </Fragment>
-              ))}
-
-            {showPenalties &&
-              selSess?.penalty_events.map((ev, i) => {
-                const maxSpeedMps = getPenaltyMaxSpeedMps(selSess, ev);
-                const confidence = getPenaltyConfidence(selSess, ev);
+            {!rosterBusy && filtered.length === 0 && !rosterErr && (
+              <p className="sr-empty-hint">
+                {search ? "No match." : "No students."}
+              </p>
+            )}
+            {!rosterBusy &&
+              filtered.map((entry) => {
+                const id = uuid(entry);
+                const active = id === selUUID;
                 return (
-                  <Marker
-                    key={`pen-${i}`}
-                    position={[ev.lat, ev.lng]}
-                    icon={
-                      ev.zone_type === "no_go"
-                        ? noGoPenaltyIcon
-                        : speedPenaltyIcon
-                    }
-                    eventHandlers={{
-                      click: () =>
-                        focusRouteEvent(ev.lat, ev.lng, "penalty", ev),
-                    }}
+                  <button
+                    key={id}
+                    className={`sr-student-row${active ? " sr-student-row--active" : ""}`}
+                    onClick={() => selectStudent(entry)}
                   >
-                    <Tooltip
-                      sticky
-                      direction="top"
-                      opacity={1}
-                      className="sr-map-hover-tooltip"
-                    >
-                      <div className="sr-map-hover-card">
-                        <strong>
-                          {ev.title ||
-                            (ev.zone_type === "no_go"
-                              ? "No-go zone"
-                              : "Speed limit zone")}
-                        </strong>
-                        <span>−{ev.points_lost.toLocaleString()} pts</span>
-                        <span>{fmtShort(ev.occurred_at)}</span>
-                        {ev.zone_type === "speed_limit" &&
-                        ev.speed_limit_mph != null ? (
-                          <span>Limit {ev.speed_limit_mph} mph</span>
-                        ) : null}
-                        {maxSpeedMps != null ? (
-                          <span>Max speed caught {fmtSpeed(maxSpeedMps)}</span>
-                        ) : null}
-                        <span>Duration {fmtMs(ev.duration_ms)}</span>
-                        <span>
-                          Confidence {confidence.score}% ({confidence.label})
-                        </span>
-                      </div>
-                    </Tooltip>
-                    <Popup>
-                      <strong>
-                        {ev.title ||
-                          (ev.zone_type === "no_go"
-                            ? "No-go zone"
-                            : "Speed limit zone")}
-                      </strong>
-                      <br />−{ev.points_lost} pts
-                      {ev.reason && (
-                        <>
-                          <br />
-                          {ev.reason}
-                        </>
+                    <div className="sr-avatar">
+                      <span className="sr-avatar-initials">
+                        {initials(entry)}
+                      </span>
+                      {active && <span className="sr-avatar-dot" />}
+                    </div>
+                    <div className="sr-student-text">
+                      <span className="sr-student-name">{fullName(entry)}</span>
+                      {subline(entry) && (
+                        <span className="sr-student-sub">{subline(entry)}</span>
                       )}
-                      {ev.zone_type === "speed_limit" &&
-                        ev.speed_limit_mph != null && (
-                          <>
-                            <br />
-                            Limit: {ev.speed_limit_mph} mph
-                          </>
-                        )}
-                      {maxSpeedMps != null ? (
-                        <>
-                          <br />
-                          Max speed caught: {fmtSpeed(maxSpeedMps)}
-                        </>
-                      ) : null}
-                      {ev.duration_ms > 0 && (
-                        <>
-                          <br />
-                          Duration: {Math.round(ev.duration_ms / 1000)}s
-                        </>
-                      )}
-                      <>
-                        <br />
-                        Derived confidence: {confidence.score}% (
-                        {confidence.label})
-                        <br />
-                        Avg GPS accuracy:{" "}
-                        {fmtAccuracy(confidence.avgAccuracyMeters)}
-                      </>
-                      {ev.zone_type === "speed_limit" ? (
-                        <>
-                          <br />
-                          Time over limit:{" "}
-                          {fmtMs((confidence.overLimitSeconds ?? 0) * 1000)}
-                          {confidence.maxOverLimitMph != null ? (
-                            <>
-                              <br />
-                              Max over limit:{" "}
-                              {confidence.maxOverLimitMph.toFixed(1)} mph
-                            </>
-                          ) : null}
-                        </>
-                      ) : confidence.durationSeconds > 0 ? (
-                        <>
-                          <br />
-                          Time in zone: {fmtMs(confidence.durationSeconds * 1000)}
-                        </>
-                      ) : null}
-                      {typeof ev.confidence_percent === "number" &&
-                        Number.isFinite(ev.confidence_percent) && (
-                          <>
-                            <br />
-                            Backend confidence:{" "}
-                            {Math.max(
-                              0,
-                              Math.min(100, Math.round(ev.confidence_percent)),
-                            )}
-                            %
-                          </>
-                        )}
-                    </Popup>
-                  </Marker>
+                    </div>
+                    {active && histBusy && <span className="sr-spinner" />}
+                    {active && !histBusy && history.length > 0 && (
+                      <span className="sr-ride-count">{history.length}</span>
+                    )}
+                  </button>
                 );
               })}
+          </div>
+        </div>
+      </aside>
 
-            {showPenalties && selectedMaxSpeedPoint ? (
-              <CircleMarker
-                center={[
-                  selectedMaxSpeedPoint.latitude,
-                  selectedMaxSpeedPoint.longitude,
-                ]}
-                radius={8}
-                pathOptions={{
-                  color: "#ffffff",
-                  fillColor: "#111827",
-                  fillOpacity: 1,
-                  weight: 3,
-                }}
+      {/* ── Col 2: Session list ── */}
+      <aside className="sr-session-list">
+        <div className="sr-session-list-head">
+          <strong>
+            {selEntry ? `${firstName(selEntry)}'s Rides` : "Rides"}
+          </strong>
+          <div className="sr-session-list-head-right">
+            {!histBusy && history.length > 0 && (
+              <span className="sr-count">{history.length}</span>
+            )}
+            {histBusy && <span className="sr-muted-inline">Loading…</span>}
+            {histErr && <span className="sr-err-inline">{histErr}</span>}
+          </div>
+        </div>
+
+        {selEntry && !histBusy && history.length > 0 && (
+          <div className="sr-session-mini-stats">
+            <div className="sr-session-mini-stat">
+              <span>Violations</span>
+              <strong
+                className={studentViolationCount > 0 ? "sr-val--red" : ""}
               >
-                <Tooltip
-                  permanent
-                  direction="top"
-                  offset={[0, -10]}
-                  opacity={1}
-                  className="sr-map-hover-tooltip"
-                >
-                  <div className="sr-map-hover-card">
-                    <strong>Max speed sample</strong>
-                    <span>{fmtSpeed(selectedMaxSpeedPoint.speed_mps)}</span>
-                    <span>{fmtFull(selectedMaxSpeedPoint.timestamp)}</span>
-                    <span>
-                      Accuracy {fmtAccuracy(selectedMaxSpeedPoint.accuracy)}
-                    </span>
-                  </div>
-                </Tooltip>
-              </CircleMarker>
-            ) : null}
-          </MapContainer>
+                {studentViolationCount}
+              </strong>
+            </div>
+            <div className="sr-session-mini-stat">
+              <span>Check-ins</span>
+              <strong>{studentPoiCount}</strong>
+            </div>
+            <div className="sr-session-mini-stat">
+              <span>GPS pts</span>
+              <strong>{studentGpsPointCount.toLocaleString()}</strong>
+            </div>
+          </div>
+        )}
 
-          {/* Floating layer toggles */}
-          {hasGPS && (
-            <div className="sr-overlay-filters">
-              <span className="sr-overlay-label">Layers</span>
-              {layerToggles.map((f) => (
-                <button
-                  key={f.key}
-                  className={`sr-filter-btn${f.active ? " sr-filter-btn--on" : ""}`}
-                  onClick={f.toggle}
+        {!selUUID && (
+          <p className="sr-context-empty sr-context-empty--padded">
+            Select a student to view their rides.
+          </p>
+        )}
+        {noRides && (
+          <p className="sr-context-empty sr-context-empty--padded">
+            No rides recorded yet.
+          </p>
+        )}
+
+        <div className="sr-session-item-list">
+          {history.map((sess, idx) => {
+            const active = sess.session_id === selId;
+            const rideNum = idx + 1;
+            const earnedPts = getRouteHistoryEarnedPoints(sess);
+            return (
+              <button
+                key={sess.session_id}
+                className={`sr-session-item${active ? " sr-session-item--active" : ""}`}
+                onClick={() => setSelId(sess.session_id)}
+              >
+                <div className="sr-session-item-top">
+                  <span className="sr-session-item-num">Ride #{rideNum}</span>
+                  <small className="sr-session-item-date">
+                    {fmtShort(getSessionStartedAt(sess))}
+                  </small>
+                </div>
+                <div className="sr-session-item-row">
+                  <span>{fmtDist(sess.distance_meters)}</span>
+                  <span className="sr-chip-sep">·</span>
+                  <span>{fmtDur(sess.duration_seconds)}</span>
+                  <span className="sr-chip-sep">·</span>
+                  <span>{(sess.top_speed_mps * 2.237).toFixed(0)} mph top</span>
+                </div>
+                <div className="sr-session-item-badges">
+                  {earnedPts > 0 && (
+                    <span className="sr-badge sr-badge--green">
+                      +{earnedPts.toLocaleString()} pts
+                    </span>
+                  )}
+                  {sess.penalty_events.length > 0 && (
+                    <span className="sr-badge sr-badge--red">
+                      {sess.penalty_events.length} violation
+                      {sess.penalty_events.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                  {sess.visited_pois.length > 0 && (
+                    <span className="sr-badge sr-badge--gold">
+                      {sess.visited_pois.length} check-in
+                      {sess.visited_pois.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                  {sess.points.length === 0 && (
+                    <span className="sr-badge sr-badge--muted">no GPS</span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </aside>
+
+      {/* ── Col 3: Detail panel ── */}
+      <main className="sr-detail-panel">
+        {!selSess ? (
+          <div className="sr-detail-empty">
+            <div className="sr-detail-empty-icon">
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M9 17H5a2 2 0 00-2 2v0M13 17h6M3 3h18M3 8h18M3 13h10" />
+              </svg>
+            </div>
+            <strong>
+              {!selUUID
+                ? "Select a student"
+                : histBusy
+                  ? "Loading rides…"
+                  : "Select a ride"}
+            </strong>
+            <p>
+              {!selUUID
+                ? "Choose a student from the roster, then pick a ride to view full data."
+                : histBusy
+                  ? "Fetching ride history…"
+                  : "Choose a ride from the list to view stats, violations, and more."}
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Session header */}
+            <div className="sr-detail-head">
+              <div className="sr-detail-head-left">
+                <span className="sr-eyebrow">
+                  {selEntry ? fullName(selEntry) : "Student"} · Ride #
+                  {selectedRideNum} ·{" "}
+                  {isTrackedRideSession(selSess) ? "Tracked" : "Background"}
+                </span>
+                <h3 className="sr-detail-title">
+                  {fmtFull(getSessionStartedAt(selSess))}
+                </h3>
+              </div>
+              <span className="sr-detail-mode-chip">
+                {selSess.trip_mode || "ride"}
+              </span>
+            </div>
+
+            {/* Stats grid */}
+            <div className="sr-detail-stat-grid">
+              <div className="sr-detail-stat">
+                <span>Distance</span>
+                <strong>{fmtDist(selSess.distance_meters)}</strong>
+              </div>
+              <div className="sr-detail-stat">
+                <span>Duration</span>
+                <strong>{fmtDur(selSess.duration_seconds)}</strong>
+              </div>
+              <div className="sr-detail-stat">
+                <span>Points earned</span>
+                <strong className="sr-val--green">
+                  +{selectedEarnedPoints.toLocaleString()}
+                </strong>
+              </div>
+              <div className="sr-detail-stat">
+                <span>Points lost</span>
+                <strong
+                  className={selSess.penalty_points > 0 ? "sr-val--red" : ""}
                 >
-                  <span
-                    className="sr-filter-dot"
-                    style={{ background: f.color }}
-                  />
-                  {f.label}
+                  −{selSess.penalty_points}
+                </strong>
+              </div>
+              <div className="sr-detail-stat">
+                <span>Top speed</span>
+                <strong>
+                  {(selSess.top_speed_mps * 2.237).toFixed(1)} mph
+                </strong>
+              </div>
+              <div className="sr-detail-stat">
+                <span>Avg speed</span>
+                <strong>
+                  {(selSess.average_speed_mps * 2.237).toFixed(1)} mph
+                </strong>
+              </div>
+              <div className="sr-detail-stat">
+                <span>Check-ins</span>
+                <strong>{selSess.visited_pois.length}</strong>
+              </div>
+              <div className="sr-detail-stat">
+                <span>GPS points</span>
+                <strong>{selSess.points.length.toLocaleString()}</strong>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="sr-detail-tabs">
+              {(
+                [
+                  "violations",
+                  "pois",
+                  "zones",
+                  "map",
+                  "downloads",
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab}
+                  className={`sr-detail-tab${detailTab === tab ? " sr-detail-tab--active" : ""}`}
+                  type="button"
+                  onClick={() => setDetailTab(tab)}
+                >
+                  {tab === "violations"
+                    ? `Violations (${selSess.penalty_events.length})`
+                    : tab === "pois"
+                      ? `Check-ins (${selSess.visited_pois.length})`
+                      : tab === "zones"
+                        ? `Zones (${dispZones.filter((z) => z.active).length})`
+                        : tab === "map"
+                          ? "Map"
+                          : "Downloads"}
                 </button>
               ))}
-              {showRoute && (
-                <div className="sr-speed-legend">
-                  {[
-                    { l: "< 5 mph", c: "#27cc5e" },
-                    { l: "5–10", c: "#a8d63c" },
-                    { l: "10–15", c: "#f6ae2d" },
-                    { l: "15–20", c: "#ff6b35" },
-                    { l: "20+", c: "#e53e3e" },
-                  ].map((s) => (
-                    <span key={s.l} className="sr-swatch">
-                      <span
-                        className="sr-swatch-dot"
-                        style={{ background: s.c }}
-                      />
-                      {s.l}
-                    </span>
-                  ))}
-                </div>
-              )}
             </div>
-          )}
 
-          {/* Floating session stats */}
-          {selSess && (
-            <div
-              className={`sr-overlay-stats${statsOpen ? " sr-overlay-stats--open" : ""}`}
-            >
-              <button
-                className="sr-stats-hd"
-                onClick={() => setStatsOpen((v) => !v)}
-              >
-                <span className="sr-stats-hd-title">
-                  {fmtShort(getSessionStartedAt(selSess))}
-                </span>
-                <span className="sr-stats-hd-icon">
-                  {statsOpen ? "▾" : "▴"}
-                </span>
-              </button>
-              {statsOpen && (
-                <div className="sr-stats-grid">
-                  {[
-                    {
-                      label: "Distance",
-                      value: fmtDist(selSess.distance_meters),
-                    },
-                    {
-                      label: "Duration",
-                      value: fmtDur(selSess.duration_seconds),
-                    },
-                    {
-                      label: "Points earned",
-                      value: `+${selectedEarnedPoints.toLocaleString()}`,
-                      cls: "sr-val--green",
-                    },
-                    ...(selSess.penalty_points > 0
-                      ? [
-                          {
-                            label: "Points lost",
-                            value: `−${selSess.penalty_points}`,
-                            cls: "sr-val--red",
-                          },
-                        ]
-                      : []),
-                    {
-                      label: "Spots visited",
-                      value: String(selSess.visited_pois.length),
-                    },
-                    {
-                      label: "Top speed",
-                      value: `${(selSess.top_speed_mps * 2.237).toFixed(1)} mph`,
-                    },
-                    {
-                      label: "GPS data points",
-                      value: selSess.points.length.toLocaleString(),
-                    },
-                  ].map((s) => (
-                    <div key={s.label} className="sr-stat">
-                      <span className="sr-stat-label">{s.label}</span>
-                      <strong
-                        className={`sr-stat-val${s.cls ? ` ${s.cls}` : ""}`}
+            {/* ── Violations tab ── */}
+            {detailTab === "violations" &&
+              (selSess.penalty_events.length === 0 ? (
+                <p className="sr-context-empty sr-context-empty--clean sr-context-empty--padded">
+                  No violations on this ride — clean ride!
+                </p>
+              ) : (
+                <div className="sr-event-button-list sr-event-button-list--tab">
+                  {selSess.penalty_events.map((ev, index) => {
+                    const maxSpeedMps = getPenaltyMaxSpeedMps(selSess, ev);
+                    const confidence = getPenaltyConfidence(selSess, ev);
+                    return (
+                      <div
+                        key={`${ev.zone_uuid}-${ev.occurred_at}-${index}`}
+                        className="sr-event-button sr-event-button--penalty"
                       >
-                        {s.value}
-                      </strong>
+                        <span className="sr-event-button-top">
+                          <strong>{penaltyTitle(ev)}</strong>
+                          <em>−{ev.points_lost.toLocaleString()} pts</em>
+                        </span>
+                        <span className="sr-event-badge-row">
+                          <span className="sr-event-type-badge">
+                            {penaltyLabel(ev.zone_type)}
+                          </span>
+                          <span className="sr-event-button-meta">
+                            {fmtShort(ev.occurred_at)}
+                          </span>
+                        </span>
+                        {ev.duration_ms > 0 && (
+                          <span className="sr-event-button-meta">
+                            Duration: {fmtMs(ev.duration_ms)}
+                          </span>
+                        )}
+                        {maxSpeedMps != null && (
+                          <span className="sr-event-button-meta">
+                            Max speed: {fmtSpeed(maxSpeedMps)}
+                            {ev.speed_limit_mph != null
+                              ? ` (limit: ${ev.speed_limit_mph} mph)`
+                              : ""}
+                          </span>
+                        )}
+                        <span className="sr-event-button-meta sr-muted-secondary">
+                          Confidence: {confidence.score}% ({confidence.label})
+                          {" · "}GPS {fmtAccuracy(confidence.avgAccuracyMeters)}
+                        </span>
+                        {ev.zone_type === "speed_limit" ? (
+                          <span className="sr-event-button-meta sr-muted-secondary">
+                            Over limit:{" "}
+                            {fmtMs((confidence.overLimitSeconds ?? 0) * 1000)}
+                            {confidence.maxOverLimitMph != null
+                              ? ` · max +${confidence.maxOverLimitMph.toFixed(1)} mph`
+                              : ""}
+                          </span>
+                        ) : confidence.durationSeconds > 0 ? (
+                          <span className="sr-event-button-meta sr-muted-secondary">
+                            Time in zone:{" "}
+                            {fmtMs(confidence.durationSeconds * 1000)}
+                          </span>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+
+            {/* ── Check-ins tab ── */}
+            {detailTab === "pois" &&
+              (selSess.visited_pois.length === 0 ? (
+                <p className="sr-context-empty sr-context-empty--padded">
+                  No check-in spots visited on this ride.
+                </p>
+              ) : (
+                <div className="sr-event-button-list sr-event-button-list--tab">
+                  {selSess.visited_pois.map((poi, index) => (
+                    <div
+                      key={`${poi.poi_uuid}-${poi.visited_at}-${index}`}
+                      className="sr-event-button sr-event-button--poi"
+                    >
+                      <span className="sr-event-button-top">
+                        <strong>{poi.title || "Point of Interest"}</strong>
+                        <em>+{poi.bonus_points.toLocaleString()} pts</em>
+                      </span>
+                      <span className="sr-event-button-meta">
+                        Visited {fmtShort(poi.visited_at)}
+                      </span>
+                      <span className="sr-event-button-meta sr-muted-secondary">
+                        Confidence: {fmtConfidence(poi.confidence_percent)}
+                        {typeof poi.radius_meters === "number" &&
+                        Number.isFinite(poi.radius_meters)
+                          ? ` · Radius: ${Math.round(poi.radius_meters * 3.28084).toLocaleString()} ft`
+                          : ""}
+                      </span>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-          )}
+              ))}
 
-          {/* Empty / loading overlays */}
-          {noStudent && (
-            <div className="sr-map-overlay">
-              <div className="sr-map-msg">
-                <div className="sr-map-msg-icon">
-                  <svg
-                    width="28"
-                    height="28"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <circle cx="12" cy="11" r="3" />
-                    <path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z" />
-                  </svg>
-                </div>
-                <p className="sr-map-msg-title">Select a student</p>
-                <p className="sr-map-msg-desc">
-                  Choose a student from the left sidebar to view their ride
-                  history on the map.
+            {/* ── Zones tab ── */}
+            {detailTab === "zones" &&
+              (dispZones.filter((z) => z.active).length === 0 ? (
+                <p className="sr-context-empty sr-context-empty--padded">
+                  No active safety zones for this ride.
                 </p>
-              </div>
-            </div>
-          )}
-          {selUUID && histBusy && (
-            <div className="sr-map-overlay">
-              <div className="sr-map-msg">
-                <p className="sr-map-msg-title">Loading rides…</p>
-              </div>
-            </div>
-          )}
-          {noRides && (
-            <div className="sr-map-overlay">
-              <div className="sr-map-msg">
-                <div className="sr-map-msg-icon">
-                  <svg
-                    width="28"
-                    height="28"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="8" x2="12" y2="12" />
-                    <line x1="12" y1="16" x2="12.01" y2="16" />
-                  </svg>
+              ) : (
+                <div className="sr-zone-list sr-zone-list--tab">
+                  {dispZones
+                    .filter((z) => z.active)
+                    .map((z) => (
+                      <div
+                        key={z.zone_uuid}
+                        className={`sr-zone-chip sr-zone-chip--${z.zone_type}`}
+                      >
+                        <span className="sr-zone-chip-dot" />
+                        <span className="sr-zone-chip-name">{zoneTitle(z)}</span>
+                        {z.zone_type === "speed_limit" &&
+                          z.speed_limit_mph != null && (
+                            <span className="sr-zone-chip-limit">
+                              {z.speed_limit_mph} mph
+                            </span>
+                          )}
+                        {z.zone_type === "no_go" && (
+                          <span className="sr-zone-chip-limit">no entry</span>
+                        )}
+                      </div>
+                    ))}
                 </div>
-                <p className="sr-map-msg-title">No rides recorded</p>
-                <p className="sr-map-msg-desc">
-                  This student has no route history yet.
-                </p>
-              </div>
-            </div>
-          )}
-          {noGPS && !noRides && (
-            <div className="sr-map-overlay">
-              <div className="sr-map-msg">
-                <div className="sr-map-msg-icon">
-                  <svg
-                    width="28"
-                    height="28"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <line x1="1" y1="1" x2="23" y2="23" />
-                    <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
-                    <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
-                  </svg>
-                </div>
-                <p className="sr-map-msg-title">No GPS data</p>
-                <p className="sr-map-msg-desc">
-                  This ride was manually logged — no GPS breadcrumbs available.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
+              ))}
 
-        <aside className="sr-context-panel">
-          <div className="sr-context-head">
-            <span className="sr-eyebrow">Ride Summary</span>
-            <div className="sr-context-head-actions">
-              {selSess && (
-                <span className="sr-count">{fmtShort(selSess.started_at)}</span>
-              )}
-            </div>
-          </div>
-
-          {!selSess ? (
-            <p className="sr-context-empty">
-              Select a ride below to see check-in spots, violations, and active
-              safety zones.
-            </p>
-          ) : (
-            <>
-              {/* At-a-glance points strip */}
-              <div className="sr-summary-strip">
-                <div className="sr-summary-item sr-summary-item--green">
-                  <span className="sr-summary-val">
-                    +{selectedEarnedPoints.toLocaleString()}
-                  </span>
-                  <span className="sr-summary-label">pts earned</span>
-                </div>
-                <div className="sr-summary-divider" />
-                <div
-                  className={`sr-summary-item${selSess.penalty_points > 0 ? " sr-summary-item--red" : ""}`}
+            {/* ── Map tab ── */}
+            {detailTab === "map" && (
+              <div className="sr-map-tab">
+                <MapContainer
+                  center={DEFAULT_CENTER}
+                  zoom={DEFAULT_ZOOM}
+                  className="sr-map"
+                  zoomControl={true}
                 >
-                  <span className="sr-summary-val">
-                    −{selSess.penalty_points}
-                  </span>
-                  <span className="sr-summary-label">pts lost</span>
-                </div>
-                <div className="sr-summary-divider" />
-                <div className="sr-summary-item">
-                  <span className="sr-summary-val">
-                    {fmtDist(selSess.distance_meters)}
-                  </span>
-                  <span className="sr-summary-label">distance</span>
-                </div>
-              </div>
+                  <TileLayer attribution={TILE_ATTR} url={TILE_URL} />
+                  <MapFitter points={routePts} />
+                  {focusPin && (
+                    <PenaltyFocuser lat={focusPin[0]} lng={focusPin[1]} />
+                  )}
 
-              <section className="sr-csv-panel" aria-label="CSV exports">
-                <div className="sr-context-section-head">
-                  <strong>CSV Exports</strong>
-                  <span>separated files</span>
-                </div>
-                <div className="sr-csv-group">
-                  <span className="sr-csv-group-label">Selected ride</span>
-                  <div className="sr-csv-actions">
+                  {dispZones
+                    .filter((z) => {
+                      if (!z.active || z.polygon.length < 3) return false;
+                      if (z.zone_type === "no_go") return showNoGoZones;
+                      if (z.zone_type === "speed_limit") return showSpeedZones;
+                      return false;
+                    })
+                    .map((z) => (
+                      <Polygon
+                        key={z.zone_uuid}
+                        positions={z.polygon.map((p): [number, number] => [
+                          p.lat,
+                          p.lng,
+                        ])}
+                        pathOptions={{
+                          color:
+                            z.zone_type === "no_go" ? "#b91c1c" : "#b45309",
+                          fillColor:
+                            z.zone_type === "no_go" ? "#ef4444" : "#f59e0b",
+                          fillOpacity: z.zone_type === "no_go" ? 0.35 : 0.25,
+                          weight: z.zone_type === "no_go" ? 3.5 : 3,
+                        }}
+                      >
+                        <Tooltip
+                          sticky
+                          direction="top"
+                          opacity={1}
+                          className="sr-map-hover-tooltip"
+                        >
+                          <div className="sr-map-hover-card">
+                            <strong>{zoneTitle(z)}</strong>
+                            <span>
+                              {z.zone_type === "no_go"
+                                ? "⛔ Students must not enter this area"
+                                : z.speed_limit_mph != null
+                                  ? `Speed limit: ${z.speed_limit_mph} mph`
+                                  : "Speed limit zone"}
+                            </span>
+                          </div>
+                        </Tooltip>
+                        <Popup>
+                          <strong>{zoneTitle(z)}</strong>
+                          {z.description && (
+                            <>
+                              <br />
+                              {z.description}
+                            </>
+                          )}
+                          {z.zone_type === "speed_limit" &&
+                            z.speed_limit_mph != null && (
+                              <>
+                                <br />
+                                Speed limit: {z.speed_limit_mph} mph
+                              </>
+                            )}
+                          {z.zone_type === "no_go" && (
+                            <>
+                              <br />
+                              Students must not enter this area.
+                            </>
+                          )}
+                        </Popup>
+                      </Polygon>
+                    ))}
+
+                  {showRoute &&
+                    segments.map((seg, i) => (
+                      <Polyline
+                        key={i}
+                        positions={seg.positions}
+                        pathOptions={{
+                          color: seg.color,
+                          weight: 5,
+                          opacity: 1,
+                          lineCap: "round",
+                          lineJoin: "round",
+                        }}
+                        eventHandlers={{
+                          mousemove: (event) => {
+                            if (!selSess) return;
+                            setRouteHover(
+                              findNearestRouteHover(
+                                selSess,
+                                routeDistances,
+                                event.latlng,
+                              ),
+                            );
+                          },
+                          mouseout: () => setRouteHover(null),
+                        }}
+                      />
+                    ))}
+
+                  {showRoute && routeHover ? (
+                    <CircleMarker
+                      center={[
+                        routeHover.point.latitude,
+                        routeHover.point.longitude,
+                      ]}
+                      radius={7}
+                      interactive={false}
+                      pathOptions={{
+                        color: "#ffffff",
+                        fillColor: speedColor(routeHover.point.speed_mps),
+                        fillOpacity: 1,
+                        weight: 2.5,
+                      }}
+                    >
+                      <Tooltip
+                        permanent
+                        direction="top"
+                        offset={[0, -10]}
+                        opacity={1}
+                        className="sr-map-hover-tooltip"
+                      >
+                        <div className="sr-map-hover-card sr-map-hover-card--wide">
+                          <strong>
+                            {fmtFull(routeHover.point.timestamp)}
+                          </strong>
+                          <span>
+                            Speed {fmtSpeed(routeHover.point.speed_mps)}
+                          </span>
+                          <span>
+                            Distance {fmtDist(routeHover.distanceMeters)}
+                          </span>
+                          <span>
+                            Elevation{" "}
+                            {fmtElevation(routeHover.point.altitude)}
+                          </span>
+                          <span>
+                            Accuracy {fmtAccuracy(routeHover.point.accuracy)}
+                          </span>
+                        </div>
+                      </Tooltip>
+                    </CircleMarker>
+                  ) : null}
+
+                  {showRoute && selSess && selSess.points.length > 0 && (
+                    <>
+                      <CircleMarker
+                        center={[
+                          selSess.points[0].latitude,
+                          selSess.points[0].longitude,
+                        ]}
+                        radius={9}
+                        pathOptions={{
+                          color: "#fff",
+                          fillColor: "#27cc5e",
+                          fillOpacity: 1,
+                          weight: 2.5,
+                        }}
+                      >
+                        <Popup>
+                          <strong>Ride started</strong>
+                          <br />
+                          {fmtFull(getSessionStartedAt(selSess))}
+                        </Popup>
+                      </CircleMarker>
+                      <CircleMarker
+                        center={[
+                          selSess.points[selSess.points.length - 1].latitude,
+                          selSess.points[selSess.points.length - 1].longitude,
+                        ]}
+                        radius={9}
+                        pathOptions={{
+                          color: "#fff",
+                          fillColor: "#112d4e",
+                          fillOpacity: 1,
+                          weight: 2.5,
+                        }}
+                      >
+                        <Popup>
+                          <strong>Ride ended</strong>
+                          <br />
+                          {getSessionEndedAt(selSess)
+                            ? fmtFull(getSessionEndedAt(selSess))
+                            : "—"}
+                        </Popup>
+                      </CircleMarker>
+                    </>
+                  )}
+
+                  {showPOIs &&
+                    selSess?.visited_pois.map((poi, i) => (
+                      <Fragment key={`poi-${i}`}>
+                        {typeof poi.radius_meters === "number" &&
+                        Number.isFinite(poi.radius_meters) &&
+                        poi.radius_meters > 0 ? (
+                          <Circle
+                            center={[poi.lat, poi.lng]}
+                            radius={poi.radius_meters}
+                            pathOptions={{
+                              color: "#f6ae2d",
+                              fillColor: "#f6ae2d",
+                              fillOpacity: 0.12,
+                              weight: 1,
+                            }}
+                          />
+                        ) : null}
+                        <Marker
+                          position={[poi.lat, poi.lng]}
+                          icon={visitedPoiIcon}
+                        >
+                          <Tooltip
+                            sticky
+                            direction="top"
+                            opacity={1}
+                            className="sr-map-hover-tooltip"
+                          >
+                            <div className="sr-map-hover-card">
+                              <strong>
+                                {poi.title || "Point of Interest"}
+                              </strong>
+                              <span>Visited {fmtShort(poi.visited_at)}</span>
+                              <span>
+                                +{poi.bonus_points.toLocaleString()} pts
+                              </span>
+                              <span>
+                                Confidence{" "}
+                                {fmtConfidence(poi.confidence_percent)}
+                              </span>
+                            </div>
+                          </Tooltip>
+                          <Popup>
+                            <strong>
+                              {poi.title || "Point of Interest"}
+                            </strong>
+                            <br />+{poi.bonus_points} pts
+                            {poi.description && (
+                              <>
+                                <br />
+                                {poi.description}
+                              </>
+                            )}
+                            {typeof poi.radius_meters === "number" &&
+                              Number.isFinite(poi.radius_meters) && (
+                                <>
+                                  <br />
+                                  Entry radius:{" "}
+                                  {Math.round(
+                                    poi.radius_meters * 3.28084,
+                                  ).toLocaleString()}{" "}
+                                  ft
+                                </>
+                              )}
+                            {typeof poi.confidence_percent === "number" &&
+                              Number.isFinite(poi.confidence_percent) && (
+                                <>
+                                  <br />
+                                  Confidence:{" "}
+                                  {fmtConfidence(poi.confidence_percent)}
+                                </>
+                              )}
+                            {poi.visited_at > 0 && (
+                              <>
+                                <br />
+                                <span
+                                  style={{ color: "#888", fontSize: "0.82em" }}
+                                >
+                                  {fmtShort(poi.visited_at)}
+                                </span>
+                              </>
+                            )}
+                          </Popup>
+                        </Marker>
+                      </Fragment>
+                    ))}
+
+                  {showPenalties &&
+                    selSess?.penalty_events.map((ev, i) => {
+                      const maxSpeedMps = getPenaltyMaxSpeedMps(selSess, ev);
+                      const confidence = getPenaltyConfidence(selSess, ev);
+                      return (
+                        <Marker
+                          key={`pen-${i}`}
+                          position={[ev.lat, ev.lng]}
+                          icon={
+                            ev.zone_type === "no_go"
+                              ? noGoPenaltyIcon
+                              : speedPenaltyIcon
+                          }
+                          eventHandlers={{
+                            click: () =>
+                              focusRouteEvent(ev.lat, ev.lng, "penalty", ev),
+                          }}
+                        >
+                          <Tooltip
+                            sticky
+                            direction="top"
+                            opacity={1}
+                            className="sr-map-hover-tooltip"
+                          >
+                            <div className="sr-map-hover-card">
+                              <strong>
+                                {ev.title ||
+                                  (ev.zone_type === "no_go"
+                                    ? "No-go zone"
+                                    : "Speed limit zone")}
+                              </strong>
+                              <span>
+                                −{ev.points_lost.toLocaleString()} pts
+                              </span>
+                              <span>{fmtShort(ev.occurred_at)}</span>
+                              {ev.zone_type === "speed_limit" &&
+                              ev.speed_limit_mph != null ? (
+                                <span>Limit {ev.speed_limit_mph} mph</span>
+                              ) : null}
+                              {maxSpeedMps != null ? (
+                                <span>
+                                  Max speed caught {fmtSpeed(maxSpeedMps)}
+                                </span>
+                              ) : null}
+                              <span>Duration {fmtMs(ev.duration_ms)}</span>
+                              <span>
+                                Confidence {confidence.score}% (
+                                {confidence.label})
+                              </span>
+                            </div>
+                          </Tooltip>
+                          <Popup>
+                            <strong>
+                              {ev.title ||
+                                (ev.zone_type === "no_go"
+                                  ? "No-go zone"
+                                  : "Speed limit zone")}
+                            </strong>
+                            <br />−{ev.points_lost} pts
+                            {ev.reason && (
+                              <>
+                                <br />
+                                {ev.reason}
+                              </>
+                            )}
+                            {ev.zone_type === "speed_limit" &&
+                              ev.speed_limit_mph != null && (
+                                <>
+                                  <br />
+                                  Limit: {ev.speed_limit_mph} mph
+                                </>
+                              )}
+                            {maxSpeedMps != null ? (
+                              <>
+                                <br />
+                                Max speed caught: {fmtSpeed(maxSpeedMps)}
+                              </>
+                            ) : null}
+                            {ev.duration_ms > 0 && (
+                              <>
+                                <br />
+                                Duration: {Math.round(ev.duration_ms / 1000)}s
+                              </>
+                            )}
+                            <>
+                              <br />
+                              Derived confidence: {confidence.score}% (
+                              {confidence.label})
+                              <br />
+                              Avg GPS accuracy:{" "}
+                              {fmtAccuracy(confidence.avgAccuracyMeters)}
+                            </>
+                            {ev.zone_type === "speed_limit" ? (
+                              <>
+                                <br />
+                                Time over limit:{" "}
+                                {fmtMs(
+                                  (confidence.overLimitSeconds ?? 0) * 1000,
+                                )}
+                                {confidence.maxOverLimitMph != null ? (
+                                  <>
+                                    <br />
+                                    Max over limit:{" "}
+                                    {confidence.maxOverLimitMph.toFixed(1)} mph
+                                  </>
+                                ) : null}
+                              </>
+                            ) : confidence.durationSeconds > 0 ? (
+                              <>
+                                <br />
+                                Time in zone:{" "}
+                                {fmtMs(confidence.durationSeconds * 1000)}
+                              </>
+                            ) : null}
+                            {typeof ev.confidence_percent === "number" &&
+                              Number.isFinite(ev.confidence_percent) && (
+                                <>
+                                  <br />
+                                  Backend confidence:{" "}
+                                  {Math.max(
+                                    0,
+                                    Math.min(
+                                      100,
+                                      Math.round(ev.confidence_percent),
+                                    ),
+                                  )}
+                                  %
+                                </>
+                              )}
+                          </Popup>
+                        </Marker>
+                      );
+                    })}
+
+                  {showPenalties && selectedMaxSpeedPoint ? (
+                    <CircleMarker
+                      center={[
+                        selectedMaxSpeedPoint.latitude,
+                        selectedMaxSpeedPoint.longitude,
+                      ]}
+                      radius={8}
+                      pathOptions={{
+                        color: "#ffffff",
+                        fillColor: "#111827",
+                        fillOpacity: 1,
+                        weight: 3,
+                      }}
+                    >
+                      <Tooltip
+                        permanent
+                        direction="top"
+                        offset={[0, -10]}
+                        opacity={1}
+                        className="sr-map-hover-tooltip"
+                      >
+                        <div className="sr-map-hover-card">
+                          <strong>Max speed sample</strong>
+                          <span>
+                            {fmtSpeed(selectedMaxSpeedPoint.speed_mps)}
+                          </span>
+                          <span>
+                            {fmtFull(selectedMaxSpeedPoint.timestamp)}
+                          </span>
+                          <span>
+                            Accuracy{" "}
+                            {fmtAccuracy(selectedMaxSpeedPoint.accuracy)}
+                          </span>
+                        </div>
+                      </Tooltip>
+                    </CircleMarker>
+                  ) : null}
+                </MapContainer>
+
+                {/* Layer toggles */}
+                {hasGPS && (
+                  <div className="sr-overlay-filters">
+                    <span className="sr-overlay-label">Layers</span>
+                    {layerToggles.map((f) => (
+                      <button
+                        key={f.key}
+                        className={`sr-filter-btn${f.active ? " sr-filter-btn--on" : ""}`}
+                        onClick={f.toggle}
+                      >
+                        <span
+                          className="sr-filter-dot"
+                          style={{ background: f.color }}
+                        />
+                        {f.label}
+                      </button>
+                    ))}
+                    {showRoute && (
+                      <div className="sr-speed-legend">
+                        {[
+                          { l: "< 5 mph", c: "#27cc5e" },
+                          { l: "5–10", c: "#a8d63c" },
+                          { l: "10–15", c: "#f6ae2d" },
+                          { l: "15–20", c: "#ff6b35" },
+                          { l: "20+", c: "#e53e3e" },
+                        ].map((s) => (
+                          <span key={s.l} className="sr-swatch">
+                            <span
+                              className="sr-swatch-dot"
+                              style={{ background: s.c }}
+                            />
+                            {s.l}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {noGPS && (
+                  <div className="sr-map-overlay">
+                    <div className="sr-map-msg">
+                      <div className="sr-map-msg-icon">
+                        <svg
+                          width="28"
+                          height="28"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <line x1="1" y1="1" x2="23" y2="23" />
+                          <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
+                          <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
+                        </svg>
+                      </div>
+                      <p className="sr-map-msg-title">No GPS data</p>
+                      <p className="sr-map-msg-desc">
+                        This ride was manually logged — no GPS breadcrumbs
+                        available.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Downloads tab ── */}
+            {detailTab === "downloads" && (
+              <div className="sr-downloads-tab">
+                <div className="sr-dl-group-section">
+                  <p className="sr-dl-group-title">
+                    This ride — Ride #{selectedRideNum}
+                  </p>
+                  <div className="sr-dl-card-grid">
                     <button
-                      className="sr-dl-btn"
+                      className="sr-dl-card"
                       type="button"
                       disabled={!selSess}
                       onClick={() =>
@@ -2139,22 +2110,66 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                         exportRideSummary(selEntry, selSess, selectedRideNum)
                       }
                     >
-                      Ride summary
+                      <span className="sr-dl-card-icon">
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                      </span>
+                      <span className="sr-dl-card-body">
+                        <strong>Ride Summary</strong>
+                        <small>1 row · distance, speed, points</small>
+                      </span>
                     </button>
                     <button
-                      className="sr-dl-btn"
+                      className="sr-dl-card"
                       type="button"
                       disabled={!selSess || selSess.points.length === 0}
                       onClick={() =>
-                        selSess && exportRideGPS(selEntry, selSess, selectedRideNum)
+                        selSess &&
+                        exportRideGPS(selEntry, selSess, selectedRideNum)
                       }
                     >
-                      GPS points
+                      <span className="sr-dl-card-icon">
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                      </span>
+                      <span className="sr-dl-card-body">
+                        <strong>GPS Points</strong>
+                        <small>
+                          {selSess.points.length.toLocaleString()} pts ·
+                          lat/lng/speed/alt
+                        </small>
+                      </span>
                     </button>
                     <button
-                      className="sr-dl-btn"
+                      className="sr-dl-card"
                       type="button"
-                      disabled={!selSess || selSess.penalty_events.length === 0}
+                      disabled={
+                        !selSess || selSess.penalty_events.length === 0
+                      }
                       onClick={() =>
                         selSess &&
                         exportRideViolations(
@@ -2165,349 +2180,227 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                         )
                       }
                     >
-                      Violations
+                      <span className="sr-dl-card-icon">
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                      </span>
+                      <span className="sr-dl-card-body">
+                        <strong>Violations</strong>
+                        <small>
+                          {selSess.penalty_events.length} event
+                          {selSess.penalty_events.length !== 1 ? "s" : ""} ·
+                          speed, confidence
+                        </small>
+                      </span>
                     </button>
                     <button
-                      className="sr-dl-btn"
+                      className="sr-dl-card"
                       type="button"
-                      disabled={!selSess || selSess.visited_pois.length === 0}
+                      disabled={
+                        !selSess || selSess.visited_pois.length === 0
+                      }
                       onClick={() =>
-                        selSess && exportRidePOIs(selEntry, selSess, selectedRideNum)
+                        selSess &&
+                        exportRidePOIs(selEntry, selSess, selectedRideNum)
                       }
                     >
-                      POIs
+                      <span className="sr-dl-card-icon">
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                      </span>
+                      <span className="sr-dl-card-body">
+                        <strong>Check-ins</strong>
+                        <small>
+                          {selSess.visited_pois.length} spot
+                          {selSess.visited_pois.length !== 1 ? "s" : ""} · POI
+                          visits
+                        </small>
+                      </span>
                     </button>
                   </div>
                 </div>
-                <div className="sr-csv-group">
-                  <span className="sr-csv-group-label">Selected student</span>
-                  <div className="sr-csv-actions">
+
+                <div className="sr-dl-group-section">
+                  <p className="sr-dl-group-title">
+                    All rides — {history.length} session
+                    {history.length !== 1 ? "s" : ""}
+                  </p>
+                  <div className="sr-dl-card-grid">
                     <button
-                      className="sr-dl-btn"
+                      className="sr-dl-card"
                       type="button"
                       disabled={history.length === 0}
                       onClick={() => exportAllRidesSummary(selEntry, history)}
                     >
-                      All ride summaries
+                      <span className="sr-dl-card-icon">
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                      </span>
+                      <span className="sr-dl-card-body">
+                        <strong>All Ride Summaries</strong>
+                        <small>{history.length} rows · all sessions</small>
+                      </span>
                     </button>
                     <button
-                      className="sr-dl-btn"
+                      className="sr-dl-card"
                       type="button"
                       disabled={studentGpsPointCount === 0}
                       onClick={() => exportAllGPS(selEntry, history)}
                     >
-                      All GPS
+                      <span className="sr-dl-card-icon">
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                      </span>
+                      <span className="sr-dl-card-body">
+                        <strong>All GPS Points</strong>
+                        <small>
+                          {studentGpsPointCount.toLocaleString()} points total
+                        </small>
+                      </span>
                     </button>
                     <button
-                      className="sr-dl-btn"
+                      className="sr-dl-card"
+                      type="button"
+                      disabled={trackedViolationCount === 0}
+                      onClick={() =>
+                        exportTrackedRideViolations(selEntry, history, zones)
+                      }
+                    >
+                      <span className="sr-dl-card-icon">
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                      </span>
+                      <span className="sr-dl-card-body">
+                        <strong>Tracked Violations</strong>
+                        <small>
+                          {trackedViolationCount} from {trackedRideCount}{" "}
+                          tracked rides
+                        </small>
+                      </span>
+                    </button>
+                    <button
+                      className="sr-dl-card"
                       type="button"
                       disabled={studentViolationCount === 0}
-                      onClick={() => exportAllViolations(selEntry, history, zones)}
+                      onClick={() =>
+                        exportAllViolations(selEntry, history, zones)
+                      }
                     >
-                      All violations
+                      <span className="sr-dl-card-icon">
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                      </span>
+                      <span className="sr-dl-card-body">
+                        <strong>All Violations</strong>
+                        <small>{studentViolationCount} total events</small>
+                      </span>
                     </button>
                     <button
-                      className="sr-dl-btn"
+                      className="sr-dl-card"
                       type="button"
                       disabled={studentPoiCount === 0}
                       onClick={() => exportAllPOIs(selEntry, history)}
                     >
-                      All POIs
+                      <span className="sr-dl-card-icon">
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                      </span>
+                      <span className="sr-dl-card-body">
+                        <strong>All Check-ins</strong>
+                        <small>{studentPoiCount} POI visits total</small>
+                      </span>
                     </button>
                   </div>
                 </div>
-              </section>
-
-              {/* Check-in spots (POIs) */}
-              <section className="sr-context-section">
-                <div className="sr-context-section-head">
-                  <strong>
-                    <span className="sr-section-icon sr-section-icon--poi">
-                      ★
-                    </span>
-                    Check-in Spots
-                  </strong>
-                  <span>{selSess.visited_pois.length}</span>
-                </div>
-                {selSess.visited_pois.length === 0 ? (
-                  <p className="sr-context-empty">
-                    No check-in spots visited on this ride.
-                  </p>
-                ) : (
-                  <div className="sr-event-button-list">
-                    {selSess.visited_pois.map((poi, index) => (
-                      <button
-                        key={`${poi.poi_uuid}-${poi.visited_at}-${index}`}
-                        className="sr-event-button sr-event-button--poi"
-                        type="button"
-                        onClick={() => focusRouteEvent(poi.lat, poi.lng, "poi")}
-                      >
-                        <span className="sr-event-button-top">
-                          <strong>{poi.title || "Point of Interest"}</strong>
-                          <em>+{poi.bonus_points.toLocaleString()} pts</em>
-                        </span>
-                        <span className="sr-event-button-meta">
-                          Visited {fmtShort(poi.visited_at)}
-                        </span>
-                        <span className="sr-event-button-meta sr-muted-secondary">
-                          Confidence: {fmtConfidence(poi.confidence_percent)}
-                        </span>
-                        <span className="sr-jump-label">↗ Jump to map</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              {/* Violations (penalties) */}
-              <section className="sr-context-section">
-                <div className="sr-context-section-head">
-                  <strong>
-                    <span className="sr-section-icon sr-section-icon--penalty">
-                      ⚠
-                    </span>
-                    Violations
-                  </strong>
-                  <span>{selSess.penalty_events.length}</span>
-                </div>
-                {selSess.penalty_events.length === 0 ? (
-                  <p className="sr-context-empty sr-context-empty--clean">
-                    No violations — clean ride!
-                  </p>
-                ) : (
-                  <div className="sr-event-button-list">
-                    {selSess.penalty_events.map((ev, index) => {
-                      const maxSpeedMps = getPenaltyMaxSpeedMps(selSess, ev);
-                      const confidence = getPenaltyConfidence(selSess, ev);
-                      return (
-                        <button
-                          key={`${ev.zone_uuid}-${ev.occurred_at}-${index}`}
-                          className="sr-event-button sr-event-button--penalty"
-                          type="button"
-                          onClick={() =>
-                            focusRouteEvent(ev.lat, ev.lng, "penalty", ev)
-                          }
-                        >
-                          <span className="sr-event-button-top">
-                            <strong>{penaltyTitle(ev)}</strong>
-                            <em>−{ev.points_lost.toLocaleString()} pts</em>
-                          </span>
-                          <span className="sr-event-badge-row">
-                            <span className="sr-event-type-badge">
-                              {penaltyLabel(ev.zone_type)}
-                            </span>
-                            <span className="sr-event-button-meta">
-                              {fmtShort(ev.occurred_at)}
-                            </span>
-                          </span>
-                          {ev.duration_ms > 0 && (
-                            <span className="sr-event-button-meta">
-                              Duration: {fmtMs(ev.duration_ms)}
-                            </span>
-                          )}
-                          {maxSpeedMps != null && (
-                            <span className="sr-event-button-meta">
-                              Max speed: {fmtSpeed(maxSpeedMps)}
-                              {ev.speed_limit_mph != null
-                                ? ` (limit: ${ev.speed_limit_mph} mph)`
-                                : ""}
-                            </span>
-                          )}
-                          <span className="sr-event-button-meta sr-muted-secondary">
-                            Confidence: {confidence.score}% ({confidence.label}) ·
-                            GPS {fmtAccuracy(confidence.avgAccuracyMeters)}
-                          </span>
-                          {ev.zone_type === "speed_limit" ? (
-                            <span className="sr-event-button-meta sr-muted-secondary">
-                              Over limit:{" "}
-                              {fmtMs((confidence.overLimitSeconds ?? 0) * 1000)}
-                              {confidence.maxOverLimitMph != null
-                                ? ` · max +${confidence.maxOverLimitMph.toFixed(1)} mph`
-                                : ""}
-                            </span>
-                          ) : confidence.durationSeconds > 0 ? (
-                            <span className="sr-event-button-meta sr-muted-secondary">
-                              Time in zone:{" "}
-                              {fmtMs(confidence.durationSeconds * 1000)}
-                            </span>
-                          ) : null}
-                          <span className="sr-jump-label">↗ Jump to map</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-
-              {/* Active safety zones on this session */}
-              {dispZones.filter((z) => z.active).length > 0 && (
-                <section className="sr-context-section">
-                  <div className="sr-context-section-head">
-                    <strong>
-                      <span className="sr-section-icon sr-section-icon--zone">
-                        ◉
-                      </span>
-                      Safety Zones
-                    </strong>
-                    <span>{dispZones.filter((z) => z.active).length}</span>
-                  </div>
-                  <div className="sr-zone-list">
-                    {dispZones
-                      .filter((z) => z.active)
-                      .map((z) => (
-                        <div
-                          key={z.zone_uuid}
-                          className={`sr-zone-chip sr-zone-chip--${z.zone_type}`}
-                        >
-                          <span className="sr-zone-chip-dot" />
-                          <span className="sr-zone-chip-name">
-                            {zoneTitle(z)}
-                          </span>
-                          {z.zone_type === "speed_limit" &&
-                            z.speed_limit_mph != null && (
-                              <span className="sr-zone-chip-limit">
-                                {z.speed_limit_mph} mph
-                              </span>
-                            )}
-                          {z.zone_type === "no_go" && (
-                            <span className="sr-zone-chip-limit">no entry</span>
-                          )}
-                        </div>
-                      ))}
-                  </div>
-                </section>
-              )}
-            </>
-          )}
-        </aside>
-      </div>
-
-      {/* ══ Bottom ride scroller ══ */}
-      {selUUID && (
-        <div className="sr-ride-bar">
-          <div className="sr-ride-bar-head">
-            <div className="sr-ride-bar-head-left">
-              <span className="sr-eyebrow">
-                {selEntry
-                  ? `${firstName(selEntry)}'s Ride History`
-                  : "Ride History"}
-              </span>
-              {!histBusy && history.length > 0 && (
-                <span className="sr-count">{history.length} rides</span>
-              )}
-              {histErr && <span className="sr-err-inline">{histErr}</span>}
-              {histBusy && <span className="sr-muted-inline">Loading…</span>}
-            </div>
-            <div className="sr-ride-bar-head-right">
-              {history.length > 3 && (
-                <span className="sr-ride-hint">Scroll to see all ›</span>
-              )}
-            </div>
-          </div>
-
-          {noRides && !histBusy && (
-            <p className="sr-ride-bar-empty">
-              No rides recorded for this student yet.
-            </p>
-          )}
-
-          {history.length > 0 && (
-            <div className="sr-ride-scroll" ref={rideScrollRef}>
-              {history.map((sess, idx) => {
-                const active = sess.session_id === selId;
-                const rideNum = idx + 1;
-                return (
-                  <div
-                    key={sess.session_id}
-                    className={`sr-ride-chip${active ? " sr-ride-chip--active" : ""}`}
-                    onClick={() => {
-                      if (!didDrag.current) setSelId(sess.session_id);
-                    }}
-                    data-active={active ? "true" : "false"}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ")
-                        setSelId(sess.session_id);
-                    }}
-                  >
-                    <div className="sr-chip-top-row">
-                      <span className="sr-chip-num">Ride #{rideNum}</span>
-                      {sess.points.length > 0 && (
-                        <button
-                          className="sr-chip-dl-btn"
-                          type="button"
-                          title={`Download Ride #${rideNum} GPS data`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            exportRideGPS(selEntry, sess, rideNum);
-                          }}
-                        >
-                          <svg
-                            width="11"
-                            height="11"
-                            viewBox="0 0 16 16"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="M8 2v9M4 8l4 4 4-4" />
-                            <rect
-                              x="2"
-                              y="13"
-                              width="12"
-                              height="1.5"
-                              rx="0.75"
-                              fill="currentColor"
-                              stroke="none"
-                            />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                    <span className="sr-chip-date">
-                      {fmtShort(getSessionStartedAt(sess))}
-                    </span>
-                    <span className="sr-chip-row">
-                      <span className="sr-chip-dist">
-                        {fmtDist(sess.distance_meters)}
-                      </span>
-                      <span className="sr-chip-sep">·</span>
-                      <span className="sr-chip-dur">
-                        {fmtDur(sess.duration_seconds)}
-                      </span>
-                    </span>
-                    <span className="sr-chip-badges">
-                      {getRouteHistoryEarnedPoints(sess) > 0 && (
-                        <span className="sr-badge sr-badge--green">
-                          +{getRouteHistoryEarnedPoints(sess).toLocaleString()} pts
-                        </span>
-                      )}
-                      {sess.penalty_events.length > 0 && (
-                        <span className="sr-badge sr-badge--red">
-                          {sess.penalty_events.length} violation
-                          {sess.penalty_events.length !== 1 ? "s" : ""}
-                        </span>
-                      )}
-                      {sess.visited_pois.length > 0 && (
-                        <span className="sr-badge sr-badge--gold">
-                          {sess.visited_pois.length} spot
-                          {sess.visited_pois.length !== 1 ? "s" : ""}
-                        </span>
-                      )}
-                      {sess.points.length === 0 && (
-                        <span className="sr-badge sr-badge--muted">no GPS</span>
-                      )}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
+              </div>
+            )}
+          </>
+        )}
+      </main>
     </div>
   );
 }
