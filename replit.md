@@ -44,6 +44,13 @@ Proxy targets can be overridden via environment variables:
   - Create form: side-by-side layout — form fields (numbered step sections) on left, sticky location map on right
   - Existing pack cards: compact header row (thumbnail photo + name + status/spots/campus/location badges + quick menu), expandable body (spot chips grid with per-spot QR actions, actions row, inline edit form, collapsible spot UUIDs)
   - Spot chips show QR status inline with "↓ QR" or "+ QR" micro-buttons
+- **Student Routes screen (`/routes`):**
+  - **Dual view mode** — segmented "By Student" / "All Students · By Time" toggle above the 3-column layout
+  - **By Student mode** (default): col 1 = student roster, col 2 = that student's rides (with filter bar), col 3 = detail panel
+  - **By Time mode**: col 1 = period overview (4-stat grid + student breakdown list), col 2 = ALL students' rides sorted newest-first, col 3 = detail panel for selected ride. Loads all students' histories with concurrency-4 background fetcher; progress bar shown during load.
+  - **Filter bar** (shared both modes): date pills (All/Today/Yesterday/This week), Source + Content dropdowns, search box. Search also matches student names in time mode.
+  - **Student breakdown** in time mode: click a student to narrow col 2 to just their rides (toggle off to clear); ride count badge turns red if they have violations.
+  - **Dashboard KPI deep-links**: "Rides today/yesterday/This week/POI visits" now navigate to `/routes?view=time&dateFilter=…` landing directly in time mode with the right date pre-selected.
 
 ## Deployment
 - **Target:** Static site

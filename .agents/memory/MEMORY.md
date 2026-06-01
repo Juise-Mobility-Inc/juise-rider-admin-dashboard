@@ -1,0 +1,1 @@
+- [Routes screen dual-mode pattern](routes-dual-mode.md) — By-Time mode loads all students via concurrency helper; adding new wrapping div to JSX return requires matching closing div or Vite/Oxc parse error at last `}`.

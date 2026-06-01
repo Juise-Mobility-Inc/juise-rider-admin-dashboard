@@ -1609,13 +1609,13 @@ export function DashboardScreen({
                                                         label="Rides today"
                                                         value={visuals.ridesToday.toLocaleString()}
                                                         detail={`${visuals.activeRidersToday.toLocaleString()} active riders`}
-                                                        to="/routes?dateFilter=today"
+                                                        to="/routes?view=time&dateFilter=today"
                                                 />
                                                 <DashboardKpi
                                                         label="Rides yesterday"
                                                         value={visuals.ridesYesterday.toLocaleString()}
                                                         detail="Daily comparison"
-                                                        to="/routes?dateFilter=yesterday"
+                                                        to="/routes?view=time&dateFilter=yesterday"
                                                 />
                                                 <DashboardKpi
                                                         label="This week"
@@ -1623,13 +1623,13 @@ export function DashboardScreen({
                                                         detail={`${visuals.activeRidersThisWeek.toLocaleString()} riders · ${formatMiles(
                                                                 visuals.distanceMetersThisWeek,
                                                         )} mi`}
-                                                        to="/routes?dateFilter=week"
+                                                        to="/routes?view=time&dateFilter=week"
                                                 />
                                                 <DashboardKpi
                                                         label="POI visits"
                                                         value={visuals.poiVisits.toLocaleString()}
                                                         detail={`${visuals.poiRankings.filter((point) => point.visits > 0).length.toLocaleString()} POIs getting the most traffic`}
-                                                        to="/routes?tab=pois&contentFilter=pois"
+                                                        to="/routes?view=time&tab=pois&contentFilter=pois"
                                                 />
                                         </div>
 
