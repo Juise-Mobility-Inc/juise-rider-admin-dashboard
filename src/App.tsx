@@ -84,6 +84,7 @@ import {
         writeDashboardSession,
         type DashboardContext,
 } from "./lib/storage";
+import { CampusDevicesScreen } from "./screens/dashboard/CampusDevicesScreen";
 import { ChallengesScreen } from "./screens/dashboard/ChallengesScreen";
 import { DashboardScreen } from "./screens/dashboard/DashboardScreen";
 import { NotificationsScreen } from "./screens/dashboard/NotificationsScreen";
@@ -121,6 +122,7 @@ type Section =
         | "students"
         | "notifications"
         | "vehicleRegistrations"
+        | "campusDevices"
         | "registrationFees"
         | "penaltyReports"
         | "studentRideViolations"
@@ -151,6 +153,11 @@ const dashboardSections: Array<{
                 section: "vehicleRegistrations",
                 label: "Vehicle Registrations",
                 path: "/vehicle-registrations",
+        },
+        {
+                section: "campusDevices",
+                label: "Campus Devices",
+                path: "/campus-devices",
         },
         {
                 section: "registrationFees",
@@ -4391,6 +4398,13 @@ function App() {
                         case "vehicleRegistrations":
                                 return (
                                         <VehicleRegistrationsScreen
+                                                activeSchoolId={activeSchoolId}
+                                                managedAppId={context.managedAppId}
+                                        />
+                                );
+                        case "campusDevices":
+                                return (
+                                        <CampusDevicesScreen
                                                 activeSchoolId={activeSchoolId}
                                                 managedAppId={context.managedAppId}
                                         />
