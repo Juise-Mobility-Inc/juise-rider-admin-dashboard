@@ -387,6 +387,14 @@ function startOfPastSevenDays(timestamp = Date.now()): number {
         return Math.floor((timestamp - 7 * 24 * 60 * 60 * 1000) / 1000);
 }
 
+function localDateStr(unixSeconds: number): string {
+        const date = new Date(unixSeconds * 1000);
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, "0");
+        const d = String(date.getDate()).padStart(2, "0");
+        return `${y}-${m}-${d}`;
+}
+
 function isInRange(timestamp: number, from: number, to?: number): boolean {
         if (!Number.isFinite(timestamp) || timestamp <= 0) {
                 return false;
@@ -875,6 +883,7 @@ function getInitials(name: string): string {
 }
 
 function PoiRankings({ rankings }: { rankings: PoiRankingEntry[] }) {
+        const navigate = useNavigate();
         const maxVisits = Math.max(1, ...rankings.map((point) => point.visits));
 
         return (
@@ -889,7 +898,12 @@ function PoiRankings({ rankings }: { rankings: PoiRankingEntry[] }) {
                                         );
 
                                         return (
-                                                <div className="dashboard-poi-ranking-row" key={point.key}>
+                                                <div
+                                                        className="dashboard-poi-ranking-row dashboard-poi-ranking-row--clickable"
+                                                        key={point.key}
+                                                        title="View on Ride Information"
+                                                        onClick={() => navigate("/student-ride-violations")}
+                                                >
                                                         <span className="dashboard-rank">{index + 1}</span>
                                                         <div className="dashboard-poi-ranking-main">
                                                                 <div className="reports-bar-row-top">
@@ -1137,15 +1151,9 @@ function RidePenaltySection({ visuals }: { visuals: DashboardVisuals }) {
                                                         <div
                                                                 className="dashboard-penalty-row dashboard-penalty-row--clickable"
                                                                 key={penalty.key}
-                                                                title="View on Student Routes map"
+                                                                title="View on Ride Information"
                                                                 onClick={() => {
-                                                                        const params = new URLSearchParams({
-                                                                                user: penalty.userUUID,
-                                                                                session: penalty.sessionId,
-                                                                                lat: String(penalty.lat),
-                                                                                lng: String(penalty.lng),
-                                                                        });
-                                                                        navigate(`/routes?${params.toString()}`);
+                                                                        navigate(`/student-ride-violations?student=${encodeURIComponent(penalty.userUUID)}`);
                                                                 }}>
                                                                 <div className="dashboard-penalty-copy">
                                                                         <strong>{penalty.name}</strong>
@@ -1605,32 +1613,42 @@ export function DashboardScreen({
                                                                 </div>
                                                         </div>
                                                 </article>
-                                                <DashboardKpi
-                                                        label="Rides today"
-                                                        value={visuals.ridesToday.toLocaleString()}
-                                                        detail={`${visuals.activeRidersToday.toLocaleString()} active riders`}
-                                                        to="/routes?view=time&dateFilter=today"
-                                                />
-                                                <DashboardKpi
-                                                        label="Rides yesterday"
-                                                        value={visuals.ridesYesterday.toLocaleString()}
-                                                        detail="Daily comparison"
-                                                        to="/routes?view=time&dateFilter=yesterday"
-                                                />
-                                                <DashboardKpi
-                                                        label="This week"
-                                                        value={visuals.ridesThisWeek.toLocaleString()}
-                                                        detail={`${visuals.activeRidersThisWeek.toLocaleString()} riders · ${formatMiles(
-                                                                visuals.distanceMetersThisWeek,
-                                                        )} mi`}
-                                                        to="/routes?view=time&dateFilter=week"
-                                                />
-                                                <DashboardKpi
-                                                        label="POI visits"
-                                                        value={visuals.poiVisits.toLocaleString()}
-                                                        detail={`${visuals.poiRankings.filter((point) => point.visits > 0).length.toLocaleString()} POIs getting the most traffic`}
-                                                        to="/routes?view=time&tab=pois&contentFilter=pois"
-                                                />
+                                                {(() => {
+                                                        const now = Date.now();
+                                                        const todayStr = localDateStr(startOfLocalDay(now));
+                                                        const yesterdayStr = localDateStr(startOfLocalDay(now) - 86400);
+                                                        const weekStartStr = localDateStr(startOfLocalWeek(now));
+                                                        return (
+                                                                <>
+                                                                        <DashboardKpi
+                                                                                label="Rides today"
+                                                                                value={visuals.ridesToday.toLocaleString()}
+                                                                                detail={`${visuals.activeRidersToday.toLocaleString()} active riders`}
+                                                                                to={`/student-ride-violations?startDate=${todayStr}&endDate=${todayStr}`}
+                                                                        />
+                                                                        <DashboardKpi
+                                                                                label="Rides yesterday"
+                                                                                value={visuals.ridesYesterday.toLocaleString()}
+                                                                                detail="Daily comparison"
+                                                                                to={`/student-ride-violations?startDate=${yesterdayStr}&endDate=${yesterdayStr}`}
+                                                                        />
+                                                                        <DashboardKpi
+                                                                                label="This week"
+                                                                                value={visuals.ridesThisWeek.toLocaleString()}
+                                                                                detail={`${visuals.activeRidersThisWeek.toLocaleString()} riders · ${formatMiles(
+                                                                                        visuals.distanceMetersThisWeek,
+                                                                                )} mi`}
+                                                                                to={`/student-ride-violations?startDate=${weekStartStr}&endDate=${todayStr}`}
+                                                                        />
+                                                                        <DashboardKpi
+                                                                                label="POI visits"
+                                                                                value={visuals.poiVisits.toLocaleString()}
+                                                                                detail={`${visuals.poiRankings.filter((point) => point.visits > 0).length.toLocaleString()} POIs getting the most traffic`}
+                                                                                to="/student-ride-violations"
+                                                                        />
+                                                                </>
+                                                        );
+                                                })()}
                                         </div>
 
                                         <div className="dashboard-main-grid">

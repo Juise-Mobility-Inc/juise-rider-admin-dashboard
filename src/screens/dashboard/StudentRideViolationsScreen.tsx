@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { LatLngBounds } from "leaflet";
 import {
   CircleMarker,
@@ -749,6 +750,7 @@ function SnippetMap({ record }: { record: RideViolationRecord }) {
 }
 
 export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Props) {
+  const [searchParams] = useSearchParams();
   const [loadState, setLoadState] = useState<LoadState>({
     status: "idle",
     message: "Ready to load student ride violations.",
@@ -760,12 +762,18 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [typeFilter, setTypeFilter] = useState<ViolationTypeFilter>("all");
-  const [selectedZoneUUIDs, setSelectedZoneUUIDs] = useState<Set<string>>(new Set());
+  const [selectedZoneUUIDs, setSelectedZoneUUIDs] = useState<Set<string>>(() => {
+    const raw = searchParams.get("zones");
+    return raw ? new Set(raw.split(",").filter(Boolean)) : new Set();
+  });
   const [zoneFilterOpen, setZoneFilterOpen] = useState(false);
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [startDate, setStartDate] = useState(() => searchParams.get("startDate") ?? "");
+  const [endDate, setEndDate] = useState(() => searchParams.get("endDate") ?? "");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
-  const [selectedStudentUUIDs, setSelectedStudentUUIDs] = useState<Set<string>>(new Set());
+  const [selectedStudentUUIDs, setSelectedStudentUUIDs] = useState<Set<string>>(() => {
+    const student = searchParams.get("student");
+    return student ? new Set([student]) : new Set();
+  });
   const [studentFilterOpen, setStudentFilterOpen] = useState(false);
   const [studentDropdownSearch, setStudentDropdownSearch] = useState("");
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
