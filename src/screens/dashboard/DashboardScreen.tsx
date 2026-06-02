@@ -882,53 +882,70 @@ function getInitials(name: string): string {
                 .toUpperCase();
 }
 
+const POI_RANKINGS_COLLAPSED_LIMIT = 5;
+
 function PoiRankings({ rankings }: { rankings: PoiRankingEntry[] }) {
         const navigate = useNavigate();
+        const [expanded, setExpanded] = useState(false);
         const maxVisits = Math.max(1, ...rankings.map((point) => point.visits));
+        const visible = expanded ? rankings : rankings.slice(0, POI_RANKINGS_COLLAPSED_LIMIT);
+        const hasMore = rankings.length > POI_RANKINGS_COLLAPSED_LIMIT;
 
         return (
                 <div className="dashboard-poi-ranking-list">
                         {rankings.length === 0 ? (
                                 <p className="reports-visual-empty">No POIs configured yet.</p>
                         ) : (
-                                rankings.map((point, index) => {
-                                        const width = Math.max(
-                                                4,
-                                                Math.round((point.visits / maxVisits) * 100),
-                                        );
+                                <>
+                                        {visible.map((point, index) => {
+                                                const width = Math.max(
+                                                        4,
+                                                        Math.round((point.visits / maxVisits) * 100),
+                                                );
 
-                                        return (
-                                                <div
-                                                        className="dashboard-poi-ranking-row dashboard-poi-ranking-row--clickable"
-                                                        key={point.key}
-                                                        title="View rides at this POI"
-                                                        onClick={() =>
-                                                                navigate(
-                                                                        `/student-ride-violations?pois=${encodeURIComponent(point.key)}`,
-                                                                )
-                                                        }
-                                                >
-                                                        <span className="dashboard-rank">{index + 1}</span>
-                                                        <div className="dashboard-poi-ranking-main">
-                                                                <div className="reports-bar-row-top">
-                                                                        <span>{point.title}</span>
-                                                                        <strong>{point.visits.toLocaleString()} visits</strong>
+                                                return (
+                                                        <div
+                                                                className="dashboard-poi-ranking-row dashboard-poi-ranking-row--clickable"
+                                                                key={point.key}
+                                                                title="View rides at this POI"
+                                                                onClick={() =>
+                                                                        navigate(
+                                                                                `/student-ride-violations?pois=${encodeURIComponent(point.key)}`,
+                                                                        )
+                                                                }
+                                                        >
+                                                                <span className="dashboard-rank">{index + 1}</span>
+                                                                <div className="dashboard-poi-ranking-main">
+                                                                        <div className="reports-bar-row-top">
+                                                                                <span>{point.title}</span>
+                                                                                <strong>{point.visits.toLocaleString()} visits</strong>
+                                                                        </div>
+                                                                        <div className="reports-bar-track">
+                                                                                <div
+                                                                                        className="reports-bar-fill dashboard-poi-ranking-fill"
+                                                                                        style={{ width: `${width}%` }}
+                                                                                />
+                                                                        </div>
+                                                                        <span className="dashboard-poi-ranking-meta">
+                                                                                {point.uniqueStudents.toLocaleString()} students ·{" "}
+                                                                                {point.bonusPoints.toLocaleString()} bonus points awarded ·{" "}
+                                                                                {point.configuredBonusPoints.toLocaleString()} pts per visit
+                                                                        </span>
                                                                 </div>
-                                                                <div className="reports-bar-track">
-                                                                        <div
-                                                                                className="reports-bar-fill dashboard-poi-ranking-fill"
-                                                                                style={{ width: `${width}%` }}
-                                                                        />
-                                                                </div>
-                                                                <span className="dashboard-poi-ranking-meta">
-                                                                        {point.uniqueStudents.toLocaleString()} students ·{" "}
-                                                                        {point.bonusPoints.toLocaleString()} bonus points awarded ·{" "}
-                                                                        {point.configuredBonusPoints.toLocaleString()} pts per visit
-                                                                </span>
                                                         </div>
-                                                </div>
-                                        );
-                                })
+                                                );
+                                        })}
+                                        {hasMore && (
+                                                <button
+                                                        className="dashboard-poi-ranking-toggle"
+                                                        onClick={() => setExpanded((e) => !e)}
+                                                >
+                                                        {expanded
+                                                                ? "Show less"
+                                                                : `Show ${rankings.length - POI_RANKINGS_COLLAPSED_LIMIT} more`}
+                                                </button>
+                                        )}
+                                </>
                         )}
                 </div>
         );

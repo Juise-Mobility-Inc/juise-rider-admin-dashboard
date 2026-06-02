@@ -4842,6 +4842,25 @@
         line-height: 1.4;
 }
 
+.dashboard-poi-ranking-toggle {
+        all: unset;
+        cursor: pointer;
+        display: block;
+        width: 100%;
+        text-align: center;
+        padding: 8px 0;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #112d4e;
+        border-top: 1px solid rgba(17, 45, 78, 0.1);
+        margin-top: 2px;
+        transition: color 0.15s;
+}
+
+.dashboard-poi-ranking-toggle:hover {
+        color: #27CC5E;
+}
+
 .dashboard-poi-card {
         overflow: hidden;
 }
