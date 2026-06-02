@@ -973,7 +973,7 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
 
   const filteredViolations = useMemo(() => {
     const startSec = startDate ? new Date(startDate).getTime() / 1000 : null;
-    const endSec = endDate ? new Date(endDate).getTime() / 1000 : null;
+    const endSec = endDate ? (new Date(endDate).getTime() / 1000) + 86399 : null;
 
     const filtered = allViolations.filter((record) => {
       if (selectedStudentUUIDs.size > 0 && !selectedStudentUUIDs.has(record.studentUserUUID)) {
@@ -1294,7 +1294,7 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
         <label className="rv-date-label">
           <span>From</span>
           <input
-            type="datetime-local"
+            type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
             className="rv-date-input"
@@ -1303,7 +1303,7 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
         <label className="rv-date-label">
           <span>To</span>
           <input
-            type="datetime-local"
+            type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
             className="rv-date-input"
