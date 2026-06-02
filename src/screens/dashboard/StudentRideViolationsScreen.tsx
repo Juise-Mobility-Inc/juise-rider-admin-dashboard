@@ -753,15 +753,19 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
   const [bundles, setBundles] = useState<StudentRouteBundle[]>([]);
   const [zones, setZones] = useState<SchoolZone[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [typeFilter, setTypeFilter] = useState<ViolationTypeFilter>("all");
-  const [zoneFilter, setZoneFilter] = useState("all");
+  const [selectedZoneUUIDs, setSelectedZoneUUIDs] = useState<Set<string>>(new Set());
+  const [zoneFilterOpen, setZoneFilterOpen] = useState(false);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [selectedStudentUUIDs, setSelectedStudentUUIDs] = useState<Set<string>>(new Set());
   const [studentFilterOpen, setStudentFilterOpen] = useState(false);
   const [studentDropdownSearch, setStudentDropdownSearch] = useState("");
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const studentFilterRef = useRef<HTMLDivElement>(null);
+  const zoneFilterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -902,6 +906,17 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
     return () => document.removeEventListener("mousedown", handleClick);
   }, [studentFilterOpen]);
 
+  useEffect(() => {
+    if (!zoneFilterOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (zoneFilterRef.current && !zoneFilterRef.current.contains(e.target as Node)) {
+        setZoneFilterOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [zoneFilterOpen]);
+
   const allViolations = useMemo(() => buildViolationRows(bundles, zones), [bundles, zones]);
   const zoneOptions = useMemo(
     () =>
@@ -939,53 +954,38 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
   }, [rosterEntries, studentDropdownSearch]);
 
   const filteredViolations = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return allViolations.filter((record) => {
+    const startSec = startDate ? new Date(startDate).getTime() / 1000 : null;
+    const endSec = endDate ? new Date(endDate).getTime() / 1000 : null;
+
+    const filtered = allViolations.filter((record) => {
       if (selectedStudentUUIDs.size > 0 && !selectedStudentUUIDs.has(record.studentUserUUID)) {
         return false;
       }
-      if (
-        sourceFilter === "tracked" &&
-        isUntrackedSession(record.session)
-      ) {
-        return false;
+      if (selectedZoneUUIDs.size > 0) {
+        const zoneId = record.matchingZone?.zone_uuid ?? record.event.zone_uuid;
+        if (!selectedZoneUUIDs.has(zoneId)) return false;
       }
-      if (
-        sourceFilter === "untracked" &&
-        !isUntrackedSession(record.session)
-      ) {
-        return false;
+      if (sourceFilter === "tracked" && isUntrackedSession(record.session)) return false;
+      if (sourceFilter === "untracked" && !isUntrackedSession(record.session)) return false;
+      if (typeFilter === "speed_limit" && record.event.zone_type !== "speed_limit") return false;
+      if (typeFilter === "no_go" && record.event.zone_type === "speed_limit") return false;
+      if (startSec !== null || endSec !== null) {
+        const at = normalizeUnixSeconds(record.event.occurred_at);
+        if (startSec !== null && at < startSec) return false;
+        if (endSec !== null && at > endSec) return false;
       }
-      if (typeFilter !== "all") {
-        if (typeFilter === "speed_limit" && record.event.zone_type !== "speed_limit") {
-          return false;
-        }
-        if (typeFilter === "no_go" && record.event.zone_type === "speed_limit") {
-          return false;
-        }
-      }
-      if (
-        zoneFilter !== "all" &&
-        (record.matchingZone?.zone_uuid ?? record.event.zone_uuid) !== zoneFilter
-      ) {
-        return false;
-      }
-      if (!query) {
-        return true;
-      }
-      return [
-        record.studentName,
-        record.studentSubline,
-        record.entry.user.email,
-        record.entry.user.username,
-        eventTitle(record.event, record.matchingZone),
-        record.event.reason,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(query);
+      return true;
     });
-  }, [allViolations, search, sourceFilter, typeFilter, zoneFilter, selectedStudentUUIDs]);
+
+    filtered.sort((a, b) => {
+      const diff =
+        normalizeUnixSeconds(a.event.occurred_at) -
+        normalizeUnixSeconds(b.event.occurred_at);
+      return sortOrder === "newest" ? -diff : diff;
+    });
+
+    return filtered;
+  }, [allViolations, sourceFilter, typeFilter, selectedZoneUUIDs, selectedStudentUUIDs, startDate, endDate, sortOrder]);
 
   useEffect(() => {
     if (filteredViolations.length === 0) {
@@ -1105,13 +1105,6 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
       </section>
 
       <section className="rv-filters" aria-label="Ride violation filters">
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search student, zone, reason..."
-        />
-
         {/* Student multi-select filter */}
         <div className="rv-student-filter" ref={studentFilterRef}>
           <button
@@ -1213,16 +1206,99 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
           <option value="speed_limit">Speed zones</option>
           <option value="no_go">No-go zones</option>
         </select>
+
+        {/* Zone multi-select filter */}
+        <div className="rv-student-filter" ref={zoneFilterRef}>
+          <button
+            type="button"
+            className={`rv-student-filter-btn${selectedZoneUUIDs.size > 0 ? " rv-student-filter-btn-active" : ""}`}
+            onClick={() => setZoneFilterOpen((o) => !o)}
+          >
+            <span>Zones</span>
+            {selectedZoneUUIDs.size > 0 ? (
+              <span className="rv-student-filter-badge">{selectedZoneUUIDs.size}</span>
+            ) : (
+              <span className="rv-student-filter-caret">▾</span>
+            )}
+          </button>
+          {zoneFilterOpen && (
+            <div className="rv-student-dropdown rv-zone-dropdown">
+              {selectedZoneUUIDs.size > 0 && (
+                <div className="rv-student-dropdown-header">
+                  <span className="rv-zone-selected-label">
+                    {selectedZoneUUIDs.size} selected
+                  </span>
+                  <button
+                    type="button"
+                    className="rv-student-clear-btn"
+                    onClick={() => setSelectedZoneUUIDs(new Set())}
+                  >
+                    Clear all
+                  </button>
+                </div>
+              )}
+              <div className="rv-student-dropdown-list">
+                {zoneOptions.length === 0 ? (
+                  <p className="rv-student-dropdown-empty">No zones available.</p>
+                ) : (
+                  zoneOptions.map(([zoneUUID, label]) => {
+                    const checked = selectedZoneUUIDs.has(zoneUUID);
+                    return (
+                      <label
+                        key={zoneUUID}
+                        className={`rv-student-row${checked ? " rv-student-row-checked" : ""}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setSelectedZoneUUIDs((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(zoneUUID)) next.delete(zoneUUID);
+                              else next.add(zoneUUID);
+                              return next;
+                            });
+                          }}
+                        />
+                        <span className="rv-student-info">
+                          <strong>{label}</strong>
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Date range */}
+        <label className="rv-date-label">
+          <span>From</span>
+          <input
+            type="datetime-local"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="rv-date-input"
+          />
+        </label>
+        <label className="rv-date-label">
+          <span>To</span>
+          <input
+            type="datetime-local"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="rv-date-input"
+          />
+        </label>
+
+        {/* Sort order */}
         <select
-          value={zoneFilter}
-          onChange={(event) => setZoneFilter(event.target.value)}
+          value={sortOrder}
+          onChange={(e) => setSortOrder(e.target.value as "newest" | "oldest")}
         >
-          <option value="all">All zones</option>
-          {zoneOptions.map(([zoneUUID, label]) => (
-            <option key={zoneUUID} value={zoneUUID}>
-              {label}
-            </option>
-          ))}
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
         </select>
       </section>
 
@@ -1230,7 +1306,7 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
         <section className="rv-list" aria-label="Filtered ride violations">
           <div className="rv-list-head">
             <strong>{filteredViolations.length.toLocaleString()} events</strong>
-            <span>Newest first</span>
+            <span>{sortOrder === "newest" ? "Newest first" : "Oldest first"}</span>
           </div>
           {loadState.status === "error" ? (
             <p className="rv-empty">{loadState.message}</p>
