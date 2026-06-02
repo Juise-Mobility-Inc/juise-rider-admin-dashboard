@@ -971,7 +971,7 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
       <section className="rv-hero">
         <div>
           <p className="eyebrow">Compliance Enforcement</p>
-          <h2>Student Ride Violations</h2>
+          <h2>Ride Information</h2>
           <p>
             Review speed and no-go events across all students, including
             background/untracked sessions.
