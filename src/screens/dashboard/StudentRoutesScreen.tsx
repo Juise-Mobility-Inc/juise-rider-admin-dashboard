@@ -971,12 +971,9 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
   const [zones, setZones] = useState<SchoolZone[]>([]);
   const [rosterBusy, setRosterBusy] = useState(false);
   const [rosterErr, setRosterErr] = useState("");
-  const [search, setSearch] = useState("");
 
   const [selUUID, setSelUUID] = useState<string | null>(null);
   const [history, setHistory] = useState<StudentRouteHistorySession[]>([]);
-  const [histBusy, setHistBusy] = useState(false);
-  const [histErr, setHistErr] = useState("");
   const [selId, setSelId] = useState<string | null>(null);
 
   // lat/lng to fly to once the right session is loaded
@@ -1002,13 +999,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
   });
   const [sessionSearch, setSessionSearch] = useState("");
 
-  // ── View mode ──
-  const [viewMode, setViewMode] = useState<"student" | "time">(() => {
-    const v = searchParams.get("view");
-    return v === "time" ? "time" : "student";
-  });
-
-  // All-student bundles for time mode
+  // All-student bundles
   const [allBundles, setAllBundles] = useState<
     Array<{
       entry: SchoolStudentRosterEntry;
@@ -1064,9 +1055,8 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
     };
   }, [managedAppId, activeSchoolId]);
 
-  // Load every student's history when entering time mode
+  // Load every student's history once the roster is ready
   useEffect(() => {
-    if (viewMode !== "time") return;
     if (allBundlesStatus !== "idle") return;
     if (rosterBusy || roster.length === 0) return;
     let cancelled = false;
@@ -1113,54 +1103,12 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
       cancelled = true;
     };
   }, [
-    viewMode,
     allBundlesStatus,
     roster,
     rosterBusy,
     managedAppId,
     activeSchoolId,
   ]);
-
-  const selectStudent = useCallback(
-    async (
-      entry: SchoolStudentRosterEntry,
-      targetSessionId?: string | null,
-      pinLat?: number | null,
-      pinLng?: number | null,
-    ) => {
-      const u = uuid(entry);
-      if (u === selUUID && !targetSessionId) return;
-      setSelUUID(u);
-      setHistory([]);
-      setSelId(null);
-      setFocusPin(null);
-      setHistBusy(true);
-      setHistErr("");
-      try {
-        const sessions = await fetchStudentRouteHistory(
-          managedAppId,
-          activeSchoolId,
-          u,
-        );
-        const sortedSessions = sortRouteSessions(sessions);
-        setHistory(sortedSessions);
-        const target = targetSessionId
-          ? sortedSessions.find((s) => s.session_id === targetSessionId)
-          : null;
-        if (target) {
-          setSelId(target.session_id);
-          if (pinLat != null && pinLng != null) setFocusPin([pinLat, pinLng]);
-        } else if (sortedSessions.length > 0) {
-          setSelId(sortedSessions[0].session_id);
-        }
-      } catch (e) {
-        setHistErr(e instanceof Error ? e.message : "Failed to load routes");
-      } finally {
-        setHistBusy(false);
-      }
-    },
-    [managedAppId, activeSchoolId, selUUID],
-  );
 
   const selectCombinedRide = useCallback(
     (record: CombinedRide) => {
@@ -1174,34 +1122,26 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
     [allBundles],
   );
 
-  // Deep-link: once roster loads, auto-select the student from URL params
+  // Deep-link: once bundles are ready, auto-select the student+session from URL params
   useEffect(() => {
-    if (
-      dlConsumed.current ||
-      !dlUser.current ||
-      rosterBusy ||
-      roster.length === 0
-    )
-      return;
-    const entry = roster.find((e) => uuid(e) === dlUser.current);
-    if (!entry) return;
+    if (dlConsumed.current || !dlUser.current) return;
+    if (allBundlesStatus !== "ready") return;
+    const bundle = allBundles.find((b) => uuid(b.entry) === dlUser.current);
+    if (!bundle) return;
     dlConsumed.current = true;
-    const lat = dlLat.current ? parseFloat(dlLat.current) : null;
-    const lng = dlLng.current ? parseFloat(dlLng.current) : null;
-    selectStudent(entry, dlSession.current, lat, lng);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roster, rosterBusy]);
-
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return roster;
-    return roster.filter(
-      (e) =>
-        fullName(e).toLowerCase().includes(q) ||
-        subline(e).toLowerCase().includes(q),
-    );
-  }, [roster, search]);
+    setTimeStudentFilter(dlUser.current);
+    const target = dlSession.current
+      ? bundle.history.find((s) => s.session_id === dlSession.current)
+      : bundle.history[0];
+    if (target) {
+      const rideNum =
+        bundle.history.findIndex((s) => s.session_id === target.session_id) + 1;
+      selectCombinedRide({ entry: bundle.entry, session: target, rideNum });
+      const lat = dlLat.current ? parseFloat(dlLat.current) : null;
+      const lng = dlLng.current ? parseFloat(dlLng.current) : null;
+      if (lat != null && lng != null) setFocusPin([lat, lng]);
+    }
+  }, [allBundlesStatus, allBundles, selectCombinedRide]);
 
   const selEntry = useMemo(
     () => roster.find((e) => uuid(e) === selUUID) ?? null,
@@ -1255,8 +1195,6 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
   }, [selId, showRoute]);
 
   const hasGPS = !!(selSess && selSess.points.length > 0);
-  const noStudent = !selUUID;
-  const noRides = !!(selUUID && !histBusy && history.length === 0 && !histErr);
   const noGPS = !!(selSess && selSess.points.length === 0);
   const selectedEarnedPoints = selSess
     ? getRouteHistoryEarnedPoints(selSess)
@@ -1285,79 +1223,8 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
     0,
   );
 
-  const filteredHistory = useMemo(() => {
-    const now = new Date();
-    const todayStart =
-      new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() /
-      1000;
-    const yesterdayStart = todayStart - 86400;
-    const weekStart = todayStart - 6 * 86400;
-
-    let result = history;
-
-    if (dateFilter === "today") {
-      result = result.filter((s) => getSessionStartedAt(s) >= todayStart);
-    } else if (dateFilter === "yesterday") {
-      result = result.filter((s) => {
-        const t = getSessionStartedAt(s);
-        return t >= yesterdayStart && t < todayStart;
-      });
-    } else if (dateFilter === "week") {
-      result = result.filter((s) => getSessionStartedAt(s) >= weekStart);
-    }
-
-    if (sourceFilter === "tracked") {
-      result = result.filter(isTrackedRideSession);
-    } else if (sourceFilter === "background") {
-      result = result.filter((s) => !isTrackedRideSession(s));
-    }
-
-    if (contentFilter === "violations") {
-      result = result.filter((s) => s.penalty_events.length > 0);
-    } else if (contentFilter === "pois") {
-      result = result.filter((s) => s.visited_pois.length > 0);
-    }
-
-    const q = sessionSearch.trim().toLowerCase();
-    if (q) {
-      result = result.filter((s) => {
-        const d = new Date(getSessionStartedAt(s) * 1000).toLocaleDateString(
-          "en-US",
-          { month: "short", day: "numeric", year: "numeric" },
-        );
-        return (
-          d.toLowerCase().includes(q) ||
-          (s.trip_mode ?? "").toLowerCase().includes(q)
-        );
-      });
-    }
-
-    return result;
-  }, [history, dateFilter, sourceFilter, contentFilter, sessionSearch]);
-
-  const noMatchingRides = !!(
-    selUUID &&
-    !histBusy &&
-    history.length > 0 &&
-    filteredHistory.length === 0
-  );
-
-  const filteredViolationCount = filteredHistory.reduce(
-    (t, s) => t + s.penalty_events.length,
-    0,
-  );
-  const filteredPoiCount = filteredHistory.reduce(
-    (t, s) => t + s.visited_pois.length,
-    0,
-  );
-  const filteredGpsPointCount = filteredHistory.reduce(
-    (t, s) => t + s.points.length,
-    0,
-  );
-
-  // ── Time-mode computed ──
+  // ── Combined rides (all students) ──
   const combinedRides = useMemo((): CombinedRide[] => {
-    if (viewMode !== "time") return [];
     const out: CombinedRide[] = [];
     for (const bundle of allBundles) {
       bundle.history.forEach((session, idx) => {
@@ -1369,7 +1236,7 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
         getSessionStartedAt(b.session) - getSessionStartedAt(a.session),
     );
     return out;
-  }, [viewMode, allBundles]);
+  }, [allBundles]);
 
   const dateFilteredCombinedRides = useMemo(
     () =>
@@ -1497,54 +1364,9 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
 
   return (
     <div className="sr-screen">
-      {/* ── View mode bar ── */}
+      {/* ── Status bar ── */}
       <div className="sr-mode-bar">
-        <div className="sr-mode-seg">
-          <button
-            type="button"
-            className={`sr-mode-btn${viewMode === "student" ? " sr-mode-btn--active" : ""}`}
-            onClick={() => setViewMode("student")}
-          >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
-            </svg>
-            By Student
-          </button>
-          <button
-            type="button"
-            className={`sr-mode-btn${viewMode === "time" ? " sr-mode-btn--active" : ""}`}
-            onClick={() => setViewMode("time")}
-          >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-            All Students · By Time
-          </button>
-        </div>
-        {viewMode === "time" && dateFilter !== "all" && (
+        {dateFilter !== "all" && (
           <span className="sr-mode-period-chip">
             {dateFilter === "today"
               ? "Today"
@@ -1553,12 +1375,12 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                 : "This Week"}
           </span>
         )}
-        {viewMode === "time" && allBundlesStatus === "loading" && (
+        {allBundlesStatus === "loading" && (
           <span className="sr-mode-loading">
             Loading {allBundlesDone} / {roster.length} students…
           </span>
         )}
-        {viewMode === "time" && allBundlesStatus === "ready" && (
+        {allBundlesStatus === "ready" && (
           <span className="sr-mode-ready">
             {combinedRides.length} rides across {roster.length} students
           </span>
@@ -1566,196 +1388,124 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
       </div>
 
       <div className="sr-layout">
-        {/* ── Col 1: Student roster (student mode) / Overview (time mode) ── */}
+        {/* ── Col 1: Student filter list ── */}
         <aside className="sr-sidebar">
-          {viewMode === "student" ? (
-            <div className="sr-sidebar-body">
-              <div className="sr-sidebar-head">
-                <span className="sr-eyebrow">Students</span>
-                {!rosterBusy && roster.length > 0 && (
-                  <span className="sr-count">{roster.length}</span>
-                )}
+          <div className="sr-sidebar-body">
+            <div className="sr-sidebar-head">
+              <span className="sr-eyebrow">Students</span>
+              {allBundlesStatus === "loading" && (
+                <span className="sr-muted-inline">Loading…</span>
+              )}
+              {allBundlesStatus === "ready" && (
+                <span className="sr-count">{roster.length}</span>
+              )}
+            </div>
+
+            {allBundlesStatus === "loading" && roster.length > 0 && (
+              <div className="sr-time-progress">
+                <div className="sr-time-progress-track">
+                  <div
+                    className="sr-time-progress-fill"
+                    style={{
+                      width: `${Math.round((allBundlesDone / roster.length) * 100)}%`,
+                    }}
+                  />
+                </div>
+                <span className="sr-time-progress-label">
+                  {allBundlesDone} / {roster.length}
+                </span>
               </div>
-              <div className="sr-search-wrap">
-                <input
-                  className="sr-search"
-                  type="search"
-                  placeholder="Search…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
+            )}
+
+            <div className="sr-time-period-stats">
+              <div className="sr-time-period-stat">
+                <span>Rides</span>
+                <strong>{timePeriodStats.rides}</strong>
               </div>
-              {rosterErr && <p className="sr-sidebar-err">{rosterErr}</p>}
-              <div className="sr-student-list">
-                {rosterBusy && (
-                  <div className="sr-skel-list">
-                    {[...Array(5)].map((_, i) => (
-                      <div key={i} className="sr-skel-row" />
-                    ))}
-                  </div>
-                )}
-                {!rosterBusy && filtered.length === 0 && !rosterErr && (
-                  <p className="sr-empty-hint">
-                    {search ? "No match." : "No students."}
-                  </p>
-                )}
-                {!rosterBusy &&
-                  filtered.map((entry) => {
-                    const id = uuid(entry);
-                    const active = id === selUUID;
-                    return (
-                      <button
-                        key={id}
-                        className={`sr-student-row${active ? " sr-student-row--active" : ""}`}
-                        onClick={() => selectStudent(entry)}
-                      >
-                        <div className="sr-avatar">
-                          <span className="sr-avatar-initials">
-                            {initials(entry)}
-                          </span>
-                          {active && <span className="sr-avatar-dot" />}
-                        </div>
-                        <div className="sr-student-text">
-                          <span className="sr-student-name">
-                            {fullName(entry)}
-                          </span>
-                          {subline(entry) && (
-                            <span className="sr-student-sub">
-                              {subline(entry)}
-                            </span>
-                          )}
-                        </div>
-                        {active && histBusy && <span className="sr-spinner" />}
-                        {active && !histBusy && history.length > 0 && (
-                          <span className="sr-ride-count">{history.length}</span>
-                        )}
-                      </button>
-                    );
-                  })}
+              <div className="sr-time-period-stat sr-time-period-stat--red">
+                <span>Violations</span>
+                <strong>{timePeriodStats.violations}</strong>
+              </div>
+              <div className="sr-time-period-stat sr-time-period-stat--gold">
+                <span>Check-ins</span>
+                <strong>{timePeriodStats.checkIns}</strong>
+              </div>
+              <div className="sr-time-period-stat">
+                <span>Active</span>
+                <strong>{timePeriodStats.uniqueStudents}</strong>
               </div>
             </div>
-          ) : (
-            /* ── Time mode: period overview + student breakdown ── */
-            <div className="sr-sidebar-body">
-              <div className="sr-sidebar-head">
-                <span className="sr-eyebrow">Overview</span>
-                {allBundlesStatus === "loading" && (
-                  <span className="sr-muted-inline">Loading…</span>
-                )}
-                {allBundlesStatus === "ready" && (
-                  <span className="sr-count">{roster.length}</span>
-                )}
-              </div>
 
-              {allBundlesStatus === "loading" && roster.length > 0 && (
-                <div className="sr-time-progress">
-                  <div className="sr-time-progress-track">
-                    <div
-                      className="sr-time-progress-fill"
-                      style={{
-                        width: `${Math.round((allBundlesDone / roster.length) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                  <span className="sr-time-progress-label">
-                    {allBundlesDone} / {roster.length}
-                  </span>
+            {rosterErr && <p className="sr-sidebar-err">{rosterErr}</p>}
+
+            {/* Student list — click to filter col 2, click again to clear */}
+            <div className="sr-student-list">
+              {(rosterBusy || allBundlesStatus === "loading") && (
+                <div className="sr-skel-list">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="sr-skel-row" />
+                  ))}
                 </div>
               )}
-
-              <div className="sr-time-period-stats">
-                <div className="sr-time-period-stat">
-                  <span>Rides</span>
-                  <strong>{timePeriodStats.rides}</strong>
-                </div>
-                <div className="sr-time-period-stat sr-time-period-stat--red">
-                  <span>Violations</span>
-                  <strong>{timePeriodStats.violations}</strong>
-                </div>
-                <div className="sr-time-period-stat sr-time-period-stat--gold">
-                  <span>Check-ins</span>
-                  <strong>{timePeriodStats.checkIns}</strong>
-                </div>
-                <div className="sr-time-period-stat">
-                  <span>Students</span>
-                  <strong>{timePeriodStats.uniqueStudents}</strong>
-                </div>
-              </div>
-
-              {/* Student breakdown — click to filter col 2 by student */}
-              <div className="sr-student-list">
-                {allBundlesStatus === "loading" && (
-                  <div className="sr-skel-list">
-                    {[...Array(5)].map((_, i) => (
-                      <div key={i} className="sr-skel-row" />
-                    ))}
-                  </div>
+              {timeStudentBreakdown.map((item) => {
+                const id = uuid(item.entry);
+                const active = timeStudentFilter === id;
+                return (
+                  <button
+                    key={id}
+                    className={`sr-student-row${active ? " sr-student-row--active" : ""}`}
+                    onClick={() =>
+                      setTimeStudentFilter((f) => (f === id ? null : id))
+                    }
+                  >
+                    <div className="sr-avatar">
+                      <span className="sr-avatar-initials">
+                        {initials(item.entry)}
+                      </span>
+                      {active && <span className="sr-avatar-dot" />}
+                    </div>
+                    <div className="sr-student-text">
+                      <span className="sr-student-name">
+                        {fullName(item.entry)}
+                      </span>
+                      <span className="sr-student-sub">
+                        {item.rideCount} ride
+                        {item.rideCount !== 1 ? "s" : ""}
+                        {item.violations > 0
+                          ? ` · ${item.violations} viol.`
+                          : ""}
+                      </span>
+                    </div>
+                    {item.rideCount > 0 && (
+                      <span
+                        className={`sr-ride-count${item.violations > 0 ? " sr-ride-count--red" : ""}`}
+                      >
+                        {item.rideCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+              {allBundlesStatus === "ready" &&
+                timeStudentBreakdown.length === 0 && (
+                  <p className="sr-context-empty sr-context-empty--padded">
+                    No rides in this period.
+                  </p>
                 )}
-                {timeStudentBreakdown.map((item) => {
-                  const id = uuid(item.entry);
-                  const active = timeStudentFilter === id;
-                  return (
-                    <button
-                      key={id}
-                      className={`sr-student-row${active ? " sr-student-row--active" : ""}`}
-                      onClick={() =>
-                        setTimeStudentFilter((f) => (f === id ? null : id))
-                      }
-                    >
-                      <div className="sr-avatar">
-                        <span className="sr-avatar-initials">
-                          {initials(item.entry)}
-                        </span>
-                        {active && <span className="sr-avatar-dot" />}
-                      </div>
-                      <div className="sr-student-text">
-                        <span className="sr-student-name">
-                          {fullName(item.entry)}
-                        </span>
-                        <span className="sr-student-sub">
-                          {item.rideCount} ride
-                          {item.rideCount !== 1 ? "s" : ""}
-                          {item.violations > 0
-                            ? ` · ${item.violations} viol.`
-                            : ""}
-                        </span>
-                      </div>
-                      {item.rideCount > 0 && (
-                        <span
-                          className={`sr-ride-count${item.violations > 0 ? " sr-ride-count--red" : ""}`}
-                        >
-                          {item.rideCount}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-                {allBundlesStatus === "ready" &&
-                  timeStudentBreakdown.length === 0 && (
-                    <p className="sr-context-empty sr-context-empty--padded">
-                      No rides in this period.
-                    </p>
-                  )}
-              </div>
             </div>
-          )}
+          </div>
         </aside>
 
-      {/* ── Col 2: Session list / All rides (time mode) ── */}
-      <aside className="sr-session-list">
-        <div className="sr-session-list-head">
-          <strong>
-            {viewMode === "time"
-              ? timeStudentFilter
+        {/* ── Col 2: All rides ── */}
+        <aside className="sr-session-list">
+          <div className="sr-session-list-head">
+            <strong>
+              {timeStudentFilter
                 ? `${firstName(allBundles.find((b) => uuid(b.entry) === timeStudentFilter)?.entry)} · Rides`
-                : "All Rides"
-              : selEntry
-                ? `${firstName(selEntry)}'s Rides`
-                : "Rides"}
-          </strong>
-          <div className="sr-session-list-head-right">
-            {viewMode === "time" ? (
-              allBundlesStatus === "ready" ? (
+                : "All Rides"}
+            </strong>
+            <div className="sr-session-list-head-right">
+              {allBundlesStatus === "ready" ? (
                 <span className="sr-count">
                   {filteredCombinedRides.length}
                   {filteredCombinedRides.length !== combinedRides.length
@@ -1764,184 +1514,64 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                 </span>
               ) : allBundlesStatus === "loading" ? (
                 <span className="sr-muted-inline">Loading…</span>
-              ) : null
-            ) : (
-              <>
-                {!histBusy && history.length > 0 && (
-                  <span className="sr-count">
-                    {filteredHistory.length}
-                    {filteredHistory.length !== history.length
-                      ? `/${history.length}`
-                      : ""}
-                  </span>
-                )}
-                {histBusy && (
-                  <span className="sr-muted-inline">Loading…</span>
-                )}
-                {histErr && (
-                  <span className="sr-err-inline">{histErr}</span>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* ── Filter bar (shared by both modes) ── */}
-        <div className="sr-session-filter">
-          <div className="sr-filter-pills">
-            {(["all", "today", "yesterday", "week"] as const).map((f) => (
-              <button
-                key={f}
-                type="button"
-                className={`sr-filter-pill${dateFilter === f ? " sr-filter-pill--active" : ""}`}
-                onClick={() => setDateFilter(f)}
-              >
-                {f === "all"
-                  ? "All"
-                  : f === "today"
-                    ? "Today"
-                    : f === "yesterday"
-                      ? "Yesterday"
-                      : "This week"}
-              </button>
-            ))}
-          </div>
-          <div className="sr-filter-row">
-            <select
-              className="sr-filter-select"
-              value={sourceFilter}
-              onChange={(e) =>
-                setSourceFilter(e.target.value as SourceFilter)
-              }
-            >
-              <option value="all">All rides</option>
-              <option value="tracked">Tracked only</option>
-              <option value="background">Background only</option>
-            </select>
-            <select
-              className="sr-filter-select"
-              value={contentFilter}
-              onChange={(e) =>
-                setContentFilter(e.target.value as ContentFilter)
-              }
-            >
-              <option value="all">All content</option>
-              <option value="violations">Has violations</option>
-              <option value="pois">Has check-ins</option>
-            </select>
-          </div>
-          <input
-            type="search"
-            className="sr-filter-search"
-            placeholder={
-              viewMode === "time"
-                ? "Search by student, date, or mode…"
-                : "Search by date or mode…"
-            }
-            value={sessionSearch}
-            onChange={(e) => setSessionSearch(e.target.value)}
-          />
-        </div>
-
-        {/* ── Student mode body ── */}
-        {viewMode === "student" && (
-          <>
-            {selEntry && !histBusy && filteredHistory.length > 0 && (
-              <div className="sr-session-mini-stats">
-                <div className="sr-session-mini-stat">
-                  <span>Violations</span>
-                  <strong
-                    className={filteredViolationCount > 0 ? "sr-val--red" : ""}
-                  >
-                    {filteredViolationCount}
-                  </strong>
-                </div>
-                <div className="sr-session-mini-stat">
-                  <span>Check-ins</span>
-                  <strong>{filteredPoiCount}</strong>
-                </div>
-                <div className="sr-session-mini-stat">
-                  <span>GPS pts</span>
-                  <strong>{filteredGpsPointCount.toLocaleString()}</strong>
-                </div>
-              </div>
-            )}
-            {!selUUID && (
-              <p className="sr-context-empty sr-context-empty--padded">
-                Select a student to view their rides.
-              </p>
-            )}
-            {noRides && (
-              <p className="sr-context-empty sr-context-empty--padded">
-                No rides recorded yet.
-              </p>
-            )}
-            {noMatchingRides && (
-              <p className="sr-context-empty sr-context-empty--padded">
-                No rides match the current filters.
-              </p>
-            )}
-            <div className="sr-session-item-list">
-              {filteredHistory.map((sess, idx) => {
-                const active = sess.session_id === selId;
-                const rideNum = idx + 1;
-                const earnedPts = getRouteHistoryEarnedPoints(sess);
-                return (
-                  <button
-                    key={sess.session_id}
-                    className={`sr-session-item${active ? " sr-session-item--active" : ""}`}
-                    onClick={() => setSelId(sess.session_id)}
-                  >
-                    <div className="sr-session-item-top">
-                      <span className="sr-session-item-num">
-                        Ride #{rideNum}
-                      </span>
-                      <small className="sr-session-item-date">
-                        {fmtShort(getSessionStartedAt(sess))}
-                      </small>
-                    </div>
-                    <div className="sr-session-item-row">
-                      <span>{fmtDist(sess.distance_meters)}</span>
-                      <span className="sr-chip-sep">·</span>
-                      <span>{fmtDur(sess.duration_seconds)}</span>
-                      <span className="sr-chip-sep">·</span>
-                      <span>
-                        {(sess.top_speed_mps * 2.237).toFixed(0)} mph top
-                      </span>
-                    </div>
-                    <div className="sr-session-item-badges">
-                      {earnedPts > 0 && (
-                        <span className="sr-badge sr-badge--green">
-                          +{earnedPts.toLocaleString()} pts
-                        </span>
-                      )}
-                      {sess.penalty_events.length > 0 && (
-                        <span className="sr-badge sr-badge--red">
-                          {sess.penalty_events.length} violation
-                          {sess.penalty_events.length !== 1 ? "s" : ""}
-                        </span>
-                      )}
-                      {sess.visited_pois.length > 0 && (
-                        <span className="sr-badge sr-badge--gold">
-                          {sess.visited_pois.length} check-in
-                          {sess.visited_pois.length !== 1 ? "s" : ""}
-                        </span>
-                      )}
-                      {sess.points.length === 0 && (
-                        <span className="sr-badge sr-badge--muted">
-                          no GPS
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
+              ) : null}
             </div>
-          </>
-        )}
+          </div>
 
-        {/* ── Time mode body ── */}
-        {viewMode === "time" && (
+          {/* ── Filter bar ── */}
+          <div className="sr-session-filter">
+            <div className="sr-filter-pills">
+              {(["all", "today", "yesterday", "week"] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  className={`sr-filter-pill${dateFilter === f ? " sr-filter-pill--active" : ""}`}
+                  onClick={() => setDateFilter(f)}
+                >
+                  {f === "all"
+                    ? "All"
+                    : f === "today"
+                      ? "Today"
+                      : f === "yesterday"
+                        ? "Yesterday"
+                        : "This week"}
+                </button>
+              ))}
+            </div>
+            <div className="sr-filter-row">
+              <select
+                className="sr-filter-select"
+                value={sourceFilter}
+                onChange={(e) =>
+                  setSourceFilter(e.target.value as SourceFilter)
+                }
+              >
+                <option value="all">All rides</option>
+                <option value="tracked">Tracked only</option>
+                <option value="background">Background only</option>
+              </select>
+              <select
+                className="sr-filter-select"
+                value={contentFilter}
+                onChange={(e) =>
+                  setContentFilter(e.target.value as ContentFilter)
+                }
+              >
+                <option value="all">All content</option>
+                <option value="violations">Has violations</option>
+                <option value="pois">Has check-ins</option>
+              </select>
+            </div>
+            <input
+              type="search"
+              className="sr-filter-search"
+              placeholder="Search by student, date, or mode…"
+              value={sessionSearch}
+              onChange={(e) => setSessionSearch(e.target.value)}
+            />
+          </div>
+
+          {/* ── Rides body ── */}
           <>
             {filteredCombinedRides.length > 0 && (
               <div className="sr-session-mini-stats">
@@ -2038,10 +1668,9 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
               })}
             </div>
           </>
-        )}
-      </aside>
+        </aside>
 
-      {/* ── Col 3: Detail panel ── */}
+        {/* ── Col 3: Detail panel ── */}
       <main className="sr-detail-panel">
         {!selSess ? (
           <div className="sr-detail-empty">
@@ -2059,20 +1688,8 @@ export function StudentRoutesScreen({ activeSchoolId, managedAppId }: Props) {
                 <path d="M9 17H5a2 2 0 00-2 2v0M13 17h6M3 3h18M3 8h18M3 13h10" />
               </svg>
             </div>
-            <strong>
-              {!selUUID
-                ? "Select a student"
-                : histBusy
-                  ? "Loading rides…"
-                  : "Select a ride"}
-            </strong>
-            <p>
-              {!selUUID
-                ? "Choose a student from the roster, then pick a ride to view full data."
-                : histBusy
-                  ? "Fetching ride history…"
-                  : "Choose a ride from the list to view stats, violations, and more."}
-            </p>
+            <strong>Select a ride</strong>
+            <p>Choose a ride from the list to view stats, violations, and more.</p>
           </div>
         ) : (
           <>
