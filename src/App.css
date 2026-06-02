@@ -12634,3 +12634,209 @@
   .cd-section { margin: 14px 14px; }
   .cd-detail-header { padding: 16px; }
 }
+
+/* ── Campus Devices — table button & overlay ── */
+.cd-table-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 9px 12px;
+  margin-bottom: 10px;
+  border: 1.5px solid #27CC5E;
+  border-radius: 8px;
+  background: #fff;
+  color: #27CC5E;
+  font-size: 0.83rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  justify-content: center;
+}
+.cd-table-btn:hover:not(:disabled) {
+  background: #27CC5E;
+  color: #fff;
+}
+.cd-table-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Overlay backdrop */
+.cd-table-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 45, 78, 0.55);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+/* Modal */
+.cd-table-modal {
+  background: #fff;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 1100px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  overflow: hidden;
+}
+
+.cd-table-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #e2e6ea;
+  flex-shrink: 0;
+}
+
+.cd-table-modal-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #112d4e;
+  margin: 0 0 3px;
+}
+
+.cd-table-modal-sub {
+  font-size: 0.78rem;
+  color: #6c757d;
+  margin: 0;
+}
+
+.cd-table-modal-close {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: #f0f2f4;
+  color: #495057;
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.cd-table-modal-close:hover { background: #e2e6ea; }
+
+/* Scrollable table area */
+.cd-table-scroll {
+  flex: 1;
+  overflow: auto;
+}
+
+/* Table */
+.cd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.cd-table thead th {
+  position: sticky;
+  top: 0;
+  background: #f8f9fa;
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6c757d;
+  border-bottom: 1px solid #e2e6ea;
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.cd-table-row {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.cd-table-row:hover td { background: #f5fbf7; }
+.cd-table-row-selected td { background: #edfbf2 !important; }
+
+.cd-table tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f0f2f4;
+  color: #112d4e;
+  vertical-align: middle;
+}
+
+.cd-table-student-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 170px;
+}
+
+.cd-table-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid #e2e6ea;
+  flex-shrink: 0;
+}
+
+.cd-table-avatar-initials {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #112d4e;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cd-table-name {
+  font-weight: 600;
+  color: #112d4e;
+  white-space: nowrap;
+}
+
+.cd-table-sid {
+  font-size: 0.7rem;
+  color: #6c757d;
+}
+
+.cd-table-device {
+  max-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cd-table-active-v {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  background: #dc3545;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0 6px;
+}
+
+.cd-table-zero { color: #adb5bd; }
+
+.cd-table-date {
+  white-space: nowrap;
+  color: #6c757d;
+  font-size: 0.78rem;
+}

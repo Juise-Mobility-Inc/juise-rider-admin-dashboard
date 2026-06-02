@@ -121,6 +121,7 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
   const [selectedUUID, setSelectedUUID] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [showTable, setShowTable] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -281,6 +282,17 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                   : ""}
             </span>
           </div>
+          <button
+            type="button"
+            className="cd-table-btn"
+            disabled={loadState !== "ready" || entries.length === 0}
+            onClick={() => setShowTable(true)}
+          >
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M0 2a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1zm0 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1zm0 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1z"/>
+            </svg>
+            View all as table
+          </button>
           <input
             type="search"
             className="cd-search"
@@ -590,6 +602,118 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
               : "Select a device from the list to view details."}
           </p>
         </main>
+      )}
+
+      {/* ── Table overlay ── */}
+      {showTable && (
+        <div className="cd-table-overlay" onClick={() => setShowTable(false)}>
+          <div className="cd-table-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="cd-table-modal-head">
+              <div>
+                <h3 className="cd-table-modal-title">All Registered Devices</h3>
+                <p className="cd-table-modal-sub">
+                  {entries.length.toLocaleString()} device{entries.length !== 1 ? "s" : ""} · click a row to inspect
+                </p>
+              </div>
+              <button
+                type="button"
+                className="cd-table-modal-close"
+                onClick={() => setShowTable(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="cd-table-scroll">
+              <table className="cd-table">
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>Device</th>
+                    <th>Type</th>
+                    <th>Color</th>
+                    <th>Status</th>
+                    <th>Active violations</th>
+                    <th>Total violations</th>
+                    <th>Outstanding fees</th>
+                    <th>Registered</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries
+                    .slice()
+                    .sort((a, b) => {
+                      const aA = (violationsByDevice.get(a.device.registered_device_uuid) ?? []).filter((v) => v.active).length;
+                      const bA = (violationsByDevice.get(b.device.registered_device_uuid) ?? []).filter((v) => v.active).length;
+                      if (bA !== aA) return bA - aA;
+                      return formatName(a).localeCompare(formatName(b));
+                    })
+                    .map((entry) => {
+                      const uuid = entry.device.registered_device_uuid;
+                      const name = formatName(entry);
+                      const deviceLabel = formatDevice(entry);
+                      const statusLabel = getDeviceStatusLabel(entry);
+                      const photoUrl = studentPhotoUrls[entry.device.user_uuid];
+                      const deviceViolations = violationsByDevice.get(uuid) ?? [];
+                      const activeV = deviceViolations.filter((v) => v.active).length;
+                      const totalV = deviceViolations.length;
+                      const outstandingCents = deviceViolations
+                        .filter((v) => v.active && !v.payment_collected_at)
+                        .reduce((s, v) => s + (v.payment_amount_cents ?? 0), 0);
+                      const sid = formatStudentId(entry);
+
+                      return (
+                        <tr
+                          key={uuid}
+                          className={`cd-table-row${uuid === selectedUUID ? " cd-table-row-selected" : ""}`}
+                          onClick={() => {
+                            setSelectedUUID(uuid);
+                            setShowTable(false);
+                          }}
+                        >
+                          <td>
+                            <div className="cd-table-student-cell">
+                              {photoUrl ? (
+                                <img src={photoUrl} alt={name} className="cd-table-avatar" />
+                              ) : (
+                                <div className="cd-table-avatar-initials">{getInitials(name)}</div>
+                              )}
+                              <div>
+                                <div className="cd-table-name">{name}</div>
+                                {sid && <div className="cd-table-sid">{sid}</div>}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="cd-table-device">{deviceLabel}</td>
+                          <td>{capitalize(entry.device.device_type) || "—"}</td>
+                          <td>{capitalize(entry.device.color) || "—"}</td>
+                          <td>
+                            <span className={getDeviceStatusClass(statusLabel)}>
+                              {statusLabel}
+                            </span>
+                          </td>
+                          <td>
+                            {activeV > 0 ? (
+                              <span className="cd-table-active-v">{activeV}</span>
+                            ) : (
+                              <span className="cd-table-zero">0</span>
+                            )}
+                          </td>
+                          <td>{totalV > 0 ? totalV : <span className="cd-table-zero">0</span>}</td>
+                          <td>
+                            {outstandingCents > 0
+                              ? formatCurrency(outstandingCents)
+                              : <span className="cd-table-zero">—</span>}
+                          </td>
+                          <td className="cd-table-date">{formatTimestamp(entry.device.created_at)}</td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
