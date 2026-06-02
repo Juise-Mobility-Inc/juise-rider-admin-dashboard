@@ -14,10 +14,12 @@ import {
 import { downloadCsv, sanitizeCsvFilename, type CsvCell } from "../../lib/csv";
 import { noGoPenaltyIcon, speedPenaltyIcon } from "../../lib/mapIcons";
 import {
+  fetchSchoolPOIs,
   fetchSchoolStudentRoster,
   fetchSchoolZones,
   fetchStudentRouteHistory,
   signSchoolMedia,
+  type SchoolPOI,
   type SchoolStudentRosterEntry,
   type SchoolZone,
   type StudentRouteHistoryPenaltyEvent,
@@ -779,6 +781,13 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const studentFilterRef = useRef<HTMLDivElement>(null);
   const zoneFilterRef = useRef<HTMLDivElement>(null);
+  const [pois, setPois] = useState<SchoolPOI[]>([]);
+  const [selectedPOIUUIDs, setSelectedPOIUUIDs] = useState<Set<string>>(() => {
+    const raw = searchParams.get("pois");
+    return raw ? new Set(raw.split(",").filter(Boolean)) : new Set();
+  });
+  const [poiFilterOpen, setPoiFilterOpen] = useState(false);
+  const poiFilterRef = useRef<HTMLDivElement>(null);
   const [confidenceInfoOpen, setConfidenceInfoOpen] = useState(false);
   const confidenceInfoRef = useRef<HTMLDivElement>(null);
 
@@ -804,12 +813,14 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
       });
       setBundles([]);
       setZones([]);
+      setPois([]);
       setSelectedId(null);
 
       try {
-        const [roster, schoolZones] = await Promise.all([
+        const [roster, schoolZones, schoolPois] = await Promise.all([
           fetchSchoolStudentRoster(managedAppId, activeSchoolId),
           fetchSchoolZones(managedAppId, activeSchoolId).catch(() => [] as SchoolZone[]),
+          fetchSchoolPOIs(managedAppId, activeSchoolId).catch(() => [] as SchoolPOI[]),
         ]);
 
         if (cancelled) {
@@ -817,6 +828,7 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
         }
 
         setZones(schoolZones);
+        setPois(schoolPois);
         setLoadState({
           status: "loading",
           message: "Loading route history for students...",
@@ -943,18 +955,47 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
     return () => document.removeEventListener("mousedown", handleClick);
   }, [confidenceInfoOpen]);
 
+  useEffect(() => {
+    if (!poiFilterOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (poiFilterRef.current && !poiFilterRef.current.contains(e.target as Node)) {
+        setPoiFilterOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [poiFilterOpen]);
+
   const allViolations = useMemo(() => buildViolationRows(bundles, zones), [bundles, zones]);
-  const zoneOptions = useMemo(
-    () =>
-      Array.from(
-        new Map(
-          allViolations.map((record) => [
-            record.matchingZone?.zone_uuid ?? record.event.zone_uuid,
-            record.matchingZone?.title || eventTitle(record.event, record.matchingZone),
-          ]),
-        ).entries(),
-      ).sort((left, right) => left[1].localeCompare(right[1])),
-    [allViolations],
+  const penaltyZoneOptions = useMemo(() => {
+    const byZone = new Map<string, { title: string; zoneType: string; pointsList: number[] }>();
+    for (const record of allViolations) {
+      const uuid = record.matchingZone?.zone_uuid ?? record.event.zone_uuid;
+      if (!byZone.has(uuid)) {
+        byZone.set(uuid, {
+          title: record.matchingZone?.title || record.event.title || uuid,
+          zoneType: record.matchingZone?.zone_type ?? record.event.zone_type,
+          pointsList: [],
+        });
+      }
+      byZone.get(uuid)!.pointsList.push(record.event.points_lost);
+    }
+    return Array.from(byZone.entries())
+      .map(([uuid, { title, zoneType, pointsList }]) => ({
+        uuid,
+        title,
+        zoneType,
+        avgPoints:
+          pointsList.length > 0
+            ? Math.round(pointsList.reduce((a, b) => a + b, 0) / pointsList.length)
+            : 0,
+      }))
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }, [allViolations]);
+
+  const poiOptions = useMemo(
+    () => pois.filter((p) => p.active).sort((a, b) => a.title.localeCompare(b.title)),
+    [pois],
   );
 
   const rosterEntries = useMemo(
@@ -991,6 +1032,12 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
         const zoneId = record.matchingZone?.zone_uuid ?? record.event.zone_uuid;
         if (!selectedZoneUUIDs.has(zoneId)) return false;
       }
+      if (selectedPOIUUIDs.size > 0) {
+        const visitedAny = record.session.visited_pois.some((v) =>
+          selectedPOIUUIDs.has(v.poi_uuid),
+        );
+        if (!visitedAny) return false;
+      }
       if (sourceFilter === "tracked" && isUntrackedSession(record.session)) return false;
       if (sourceFilter === "untracked" && !isUntrackedSession(record.session)) return false;
       if (typeFilter === "speed_limit" && record.event.zone_type !== "speed_limit") return false;
@@ -1011,7 +1058,7 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
     });
 
     return filtered;
-  }, [allViolations, sourceFilter, typeFilter, selectedZoneUUIDs, selectedStudentUUIDs, startDate, endDate, sortOrder]);
+  }, [allViolations, sourceFilter, typeFilter, selectedZoneUUIDs, selectedPOIUUIDs, selectedStudentUUIDs, startDate, endDate, sortOrder]);
 
   useEffect(() => {
     if (filteredViolations.length === 0) {
@@ -1233,14 +1280,14 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
           <option value="no_go">No-go zones</option>
         </select>
 
-        {/* Zone multi-select filter */}
+        {/* Penalty zone multi-select filter */}
         <div className="rv-student-filter" ref={zoneFilterRef}>
           <button
             type="button"
             className={`rv-student-filter-btn${selectedZoneUUIDs.size > 0 ? " rv-student-filter-btn-active" : ""}`}
             onClick={() => setZoneFilterOpen((o) => !o)}
           >
-            <span>Zones</span>
+            <span>Penalty Zones</span>
             {selectedZoneUUIDs.size > 0 ? (
               <span className="rv-student-filter-badge">{selectedZoneUUIDs.size}</span>
             ) : (
@@ -1264,14 +1311,15 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
                 </div>
               )}
               <div className="rv-student-dropdown-list">
-                {zoneOptions.length === 0 ? (
-                  <p className="rv-student-dropdown-empty">No zones available.</p>
+                {penaltyZoneOptions.length === 0 ? (
+                  <p className="rv-student-dropdown-empty">No penalty zones in violations.</p>
                 ) : (
-                  zoneOptions.map(([zoneUUID, label]) => {
-                    const checked = selectedZoneUUIDs.has(zoneUUID);
+                  penaltyZoneOptions.map((opt) => {
+                    const checked = selectedZoneUUIDs.has(opt.uuid);
+                    const isSpeed = opt.zoneType === "speed_limit";
                     return (
                       <label
-                        key={zoneUUID}
+                        key={opt.uuid}
                         className={`rv-student-row${checked ? " rv-student-row-checked" : ""}`}
                       >
                         <input
@@ -1280,14 +1328,96 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
                           onChange={() => {
                             setSelectedZoneUUIDs((prev) => {
                               const next = new Set(prev);
-                              if (next.has(zoneUUID)) next.delete(zoneUUID);
-                              else next.add(zoneUUID);
+                              if (next.has(opt.uuid)) next.delete(opt.uuid);
+                              else next.add(opt.uuid);
                               return next;
                             });
                           }}
                         />
                         <span className="rv-student-info">
-                          <strong>{label}</strong>
+                          <strong>{opt.title}</strong>
+                          <span className="rv-zone-row-badges">
+                            <span className={`rv-zone-type-badge${isSpeed ? " rv-zone-type-badge--speed" : " rv-zone-type-badge--nogo"}`}>
+                              {isSpeed ? "slow-go" : "no-go"}
+                            </span>
+                            {opt.avgPoints > 0 && (
+                              <span className="rv-zone-pts-badge rv-zone-pts-badge--deduct">
+                                -{opt.avgPoints} pts avg
+                              </span>
+                            )}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* POI zone multi-select filter */}
+        <div className="rv-student-filter" ref={poiFilterRef}>
+          <button
+            type="button"
+            className={`rv-student-filter-btn${selectedPOIUUIDs.size > 0 ? " rv-student-filter-btn-active" : ""}`}
+            onClick={() => setPoiFilterOpen((o) => !o)}
+          >
+            <span>POI Zones</span>
+            {selectedPOIUUIDs.size > 0 ? (
+              <span className="rv-student-filter-badge">{selectedPOIUUIDs.size}</span>
+            ) : (
+              <span className="rv-student-filter-caret">▾</span>
+            )}
+          </button>
+          {poiFilterOpen && (
+            <div className="rv-student-dropdown rv-zone-dropdown">
+              {selectedPOIUUIDs.size > 0 && (
+                <div className="rv-student-dropdown-header">
+                  <span className="rv-zone-selected-label">
+                    {selectedPOIUUIDs.size} selected
+                  </span>
+                  <button
+                    type="button"
+                    className="rv-student-clear-btn"
+                    onClick={() => setSelectedPOIUUIDs(new Set())}
+                  >
+                    Clear all
+                  </button>
+                </div>
+              )}
+              <div className="rv-student-dropdown-list">
+                {poiOptions.length === 0 ? (
+                  <p className="rv-student-dropdown-empty">No POIs configured.</p>
+                ) : (
+                  poiOptions.map((poi) => {
+                    const checked = selectedPOIUUIDs.has(poi.poi_uuid);
+                    return (
+                      <label
+                        key={poi.poi_uuid}
+                        className={`rv-student-row${checked ? " rv-student-row-checked" : ""}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setSelectedPOIUUIDs((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(poi.poi_uuid)) next.delete(poi.poi_uuid);
+                              else next.add(poi.poi_uuid);
+                              return next;
+                            });
+                          }}
+                        />
+                        <span className="rv-student-info">
+                          <strong>{poi.title}</strong>
+                          <span className="rv-zone-row-badges">
+                            {poi.bonus_points > 0 && (
+                              <span className="rv-zone-pts-badge rv-zone-pts-badge--bonus">
+                                +{poi.bonus_points} pts
+                              </span>
+                            )}
+                          </span>
                         </span>
                       </label>
                     );

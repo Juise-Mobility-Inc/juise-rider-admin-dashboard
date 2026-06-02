@@ -11403,7 +11403,59 @@
 }
 
 .rv-zone-dropdown {
-        width: 280px;
+        width: 300px;
+}
+
+.rv-zone-row-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 4px;
+}
+
+.rv-zone-type-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 1px 7px;
+        border-radius: 999px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+}
+
+.rv-zone-type-badge--speed {
+        background: rgba(245, 158, 11, 0.15);
+        color: #b45309;
+        border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.rv-zone-type-badge--nogo {
+        background: rgba(239, 68, 68, 0.12);
+        color: #b91c1c;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.rv-zone-pts-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 1px 7px;
+        border-radius: 999px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+}
+
+.rv-zone-pts-badge--deduct {
+        background: rgba(185, 28, 28, 0.1);
+        color: #b91c1c;
+        border: 1px solid rgba(185, 28, 28, 0.25);
+}
+
+.rv-zone-pts-badge--bonus {
+        background: rgba(39, 204, 94, 0.12);
+        color: #15803d;
+        border: 1px solid rgba(39, 204, 94, 0.3);
 }
 
 .rv-zone-selected-label {
