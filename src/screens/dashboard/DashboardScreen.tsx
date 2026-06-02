@@ -1578,13 +1578,13 @@ export function DashboardScreen({
                                                         <small className="dashboard-summary-detail">Students under this school →</small>
                                                 </Link>
                                                 <div className="dashboard-summary-divider" />
-                                                <div className="dashboard-summary-stat">
+                                                <Link className="dashboard-summary-stat dashboard-summary-stat-link" to="/campus-devices">
                                                         <span className="dashboard-summary-label">Total registered devices</span>
                                                         <strong className="dashboard-summary-value">
                                                                 {deviceTotalCount !== null ? deviceTotalCount.toLocaleString() : "—"}
                                                         </strong>
-                                                        <small className="dashboard-summary-detail">All vehicle registrations</small>
-                                                </div>
+                                                        <small className="dashboard-summary-detail">View campus devices →</small>
+                                                </Link>
                                                 <div className="dashboard-summary-divider" />
                                                 <Link className="dashboard-summary-stat dashboard-summary-stat-pending dashboard-summary-stat-link" to="/vehicle-registrations">
                                                         <span className="dashboard-summary-label">Pending review</span>
