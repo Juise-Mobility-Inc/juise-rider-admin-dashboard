@@ -11663,6 +11663,17 @@
         border-bottom: 1px solid var(--panel-border);
 }
 
+.rv-list-sort-select {
+        height: 30px;
+        padding: 0 0.5rem;
+        border: 1px solid var(--panel-border);
+        border-radius: 6px;
+        background: var(--panel-bg);
+        color: var(--text-strong);
+        font-size: 0.78rem;
+        cursor: pointer;
+}
+
 .rv-event-list {
         overflow: auto;
         padding: 0.6rem;

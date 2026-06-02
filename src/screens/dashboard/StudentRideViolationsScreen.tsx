@@ -1310,21 +1310,20 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
           />
         </label>
 
-        {/* Sort order */}
-        <select
-          value={sortOrder}
-          onChange={(e) => setSortOrder(e.target.value as "newest" | "oldest")}
-        >
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-        </select>
       </section>
 
       <div className="rv-layout">
         <section className="rv-list" aria-label="Filtered ride violations">
           <div className="rv-list-head">
             <strong>{filteredViolations.length.toLocaleString()} events</strong>
-            <span>{sortOrder === "newest" ? "Newest first" : "Oldest first"}</span>
+            <select
+              className="rv-list-sort-select"
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as "newest" | "oldest")}
+            >
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+            </select>
           </div>
           {loadState.status === "error" ? (
             <p className="rv-empty">{loadState.message}</p>
