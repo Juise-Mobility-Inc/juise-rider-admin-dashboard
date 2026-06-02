@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LatLngBounds } from "leaflet";
 import {
   CircleMarker,
@@ -16,6 +16,7 @@ import {
   fetchSchoolStudentRoster,
   fetchSchoolZones,
   fetchStudentRouteHistory,
+  signSchoolMedia,
   type SchoolStudentRosterEntry,
   type SchoolZone,
   type StudentRouteHistoryPenaltyEvent,
@@ -756,6 +757,11 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [typeFilter, setTypeFilter] = useState<ViolationTypeFilter>("all");
   const [zoneFilter, setZoneFilter] = useState("all");
+  const [selectedStudentUUIDs, setSelectedStudentUUIDs] = useState<Set<string>>(new Set());
+  const [studentFilterOpen, setStudentFilterOpen] = useState(false);
+  const [studentDropdownSearch, setStudentDropdownSearch] = useState("");
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
+  const studentFilterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -859,6 +865,43 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
     };
   }, [activeSchoolId, managedAppId]);
 
+  useEffect(() => {
+    if (!activeSchoolId || bundles.length === 0) return;
+    const keys: string[] = [];
+    const keyToUUID: Record<string, string> = {};
+    for (const bundle of bundles) {
+      const key =
+        bundle.entry.membership.front_photo?.object_key?.trim() ||
+        bundle.entry.membership.photo?.object_key?.trim();
+      if (key) {
+        keys.push(key);
+        keyToUUID[key] = studentUUID(bundle.entry);
+      }
+    }
+    if (keys.length === 0) return;
+    signSchoolMedia(activeSchoolId, keys)
+      .then((signed) => {
+        const byUUID: Record<string, string> = {};
+        for (const [key, url] of Object.entries(signed)) {
+          const uuid = keyToUUID[key];
+          if (uuid) byUUID[uuid] = url;
+        }
+        setPhotoUrls(byUUID);
+      })
+      .catch(() => {});
+  }, [activeSchoolId, bundles]);
+
+  useEffect(() => {
+    if (!studentFilterOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (studentFilterRef.current && !studentFilterRef.current.contains(e.target as Node)) {
+        setStudentFilterOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [studentFilterOpen]);
+
   const allViolations = useMemo(() => buildViolationRows(bundles, zones), [bundles, zones]);
   const zoneOptions = useMemo(
     () =>
@@ -873,9 +916,34 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
     [allViolations],
   );
 
+  const rosterEntries = useMemo(
+    () =>
+      bundles
+        .map((b) => b.entry)
+        .sort((a, b) => {
+          const nameA = `${a.user.first_name} ${a.user.last_name}`.toLowerCase();
+          const nameB = `${b.user.first_name} ${b.user.last_name}`.toLowerCase();
+          return nameA.localeCompare(nameB);
+        }),
+    [bundles],
+  );
+
+  const filteredDropdownStudents = useMemo(() => {
+    const q = studentDropdownSearch.trim().toLowerCase();
+    if (!q) return rosterEntries;
+    return rosterEntries.filter((entry) => {
+      const name = `${entry.user.first_name} ${entry.user.last_name}`.toLowerCase();
+      const sid = (entry.membership.student_id ?? "").toLowerCase();
+      return name.includes(q) || sid.includes(q);
+    });
+  }, [rosterEntries, studentDropdownSearch]);
+
   const filteredViolations = useMemo(() => {
     const query = search.trim().toLowerCase();
     return allViolations.filter((record) => {
+      if (selectedStudentUUIDs.size > 0 && !selectedStudentUUIDs.has(record.studentUserUUID)) {
+        return false;
+      }
       if (
         sourceFilter === "tracked" &&
         isUntrackedSession(record.session)
@@ -917,7 +985,7 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
         .toLowerCase()
         .includes(query);
     });
-  }, [allViolations, search, sourceFilter, typeFilter, zoneFilter]);
+  }, [allViolations, search, sourceFilter, typeFilter, zoneFilter, selectedStudentUUIDs]);
 
   useEffect(() => {
     if (filteredViolations.length === 0) {
@@ -1043,6 +1111,90 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search student, zone, reason..."
         />
+
+        {/* Student multi-select filter */}
+        <div className="rv-student-filter" ref={studentFilterRef}>
+          <button
+            type="button"
+            className={`rv-student-filter-btn${selectedStudentUUIDs.size > 0 ? " rv-student-filter-btn-active" : ""}`}
+            onClick={() => setStudentFilterOpen((o) => !o)}
+          >
+            <span>Students</span>
+            {selectedStudentUUIDs.size > 0 ? (
+              <span className="rv-student-filter-badge">{selectedStudentUUIDs.size}</span>
+            ) : (
+              <span className="rv-student-filter-caret">▾</span>
+            )}
+          </button>
+
+          {studentFilterOpen && (
+            <div className="rv-student-dropdown">
+              <div className="rv-student-dropdown-header">
+                <input
+                  type="search"
+                  autoFocus
+                  placeholder="Search by name or ID..."
+                  value={studentDropdownSearch}
+                  onChange={(e) => setStudentDropdownSearch(e.target.value)}
+                  className="rv-student-dropdown-search"
+                />
+                {selectedStudentUUIDs.size > 0 && (
+                  <button
+                    type="button"
+                    className="rv-student-clear-btn"
+                    onClick={() => setSelectedStudentUUIDs(new Set())}
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
+
+              <div className="rv-student-dropdown-list">
+                {filteredDropdownStudents.length === 0 ? (
+                  <p className="rv-student-dropdown-empty">No students match.</p>
+                ) : (
+                  filteredDropdownStudents.map((entry) => {
+                    const uuid = studentUUID(entry);
+                    const checked = selectedStudentUUIDs.has(uuid);
+                    const name = `${entry.user.first_name} ${entry.user.last_name}`.trim();
+                    const sid = entry.membership.student_id?.trim() || entry.user.email?.trim() || "";
+                    const photo = photoUrls[uuid];
+                    return (
+                      <label key={uuid} className={`rv-student-row${checked ? " rv-student-row-checked" : ""}`}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setSelectedStudentUUIDs((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(uuid)) next.delete(uuid);
+                              else next.add(uuid);
+                              return next;
+                            });
+                          }}
+                        />
+                        <span className="rv-student-avatar">
+                          {photo ? (
+                            <img src={photo} alt={name} />
+                          ) : (
+                            <span className="rv-student-avatar-fallback">
+                              {(entry.user.first_name?.[0] ?? "?").toUpperCase()}
+                            </span>
+                          )}
+                        </span>
+                        <span className="rv-student-info">
+                          <strong>{name || "—"}</strong>
+                          <em>{sid}</em>
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
         <select
           value={sourceFilter}
           onChange={(event) => setSourceFilter(event.target.value as SourceFilter)}

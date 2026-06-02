@@ -11388,9 +11388,204 @@
 
 .rv-filters {
         display: grid;
-        grid-template-columns: minmax(240px, 1fr) repeat(3, minmax(150px, 0.35fr));
+        grid-template-columns: minmax(240px, 1fr) minmax(140px, 0.38fr) repeat(3, minmax(140px, 0.35fr));
         gap: 0.65rem;
         padding: 0.75rem;
+}
+
+/* Student multi-select filter */
+.rv-student-filter {
+        position: relative;
+}
+
+.rv-student-filter-btn {
+        width: 100%;
+        min-height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        padding: 0.55rem 0.65rem;
+        border: 1px solid var(--panel-border);
+        border-radius: 6px;
+        background: var(--panel-bg);
+        color: var(--text-strong);
+        font-size: 0.9rem;
+        cursor: pointer;
+        white-space: nowrap;
+}
+
+.rv-student-filter-btn-active {
+        border-color: #27CC5E;
+        background: color-mix(in srgb, #27CC5E 10%, var(--panel-bg));
+        color: #27CC5E;
+        font-weight: 600;
+}
+
+.rv-student-filter-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: #27CC5E;
+        color: #fff;
+        font-size: 0.72rem;
+        font-weight: 700;
+        line-height: 1;
+}
+
+.rv-student-filter-caret {
+        opacity: 0.5;
+        font-size: 0.8rem;
+}
+
+.rv-student-dropdown {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        z-index: 200;
+        width: 320px;
+        background: var(--panel-bg);
+        border: 1px solid var(--panel-border);
+        border-radius: 10px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+}
+
+.rv-student-dropdown-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.6rem 0.7rem;
+        border-bottom: 1px solid var(--panel-border);
+}
+
+.rv-student-dropdown-search {
+        flex: 1;
+        min-width: 0;
+        height: 34px;
+        border: 1px solid var(--panel-border);
+        border-radius: 6px;
+        padding: 0 0.55rem;
+        background: var(--workspace-bg);
+        color: var(--text-strong);
+        font-size: 0.85rem;
+}
+
+.rv-student-clear-btn {
+        flex-shrink: 0;
+        height: 34px;
+        padding: 0 0.65rem;
+        border: 1px solid var(--panel-border);
+        border-radius: 6px;
+        background: transparent;
+        color: var(--text-muted);
+        font-size: 0.78rem;
+        cursor: pointer;
+        white-space: nowrap;
+}
+
+.rv-student-clear-btn:hover {
+        background: var(--workspace-bg);
+        color: var(--text-strong);
+}
+
+.rv-student-dropdown-list {
+        overflow-y: auto;
+        max-height: 340px;
+        padding: 0.4rem;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+}
+
+.rv-student-dropdown-empty {
+        padding: 1rem;
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 0.85rem;
+}
+
+.rv-student-row {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        padding: 0.45rem 0.55rem;
+        border-radius: 7px;
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: background 0.1s;
+}
+
+.rv-student-row:hover {
+        background: var(--workspace-bg);
+}
+
+.rv-student-row-checked {
+        background: color-mix(in srgb, #27CC5E 10%, var(--panel-bg));
+        border-color: color-mix(in srgb, #27CC5E 25%, transparent);
+}
+
+.rv-student-row input[type="checkbox"] {
+        flex-shrink: 0;
+        width: 16px;
+        height: 16px;
+        accent-color: #27CC5E;
+        cursor: pointer;
+}
+
+.rv-student-avatar {
+        flex-shrink: 0;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        overflow: hidden;
+        background: var(--workspace-bg);
+        border: 1px solid var(--panel-border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+}
+
+.rv-student-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+}
+
+.rv-student-avatar-fallback {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: var(--text-muted);
+}
+
+.rv-student-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+}
+
+.rv-student-info strong {
+        font-size: 0.875rem;
+        color: var(--text-strong);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+}
+
+.rv-student-info em {
+        font-size: 0.75rem;
+        font-style: normal;
+        color: var(--text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
 }
 
 .rv-filters input,
