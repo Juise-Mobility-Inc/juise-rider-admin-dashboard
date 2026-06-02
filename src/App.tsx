@@ -4764,13 +4764,22 @@ function App() {
                                                 {openNavGroups.vehicles && (
                                                         <div className="nav-group-items">
                                                                 <NavLink
+                                                                        to="/campus-devices"
+                                                                        className={({ isActive }) =>
+                                                                                isActive
+                                                                                        ? "nav-sub-item nav-sub-item-active"
+                                                                                        : "nav-sub-item"
+                                                                        }>
+                                                                        Campus Devices
+                                                                </NavLink>
+                                                                <NavLink
                                                                         to="/vehicle-registrations"
                                                                         className={({ isActive }) =>
                                                                                 isActive
                                                                                         ? "nav-sub-item nav-sub-item-active"
                                                                                         : "nav-sub-item"
                                                                         }>
-                                                                        View Vehicle Registrations
+                                                                        Vehicle Registrations
                                                                 </NavLink>
                                                                 <NavLink
                                                                         to="/registration-fees"

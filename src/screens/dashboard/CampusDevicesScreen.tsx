@@ -47,17 +47,13 @@ function getDeviceStatusLabel(entry: RegisteredDeviceReviewEntry) {
   if (!d.active) return "Inactive";
   if (d.registration_status === "declined") return "Declined";
   if (d.registration_status === "pending") return "Pending";
-  if (d.payment_status === "awaiting_payment") return "Payment Due";
-  if (d.qr_unlocked_at) return "QR Ready";
-  return "Approved";
+  return "Active";
 }
 
 function getDeviceStatusClass(label: string) {
   switch (label) {
     case "Declined": return "cd-status cd-status-declined";
     case "Pending": return "cd-status cd-status-pending";
-    case "Payment Due": return "cd-status cd-status-payment";
-    case "QR Ready": return "cd-status cd-status-qr";
     case "Inactive": return "cd-status cd-status-inactive";
     default: return "cd-status cd-status-approved";
   }
@@ -105,10 +101,10 @@ function getInitials(name: string) {
 
 const STATUS_TABS = [
   { key: "all", label: "All" },
-  { key: "approved", label: "Approved" },
+  { key: "active", label: "Active" },
   { key: "pending", label: "Pending" },
-  { key: "payment", label: "Payment Due" },
   { key: "declined", label: "Declined" },
+  { key: "inactive", label: "Inactive" },
 ];
 
 export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
@@ -216,8 +212,7 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
     return entries
       .filter((entry) => {
         const statusLabel = getDeviceStatusLabel(entry).toLowerCase();
-        if (statusFilter === "payment" && !statusLabel.includes("payment")) return false;
-        if (statusFilter !== "all" && statusFilter !== "payment" && !statusLabel.startsWith(statusFilter))
+        if (statusFilter !== "all" && statusLabel.toLowerCase() !== statusFilter)
           return false;
         if (!q) return true;
         const name = formatName(entry).toLowerCase();
@@ -433,13 +428,11 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
               </strong>
             </div>
             <div className="cd-stat">
-              <span>Outstanding fees</span>
+              <span>Last violation</span>
               <strong>
-                {formatCurrency(
-                  selectedViolations
-                    .filter((v) => v.active && !v.payment_collected_at)
-                    .reduce((sum, v) => sum + (v.payment_amount_cents ?? 0), 0),
-                ) ?? "None"}
+                {selectedViolations.length > 0
+                  ? formatTimestamp(selectedViolations[0].created_at)
+                  : "—"}
               </strong>
             </div>
             <div className="cd-stat">
@@ -484,21 +477,6 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                 <div className="cd-info-row">
                   <span>Powertrain</span>
                   <strong>{capitalize(selectedEntry.device.powertrain_type)}</strong>
-                </div>
-              )}
-              {selectedEntry.device.registration_fee_amount_cents != null && (
-                <div className="cd-info-row">
-                  <span>Registration fee</span>
-                  <strong>
-                    {formatCurrency(selectedEntry.device.registration_fee_amount_cents) ??
-                      "No fee"}
-                  </strong>
-                </div>
-              )}
-              {selectedEntry.device.qr_unlocked_at && (
-                <div className="cd-info-row">
-                  <span>QR unlocked</span>
-                  <strong>{formatTimestamp(selectedEntry.device.qr_unlocked_at)}</strong>
                 </div>
               )}
             </div>
@@ -635,7 +613,7 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                     <th>Status</th>
                     <th>Active violations</th>
                     <th>Total violations</th>
-                    <th>Outstanding fees</th>
+                    <th>Last violation</th>
                     <th>Registered</th>
                   </tr>
                 </thead>
@@ -657,9 +635,9 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                       const deviceViolations = violationsByDevice.get(uuid) ?? [];
                       const activeV = deviceViolations.filter((v) => v.active).length;
                       const totalV = deviceViolations.length;
-                      const outstandingCents = deviceViolations
-                        .filter((v) => v.active && !v.payment_collected_at)
-                        .reduce((s, v) => s + (v.payment_amount_cents ?? 0), 0);
+                      const lastViolation = deviceViolations
+                        .slice()
+                        .sort((a, b) => b.created_at - a.created_at)[0];
                       const sid = formatStudentId(entry);
 
                       return (
@@ -700,9 +678,9 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                             )}
                           </td>
                           <td>{totalV > 0 ? totalV : <span className="cd-table-zero">0</span>}</td>
-                          <td>
-                            {outstandingCents > 0
-                              ? formatCurrency(outstandingCents)
+                          <td className="cd-table-date">
+                            {lastViolation
+                              ? formatTimestamp(lastViolation.created_at)
                               : <span className="cd-table-zero">—</span>}
                           </td>
                           <td className="cd-table-date">{formatTimestamp(entry.device.created_at)}</td>
