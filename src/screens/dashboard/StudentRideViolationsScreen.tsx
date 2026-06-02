@@ -501,14 +501,16 @@ function getPenaltyConfidence(
       : null;
 
   const accuracyScore = scoreAccuracy(avgAccuracyMeters);
+  const durationScore =
+    event.zone_type === "speed_limit"
+      ? scoreSpeedDuration(overLimitSeconds ?? durationSeconds)
+      : scoreNoGoDuration(durationSeconds);
+  const overLimitScore =
+    event.zone_type === "speed_limit" ? scoreSpeedOverLimit(maxOverLimitMph) : undefined;
   const rawScore =
     event.zone_type === "speed_limit"
-      ? Math.round(
-          accuracyScore * 0.25 +
-            scoreSpeedDuration(overLimitSeconds ?? durationSeconds) * 0.4 +
-            scoreSpeedOverLimit(maxOverLimitMph) * 0.35,
-        )
-      : Math.round(accuracyScore * 0.45 + scoreNoGoDuration(durationSeconds) * 0.55);
+      ? Math.round(accuracyScore * 0.25 + durationScore * 0.4 + (overLimitScore ?? 0) * 0.35)
+      : Math.round(accuracyScore * 0.45 + durationScore * 0.55);
   const score = Math.max(0, Math.min(100, rawScore));
 
   return {
@@ -518,6 +520,9 @@ function getPenaltyConfidence(
     durationSeconds,
     overLimitSeconds,
     maxOverLimitMph,
+    accuracyScore,
+    durationScore,
+    overLimitScore,
   };
 }
 
@@ -766,6 +771,8 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const studentFilterRef = useRef<HTMLDivElement>(null);
   const zoneFilterRef = useRef<HTMLDivElement>(null);
+  const [confidenceInfoOpen, setConfidenceInfoOpen] = useState(false);
+  const confidenceInfoRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -916,6 +923,17 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [zoneFilterOpen]);
+
+  useEffect(() => {
+    if (!confidenceInfoOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (confidenceInfoRef.current && !confidenceInfoRef.current.contains(e.target as Node)) {
+        setConfidenceInfoOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [confidenceInfoOpen]);
 
   const allViolations = useMemo(() => buildViolationRows(bundles, zones), [bundles, zones]);
   const zoneOptions = useMemo(
@@ -1412,8 +1430,82 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
                 </div>
                 {selectedConfidence ? (
                   <>
-                    <div>
-                      <span>Derived confidence</span>
+                    <div className="rv-confidence-cell">
+                      <span className="rv-confidence-label-row">
+                        <span>Derived confidence</span>
+                        <div className="rv-conf-info-wrap" ref={confidenceInfoRef}>
+                          <button
+                            type="button"
+                            className={`rv-conf-info-btn${confidenceInfoOpen ? " rv-conf-info-btn-active" : ""}`}
+                            onClick={() => setConfidenceInfoOpen((o) => !o)}
+                            title="How is this calculated?"
+                          >
+                            ⓘ
+                          </button>
+                          {confidenceInfoOpen && (
+                            <div className="rv-conf-popover">
+                              <p className="rv-conf-popover-title">How confidence is scored</p>
+
+                              {selectedRecord.event.zone_type === "speed_limit" ? (
+                                <>
+                                  <div className="rv-conf-row">
+                                    <span className="rv-conf-row-label">GPS accuracy</span>
+                                    <span className="rv-conf-row-measure">{formatAccuracy(selectedConfidence.avgAccuracyMeters)}</span>
+                                    <span className="rv-conf-row-pts">{selectedConfidence.accuracyScore} pts</span>
+                                    <span className="rv-conf-row-weight">× 25%</span>
+                                  </div>
+                                  <div className="rv-conf-row">
+                                    <span className="rv-conf-row-label">Time over limit</span>
+                                    <span className="rv-conf-row-measure">{formatDuration(selectedConfidence.overLimitSeconds ?? selectedConfidence.durationSeconds)}</span>
+                                    <span className="rv-conf-row-pts">{selectedConfidence.durationScore} pts</span>
+                                    <span className="rv-conf-row-weight">× 40%</span>
+                                  </div>
+                                  <div className="rv-conf-row">
+                                    <span className="rv-conf-row-label">Speed over limit</span>
+                                    <span className="rv-conf-row-measure">
+                                      {selectedConfidence.maxOverLimitMph != null
+                                        ? `${selectedConfidence.maxOverLimitMph.toFixed(1)} mph over`
+                                        : "—"}
+                                    </span>
+                                    <span className="rv-conf-row-pts">{selectedConfidence.overLimitScore ?? "—"} pts</span>
+                                    <span className="rv-conf-row-weight">× 35%</span>
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="rv-conf-row">
+                                    <span className="rv-conf-row-label">GPS accuracy</span>
+                                    <span className="rv-conf-row-measure">{formatAccuracy(selectedConfidence.avgAccuracyMeters)}</span>
+                                    <span className="rv-conf-row-pts">{selectedConfidence.accuracyScore} pts</span>
+                                    <span className="rv-conf-row-weight">× 45%</span>
+                                  </div>
+                                  <div className="rv-conf-row">
+                                    <span className="rv-conf-row-label">Time in zone</span>
+                                    <span className="rv-conf-row-measure">{formatDuration(selectedConfidence.durationSeconds)}</span>
+                                    <span className="rv-conf-row-pts">{selectedConfidence.durationScore} pts</span>
+                                    <span className="rv-conf-row-weight">× 55%</span>
+                                  </div>
+                                </>
+                              )}
+
+                              <hr className="rv-conf-divider" />
+                              <div className="rv-conf-total">
+                                <span className="rv-conf-total-label">
+                                  {selectedRecord.event.zone_type === "speed_limit"
+                                    ? `${selectedConfidence.accuracyScore}×0.25 + ${selectedConfidence.durationScore}×0.40 + ${selectedConfidence.overLimitScore ?? 0}×0.35`
+                                    : `${selectedConfidence.accuracyScore}×0.45 + ${selectedConfidence.durationScore}×0.55`}
+                                </span>
+                                <span className="rv-conf-total-score">
+                                  = {selectedConfidence.score}% ({selectedConfidence.label})
+                                </span>
+                              </div>
+                              <p className="rv-conf-note">
+                                Higher GPS accuracy, longer time in the zone, and greater speed over the limit each push the score up. Scores ≥85 are High, ≥65 Good, ≥45 Moderate, and below that Low.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </span>
                       <strong>
                         {selectedConfidence.score}% ({selectedConfidence.label})
                       </strong>

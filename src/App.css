@@ -11756,6 +11756,137 @@
         font-size: 0.76rem;
 }
 
+/* Confidence info popover */
+.rv-confidence-cell {
+        position: relative;
+}
+
+.rv-confidence-label-row {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+}
+
+.rv-conf-info-wrap {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+}
+
+.rv-conf-info-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        padding: 0;
+        border: none;
+        background: transparent;
+        color: var(--text-muted);
+        font-size: 0.8rem;
+        cursor: pointer;
+        border-radius: 50%;
+        line-height: 1;
+        transition: color 0.15s;
+}
+
+.rv-conf-info-btn:hover,
+.rv-conf-info-btn-active {
+        color: #27CC5E;
+}
+
+.rv-conf-popover {
+        position: absolute;
+        bottom: calc(100% + 6px);
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 300;
+        width: 310px;
+        background: var(--panel-bg);
+        border: 1px solid var(--panel-border);
+        border-radius: 10px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.22);
+        padding: 0.85rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+}
+
+.rv-conf-popover-title {
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-muted);
+        padding-bottom: 0.4rem;
+        border-bottom: 1px solid var(--panel-border);
+}
+
+.rv-conf-row {
+        display: grid;
+        grid-template-columns: 1fr auto auto auto;
+        align-items: baseline;
+        gap: 0.3rem 0.5rem;
+        font-size: 0.8rem;
+}
+
+.rv-conf-row-label {
+        color: var(--text-strong);
+        font-weight: 500;
+}
+
+.rv-conf-row-measure {
+        color: var(--text-muted);
+        font-size: 0.74rem;
+        text-align: right;
+        white-space: nowrap;
+}
+
+.rv-conf-row-pts {
+        color: var(--text-strong);
+        font-weight: 600;
+        text-align: right;
+        white-space: nowrap;
+}
+
+.rv-conf-row-weight {
+        color: var(--text-muted);
+        font-size: 0.74rem;
+        white-space: nowrap;
+}
+
+.rv-conf-divider {
+        border: none;
+        border-top: 1px solid var(--panel-border);
+        margin: 0;
+}
+
+.rv-conf-total {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 0.82rem;
+}
+
+.rv-conf-total-label {
+        color: var(--text-muted);
+        font-size: 0.76rem;
+}
+
+.rv-conf-total-score {
+        font-weight: 700;
+        color: #27CC5E;
+        font-size: 0.9rem;
+}
+
+.rv-conf-note {
+        font-size: 0.72rem;
+        color: var(--text-muted);
+        line-height: 1.4;
+        padding-top: 0.1rem;
+        border-top: 1px solid var(--panel-border);
+}
+
 .rv-map-shell {
         height: 360px;
         min-height: 360px;
