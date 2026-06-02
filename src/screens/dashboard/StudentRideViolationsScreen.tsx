@@ -762,6 +762,7 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
   const [bundles, setBundles] = useState<StudentRouteBundle[]>([]);
   const [zones, setZones] = useState<SchoolZone[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const pendingSessionId = useRef<string | null>(searchParams.get("session"));
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [typeFilter, setTypeFilter] = useState<ViolationTypeFilter>("all");
   const [selectedZoneUUIDs, setSelectedZoneUUIDs] = useState<Set<string>>(() => {
@@ -1064,6 +1065,16 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
     if (filteredViolations.length === 0) {
       setSelectedId(null);
       return;
+    }
+    if (pendingSessionId.current) {
+      const match = filteredViolations.find(
+        (record) => record.session.session_id === pendingSessionId.current,
+      );
+      if (match) {
+        pendingSessionId.current = null;
+        setSelectedId(match.id);
+        return;
+      }
     }
     if (!selectedId || !filteredViolations.some((record) => record.id === selectedId)) {
       setSelectedId(filteredViolations[0].id);

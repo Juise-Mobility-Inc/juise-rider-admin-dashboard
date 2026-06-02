@@ -1157,7 +1157,9 @@ function RidePenaltySection({ visuals }: { visuals: DashboardVisuals }) {
                                                                 key={penalty.key}
                                                                 title="View on Ride Information"
                                                                 onClick={() => {
-                                                                        navigate(`/student-ride-violations?student=${encodeURIComponent(penalty.userUUID)}`);
+                                                                        navigate(
+                                                                                `/student-ride-violations?student=${encodeURIComponent(penalty.userUUID)}&session=${encodeURIComponent(penalty.sessionId)}`,
+                                                                        );
                                                                 }}>
                                                                 <div className="dashboard-penalty-copy">
                                                                         <strong>{penalty.name}</strong>
