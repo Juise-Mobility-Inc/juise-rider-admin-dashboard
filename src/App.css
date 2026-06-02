@@ -12840,3 +12840,29 @@
   color: #6c757d;
   font-size: 0.78rem;
 }
+
+/* Dashboard leaderboard rows — link behaviour */
+.dashboard-leaderboard-row-link {
+        text-decoration: none;
+        color: inherit;
+        cursor: pointer;
+        transition: background 0.15s, transform 0.1s;
+}
+.dashboard-leaderboard-row-link:hover {
+        background: rgba(39, 204, 94, 0.1);
+        transform: translateX(2px);
+}
+
+/* Dashboard points bar rows — link behaviour */
+.dashboard-points-row-link {
+        text-decoration: none;
+        color: inherit;
+        cursor: pointer;
+        border-radius: 6px;
+        padding: 4px 6px;
+        margin: -4px -6px;
+        transition: background 0.15s;
+}
+.dashboard-points-row-link:hover {
+        background: rgba(39, 204, 94, 0.08);
+}

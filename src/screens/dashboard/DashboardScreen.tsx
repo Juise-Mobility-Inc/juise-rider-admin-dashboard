@@ -1255,7 +1255,11 @@ function Leaderboard({
                                 <p className="reports-visual-empty">No points in this window yet.</p>
                         ) : (
                                 entries.map((entry, index) => (
-                                        <div className="dashboard-leaderboard-row" key={entry.userUUID}>
+                                        <Link
+                                                className="dashboard-leaderboard-row dashboard-leaderboard-row-link"
+                                                key={entry.userUUID}
+                                                to={`/student-ride-violations?student=${encodeURIComponent(entry.userUUID)}`}
+                                        >
                                                 <span className="dashboard-rank">{index + 1}</span>
                                                 <span className="dashboard-avatar">
                                                         {getInitials(entry.name) || "S"}
@@ -1271,7 +1275,7 @@ function Leaderboard({
                                                         <strong>{entry.earnedPoints.toLocaleString()}</strong>
                                                         <span>{windowLabel} pts</span>
                                                 </div>
-                                        </div>
+                                        </Link>
                                 ))
                         )}
                 </div>
@@ -1674,7 +1678,7 @@ export function DashboardScreen({
                                                                                         </button>
                                                                                 ))}
                                                                         </div>
-                                                                        <DashboardSectionArrow to="/students" label="Open Students" />
+                                                                        <DashboardSectionArrow to="/student-ride-violations" label="View rides" />
                                                                 </div>
                                                         </div>
                                                         <Leaderboard
@@ -1691,7 +1695,7 @@ export function DashboardScreen({
                                                                                 Top earners turn routes and POI visits into campus momentum.
                                                                         </p>
                                                                 </div>
-                                                                <DashboardSectionArrow to="/students" label="Open Students" />
+                                                                <DashboardSectionArrow to="/student-ride-violations" label="View rides" />
                                                         </div>
                                                         <div className="dashboard-points-bars">
                                                                 {(visuals.leaderboardAll.length > 0
@@ -1709,7 +1713,11 @@ export function DashboardScreen({
                                                                         );
 
                                                                         return (
-                                                                                <div className="dashboard-points-row" key={entry.userUUID}>
+                                                                                <Link
+                                                                                        className="dashboard-points-row dashboard-points-row-link"
+                                                                                        key={entry.userUUID}
+                                                                                        to={`/student-ride-violations?student=${encodeURIComponent(entry.userUUID)}`}
+                                                                                >
                                                                                         <div className="reports-bar-row-top">
                                                                                                 <span>{entry.name}</span>
                                                                                                 <strong>{entry.earnedPoints.toLocaleString()}</strong>
@@ -1720,7 +1728,7 @@ export function DashboardScreen({
                                                                                                         style={{ width: `${width}%` }}
                                                                                                 />
                                                                                         </div>
-                                                                                </div>
+                                                                                </Link>
                                                                         );
                                                                 })}
                                                         </div>
