@@ -1129,8 +1129,11 @@ function DashboardSectionArrow({ to, label }: { to: string; label: string }) {
         );
 }
 
+const RIDE_PENALTIES_COLLAPSED_LIMIT = 5;
+
 function RidePenaltySection({ visuals }: { visuals: DashboardVisuals }) {
         const navigate = useNavigate();
+        const [penaltiesExpanded, setPenaltiesExpanded] = useState(false);
 
         return (
                 <article className="dashboard-card dashboard-penalty-card">
@@ -1168,32 +1171,47 @@ function RidePenaltySection({ visuals }: { visuals: DashboardVisuals }) {
                                         {visuals.recentRidePenalties.length === 0 ? (
                                                 <p className="reports-visual-empty">No recent ride penalties.</p>
                                         ) : (
-                                                visuals.recentRidePenalties.map((penalty) => (
-                                                        <div
-                                                                className="dashboard-penalty-row dashboard-penalty-row--clickable"
-                                                                key={penalty.key}
-                                                                title="View on Ride Information"
-                                                                onClick={() => {
-                                                                        navigate(
-                                                                                `/student-ride-violations?student=${encodeURIComponent(penalty.userUUID)}&session=${encodeURIComponent(penalty.sessionId)}`,
-                                                                        );
-                                                                }}>
-                                                                <div className="dashboard-penalty-copy">
-                                                                        <strong>{penalty.name}</strong>
-                                                                        <span>
-                                                                                {penalty.title} · {penalty.zoneType}
-                                                                        </span>
-                                                                        <small>
-                                                                                {penalty.reason} ·{" "}
-                                                                                {formatDashboardTimestamp(penalty.occurredAt)}
-                                                                        </small>
+                                                <>
+                                                        {(penaltiesExpanded
+                                                                ? visuals.recentRidePenalties
+                                                                : visuals.recentRidePenalties.slice(0, RIDE_PENALTIES_COLLAPSED_LIMIT)
+                                                        ).map((penalty) => (
+                                                                <div
+                                                                        className="dashboard-penalty-row dashboard-penalty-row--clickable"
+                                                                        key={penalty.key}
+                                                                        title="View on Ride Information"
+                                                                        onClick={() => {
+                                                                                navigate(
+                                                                                        `/student-ride-violations?student=${encodeURIComponent(penalty.userUUID)}&session=${encodeURIComponent(penalty.sessionId)}`,
+                                                                                );
+                                                                        }}>
+                                                                        <div className="dashboard-penalty-copy">
+                                                                                <strong>{penalty.name}</strong>
+                                                                                <span>
+                                                                                        {penalty.title} · {penalty.zoneType}
+                                                                                </span>
+                                                                                <small>
+                                                                                        {penalty.reason} ·{" "}
+                                                                                        {formatDashboardTimestamp(penalty.occurredAt)}
+                                                                                </small>
+                                                                        </div>
+                                                                        <div className="dashboard-penalty-score">
+                                                                                <strong>{penalty.pointsLost.toLocaleString()}</strong>
+                                                                                <span>pts lost</span>
+                                                                        </div>
                                                                 </div>
-                                                                <div className="dashboard-penalty-score">
-                                                                        <strong>{penalty.pointsLost.toLocaleString()}</strong>
-                                                                        <span>pts lost</span>
-                                                                </div>
-                                                        </div>
-                                                ))
+                                                        ))}
+                                                        {visuals.recentRidePenalties.length > RIDE_PENALTIES_COLLAPSED_LIMIT && (
+                                                                <button
+                                                                        className="dashboard-poi-ranking-toggle"
+                                                                        onClick={() => setPenaltiesExpanded((e) => !e)}
+                                                                >
+                                                                        {penaltiesExpanded
+                                                                                ? "Show less"
+                                                                                : `Show ${visuals.recentRidePenalties.length - RIDE_PENALTIES_COLLAPSED_LIMIT} more`}
+                                                                </button>
+                                                        )}
+                                                </>
                                         )}
                                 </div>
                         </div>
