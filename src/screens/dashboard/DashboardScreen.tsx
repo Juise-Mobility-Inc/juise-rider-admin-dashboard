@@ -901,8 +901,12 @@ function PoiRankings({ rankings }: { rankings: PoiRankingEntry[] }) {
                                                 <div
                                                         className="dashboard-poi-ranking-row dashboard-poi-ranking-row--clickable"
                                                         key={point.key}
-                                                        title="View on Ride Information"
-                                                        onClick={() => navigate("/student-ride-violations")}
+                                                        title="View rides at this POI"
+                                                        onClick={() =>
+                                                                navigate(
+                                                                        `/student-ride-violations?pois=${encodeURIComponent(point.key)}`,
+                                                                )
+                                                        }
                                                 >
                                                         <span className="dashboard-rank">{index + 1}</span>
                                                         <div className="dashboard-poi-ranking-main">
