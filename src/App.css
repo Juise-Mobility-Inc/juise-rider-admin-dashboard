@@ -12979,6 +12979,28 @@
   color: #6c757d;
 }
 
+.cd-table-uuid {
+  font-size: 0.65rem;
+  font-family: ui-monospace, monospace;
+  color: #adb5bd;
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cd-table-avatar-device {
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.cd-table-avatar-device-placeholder {
+  border-radius: 6px;
+  background: #f0f2f4;
+  color: #6c757d;
+  font-size: 1rem;
+}
+
 .cd-table-device {
   max-width: 160px;
   white-space: nowrap;
@@ -13032,4 +13054,224 @@
 }
 .dashboard-points-row-link:hover {
         background: rgba(39, 204, 94, 0.08);
+}
+
+/* ── Campus Devices — redesigned table-first layout ── */
+
+/* Table view (default) */
+.cd-table-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.cd-table-view-header {
+  padding: 14px 20px 10px;
+  background: #fff;
+  border-bottom: 1px solid #e2e6ea;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cd-table-view-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cd-table-view-title-group {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.cd-table-search {
+  flex: 1;
+  max-width: 360px;
+  padding: 7px 11px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  background: #f8f9fa;
+  color: #112d4e;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.cd-table-search:focus {
+  border-color: #27CC5E;
+  background: #fff;
+}
+
+/* Detail view */
+.cd-detail-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.cd-detail-back-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  background: #fff;
+  border-bottom: 1px solid #e2e6ea;
+  flex-shrink: 0;
+}
+
+.cd-detail-back-btn {
+  all: unset;
+  cursor: pointer;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: #112d4e;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid #d0d7de;
+  background: #f8f9fa;
+  transition: background 0.14s, border-color 0.14s;
+}
+.cd-detail-back-btn:hover {
+  background: #edfbf2;
+  border-color: #27CC5E;
+  color: #27CC5E;
+}
+
+.cd-detail-back-label {
+  font-size: 0.76rem;
+  color: #6c757d;
+}
+
+.cd-detail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 0 40px;
+}
+
+/* Two-column layout in detail view */
+.cd-detail-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  align-items: start;
+}
+
+.cd-detail-col {
+  min-width: 0;
+}
+
+.cd-detail-col:first-child {
+  border-right: 1px solid #e2e6ea;
+}
+
+/* Beacon location map */
+.cd-beacon-map {
+  width: 100%;
+  height: 220px;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.cd-beacon-coords {
+  font-size: 0.75rem;
+  font-family: ui-monospace, monospace;
+  color: #6c757d;
+  margin: 0 0 6px;
+}
+
+/* Violation location map */
+.cd-violation-map {
+  width: 100%;
+  height: 160px;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+@media (max-width: 900px) {
+  .cd-detail-columns {
+    grid-template-columns: 1fr;
+  }
+  .cd-detail-col:first-child {
+    border-right: none;
+    border-bottom: 1px solid #e2e6ea;
+  }
+  .cd-table-search {
+    max-width: 100%;
+  }
+}
+
+/* ── Campus Devices — device map & beacon ── */
+
+.cd-device-map-wrap {
+  position: relative;
+  border-bottom: 1px solid #e2e6ea;
+}
+
+.cd-device-map {
+  width: 100%;
+  height: 280px;
+}
+
+.cd-device-map-legend {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  display: flex;
+  gap: 10px;
+  z-index: 500;
+  pointer-events: none;
+}
+
+.cd-map-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(4px);
+  padding: 4px 9px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #112d4e;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+}
+
+.cd-map-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cd-tag-beacon {
+  background: #e8f5e9;
+  color: #1b5e20;
+}
+
+.cd-mono-sm {
+  font-size: 0.72rem;
+  word-break: break-all;
+}
+
+.cd-violation-has-location {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.cd-table-beacon-dot {
+  margin-left: 4px;
+  font-size: 0.75rem;
+  opacity: 0.8;
 }
