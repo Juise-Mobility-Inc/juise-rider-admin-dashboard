@@ -23,7 +23,8 @@ import {
 } from "../../lib/api";
 
 const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+const TILE_ATTR =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 
 type Props = {
   activeSchoolId: string;
@@ -81,10 +82,14 @@ function getDeviceStatusLabel(entry: RegisteredDeviceReviewEntry) {
 
 function getDeviceStatusClass(label: string) {
   switch (label) {
-    case "Declined": return "cd-status cd-status-declined";
-    case "Pending": return "cd-status cd-status-pending";
-    case "Inactive": return "cd-status cd-status-inactive";
-    default: return "cd-status cd-status-approved";
+    case "Declined":
+      return "cd-status cd-status-declined";
+    case "Pending":
+      return "cd-status cd-status-pending";
+    case "Inactive":
+      return "cd-status cd-status-inactive";
+    default:
+      return "cd-status cd-status-approved";
   }
 }
 
@@ -122,18 +127,6 @@ function formatTimestampFull(unix: number) {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-function formatBeaconRadius(value?: number | null) {
-  return typeof value === "number" && Number.isFinite(value)
-    ? `${Math.round(value)} m`
-    : "Unknown";
-}
-
-function formatBeaconRssi(value?: number | null) {
-  return typeof value === "number" && Number.isFinite(value)
-    ? `${value} dBm`
-    : "Unknown";
 }
 
 function capitalize(str: string) {
@@ -178,11 +171,13 @@ function getBeaconMeta(device: RegisteredDevice): BeaconMeta | null {
   const tryPos = (lk: string, lgk: string): [number, number] | null => {
     const lat = Number(meta[lk]);
     const lng = Number(meta[lgk]);
-    return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0)
+    return Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      !(lat === 0 && lng === 0)
       ? [lat, lng]
       : null;
   };
-  const position =
+  const metaPosition =
     tryPos("lat", "lng") ??
     tryPos("latitude", "longitude") ??
     tryPos("beacon_lat", "beacon_lng") ??
@@ -190,14 +185,24 @@ function getBeaconMeta(device: RegisteredDevice): BeaconMeta | null {
     tryPos("last_latitude", "last_longitude") ??
     null;
 
-  if (!uuid && !hubUUID && major == null && minor == null && lastSeen == null && rssi == null && !position) {
+  if (
+    !uuid &&
+    !hubUUID &&
+    major == null &&
+    minor == null &&
+    lastSeen == null &&
+    rssi == null &&
+    !metaPosition
+  ) {
     return null;
   }
 
-  return { uuid, hubUUID, major, minor, lastSeen, rssi, position };
+  return { uuid, hubUUID, major, minor, lastSeen, rssi, position: metaPosition };
 }
 
-function violationPositions(violations: StudentParkingViolation[]): { pos: [number, number]; label: string }[] {
+function violationPositions(
+  violations: StudentParkingViolation[],
+): { pos: [number, number]; label: string }[] {
   return violations
     .filter(
       (v) =>
@@ -243,13 +248,14 @@ function DeviceMapFitter({
 }
 
 function DeviceMap({
-  beaconMeta,
+  beaconPos,
   violations,
+  beaconLabel,
 }: {
-  beaconMeta: BeaconMeta | null;
+  beaconPos: [number, number] | null;
   violations: StudentParkingViolation[];
+  beaconLabel?: string;
 }) {
-  const beaconPos = beaconMeta?.position ?? null;
   const vPos = violationPositions(violations);
   const allPoints: [number, number][] = [
     ...(beaconPos ? [beaconPos] : []),
@@ -271,7 +277,7 @@ function DeviceMap({
       {beaconPos && (
         <Marker position={beaconPos} icon={juisePackIcon}>
           <Tooltip permanent direction="top" offset={[0, -22]}>
-            Last known location
+            {beaconLabel ?? "Last known location"}
           </Tooltip>
         </Marker>
       )}
@@ -292,7 +298,7 @@ function DeviceMap({
   );
 }
 
-// ── Status tabs ─────────────────────────────────────────────────────────────────
+// ── Status tabs ────────────────────────────────────────────────────────────────
 
 const STATUS_TABS = [
   { key: "all", label: "All" },
@@ -302,23 +308,36 @@ const STATUS_TABS = [
   { key: "inactive", label: "Inactive" },
 ];
 
-// ── Main screen ─────────────────────────────────────────────────────────────────
+// ── Main screen ────────────────────────────────────────────────────────────────
 
 export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const requestedDeviceUUID =
-    searchParams.get("device")?.trim() ||
-    searchParams.get("registered_device_uuid")?.trim() ||
-    "";
-  const [view, setView] = useState<View>("table");
+
+  const [view, setView] = useState<View>(() => {
+    const deepLinked =
+      searchParams.get("device")?.trim() ||
+      searchParams.get("registered_device_uuid")?.trim();
+    return deepLinked ? "detail" : "table";
+  });
+
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [entries, setEntries] = useState<RegisteredDeviceReviewEntry[]>([]);
   const [violations, setViolations] = useState<StudentParkingViolation[]>([]);
-  const [beaconLocations, setBeaconLocations] = useState<SchoolRegisteredDeviceBeaconLocation[]>([]);
-  const [studentPhotoUrls, setStudentPhotoUrls] = useState<Record<string, string>>({});
-  const [devicePhotoUrls, setDevicePhotoUrls] = useState<Record<string, string>>({});
-  const [selectedUUID, setSelectedUUID] = useState<string | null>(null);
+  const [beaconLocations, setBeaconLocations] = useState<
+    SchoolRegisteredDeviceBeaconLocation[]
+  >([]);
+  const [studentPhotoUrls, setStudentPhotoUrls] = useState<
+    Record<string, string>
+  >({});
+  const [devicePhotoUrls, setDevicePhotoUrls] = useState<
+    Record<string, string>
+  >({});
+  const [selectedUUID, setSelectedUUID] = useState<string | null>(
+    searchParams.get("device")?.trim() ||
+      searchParams.get("registered_device_uuid")?.trim() ||
+      null,
+  );
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -338,22 +357,22 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
       setBeaconLocations([]);
       setStudentPhotoUrls({});
       setDevicePhotoUrls({});
-      setSelectedUUID(null);
 
       try {
-        const [allEntries, allViolations, allBeaconLocations] = await Promise.all([
-          fetchSchoolRegisteredDevices(managedAppId, activeSchoolId, "").catch(
-            () => [] as RegisteredDeviceReviewEntry[],
-          ),
-          fetchSchoolParkingViolations(managedAppId, activeSchoolId, {
-            includeInactive: true,
-          }).catch(() => [] as StudentParkingViolation[]),
-          fetchSchoolBeaconLocations(managedAppId, activeSchoolId, {
-            maxAgeSeconds: 3600,
-            staleAfterSeconds: 300,
-            limit: 10,
-          }).catch(() => [] as SchoolRegisteredDeviceBeaconLocation[]),
-        ]);
+        const [allEntries, allViolations, allBeaconLocations] =
+          await Promise.all([
+            fetchSchoolRegisteredDevices(managedAppId, activeSchoolId, "").catch(
+              () => [] as RegisteredDeviceReviewEntry[],
+            ),
+            fetchSchoolParkingViolations(managedAppId, activeSchoolId, {
+              includeInactive: true,
+            }).catch(() => [] as StudentParkingViolation[]),
+            fetchSchoolBeaconLocations(managedAppId, activeSchoolId, {
+              maxAgeSeconds: 3600,
+              staleAfterSeconds: 300,
+              limit: 500,
+            }).catch(() => [] as SchoolRegisteredDeviceBeaconLocation[]),
+          ]);
 
         if (cancelled) return;
         setEntries(allEntries);
@@ -366,7 +385,9 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
         for (const entry of allEntries) {
           const profileKey = entry.student.profile_image_object_key?.trim();
           if (profileKey) studentKeyMap[entry.device.user_uuid] = profileKey;
-          const asset = entry.device_media.find((m) => m.active && m.object_key?.trim());
+          const asset = entry.device_media.find(
+            (m) => m.active && m.object_key?.trim(),
+          );
           if (asset?.object_key) {
             deviceKeyMap[entry.device.registered_device_uuid] = asset.object_key;
           }
@@ -379,7 +400,10 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
           ]),
         ];
         if (allKeys.length > 0 && !cancelled) {
-          const signed: Record<string, string> = await signSchoolMedia(activeSchoolId, allKeys).catch(() => ({}));
+          const signed: Record<string, string> = await signSchoolMedia(
+            activeSchoolId,
+            allKeys,
+          ).catch(() => ({}));
           if (cancelled) return;
 
           const sPhotos: Record<string, string> = {};
@@ -402,25 +426,25 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
     }
 
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [activeSchoolId, managedAppId]);
 
-  useEffect(() => {
-    if (!requestedDeviceUUID || entries.length === 0) return;
-    const exists = entries.some(
-      (entry) => entry.device.registered_device_uuid === requestedDeviceUUID,
-    );
-    if (!exists) return;
-    setSelectedUUID(requestedDeviceUUID);
-    setSearch("");
-    setStatusFilter("all");
-  }, [entries, requestedDeviceUUID]);
+  const beaconLocationByDevice = useMemo(() => {
+    const map = new Map<string, SchoolRegisteredDeviceBeaconLocation>();
+    for (const loc of beaconLocations) {
+      map.set(loc.registered_device_uuid, loc);
+    }
+    return map;
+  }, [beaconLocations]);
 
   const violationsByDevice = useMemo(() => {
     const map = new Map<string, StudentParkingViolation[]>();
     for (const v of violations) {
       if (!v.registered_device_uuid) continue;
-      if (!map.has(v.registered_device_uuid)) map.set(v.registered_device_uuid, []);
+      if (!map.has(v.registered_device_uuid))
+        map.set(v.registered_device_uuid, []);
       map.get(v.registered_device_uuid)!.push(v);
     }
     return map;
@@ -437,60 +461,41 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
         const device = formatDevice(entry).toLowerCase();
         const sid = formatStudentId(entry).toLowerCase();
         const serial = (entry.device.serial_number ?? "").toLowerCase();
-        return name.includes(q) || device.includes(q) || sid.includes(q) || serial.includes(q);
+        return (
+          name.includes(q) ||
+          device.includes(q) ||
+          sid.includes(q) ||
+          serial.includes(q)
+        );
       })
       .sort((a, b) => {
-        const aActive = (violationsByDevice.get(a.device.registered_device_uuid) ?? []).filter(
-          (v) => v.active,
-        ).length;
-        const bActive = (violationsByDevice.get(b.device.registered_device_uuid) ?? []).filter(
-          (v) => v.active,
-        ).length;
+        const aActive = (
+          violationsByDevice.get(a.device.registered_device_uuid) ?? []
+        ).filter((v) => v.active).length;
+        const bActive = (
+          violationsByDevice.get(b.device.registered_device_uuid) ?? []
+        ).filter((v) => v.active).length;
         if (bActive !== aActive) return bActive - aActive;
         return formatName(a).localeCompare(formatName(b));
       });
   }, [entries, violationsByDevice, search, statusFilter]);
 
-  useEffect(() => {
-    if (
-      selectedUUID &&
-      filteredEntries.some((e) => e.device.registered_device_uuid === selectedUUID)
-    )
-      return;
-    if (
-      selectedUUID &&
-      entries.some((e) => e.device.registered_device_uuid === selectedUUID)
-    )
-      return;
-    setSelectedUUID(filteredEntries[0]?.device.registered_device_uuid ?? null);
-  }, [entries, filteredEntries, selectedUUID]);
-
   const selectedEntry = useMemo(
-    () => entries.find((e) => e.device.registered_device_uuid === selectedUUID) ?? null,
-    [entries, selectedUUID],
-  );
-
-  const selectedBeaconInfo = useMemo(
-    () => selectedEntry ? getRegisteredDeviceBeaconInfo(selectedEntry.device) : null,
-    [selectedEntry],
-  );
-
-  const selectedBeaconLocation = useMemo(
     () =>
-      selectedEntry
-        ? beaconLocations.find(
-            (location) =>
-              location.registered_device_uuid ===
-              selectedEntry.device.registered_device_uuid,
-          ) ?? null
-        : null,
-    [beaconLocations, selectedEntry],
+      entries.find(
+        (e) => e.device.registered_device_uuid === selectedUUID,
+      ) ?? null,
+    [entries, selectedUUID],
   );
 
   const selectedViolations = useMemo(
     () =>
       selectedEntry
-        ? (violationsByDevice.get(selectedEntry.device.registered_device_uuid) ?? [])
+        ? (
+            violationsByDevice.get(
+              selectedEntry.device.registered_device_uuid,
+            ) ?? []
+          )
             .slice()
             .sort((a, b) => b.created_at - a.created_at)
         : [],
@@ -499,21 +504,42 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
 
   function openDetail(uuid: string) {
     setSelectedUUID(uuid);
+    setSearchParams({ device: uuid });
     setView("detail");
   }
 
   function backToTable() {
     setView("table");
+    setSearchParams({});
   }
 
   // ── Detail view ──────────────────────────────────────────────────────────────
   if (view === "detail" && selectedEntry) {
+    const devUUID = selectedEntry.device.registered_device_uuid;
+    const beaconInfo = getRegisteredDeviceBeaconInfo(selectedEntry.device);
     const beaconMeta = getBeaconMeta(selectedEntry.device);
+    const liveLocation = beaconLocationByDevice.get(devUUID);
+
+    const beaconPos: [number, number] | null =
+      liveLocation &&
+      Number.isFinite(liveLocation.latitude) &&
+      Number.isFinite(liveLocation.longitude) &&
+      liveLocation.latitude !== 0
+        ? [liveLocation.latitude!, liveLocation.longitude!]
+        : beaconMeta?.position ?? null;
+
+    const beaconMapLabel = liveLocation
+      ? `${beaconInfo?.beacon_mac ?? "Beacon"} \u00b7 ${liveLocation.stale ? "stale" : "live"}`
+      : beaconInfo?.beacon_mac
+        ? `${beaconInfo.beacon_mac} (metadata)`
+        : "Last known location";
+
     const statusLabel = getDeviceStatusLabel(selectedEntry);
-    const devicePhoto = devicePhotoUrls[selectedEntry.device.registered_device_uuid];
+    const devicePhoto = devicePhotoUrls[devUUID];
     const studentPhoto = studentPhotoUrls[selectedEntry.device.user_uuid];
+
     const hasMap =
-      beaconMeta?.position != null ||
+      beaconPos !== null ||
       selectedViolations.some(
         (v) =>
           Number.isFinite(v.violation_latitude) &&
@@ -524,31 +550,52 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
     return (
       <div className="cd-root">
         <div className="cd-detail-view">
-          {/* Back bar */}
           <div className="cd-detail-back-bar">
-            <button type="button" className="cd-detail-back-btn" onClick={backToTable}>
-              ← All Devices
+            <button
+              type="button"
+              className="cd-detail-back-btn"
+              onClick={backToTable}
+            >
+              \u2190 All Devices
             </button>
             <span className="cd-detail-back-label">
-              {filteredEntries.length.toLocaleString()} device{filteredEntries.length !== 1 ? "s" : ""}
+              {filteredEntries.length.toLocaleString()} device
+              {filteredEntries.length !== 1 ? "s" : ""}
             </span>
           </div>
 
           <div className="cd-detail-body">
-            {/* Full-width map */}
             {hasMap && (
               <div className="cd-device-map-wrap">
-                <DeviceMap beaconMeta={beaconMeta} violations={selectedViolations} />
+                <DeviceMap
+                  beaconPos={beaconPos}
+                  violations={selectedViolations}
+                  beaconLabel={beaconMapLabel}
+                />
                 <div className="cd-device-map-legend">
-                  {beaconMeta?.position && (
+                  {beaconPos && (
                     <span className="cd-map-legend-item cd-map-legend-beacon">
-                      <span className="cd-map-legend-dot" style={{ background: "#27CC5E" }} />
-                      Beacon location
+                      <span
+                        className="cd-map-legend-dot"
+                        style={{ background: "#27CC5E" }}
+                      />
+                      {liveLocation
+                        ? liveLocation.stale
+                          ? "Beacon (stale)"
+                          : "Beacon (live)"
+                        : "Beacon location"}
                     </span>
                   )}
-                  {selectedViolations.some((v) => Number.isFinite(v.violation_latitude) && v.violation_latitude !== 0) && (
+                  {selectedViolations.some(
+                    (v) =>
+                      Number.isFinite(v.violation_latitude) &&
+                      v.violation_latitude !== 0,
+                  ) && (
                     <span className="cd-map-legend-item">
-                      <span className="cd-map-legend-dot" style={{ background: "#dc3545" }} />
+                      <span
+                        className="cd-map-legend-dot"
+                        style={{ background: "#dc3545" }}
+                      />
                       Violations
                     </span>
                   )}
@@ -556,34 +603,51 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
               </div>
             )}
 
-            {/* Header */}
             <div className="cd-detail-header">
               <div className="cd-detail-device-thumb">
                 {devicePhoto ? (
-                  <img src={devicePhoto} alt={formatDevice(selectedEntry)} className="cd-device-photo" />
+                  <img
+                    src={devicePhoto}
+                    alt={formatDevice(selectedEntry)}
+                    className="cd-device-photo"
+                  />
                 ) : (
                   <div className="cd-device-photo-placeholder">🚲</div>
                 )}
               </div>
               <div className="cd-detail-header-info">
-                <h3 className="cd-detail-device-name">{formatDevice(selectedEntry)}</h3>
-                <p className="cd-detail-student-name">{formatName(selectedEntry)}</p>
+                <h3 className="cd-detail-device-name">
+                  {formatDevice(selectedEntry)}
+                </h3>
+                <p className="cd-detail-student-name">
+                  {formatName(selectedEntry)}
+                </p>
                 <div className="cd-detail-badges">
-                  <span className={getDeviceStatusClass(statusLabel)}>{statusLabel}</span>
+                  <span className={getDeviceStatusClass(statusLabel)}>
+                    {statusLabel}
+                  </span>
                   {selectedEntry.device.powertrain_type && (
-                    <span className="cd-tag">{capitalize(selectedEntry.device.powertrain_type)}</span>
+                    <span className="cd-tag">
+                      {capitalize(selectedEntry.device.powertrain_type)}
+                    </span>
                   )}
                   {selectedEntry.device.device_type && (
-                    <span className="cd-tag">{capitalize(selectedEntry.device.device_type)}</span>
+                    <span className="cd-tag">
+                      {capitalize(selectedEntry.device.device_type)}
+                    </span>
                   )}
-                  {beaconMeta && (
+                  {beaconInfo && (
+                    <span className="cd-tag cd-tag-beacon">
+                      📡 {beaconInfo.beacon_mac}
+                    </span>
+                  )}
+                  {!beaconInfo && beaconMeta && (
                     <span className="cd-tag cd-tag-beacon">📡 Beacon</span>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Stats row */}
             <div className="cd-stats-row">
               <div className="cd-stat">
                 <span>Total violations</span>
@@ -591,8 +655,16 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
               </div>
               <div className="cd-stat">
                 <span>Active</span>
-                <strong className={selectedViolations.filter((v) => v.active).length > 0 ? "cd-stat-danger" : ""}>
-                  {selectedViolations.filter((v) => v.active).length.toLocaleString()}
+                <strong
+                  className={
+                    selectedViolations.filter((v) => v.active).length > 0
+                      ? "cd-stat-danger"
+                      : ""
+                  }
+                >
+                  {selectedViolations
+                    .filter((v) => v.active)
+                    .length.toLocaleString()}
                 </strong>
               </div>
               <div className="cd-stat">
@@ -600,117 +672,208 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                 <strong>
                   {selectedViolations.length > 0
                     ? formatTimestamp(selectedViolations[0].created_at)
-                    : "—"}
+                    : "\u2014"}
                 </strong>
               </div>
               <div className="cd-stat">
                 <span>Registered</span>
-                <strong>{formatTimestamp(selectedEntry.device.created_at)}</strong>
+                <strong>
+                  {formatTimestamp(selectedEntry.device.created_at)}
+                </strong>
               </div>
             </div>
 
             <div className="cd-detail-columns">
-              {/* Left column */}
               <div className="cd-detail-col">
-                {/* Device details */}
                 <section className="cd-section">
                   <h4 className="cd-section-title">Device Details</h4>
                   <div className="cd-info-grid">
                     {selectedEntry.device.device_type && (
                       <div className="cd-info-row">
                         <span>Type</span>
-                        <strong>{capitalize(selectedEntry.device.device_type)}</strong>
+                        <strong>
+                          {capitalize(selectedEntry.device.device_type)}
+                        </strong>
                       </div>
                     )}
                     {(selectedEntry.device.make || selectedEntry.device.model) && (
                       <div className="cd-info-row">
                         <span>Make / Model</span>
                         <strong>
-                          {[selectedEntry.device.make, selectedEntry.device.model].filter(Boolean).join(" ")}
+                          {[
+                            selectedEntry.device.make,
+                            selectedEntry.device.model,
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
                         </strong>
                       </div>
                     )}
                     {selectedEntry.device.color && (
                       <div className="cd-info-row">
                         <span>Color</span>
-                        <strong>{capitalize(selectedEntry.device.color)}</strong>
+                        <strong>
+                          {capitalize(selectedEntry.device.color)}
+                        </strong>
                       </div>
                     )}
                     {selectedEntry.device.serial_number && (
                       <div className="cd-info-row">
                         <span>Serial number</span>
-                        <strong className="cd-mono">{selectedEntry.device.serial_number}</strong>
+                        <strong className="cd-mono">
+                          {selectedEntry.device.serial_number}
+                        </strong>
                       </div>
                     )}
                     {selectedEntry.device.powertrain_type && (
                       <div className="cd-info-row">
                         <span>Powertrain</span>
-                        <strong>{capitalize(selectedEntry.device.powertrain_type)}</strong>
+                        <strong>
+                          {capitalize(selectedEntry.device.powertrain_type)}
+                        </strong>
                       </div>
                     )}
                     {selectedEntry.device.registration_status && (
                       <div className="cd-info-row">
                         <span>Registration</span>
-                        <strong>{capitalize(selectedEntry.device.registration_status)}</strong>
+                        <strong>
+                          {capitalize(
+                            selectedEntry.device.registration_status,
+                          )}
+                        </strong>
                       </div>
                     )}
                   </div>
                 </section>
 
-                {/* Beacon info */}
-                {beaconMeta && (
+                {(beaconInfo || beaconMeta || liveLocation) && (
                   <section className="cd-section">
                     <h4 className="cd-section-title">📡 Beacon</h4>
                     <div className="cd-info-grid">
-                      {beaconMeta.uuid && (
+                      {beaconInfo && (
                         <div className="cd-info-row">
-                          <span>Beacon UUID</span>
-                          <strong className="cd-mono cd-mono-sm">{beaconMeta.uuid}</strong>
-                        </div>
-                      )}
-                      {beaconMeta.hubUUID && (
-                        <div className="cd-info-row">
-                          <span>Hub UUID</span>
-                          <strong className="cd-mono cd-mono-sm">{beaconMeta.hubUUID}</strong>
-                        </div>
-                      )}
-                      {beaconMeta.major != null && (
-                        <div className="cd-info-row">
-                          <span>Major</span>
-                          <strong>{beaconMeta.major}</strong>
-                        </div>
-                      )}
-                      {beaconMeta.minor != null && (
-                        <div className="cd-info-row">
-                          <span>Minor</span>
-                          <strong>{beaconMeta.minor}</strong>
-                        </div>
-                      )}
-                      {beaconMeta.rssi != null && (
-                        <div className="cd-info-row">
-                          <span>Signal (RSSI)</span>
-                          <strong>{beaconMeta.rssi} dBm</strong>
-                        </div>
-                      )}
-                      {beaconMeta.lastSeen != null && (
-                        <div className="cd-info-row">
-                          <span>Last seen</span>
-                          <strong>{formatTimestampFull(beaconMeta.lastSeen)}</strong>
-                        </div>
-                      )}
-                      {beaconMeta.position && (
-                        <div className="cd-info-row">
-                          <span>Coordinates</span>
-                          <strong className="cd-mono cd-mono-sm">
-                            {beaconMeta.position[0].toFixed(5)}, {beaconMeta.position[1].toFixed(5)}
+                          <span>MAC address</span>
+                          <strong className="cd-mono">
+                            {beaconInfo.beacon_mac}
                           </strong>
                         </div>
+                      )}
+                      {liveLocation && (
+                        <>
+                          <div className="cd-info-row">
+                            <span>Status</span>
+                            <strong>
+                              {liveLocation.stale ? "Stale" : "Live"}
+                            </strong>
+                          </div>
+                          {liveLocation.observed_at != null && (
+                            <div className="cd-info-row">
+                              <span>Last observed</span>
+                              <strong>
+                                {formatTimestampFull(liveLocation.observed_at)}
+                              </strong>
+                            </div>
+                          )}
+                          {liveLocation.sighting_count > 0 && (
+                            <div className="cd-info-row">
+                              <span>Sightings</span>
+                              <strong>
+                                {liveLocation.sighting_count.toLocaleString()}
+                              </strong>
+                            </div>
+                          )}
+                          {liveLocation.rssi != null && (
+                            <div className="cd-info-row">
+                              <span>Signal (RSSI)</span>
+                              <strong>{liveLocation.rssi} dBm</strong>
+                            </div>
+                          )}
+                          {liveLocation.radius_meters != null && (
+                            <div className="cd-info-row">
+                              <span>Accuracy</span>
+                              <strong>
+                                \u00b1{liveLocation.radius_meters.toFixed(0)} m
+                              </strong>
+                            </div>
+                          )}
+                          {liveLocation.estimate_method && (
+                            <div className="cd-info-row">
+                              <span>Method</span>
+                              <strong>
+                                {capitalize(liveLocation.estimate_method)}
+                              </strong>
+                            </div>
+                          )}
+                          {beaconPos && (
+                            <div className="cd-info-row">
+                              <span>Coordinates</span>
+                              <strong className="cd-mono cd-mono-sm">
+                                {beaconPos[0].toFixed(5)},{" "}
+                                {beaconPos[1].toFixed(5)}
+                              </strong>
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {!liveLocation && beaconMeta && (
+                        <>
+                          {beaconMeta.uuid && (
+                            <div className="cd-info-row">
+                              <span>Beacon UUID</span>
+                              <strong className="cd-mono cd-mono-sm">
+                                {beaconMeta.uuid}
+                              </strong>
+                            </div>
+                          )}
+                          {beaconMeta.hubUUID && (
+                            <div className="cd-info-row">
+                              <span>Hub UUID</span>
+                              <strong className="cd-mono cd-mono-sm">
+                                {beaconMeta.hubUUID}
+                              </strong>
+                            </div>
+                          )}
+                          {beaconMeta.major != null && (
+                            <div className="cd-info-row">
+                              <span>Major</span>
+                              <strong>{beaconMeta.major}</strong>
+                            </div>
+                          )}
+                          {beaconMeta.minor != null && (
+                            <div className="cd-info-row">
+                              <span>Minor</span>
+                              <strong>{beaconMeta.minor}</strong>
+                            </div>
+                          )}
+                          {beaconMeta.rssi != null && (
+                            <div className="cd-info-row">
+                              <span>Signal (RSSI)</span>
+                              <strong>{beaconMeta.rssi} dBm</strong>
+                            </div>
+                          )}
+                          {beaconMeta.lastSeen != null && (
+                            <div className="cd-info-row">
+                              <span>Last seen</span>
+                              <strong>
+                                {formatTimestampFull(beaconMeta.lastSeen)}
+                              </strong>
+                            </div>
+                          )}
+                          {beaconMeta.position && (
+                            <div className="cd-info-row">
+                              <span>Coordinates</span>
+                              <strong className="cd-mono cd-mono-sm">
+                                {beaconMeta.position[0].toFixed(5)},{" "}
+                                {beaconMeta.position[1].toFixed(5)}
+                              </strong>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </section>
                 )}
 
-                {/* Student */}
                 <section className="cd-section">
                   <h4 className="cd-section-title">Student</h4>
                   <div className="cd-student-card">
@@ -730,11 +893,15 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                     <div className="cd-student-card-info">
                       <strong>{formatName(selectedEntry)}</strong>
                       {formatStudentId(selectedEntry) && (
-                        <p className="cd-student-sub">ID: {formatStudentId(selectedEntry)}</p>
-                      )}
-                      {(selectedEntry.student.user.email || selectedEntry.student.user.username) && (
                         <p className="cd-student-sub">
-                          {selectedEntry.student.user.email || selectedEntry.student.user.username}
+                          ID: {formatStudentId(selectedEntry)}
+                        </p>
+                      )}
+                      {(selectedEntry.student.user.email ||
+                        selectedEntry.student.user.username) && (
+                        <p className="cd-student-sub">
+                          {selectedEntry.student.user.email ||
+                            selectedEntry.student.user.username}
                         </p>
                       )}
                     </div>
@@ -742,17 +909,20 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                 </section>
               </div>
 
-              {/* Right column — violations */}
               <div className="cd-detail-col">
                 <section className="cd-section">
                   <h4 className="cd-section-title">
                     Enforcement Violations
                     {selectedViolations.length > 0 && (
-                      <span className="cd-section-count">{selectedViolations.length}</span>
+                      <span className="cd-section-count">
+                        {selectedViolations.length}
+                      </span>
                     )}
                   </h4>
                   {selectedViolations.length === 0 ? (
-                    <p className="cd-empty-inline">No violations reported for this device.</p>
+                    <p className="cd-empty-inline">
+                      No violations reported for this device.
+                    </p>
                   ) : (
                     <div className="cd-violation-list">
                       {selectedViolations.map((v) => {
@@ -779,22 +949,36 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                                   {vStatus}
                                 </span>
                                 {fee && (
-                                  <span className={`cd-violation-fee${feePaid ? " cd-violation-fee-paid" : ""}`}>
-                                    {fee}{feePaid ? " paid" : ""}
+                                  <span
+                                    className={`cd-violation-fee${feePaid ? " cd-violation-fee-paid" : ""}`}
+                                  >
+                                    {fee}
+                                    {feePaid ? " paid" : ""}
                                   </span>
                                 )}
                                 {hasCoords && (
-                                  <span className="cd-violation-has-location" title="Location on map">📍</span>
+                                  <span
+                                    className="cd-violation-has-location"
+                                    title="Location on map"
+                                  >
+                                    📍
+                                  </span>
                                 )}
                               </div>
                             </div>
                             {v.description && (
-                              <p className="cd-violation-desc">{v.description}</p>
+                              <p className="cd-violation-desc">
+                                {v.description}
+                              </p>
                             )}
                             {v.admin_notes && (
-                              <p className="cd-violation-notes"><em>Note:</em> {v.admin_notes}</p>
+                              <p className="cd-violation-notes">
+                                <em>Note:</em> {v.admin_notes}
+                              </p>
                             )}
-                            <p className="cd-violation-date">{formatTimestamp(v.created_at)}</p>
+                            <p className="cd-violation-date">
+                              {formatTimestamp(v.created_at)}
+                            </p>
                           </div>
                         );
                       })}
@@ -809,7 +993,7 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
     );
   }
 
-  // ── Table view (default) ─────────────────────────────────────────────────────
+  // ── Table view (default) ───────────────────────────────────────────────────
   return (
     <div className="cd-root">
       <div className="cd-table-view">
@@ -821,14 +1005,14 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                 {loadState === "ready"
                   ? `${filteredEntries.length.toLocaleString()} of ${entries.length.toLocaleString()} devices`
                   : loadState === "loading"
-                    ? "Loading…"
+                    ? "Loading\u2026"
                     : ""}
               </span>
             </div>
             <input
               type="search"
               className="cd-table-search"
-              placeholder="Search by student, device, serial…"
+              placeholder="Search by student, device, serial\u2026"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -850,7 +1034,7 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
         {loadState === "error" ? (
           <p className="cd-empty">{errorMsg}</p>
         ) : loadState === "loading" ? (
-          <p className="cd-empty">Loading devices…</p>
+          <p className="cd-empty">Loading devices\u2026</p>
         ) : filteredEntries.length === 0 ? (
           <p className="cd-empty">No devices match this filter.</p>
         ) : (
@@ -871,336 +1055,30 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
               </thead>
               <tbody>
                 {filteredEntries.map((entry) => {
-                  const uuid = entry.device.registered_device_uuid;
+                  const rowUUID = entry.device.registered_device_uuid;
                   const name = formatName(entry);
                   const deviceLabel = formatDevice(entry);
                   const statusLabel = getDeviceStatusLabel(entry);
                   const studentPhotoUrl = studentPhotoUrls[entry.device.user_uuid];
-                  const devicePhotoUrl = devicePhotoUrls[entry.device.registered_device_uuid];
-                  const deviceViolations = violationsByDevice.get(uuid) ?? [];
+                  const devicePhotoUrl = devicePhotoUrls[rowUUID];
+                  const deviceViolations = violationsByDevice.get(rowUUID) ?? [];
                   const activeV = deviceViolations.filter((v) => v.active).length;
                   const totalV = deviceViolations.length;
                   const lastViolation = deviceViolations
                     .slice()
                     .sort((a, b) => b.created_at - a.created_at)[0];
                   const sid = formatStudentId(entry);
-                  const hasBeacon = getBeaconMeta(entry.device) !== null;
+                  const beaconInfo = getRegisteredDeviceBeaconInfo(entry.device);
+                  const hasBeacon =
+                    beaconInfo !== null || getBeaconMeta(entry.device) !== null;
+                  const liveBeacon = beaconLocationByDevice.get(rowUUID);
 
-              return (
-                <button
-                  key={uuid}
-                  type="button"
-                  className={`cd-device-row${isSelected ? " cd-device-row-active" : ""}`}
-                  onClick={() => {
-                    setSelectedUUID(uuid);
-                    setSearchParams({ device: uuid });
-                  }}
-                >
-                  <div className="cd-device-row-avatar">
-                    {photoUrl ? (
-                      <img src={photoUrl} alt={name} className="cd-avatar-img" />
-                    ) : (
-                      <div className="cd-avatar-initials">{getInitials(name)}</div>
-                    )}
-                  </div>
-                  <div className="cd-device-row-body">
-                    <div className="cd-device-row-top">
-                      <strong className="cd-device-row-name">{name}</strong>
-                      {activeViolations > 0 && (
-                        <span className="cd-violation-dot">
-                          {activeViolations}
-                        </span>
-                      )}
-                    </div>
-                    <div className="cd-device-row-meta">
-                      <span className="cd-device-row-label">{deviceLabel}</span>
-                      <span className={getDeviceStatusClass(statusLabel)}>
-                        {statusLabel}
-                      </span>
-                    </div>
-                    {totalViolations > 0 && activeViolations === 0 && (
-                      <span className="cd-device-row-closed">
-                        {totalViolations} past violation{totalViolations !== 1 ? "s" : ""}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </aside>
-
-      {/* ── Right detail panel ── */}
-      {selectedEntry ? (
-        <main className="cd-detail">
-          {/* Header */}
-          <div className="cd-detail-header">
-            <div className="cd-detail-device-thumb">
-              {devicePhotoUrls[selectedEntry.device.registered_device_uuid] ? (
-                <img
-                  src={devicePhotoUrls[selectedEntry.device.registered_device_uuid]}
-                  alt={formatDevice(selectedEntry)}
-                  className="cd-device-photo"
-                />
-              ) : (
-                <div className="cd-device-photo-placeholder">🚲</div>
-              )}
-            </div>
-            <div className="cd-detail-header-info">
-              <h3 className="cd-detail-device-name">{formatDevice(selectedEntry)}</h3>
-              <p className="cd-detail-student-name">{formatName(selectedEntry)}</p>
-              <div className="cd-detail-badges">
-                {(() => {
-                  const label = getDeviceStatusLabel(selectedEntry);
-                  return <span className={getDeviceStatusClass(label)}>{label}</span>;
-                })()}
-                {selectedEntry.device.powertrain_type && (
-                  <span className="cd-tag">
-                    {capitalize(selectedEntry.device.powertrain_type)}
-                  </span>
-                )}
-                {selectedEntry.device.device_type && (
-                  <span className="cd-tag">
-                    {capitalize(selectedEntry.device.device_type)}
-                  </span>
-                )}
-                {selectedBeaconInfo && (
-                  <span className="cd-tag cd-tag-beacon">
-                    Beacon {selectedBeaconInfo.beacon_mac}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Stats row */}
-          <div className="cd-stats-row">
-            <div className="cd-stat">
-              <span>Total violations</span>
-              <strong>{selectedViolations.length.toLocaleString()}</strong>
-            </div>
-            <div className="cd-stat">
-              <span>Active</span>
-              <strong
-                className={
-                  selectedViolations.filter((v) => v.active).length > 0
-                    ? "cd-stat-danger"
-                    : ""
-                }
-              >
-                {selectedViolations.filter((v) => v.active).length.toLocaleString()}
-              </strong>
-            </div>
-            <div className="cd-stat">
-              <span>Last violation</span>
-              <strong>
-                {selectedViolations.length > 0
-                  ? formatTimestamp(selectedViolations[0].created_at)
-                  : "—"}
-              </strong>
-            </div>
-            <div className="cd-stat">
-              <span>Registered</span>
-              <strong>{formatTimestamp(selectedEntry.device.created_at)}</strong>
-            </div>
-          </div>
-
-          {/* Device details */}
-          <section className="cd-section">
-            <h4 className="cd-section-title">Device Details</h4>
-            <div className="cd-info-grid">
-              {selectedEntry.device.device_type && (
-                <div className="cd-info-row">
-                  <span>Type</span>
-                  <strong>{capitalize(selectedEntry.device.device_type)}</strong>
-                </div>
-              )}
-              {(selectedEntry.device.make || selectedEntry.device.model) && (
-                <div className="cd-info-row">
-                  <span>Make / Model</span>
-                  <strong>
-                    {[selectedEntry.device.make, selectedEntry.device.model]
-                      .filter(Boolean)
-                      .join(" ")}
-                  </strong>
-                </div>
-              )}
-              {selectedEntry.device.color && (
-                <div className="cd-info-row">
-                  <span>Color</span>
-                  <strong>{capitalize(selectedEntry.device.color)}</strong>
-                </div>
-              )}
-              {selectedEntry.device.serial_number && (
-                <div className="cd-info-row">
-                  <span>Serial number</span>
-                  <strong className="cd-mono">{selectedEntry.device.serial_number}</strong>
-                </div>
-              )}
-              {selectedEntry.device.powertrain_type && (
-                <div className="cd-info-row">
-                  <span>Powertrain</span>
-                  <strong>{capitalize(selectedEntry.device.powertrain_type)}</strong>
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* Beacon info */}
-          <section className="cd-section">
-            <h4 className="cd-section-title">Beacon</h4>
-            {selectedBeaconInfo ? (
-              <div className="cd-beacon-panel">
-                <div className="cd-beacon-header">
-                  <div className="cd-beacon-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" focusable="false">
-                      <path d="M7 7l10 10-5 5V2l5 5L7 17" />
-                    </svg>
-                  </div>
-                  <div>
-                    <strong>{selectedBeaconInfo.beacon_mac}</strong>
-                    <span>
-                      {selectedBeaconLocation
-                        ? selectedBeaconLocation.stale
-                          ? "Last-known location"
-                          : "Live location"
-                        : "Registered beacon"}
-                    </span>
-                  </div>
-                </div>
-                <div className="cd-info-grid cd-info-grid-compact">
-                  <div className="cd-info-row">
-                    <span>Normalized MAC</span>
-                    <strong className="cd-mono">{selectedBeaconInfo.beacon_mac_normalized}</strong>
-                  </div>
-                  <div className="cd-info-row">
-                    <span>Frame types</span>
-                    <strong>
-                      {selectedBeaconInfo.frame_types.length
-                        ? selectedBeaconInfo.frame_types.join(", ")
-                        : "Not recorded"}
-                    </strong>
-                  </div>
-                  <div className="cd-info-row">
-                    <span>Verification</span>
-                    <strong>{selectedBeaconInfo.verification_source || "Not recorded"}</strong>
-                  </div>
-                  {selectedBeaconInfo.observed_name || selectedBeaconInfo.observed_device_id ? (
-                    <div className="cd-info-row">
-                      <span>Registered from</span>
-                      <strong>
-                        {selectedBeaconInfo.observed_name ||
-                          selectedBeaconInfo.observed_device_id}
-                      </strong>
-                    </div>
-                  ) : null}
-                  <div className="cd-info-row">
-                    <span>Registered RSSI</span>
-                    <strong>{formatBeaconRssi(selectedBeaconInfo.observed_rssi)}</strong>
-                  </div>
-                  <div className="cd-info-row">
-                    <span>Registered observed</span>
-                    <strong>{formatDateTime(selectedBeaconInfo.observed_at)}</strong>
-                  </div>
-                  {selectedBeaconLocation ? (
-                    <>
-                      <div className="cd-info-row">
-                        <span>Latest observed</span>
-                        <strong>{formatDateTime(selectedBeaconLocation.observed_at)}</strong>
-                      </div>
-                      <div className="cd-info-row">
-                        <span>Latest estimate</span>
-                        <strong>
-                          {selectedBeaconLocation.latitude != null &&
-                          selectedBeaconLocation.longitude != null
-                            ? `${selectedBeaconLocation.latitude.toFixed(6)}, ${selectedBeaconLocation.longitude.toFixed(6)}`
-                            : "No coordinate"}
-                        </strong>
-                      </div>
-                      <div className="cd-info-row">
-                        <span>Radius</span>
-                        <strong>{formatBeaconRadius(selectedBeaconLocation.radius_meters)}</strong>
-                      </div>
-                      <div className="cd-info-row">
-                        <span>Latest RSSI</span>
-                        <strong>{formatBeaconRssi(selectedBeaconLocation.rssi)}</strong>
-                      </div>
-                      <div className="cd-info-row">
-                        <span>Sightings</span>
-                        <strong>{selectedBeaconLocation.sighting_count.toLocaleString()}</strong>
-                      </div>
-                      <div className="cd-info-row">
-                        <span>Method</span>
-                        <strong>
-                          {selectedBeaconLocation.estimate_method?.replace(/_/g, " ") ||
-                            "Unknown"}
-                        </strong>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="cd-beacon-empty">
-                      No recent beacon location has been reported for this device.
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <p className="cd-empty-inline">No beacon registered for this device.</p>
-            )}
-          </section>
-
-          {/* Student info */}
-          <section className="cd-section">
-            <h4 className="cd-section-title">Student</h4>
-            <div className="cd-student-card">
-              <div className="cd-student-card-avatar">
-                {studentPhotoUrls[selectedEntry.device.user_uuid] ? (
-                  <img
-                    src={studentPhotoUrls[selectedEntry.device.user_uuid]}
-                    alt={formatName(selectedEntry)}
-                    className="cd-avatar-img cd-avatar-img-lg"
-                  />
-                ) : (
-                  <div className="cd-avatar-initials cd-avatar-initials-lg">
-                    {getInitials(formatName(selectedEntry))}
-                  </div>
-                )}
-              </div>
-              <div className="cd-student-card-info">
-                <strong>{formatName(selectedEntry)}</strong>
-                {formatStudentId(selectedEntry) && (
-                  <p className="cd-student-sub">
-                    ID: {formatStudentId(selectedEntry)}
-                  </p>
-                )}
-                {(selectedEntry.student.user.email || selectedEntry.student.user.username) && (
-                  <p className="cd-student-sub">
-                    {selectedEntry.student.user.email || selectedEntry.student.user.username}
-                  </p>
-                )}
-              </div>
-            </div>
-          </section>
-
-          {/* Enforcement violations */}
-          <section className="cd-section">
-            <h4 className="cd-section-title">
-              Enforcement Violations
-              {selectedViolations.length > 0 && (
-                <span className="cd-section-count">{selectedViolations.length}</span>
-              )}
-            </h4>
-            {selectedViolations.length === 0 ? (
-              <p className="cd-empty-inline">No violations reported for this device.</p>
-            ) : (
-              <div className="cd-violation-list">
-                {selectedViolations.map((v) => {
-                  const statusLabel = formatViolationStatus(v);
-                  const fee = formatCurrency(v.payment_amount_cents);
-                  const feePaid = !!v.payment_collected_at;
                   return (
-                    <tr key={uuid} className="cd-table-row" onClick={() => openDetail(uuid)}>
+                    <tr
+                      key={rowUUID}
+                      className="cd-table-row"
+                      onClick={() => openDetail(rowUUID)}
+                    >
                       <td>
                         <div className="cd-table-student-cell">
                           {devicePhotoUrl ? (
@@ -1210,23 +1088,46 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                               className="cd-table-avatar cd-table-avatar-device"
                             />
                           ) : (
-                            <div className="cd-table-avatar-initials cd-table-avatar-device-placeholder">🚲</div>
+                            <div className="cd-table-avatar-initials cd-table-avatar-device-placeholder">
+                              🚲
+                            </div>
                           )}
                           <div>
                             <div className="cd-table-name">
                               {deviceLabel}
-                              {hasBeacon && <span className="cd-table-beacon-dot" title="Has beacon">📡</span>}
+                              {hasBeacon && (
+                                <span
+                                  className={`cd-table-beacon-dot${liveBeacon && !liveBeacon.stale ? " cd-table-beacon-live" : ""}`}
+                                  title={
+                                    liveBeacon
+                                      ? liveBeacon.stale
+                                        ? "Beacon stale"
+                                        : "Beacon live"
+                                      : "Has beacon"
+                                  }
+                                >
+                                  📡
+                                </span>
+                              )}
                             </div>
-                            <div className="cd-table-sid cd-table-uuid">{uuid}</div>
+                            <div className="cd-table-sid cd-table-uuid">
+                              {rowUUID}
+                            </div>
                           </div>
                         </div>
                       </td>
                       <td>
                         <div className="cd-table-student-cell">
                           {studentPhotoUrl ? (
-                            <img src={studentPhotoUrl} alt={name} className="cd-table-avatar" />
+                            <img
+                              src={studentPhotoUrl}
+                              alt={name}
+                              className="cd-table-avatar"
+                            />
                           ) : (
-                            <div className="cd-table-avatar-initials">{getInitials(name)}</div>
+                            <div className="cd-table-avatar-initials">
+                              {getInitials(name)}
+                            </div>
                           )}
                           <div>
                             <div className="cd-table-name">{name}</div>
@@ -1234,10 +1135,12 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                           </div>
                         </div>
                       </td>
-                      <td>{capitalize(entry.device.device_type) || "—"}</td>
-                      <td>{capitalize(entry.device.color) || "—"}</td>
+                      <td>{capitalize(entry.device.device_type) || "\u2014"}</td>
+                      <td>{capitalize(entry.device.color) || "\u2014"}</td>
                       <td>
-                        <span className={getDeviceStatusClass(statusLabel)}>{statusLabel}</span>
+                        <span className={getDeviceStatusClass(statusLabel)}>
+                          {statusLabel}
+                        </span>
                       </td>
                       <td>
                         {activeV > 0 ? (
@@ -1246,137 +1149,26 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                           <span className="cd-table-zero">0</span>
                         )}
                       </td>
-                      <td>{totalV > 0 ? totalV : <span className="cd-table-zero">0</span>}</td>
-                      <td className="cd-table-date">
-                        {lastViolation ? formatTimestamp(lastViolation.created_at) : "—"}
+                      <td>
+                        {totalV > 0 ? (
+                          totalV
+                        ) : (
+                          <span className="cd-table-zero">0</span>
+                        )}
                       </td>
-                      <td className="cd-table-date">{formatTimestamp(entry.device.created_at)}</td>
+                      <td className="cd-table-date">
+                        {lastViolation
+                          ? formatTimestamp(lastViolation.created_at)
+                          : "\u2014"}
+                      </td>
+                      <td className="cd-table-date">
+                        {formatTimestamp(entry.device.created_at)}
+                      </td>
                     </tr>
                   );
                 })}
-              </div>
-            )}
-          </section>
-        </main>
-      ) : (
-        <main className="cd-detail cd-detail-empty">
-          <p>
-            {loadState === "loading"
-              ? "Loading devices…"
-              : "Select a device from the list to view details."}
-          </p>
-        </main>
-      )}
-
-      {/* ── Table overlay ── */}
-      {showTable && (
-        <div className="cd-table-overlay" onClick={() => setShowTable(false)}>
-          <div className="cd-table-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="cd-table-modal-head">
-              <div>
-                <h3 className="cd-table-modal-title">All Registered Devices</h3>
-                <p className="cd-table-modal-sub">
-                  {entries.length.toLocaleString()} device{entries.length !== 1 ? "s" : ""} · click a row to inspect
-                </p>
-              </div>
-              <button
-                type="button"
-                className="cd-table-modal-close"
-                onClick={() => setShowTable(false)}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="cd-table-scroll">
-              <table className="cd-table">
-                <thead>
-                  <tr>
-                    <th>Student</th>
-                    <th>Device</th>
-                    <th>Type</th>
-                    <th>Color</th>
-                    <th>Status</th>
-                    <th>Active violations</th>
-                    <th>Total violations</th>
-                    <th>Last violation</th>
-                    <th>Registered</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {entries
-                    .slice()
-                    .sort((a, b) => {
-                      const aA = (violationsByDevice.get(a.device.registered_device_uuid) ?? []).filter((v) => v.active).length;
-                      const bA = (violationsByDevice.get(b.device.registered_device_uuid) ?? []).filter((v) => v.active).length;
-                      if (bA !== aA) return bA - aA;
-                      return formatName(a).localeCompare(formatName(b));
-                    })
-                    .map((entry) => {
-                      const uuid = entry.device.registered_device_uuid;
-                      const name = formatName(entry);
-                      const deviceLabel = formatDevice(entry);
-                      const statusLabel = getDeviceStatusLabel(entry);
-                      const photoUrl = studentPhotoUrls[entry.device.user_uuid];
-                      const deviceViolations = violationsByDevice.get(uuid) ?? [];
-                      const activeV = deviceViolations.filter((v) => v.active).length;
-                      const totalV = deviceViolations.length;
-                      const lastViolation = deviceViolations
-                        .slice()
-                        .sort((a, b) => b.created_at - a.created_at)[0];
-                      const sid = formatStudentId(entry);
-
-                      return (
-                        <tr
-                          key={uuid}
-                          className={`cd-table-row${uuid === selectedUUID ? " cd-table-row-selected" : ""}`}
-                          onClick={() => {
-                            setSelectedUUID(uuid);
-                            setSearchParams({ device: uuid });
-                            setShowTable(false);
-                          }}
-                        >
-                          <td>
-                            <div className="cd-table-student-cell">
-                              {photoUrl ? (
-                                <img src={photoUrl} alt={name} className="cd-table-avatar" />
-                              ) : (
-                                <div className="cd-table-avatar-initials">{getInitials(name)}</div>
-                              )}
-                              <div>
-                                <div className="cd-table-name">{name}</div>
-                                {sid && <div className="cd-table-sid">{sid}</div>}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="cd-table-device">{deviceLabel}</td>
-                          <td>{capitalize(entry.device.device_type) || "—"}</td>
-                          <td>{capitalize(entry.device.color) || "—"}</td>
-                          <td>
-                            <span className={getDeviceStatusClass(statusLabel)}>
-                              {statusLabel}
-                            </span>
-                          </td>
-                          <td>
-                            {activeV > 0 ? (
-                              <span className="cd-table-active-v">{activeV}</span>
-                            ) : (
-                              <span className="cd-table-zero">0</span>
-                            )}
-                          </td>
-                          <td>{totalV > 0 ? totalV : <span className="cd-table-zero">0</span>}</td>
-                          <td className="cd-table-date">
-                            {lastViolation
-                              ? formatTimestamp(lastViolation.created_at)
-                              : <span className="cd-table-zero">—</span>}
-                          </td>
-                          <td className="cd-table-date">{formatTimestamp(entry.device.created_at)}</td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
-            </div>
+              </tbody>
+            </table>
           </div>
         )}
       </div>
