@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { MapContainer, Marker, TileLayer } from "react-leaflet";
+import { LatLngBounds } from "leaflet";
+import {
+  CircleMarker,
+  MapContainer,
+  Marker,
+  TileLayer,
+  Tooltip,
+  useMap,
+} from "react-leaflet";
 import { juisePackIcon } from "../../lib/mapIcons";
 import {
   fetchSchoolParkingViolations,
@@ -20,6 +28,16 @@ type Props = {
 
 type LoadState = "idle" | "loading" | "error" | "ready";
 type View = "table" | "detail";
+
+type BeaconMeta = {
+  uuid?: string;
+  hubUUID?: string;
+  major?: number;
+  minor?: number;
+  lastSeen?: number;
+  rssi?: number;
+  position: [number, number] | null;
+};
 
 function getErrorMessage(err: unknown) {
   return err instanceof Error ? err.message : "Something went wrong.";
@@ -91,6 +109,17 @@ function formatTimestamp(unix: number) {
   });
 }
 
+function formatTimestampFull(unix: number) {
+  const ms = unix < 1e11 ? unix * 1000 : unix;
+  return new Date(ms).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function capitalize(str: string) {
   if (!str) return "";
   return str.charAt(0).toUpperCase() + str.slice(1).replace(/_/g, " ");
@@ -106,26 +135,148 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
-function getBeaconLocation(device: RegisteredDevice): [number, number] | null {
+function getBeaconMeta(device: RegisteredDevice): BeaconMeta | null {
   const meta = device.metadata as Record<string, unknown> | undefined;
   if (!meta) return null;
-  const tryPair = (latKey: string, lngKey: string): [number, number] | null => {
-    const lat = Number(meta[latKey]);
-    const lng = Number(meta[lngKey]);
-    if (Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0)) {
-      return [lat, lng];
-    }
-    return null;
+
+  const str = (key: string) => {
+    const v = meta[key];
+    return v != null ? String(v).trim() : undefined;
   };
+  const num = (...keys: string[]) => {
+    for (const k of keys) {
+      const v = Number(meta[k]);
+      if (Number.isFinite(v)) return v;
+    }
+    return undefined;
+  };
+
+  const uuid =
+    str("beacon_uuid") ?? str("beacon_id") ?? str("hub_key") ?? undefined;
+  const hubUUID = str("hub_uuid") ?? undefined;
+  const major = num("major", "beacon_major");
+  const minor = num("minor", "beacon_minor");
+  const lastSeen = num("last_seen_at", "last_seen", "seen_at");
+  const rssi = num("rssi", "signal_strength");
+
+  const tryPos = (lk: string, lgk: string): [number, number] | null => {
+    const lat = Number(meta[lk]);
+    const lng = Number(meta[lgk]);
+    return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0)
+      ? [lat, lng]
+      : null;
+  };
+  const position =
+    tryPos("lat", "lng") ??
+    tryPos("latitude", "longitude") ??
+    tryPos("beacon_lat", "beacon_lng") ??
+    tryPos("last_lat", "last_lng") ??
+    tryPos("last_latitude", "last_longitude") ??
+    null;
+
+  if (!uuid && !hubUUID && major == null && minor == null && lastSeen == null && rssi == null && !position) {
+    return null;
+  }
+
+  return { uuid, hubUUID, major, minor, lastSeen, rssi, position };
+}
+
+function violationPositions(violations: StudentParkingViolation[]): { pos: [number, number]; label: string }[] {
+  return violations
+    .filter(
+      (v) =>
+        Number.isFinite(v.violation_latitude) &&
+        Number.isFinite(v.violation_longitude) &&
+        v.violation_latitude !== 0 &&
+        v.violation_longitude !== 0,
+    )
+    .map((v) => ({
+      pos: [v.violation_latitude!, v.violation_longitude!] as [number, number],
+      label: capitalize(v.violation_type) || "Violation",
+    }));
+}
+
+// ── Map components ─────────────────────────────────────────────────────────────
+
+function DeviceMapFitter({
+  beaconPos,
+  vPositions,
+}: {
+  beaconPos: [number, number] | null;
+  vPositions: { pos: [number, number] }[];
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    const all: [number, number][] = [
+      ...(beaconPos ? [beaconPos] : []),
+      ...vPositions.map((v) => v.pos),
+    ];
+    if (all.length === 0) return;
+    if (all.length === 1) {
+      map.setView(all[0], 16, { animate: false });
+    } else {
+      const bounds = new LatLngBounds(all);
+      if (bounds.isValid()) {
+        map.fitBounds(bounds.pad(0.25), { padding: [28, 28], animate: false });
+      }
+    }
+  }, [map, beaconPos, vPositions]);
+
+  return null;
+}
+
+function DeviceMap({
+  beaconMeta,
+  violations,
+}: {
+  beaconMeta: BeaconMeta | null;
+  violations: StudentParkingViolation[];
+}) {
+  const beaconPos = beaconMeta?.position ?? null;
+  const vPos = violationPositions(violations);
+  const allPoints: [number, number][] = [
+    ...(beaconPos ? [beaconPos] : []),
+    ...vPos.map((v) => v.pos),
+  ];
+
+  if (allPoints.length === 0) return null;
+
   return (
-    tryPair("lat", "lng") ??
-    tryPair("latitude", "longitude") ??
-    tryPair("beacon_lat", "beacon_lng") ??
-    tryPair("last_lat", "last_lng") ??
-    tryPair("last_latitude", "last_longitude") ??
-    null
+    <MapContainer
+      center={allPoints[0]}
+      zoom={15}
+      scrollWheelZoom={false}
+      className="cd-device-map"
+      attributionControl={false}
+    >
+      <TileLayer url={TILE_URL} attribution={TILE_ATTR} />
+      <DeviceMapFitter beaconPos={beaconPos} vPositions={vPos} />
+      {beaconPos && (
+        <Marker position={beaconPos} icon={juisePackIcon}>
+          <Tooltip permanent direction="top" offset={[0, -22]}>
+            Last known location
+          </Tooltip>
+        </Marker>
+      )}
+      {vPos.map(({ pos, label }, i) => (
+        <CircleMarker
+          key={i}
+          center={pos}
+          radius={9}
+          color="#dc3545"
+          fillColor="#dc3545"
+          fillOpacity={0.75}
+          weight={2}
+        >
+          <Tooltip>{label}</Tooltip>
+        </CircleMarker>
+      ))}
+    </MapContainer>
   );
 }
+
+// ── Status tabs ─────────────────────────────────────────────────────────────────
 
 const STATUS_TABS = [
   { key: "all", label: "All" },
@@ -135,35 +286,7 @@ const STATUS_TABS = [
   { key: "inactive", label: "Inactive" },
 ];
 
-function BeaconMap({ position }: { position: [number, number] }) {
-  return (
-    <MapContainer
-      center={position}
-      zoom={16}
-      scrollWheelZoom={false}
-      className="cd-beacon-map"
-      attributionControl={false}
-    >
-      <TileLayer url={TILE_URL} attribution={TILE_ATTR} />
-      <Marker position={position} icon={juisePackIcon} />
-    </MapContainer>
-  );
-}
-
-function ViolationMap({ lat, lng }: { lat: number; lng: number }) {
-  return (
-    <MapContainer
-      center={[lat, lng]}
-      zoom={17}
-      scrollWheelZoom={false}
-      className="cd-violation-map"
-      attributionControl={false}
-    >
-      <TileLayer url={TILE_URL} attribution={TILE_ATTR} />
-      <Marker position={[lat, lng]} />
-    </MapContainer>
-  );
-}
+// ── Main screen ─────────────────────────────────────────────────────────────────
 
 export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
   const [view, setView] = useState<View>("table");
@@ -250,9 +373,7 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
     }
 
     load();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [activeSchoolId, managedAppId]);
 
   const violationsByDevice = useMemo(() => {
@@ -314,11 +435,20 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
     setView("table");
   }
 
+  // ── Detail view ──────────────────────────────────────────────────────────────
   if (view === "detail" && selectedEntry) {
-    const beaconPos = getBeaconLocation(selectedEntry.device);
+    const beaconMeta = getBeaconMeta(selectedEntry.device);
     const statusLabel = getDeviceStatusLabel(selectedEntry);
     const devicePhoto = devicePhotoUrls[selectedEntry.device.registered_device_uuid];
     const studentPhoto = studentPhotoUrls[selectedEntry.device.user_uuid];
+    const hasMap =
+      beaconMeta?.position != null ||
+      selectedViolations.some(
+        (v) =>
+          Number.isFinite(v.violation_latitude) &&
+          Number.isFinite(v.violation_longitude) &&
+          v.violation_latitude !== 0,
+      );
 
     return (
       <div className="cd-root">
@@ -334,15 +464,32 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
           </div>
 
           <div className="cd-detail-body">
+            {/* Full-width map */}
+            {hasMap && (
+              <div className="cd-device-map-wrap">
+                <DeviceMap beaconMeta={beaconMeta} violations={selectedViolations} />
+                <div className="cd-device-map-legend">
+                  {beaconMeta?.position && (
+                    <span className="cd-map-legend-item cd-map-legend-beacon">
+                      <span className="cd-map-legend-dot" style={{ background: "#27CC5E" }} />
+                      Beacon location
+                    </span>
+                  )}
+                  {selectedViolations.some((v) => Number.isFinite(v.violation_latitude) && v.violation_latitude !== 0) && (
+                    <span className="cd-map-legend-item">
+                      <span className="cd-map-legend-dot" style={{ background: "#dc3545" }} />
+                      Violations
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Header */}
             <div className="cd-detail-header">
               <div className="cd-detail-device-thumb">
                 {devicePhoto ? (
-                  <img
-                    src={devicePhoto}
-                    alt={formatDevice(selectedEntry)}
-                    className="cd-device-photo"
-                  />
+                  <img src={devicePhoto} alt={formatDevice(selectedEntry)} className="cd-device-photo" />
                 ) : (
                   <div className="cd-device-photo-placeholder">🚲</div>
                 )}
@@ -358,6 +505,9 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                   {selectedEntry.device.device_type && (
                     <span className="cd-tag">{capitalize(selectedEntry.device.device_type)}</span>
                   )}
+                  {beaconMeta && (
+                    <span className="cd-tag cd-tag-beacon">📡 Beacon</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -370,11 +520,7 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
               </div>
               <div className="cd-stat">
                 <span>Active</span>
-                <strong
-                  className={
-                    selectedViolations.filter((v) => v.active).length > 0 ? "cd-stat-danger" : ""
-                  }
-                >
+                <strong className={selectedViolations.filter((v) => v.active).length > 0 ? "cd-stat-danger" : ""}>
                   {selectedViolations.filter((v) => v.active).length.toLocaleString()}
                 </strong>
               </div>
@@ -409,9 +555,7 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                       <div className="cd-info-row">
                         <span>Make / Model</span>
                         <strong>
-                          {[selectedEntry.device.make, selectedEntry.device.model]
-                            .filter(Boolean)
-                            .join(" ")}
+                          {[selectedEntry.device.make, selectedEntry.device.model].filter(Boolean).join(" ")}
                         </strong>
                       </div>
                     )}
@@ -441,6 +585,59 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                     )}
                   </div>
                 </section>
+
+                {/* Beacon info */}
+                {beaconMeta && (
+                  <section className="cd-section">
+                    <h4 className="cd-section-title">📡 Beacon</h4>
+                    <div className="cd-info-grid">
+                      {beaconMeta.uuid && (
+                        <div className="cd-info-row">
+                          <span>Beacon UUID</span>
+                          <strong className="cd-mono cd-mono-sm">{beaconMeta.uuid}</strong>
+                        </div>
+                      )}
+                      {beaconMeta.hubUUID && (
+                        <div className="cd-info-row">
+                          <span>Hub UUID</span>
+                          <strong className="cd-mono cd-mono-sm">{beaconMeta.hubUUID}</strong>
+                        </div>
+                      )}
+                      {beaconMeta.major != null && (
+                        <div className="cd-info-row">
+                          <span>Major</span>
+                          <strong>{beaconMeta.major}</strong>
+                        </div>
+                      )}
+                      {beaconMeta.minor != null && (
+                        <div className="cd-info-row">
+                          <span>Minor</span>
+                          <strong>{beaconMeta.minor}</strong>
+                        </div>
+                      )}
+                      {beaconMeta.rssi != null && (
+                        <div className="cd-info-row">
+                          <span>Signal (RSSI)</span>
+                          <strong>{beaconMeta.rssi} dBm</strong>
+                        </div>
+                      )}
+                      {beaconMeta.lastSeen != null && (
+                        <div className="cd-info-row">
+                          <span>Last seen</span>
+                          <strong>{formatTimestampFull(beaconMeta.lastSeen)}</strong>
+                        </div>
+                      )}
+                      {beaconMeta.position && (
+                        <div className="cd-info-row">
+                          <span>Coordinates</span>
+                          <strong className="cd-mono cd-mono-sm">
+                            {beaconMeta.position[0].toFixed(5)}, {beaconMeta.position[1].toFixed(5)}
+                          </strong>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                )}
 
                 {/* Student */}
                 <section className="cd-section">
@@ -472,17 +669,6 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                     </div>
                   </div>
                 </section>
-
-                {/* Beacon location */}
-                {beaconPos && (
-                  <section className="cd-section">
-                    <h4 className="cd-section-title">Last Known Location</h4>
-                    <p className="cd-beacon-coords">
-                      {beaconPos[0].toFixed(5)}, {beaconPos[1].toFixed(5)}
-                    </p>
-                    <BeaconMap position={beaconPos} />
-                  </section>
-                )}
               </div>
 
               {/* Right column — violations */}
@@ -502,11 +688,10 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                         const vStatus = formatViolationStatus(v);
                         const fee = formatCurrency(v.payment_amount_cents);
                         const feePaid = !!v.payment_collected_at;
-                        const hasMap =
+                        const hasCoords =
                           Number.isFinite(v.violation_latitude) &&
                           Number.isFinite(v.violation_longitude) &&
-                          v.violation_latitude !== 0 &&
-                          v.violation_longitude !== 0;
+                          v.violation_latitude !== 0;
                         return (
                           <div
                             key={v.violation_uuid}
@@ -523,12 +708,12 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                                   {vStatus}
                                 </span>
                                 {fee && (
-                                  <span
-                                    className={`cd-violation-fee${feePaid ? " cd-violation-fee-paid" : ""}`}
-                                  >
-                                    {fee}
-                                    {feePaid ? " paid" : ""}
+                                  <span className={`cd-violation-fee${feePaid ? " cd-violation-fee-paid" : ""}`}>
+                                    {fee}{feePaid ? " paid" : ""}
                                   </span>
+                                )}
+                                {hasCoords && (
+                                  <span className="cd-violation-has-location" title="Location on map">📍</span>
                                 )}
                               </div>
                             </div>
@@ -536,17 +721,9 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                               <p className="cd-violation-desc">{v.description}</p>
                             )}
                             {v.admin_notes && (
-                              <p className="cd-violation-notes">
-                                <em>Note:</em> {v.admin_notes}
-                              </p>
+                              <p className="cd-violation-notes"><em>Note:</em> {v.admin_notes}</p>
                             )}
                             <p className="cd-violation-date">{formatTimestamp(v.created_at)}</p>
-                            {hasMap && (
-                              <ViolationMap
-                                lat={v.violation_latitude!}
-                                lng={v.violation_longitude!}
-                              />
-                            )}
                           </div>
                         );
                       })}
@@ -561,10 +738,10 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
     );
   }
 
+  // ── Table view (default) ─────────────────────────────────────────────────────
   return (
     <div className="cd-root">
       <div className="cd-table-view">
-        {/* Table header */}
         <div className="cd-table-view-header">
           <div className="cd-table-view-header-row">
             <div className="cd-table-view-title-group">
@@ -599,7 +776,6 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
           </div>
         </div>
 
-        {/* Table body */}
         {loadState === "error" ? (
           <p className="cd-empty">{errorMsg}</p>
         ) : loadState === "loading" ? (
@@ -637,22 +813,26 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                     .slice()
                     .sort((a, b) => b.created_at - a.created_at)[0];
                   const sid = formatStudentId(entry);
+                  const hasBeacon = getBeaconMeta(entry.device) !== null;
 
                   return (
-                    <tr
-                      key={uuid}
-                      className="cd-table-row"
-                      onClick={() => openDetail(uuid)}
-                    >
+                    <tr key={uuid} className="cd-table-row" onClick={() => openDetail(uuid)}>
                       <td>
                         <div className="cd-table-student-cell">
                           {devicePhotoUrl ? (
-                            <img src={devicePhotoUrl} alt={deviceLabel} className="cd-table-avatar cd-table-avatar-device" />
+                            <img
+                              src={devicePhotoUrl}
+                              alt={deviceLabel}
+                              className="cd-table-avatar cd-table-avatar-device"
+                            />
                           ) : (
                             <div className="cd-table-avatar-initials cd-table-avatar-device-placeholder">🚲</div>
                           )}
                           <div>
-                            <div className="cd-table-name">{deviceLabel}</div>
+                            <div className="cd-table-name">
+                              {deviceLabel}
+                              {hasBeacon && <span className="cd-table-beacon-dot" title="Has beacon">📡</span>}
+                            </div>
                             <div className="cd-table-sid cd-table-uuid">{uuid}</div>
                           </div>
                         </div>
@@ -682,9 +862,7 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                           <span className="cd-table-zero">0</span>
                         )}
                       </td>
-                      <td>
-                        {totalV > 0 ? totalV : <span className="cd-table-zero">0</span>}
-                      </td>
+                      <td>{totalV > 0 ? totalV : <span className="cd-table-zero">0</span>}</td>
                       <td className="cd-table-date">
                         {lastViolation ? formatTimestamp(lastViolation.created_at) : "—"}
                       </td>
