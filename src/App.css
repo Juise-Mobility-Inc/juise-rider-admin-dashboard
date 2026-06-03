@@ -12831,6 +12831,28 @@
   color: #6c757d;
 }
 
+.cd-table-uuid {
+  font-size: 0.65rem;
+  font-family: ui-monospace, monospace;
+  color: #adb5bd;
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cd-table-avatar-device {
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.cd-table-avatar-device-placeholder {
+  border-radius: 6px;
+  background: #f0f2f4;
+  color: #6c757d;
+  font-size: 1rem;
+}
+
 .cd-table-device {
   max-width: 160px;
   white-space: nowrap;

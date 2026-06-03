@@ -611,8 +611,8 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
             <table className="cd-table">
               <thead>
                 <tr>
-                  <th>Student</th>
                   <th>Device</th>
+                  <th>Student</th>
                   <th>Type</th>
                   <th>Color</th>
                   <th>Status</th>
@@ -628,7 +628,8 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                   const name = formatName(entry);
                   const deviceLabel = formatDevice(entry);
                   const statusLabel = getDeviceStatusLabel(entry);
-                  const photoUrl = studentPhotoUrls[entry.device.user_uuid];
+                  const studentPhotoUrl = studentPhotoUrls[entry.device.user_uuid];
+                  const devicePhotoUrl = devicePhotoUrls[entry.device.registered_device_uuid];
                   const deviceViolations = violationsByDevice.get(uuid) ?? [];
                   const activeV = deviceViolations.filter((v) => v.active).length;
                   const totalV = deviceViolations.length;
@@ -645,8 +646,21 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                     >
                       <td>
                         <div className="cd-table-student-cell">
-                          {photoUrl ? (
-                            <img src={photoUrl} alt={name} className="cd-table-avatar" />
+                          {devicePhotoUrl ? (
+                            <img src={devicePhotoUrl} alt={deviceLabel} className="cd-table-avatar cd-table-avatar-device" />
+                          ) : (
+                            <div className="cd-table-avatar-initials cd-table-avatar-device-placeholder">🚲</div>
+                          )}
+                          <div>
+                            <div className="cd-table-name">{deviceLabel}</div>
+                            <div className="cd-table-sid cd-table-uuid">{uuid}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="cd-table-student-cell">
+                          {studentPhotoUrl ? (
+                            <img src={studentPhotoUrl} alt={name} className="cd-table-avatar" />
                           ) : (
                             <div className="cd-table-avatar-initials">{getInitials(name)}</div>
                           )}
@@ -656,7 +670,6 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                           </div>
                         </div>
                       </td>
-                      <td className="cd-table-device">{deviceLabel}</td>
                       <td>{capitalize(entry.device.device_type) || "—"}</td>
                       <td>{capitalize(entry.device.color) || "—"}</td>
                       <td>
