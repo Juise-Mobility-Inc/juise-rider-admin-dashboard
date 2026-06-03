@@ -10795,6 +10795,12 @@
         border: 1px solid rgba(59, 130, 246, 0.28);
 }
 
+.mo-stat-chip--beacons {
+	background: rgba(236, 72, 153, 0.12);
+	color: #be185d;
+	border: 1px solid rgba(236, 72, 153, 0.28);
+}
+
 .mo-layer-bar {
         display: flex;
         gap: 6px;
@@ -10824,6 +10830,11 @@
 .mo-layer-btn:hover {
         background: var(--surface-2, #f3f4f6);
         color: var(--text-strong, #111827);
+}
+
+.mo-layer-btn:disabled {
+	cursor: not-allowed;
+	opacity: 0.58;
 }
 
 .mo-layer-btn--on {
@@ -10868,6 +10879,56 @@
         height: 100%;
         position: absolute;
         inset: 0;
+}
+
+.beacon-location-marker.leaflet-div-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 3px solid #fff;
+	border-radius: 999px;
+	background: rgba(2, 6, 23, 0.9);
+	box-shadow:
+		0 14px 32px rgba(2, 6, 23, 0.38),
+		0 0 0 8px rgba(236, 72, 153, 0.24),
+		0 0 0 13px rgba(255, 255, 255, 0.56);
+}
+
+.beacon-location-marker-core {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	border: 2px solid rgba(255, 255, 255, 0.82);
+	border-radius: 999px;
+	background: linear-gradient(135deg, #f43f8c, #be185d);
+	color: #fff;
+	line-height: 1;
+	box-shadow: inset 0 -5px 12px rgba(2, 6, 23, 0.2);
+}
+
+.beacon-location-marker-core svg {
+	width: 29px;
+	height: 29px;
+	stroke: currentColor;
+	stroke-width: 2.8;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	fill: none;
+}
+
+.beacon-location-marker--stale.leaflet-div-icon {
+	background: rgba(15, 23, 42, 0.86);
+	box-shadow:
+		0 14px 32px rgba(15, 23, 42, 0.3),
+		0 0 0 8px rgba(100, 116, 139, 0.24),
+		0 0 0 13px rgba(255, 255, 255, 0.46);
+}
+
+.beacon-location-marker--stale .beacon-location-marker-core {
+	color: rgba(255, 255, 255, 0.82);
+	background: linear-gradient(135deg, #94a3b8, #475569);
 }
 
 .mo-empty-overlay {
@@ -10954,6 +11015,16 @@
         color: #1d4ed8;
 }
 
+.mo-popup-badge--beacon {
+	background: #fdf2f8;
+	color: #be185d;
+}
+
+.mo-popup-badge--beacon-stale {
+	background: #f1f5f9;
+	color: #475569;
+}
+
 .mo-popup-title {
         font-size: 0.95rem;
         font-weight: 700;
@@ -11029,6 +11100,11 @@
 .mo-popup-nav-btn--pack {
         background: #1d4ed8;
         color: #fff;
+}
+
+.mo-popup-nav-btn--beacon {
+	background: #be185d;
+	color: #fff;
 }
 
 .settings-grid {
@@ -11249,6 +11325,11 @@
 .reg-chip-fee {
         background: rgba(59, 130, 246, 0.1);
         color: #1d4ed8;
+}
+
+.reg-chip-beacon {
+	background: rgba(236, 72, 153, 0.12);
+	color: #be185d;
 }
 
 /* ── Fee rule card improvements ── */
@@ -12335,6 +12416,11 @@
   white-space: nowrap;
 }
 
+.cd-tag-beacon {
+  background: #fdf2f8;
+  color: #be185d;
+}
+
 /* Empty state */
 .cd-empty {
   padding: 24px 16px;
@@ -12524,6 +12610,68 @@
   font-family: monospace;
   font-size: 0.8rem !important;
   letter-spacing: 0.02em;
+}
+
+.cd-info-grid-compact {
+  padding: 0;
+}
+
+.cd-beacon-panel {
+  padding: 14px 16px 16px;
+}
+
+.cd-beacon-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+  border: 1px solid #f9a8d4;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #fff1f7, #fff);
+}
+
+.cd-beacon-header strong {
+  display: block;
+  font-size: 0.95rem;
+  color: #9d174d;
+}
+
+.cd-beacon-header span {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.76rem;
+  color: #be185d;
+}
+
+.cd-beacon-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f43f8c, #be185d);
+  color: #fff;
+  box-shadow: 0 10px 22px rgba(190, 24, 93, 0.18);
+}
+
+.cd-beacon-icon svg {
+  width: 28px;
+  height: 28px;
+  stroke: currentColor;
+  stroke-width: 2.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.cd-beacon-empty {
+  padding: 12px 0 0;
+  color: #6c757d;
+  font-size: 0.82rem;
 }
 
 /* Student card */

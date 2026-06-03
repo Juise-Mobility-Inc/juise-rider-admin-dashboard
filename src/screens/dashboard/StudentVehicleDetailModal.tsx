@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
 
-import type { RegisteredDevice, UserMediaAsset } from "../../lib/api";
+import {
+  getRegisteredDeviceBeaconInfo,
+  type RegisteredDevice,
+  type UserMediaAsset,
+} from "../../lib/api";
 
 type Props = {
   device: RegisteredDevice;
@@ -123,6 +127,7 @@ export function StudentVehicleDetailModal({
   const qrDescriptor = useMemo(() => resolveDeviceQrDescriptor(device), [device]);
   const qrUnlocked = isDeviceQrUnlocked(device);
   const bikeIndexMetadata = useMemo(() => resolveBikeIndexMetadata(device), [device]);
+  const beaconInfo = useMemo(() => getRegisteredDeviceBeaconInfo(device), [device]);
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [qrBusy, setQrBusy] = useState(false);
 
@@ -408,6 +413,74 @@ export function StudentVehicleDetailModal({
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="data-section">
+          <div className="data-section-header">
+            <h4>Beacon</h4>
+          </div>
+          {beaconInfo ? (
+            <>
+              <div className="detail-grid">
+                <div className="detail-row">
+                  <span>MAC address</span>
+                  <strong>{beaconInfo.beacon_mac}</strong>
+                </div>
+                <div className="detail-row">
+                  <span>Normalized MAC</span>
+                  <strong>{beaconInfo.beacon_mac_normalized}</strong>
+                </div>
+                <div className="detail-row">
+                  <span>Frame types</span>
+                  <strong>
+                    {beaconInfo.frame_types.length
+                      ? beaconInfo.frame_types.join(", ")
+                      : "Not recorded"}
+                  </strong>
+                </div>
+                <div className="detail-row">
+                  <span>Verification</span>
+                  <strong>{beaconInfo.verification_source || "Not recorded"}</strong>
+                </div>
+                <div className="detail-row">
+                  <span>Observed device</span>
+                  <strong>
+                    {beaconInfo.observed_name ||
+                      beaconInfo.observed_device_id ||
+                      "Not recorded"}
+                  </strong>
+                </div>
+                <div className="detail-row">
+                  <span>Observed RSSI</span>
+                  <strong>{formatMetadataValue(beaconInfo.observed_rssi)}</strong>
+                </div>
+                <div className="detail-row">
+                  <span>Observed</span>
+                  <strong>{formatUnixTimestamp(beaconInfo.observed_at ?? undefined)}</strong>
+                </div>
+              </div>
+              <div className="vehicle-modal-action-row">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => void onCopy("beacon MAC", beaconInfo.beacon_mac)}
+                >
+                  Copy MAC
+                </button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() =>
+                    void onCopy("normalized beacon MAC", beaconInfo.beacon_mac_normalized)
+                  }
+                >
+                  Copy normalized MAC
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="muted-text">No beacon registered.</p>
+          )}
         </div>
 
         <div className="data-section">

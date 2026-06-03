@@ -454,6 +454,42 @@ export interface RegisteredDevice {
   updated_at: number;
 }
 
+export interface RegisteredDeviceBeaconInfo {
+  beacon_mac: string;
+  beacon_mac_normalized: string;
+  beacon_mac_address: string;
+  frame_types: string[];
+  verification_source?: string;
+  observed_device_id?: string;
+  observed_name?: string;
+  observed_rssi?: number | null;
+  observed_at?: number | null;
+}
+
+export interface SchoolRegisteredDeviceBeaconLocation {
+  managed_app_id: string;
+  school_id: string;
+  registered_device_uuid: string;
+  owner_user_uuid: string;
+  membership_uuid?: string | null;
+  device: RegisteredDevice;
+  device_label?: string;
+  owner_display_name?: string;
+  beacon_mac: string;
+  beacon_mac_normalized: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  radius_meters?: number | null;
+  observed_at?: number | null;
+  sighting_count: number;
+  estimate_method?: string;
+  used_observer_count?: number;
+  best_accuracy_sighting_uuid?: string;
+  latest_sighting_uuid?: string;
+  rssi?: number | null;
+  stale: boolean;
+}
+
 export interface RegisteredDeviceReviewEntry {
   managed_app_id: string;
   school_id: string;
@@ -491,6 +527,86 @@ export interface RegisteredDeviceApprovalInput {
   fee_mode: "matched" | "manual" | "waive";
   amount_cents?: number | null;
   note?: string;
+}
+
+function apiRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
+}
+
+function apiString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function apiNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function normalizeBeaconMacForDisplay(value: string): string {
+  const normalized = value.replace(/[^0-9a-f]/gi, "").toUpperCase();
+  return normalized.length === 12 ? normalized : "";
+}
+
+function formatNormalizedBeaconMac(value: string): string {
+  const normalized = normalizeBeaconMacForDisplay(value);
+  return normalized ? normalized.match(/.{1,2}/g)!.join(":") : value.trim();
+}
+
+function beaconFrameTypes(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => apiString(item))
+    .filter(Boolean);
+}
+
+export function getRegisteredDeviceBeaconInfo(
+  device: RegisteredDevice,
+): RegisteredDeviceBeaconInfo | null {
+  const metadata = apiRecord(device.metadata);
+  const sections = [
+    metadata,
+    apiRecord(metadata.juise_beacon),
+    apiRecord(metadata.beacon),
+    apiRecord(metadata.tag),
+  ];
+
+  for (const section of sections) {
+    const rawMac =
+      apiString(section.beacon_mac) ||
+      apiString(section.beacon_mac_address) ||
+      apiString(section.beacon_mac_normalized) ||
+      apiString(section.m2_mac) ||
+      apiString(section.m2_mac_address) ||
+      apiString(section.tag_mac) ||
+      apiString(section.tag_mac_address) ||
+      apiString(section.ble_mac) ||
+      apiString(section.ble_address) ||
+      apiString(section.mac) ||
+      apiString(section.mac_address);
+    const normalized =
+      normalizeBeaconMacForDisplay(apiString(section.beacon_mac_normalized)) ||
+      normalizeBeaconMacForDisplay(rawMac);
+    if (!normalized) {
+      continue;
+    }
+    return {
+      beacon_mac: formatNormalizedBeaconMac(normalized),
+      beacon_mac_normalized: normalized,
+      beacon_mac_address: formatNormalizedBeaconMac(rawMac || normalized),
+      frame_types: beaconFrameTypes(section.frame_types),
+      verification_source: apiString(section.verification_source) || undefined,
+      observed_device_id: apiString(section.observed_device_id) || undefined,
+      observed_name: apiString(section.observed_name) || undefined,
+      observed_rssi: apiNumber(section.observed_rssi),
+      observed_at: apiNumber(section.observed_at),
+    };
+  }
+
+  return null;
 }
 
 export interface StudentProfileBundle {
@@ -2549,6 +2665,29 @@ export async function fetchSchoolRegisteredDevices(
   return request<RegisteredDeviceReviewEntry[]>(
     "kcaProxy",
     `/api/v1/admin/school/${encodeURIComponent(schoolId)}/registered-devices?${search}`,
+    {
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function fetchSchoolBeaconLocations(
+  managedAppId: string,
+  schoolId: string,
+  options: {
+    maxAgeSeconds?: number;
+    staleAfterSeconds?: number;
+    limit?: number;
+  } = {},
+): Promise<SchoolRegisteredDeviceBeaconLocation[]> {
+  const search = buildManagedSchoolSearch(managedAppId, {
+    max_age_seconds: options.maxAgeSeconds?.toString(),
+    stale_after_seconds: options.staleAfterSeconds?.toString(),
+    limit: options.limit?.toString(),
+  });
+  return request<SchoolRegisteredDeviceBeaconLocation[]>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/registered-devices/beacon-locations?${search}`,
     {
       appIdHeader: currentSession?.authAppId ?? managedAppId,
     },

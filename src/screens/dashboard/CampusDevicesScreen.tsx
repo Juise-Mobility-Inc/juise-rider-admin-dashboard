@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
+  fetchSchoolBeaconLocations,
   fetchSchoolParkingViolations,
   fetchSchoolRegisteredDevices,
+  getRegisteredDeviceBeaconInfo,
   signSchoolMedia,
+  type SchoolRegisteredDeviceBeaconLocation,
   type RegisteredDeviceReviewEntry,
   type StudentParkingViolation,
 } from "../../lib/api";
@@ -84,6 +88,30 @@ function formatTimestamp(unix: number) {
   });
 }
 
+function formatDateTime(unix?: number | null) {
+  if (!unix) return "Never";
+  const ms = unix < 1e11 ? unix * 1000 : unix;
+  return new Date(ms).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatBeaconRadius(value?: number | null) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? `${Math.round(value)} m`
+    : "Unknown";
+}
+
+function formatBeaconRssi(value?: number | null) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? `${value} dBm`
+    : "Unknown";
+}
+
 function capitalize(str: string) {
   if (!str) return "";
   return str.charAt(0).toUpperCase() + str.slice(1).replace(/_/g, " ");
@@ -108,10 +136,16 @@ const STATUS_TABS = [
 ];
 
 export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedDeviceUUID =
+    searchParams.get("device")?.trim() ||
+    searchParams.get("registered_device_uuid")?.trim() ||
+    "";
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [entries, setEntries] = useState<RegisteredDeviceReviewEntry[]>([]);
   const [violations, setViolations] = useState<StudentParkingViolation[]>([]);
+  const [beaconLocations, setBeaconLocations] = useState<SchoolRegisteredDeviceBeaconLocation[]>([]);
   const [studentPhotoUrls, setStudentPhotoUrls] = useState<Record<string, string>>({});
   const [devicePhotoUrls, setDevicePhotoUrls] = useState<Record<string, string>>({});
   const [selectedUUID, setSelectedUUID] = useState<string | null>(null);
@@ -132,23 +166,30 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
       setErrorMsg("");
       setEntries([]);
       setViolations([]);
+      setBeaconLocations([]);
       setStudentPhotoUrls({});
       setDevicePhotoUrls({});
       setSelectedUUID(null);
 
       try {
-        const [allEntries, allViolations] = await Promise.all([
+        const [allEntries, allViolations, allBeaconLocations] = await Promise.all([
           fetchSchoolRegisteredDevices(managedAppId, activeSchoolId, "").catch(
             () => [] as RegisteredDeviceReviewEntry[],
           ),
           fetchSchoolParkingViolations(managedAppId, activeSchoolId, {
             includeInactive: true,
           }).catch(() => [] as StudentParkingViolation[]),
+          fetchSchoolBeaconLocations(managedAppId, activeSchoolId, {
+            maxAgeSeconds: 3600,
+            staleAfterSeconds: 300,
+            limit: 10,
+          }).catch(() => [] as SchoolRegisteredDeviceBeaconLocation[]),
         ]);
 
         if (cancelled) return;
         setEntries(allEntries);
         setViolations(allViolations);
+        setBeaconLocations(allBeaconLocations);
         setLoadState("ready");
 
         const studentKeyMap: Record<string, string> = {};
@@ -197,6 +238,17 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
     };
   }, [activeSchoolId, managedAppId]);
 
+  useEffect(() => {
+    if (!requestedDeviceUUID || entries.length === 0) return;
+    const exists = entries.some(
+      (entry) => entry.device.registered_device_uuid === requestedDeviceUUID,
+    );
+    if (!exists) return;
+    setSelectedUUID(requestedDeviceUUID);
+    setSearch("");
+    setStatusFilter("all");
+  }, [entries, requestedDeviceUUID]);
+
   const violationsByDevice = useMemo(() => {
     const map = new Map<string, StudentParkingViolation[]>();
     for (const v of violations) {
@@ -244,12 +296,34 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
       filteredEntries.some((e) => e.device.registered_device_uuid === selectedUUID)
     )
       return;
+    if (
+      selectedUUID &&
+      entries.some((e) => e.device.registered_device_uuid === selectedUUID)
+    )
+      return;
     setSelectedUUID(filteredEntries[0]?.device.registered_device_uuid ?? null);
-  }, [filteredEntries, selectedUUID]);
+  }, [entries, filteredEntries, selectedUUID]);
 
   const selectedEntry = useMemo(
     () => entries.find((e) => e.device.registered_device_uuid === selectedUUID) ?? null,
     [entries, selectedUUID],
+  );
+
+  const selectedBeaconInfo = useMemo(
+    () => selectedEntry ? getRegisteredDeviceBeaconInfo(selectedEntry.device) : null,
+    [selectedEntry],
+  );
+
+  const selectedBeaconLocation = useMemo(
+    () =>
+      selectedEntry
+        ? beaconLocations.find(
+            (location) =>
+              location.registered_device_uuid ===
+              selectedEntry.device.registered_device_uuid,
+          ) ?? null
+        : null,
+    [beaconLocations, selectedEntry],
   );
 
   const selectedViolations = useMemo(
@@ -334,7 +408,10 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                   key={uuid}
                   type="button"
                   className={`cd-device-row${isSelected ? " cd-device-row-active" : ""}`}
-                  onClick={() => setSelectedUUID(uuid)}
+                  onClick={() => {
+                    setSelectedUUID(uuid);
+                    setSearchParams({ device: uuid });
+                  }}
                 >
                   <div className="cd-device-row-avatar">
                     {photoUrl ? (
@@ -403,6 +480,11 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                 {selectedEntry.device.device_type && (
                   <span className="cd-tag">
                     {capitalize(selectedEntry.device.device_type)}
+                  </span>
+                )}
+                {selectedBeaconInfo && (
+                  <span className="cd-tag cd-tag-beacon">
+                    Beacon {selectedBeaconInfo.beacon_mac}
                   </span>
                 )}
               </div>
@@ -480,6 +562,109 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                 </div>
               )}
             </div>
+          </section>
+
+          {/* Beacon info */}
+          <section className="cd-section">
+            <h4 className="cd-section-title">Beacon</h4>
+            {selectedBeaconInfo ? (
+              <div className="cd-beacon-panel">
+                <div className="cd-beacon-header">
+                  <div className="cd-beacon-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M7 7l10 10-5 5V2l5 5L7 17" />
+                    </svg>
+                  </div>
+                  <div>
+                    <strong>{selectedBeaconInfo.beacon_mac}</strong>
+                    <span>
+                      {selectedBeaconLocation
+                        ? selectedBeaconLocation.stale
+                          ? "Last-known location"
+                          : "Live location"
+                        : "Registered beacon"}
+                    </span>
+                  </div>
+                </div>
+                <div className="cd-info-grid cd-info-grid-compact">
+                  <div className="cd-info-row">
+                    <span>Normalized MAC</span>
+                    <strong className="cd-mono">{selectedBeaconInfo.beacon_mac_normalized}</strong>
+                  </div>
+                  <div className="cd-info-row">
+                    <span>Frame types</span>
+                    <strong>
+                      {selectedBeaconInfo.frame_types.length
+                        ? selectedBeaconInfo.frame_types.join(", ")
+                        : "Not recorded"}
+                    </strong>
+                  </div>
+                  <div className="cd-info-row">
+                    <span>Verification</span>
+                    <strong>{selectedBeaconInfo.verification_source || "Not recorded"}</strong>
+                  </div>
+                  {selectedBeaconInfo.observed_name || selectedBeaconInfo.observed_device_id ? (
+                    <div className="cd-info-row">
+                      <span>Registered from</span>
+                      <strong>
+                        {selectedBeaconInfo.observed_name ||
+                          selectedBeaconInfo.observed_device_id}
+                      </strong>
+                    </div>
+                  ) : null}
+                  <div className="cd-info-row">
+                    <span>Registered RSSI</span>
+                    <strong>{formatBeaconRssi(selectedBeaconInfo.observed_rssi)}</strong>
+                  </div>
+                  <div className="cd-info-row">
+                    <span>Registered observed</span>
+                    <strong>{formatDateTime(selectedBeaconInfo.observed_at)}</strong>
+                  </div>
+                  {selectedBeaconLocation ? (
+                    <>
+                      <div className="cd-info-row">
+                        <span>Latest observed</span>
+                        <strong>{formatDateTime(selectedBeaconLocation.observed_at)}</strong>
+                      </div>
+                      <div className="cd-info-row">
+                        <span>Latest estimate</span>
+                        <strong>
+                          {selectedBeaconLocation.latitude != null &&
+                          selectedBeaconLocation.longitude != null
+                            ? `${selectedBeaconLocation.latitude.toFixed(6)}, ${selectedBeaconLocation.longitude.toFixed(6)}`
+                            : "No coordinate"}
+                        </strong>
+                      </div>
+                      <div className="cd-info-row">
+                        <span>Radius</span>
+                        <strong>{formatBeaconRadius(selectedBeaconLocation.radius_meters)}</strong>
+                      </div>
+                      <div className="cd-info-row">
+                        <span>Latest RSSI</span>
+                        <strong>{formatBeaconRssi(selectedBeaconLocation.rssi)}</strong>
+                      </div>
+                      <div className="cd-info-row">
+                        <span>Sightings</span>
+                        <strong>{selectedBeaconLocation.sighting_count.toLocaleString()}</strong>
+                      </div>
+                      <div className="cd-info-row">
+                        <span>Method</span>
+                        <strong>
+                          {selectedBeaconLocation.estimate_method?.replace(/_/g, " ") ||
+                            "Unknown"}
+                        </strong>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="cd-beacon-empty">
+                      No recent beacon location has been reported for this device.
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="cd-empty-inline">No beacon registered for this device.</p>
+            )}
           </section>
 
           {/* Student info */}
@@ -646,6 +831,7 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                           className={`cd-table-row${uuid === selectedUUID ? " cd-table-row-selected" : ""}`}
                           onClick={() => {
                             setSelectedUUID(uuid);
+                            setSearchParams({ device: uuid });
                             setShowTable(false);
                           }}
                         >

@@ -5,6 +5,7 @@ import {
   declineSchoolRegisteredDevice,
   fetchRegisteredDeviceFeeRules,
   fetchSchoolRegisteredDevices,
+  getRegisteredDeviceBeaconInfo,
   signSchoolMedia,
   type RegisteredDevice,
   type RegisteredDeviceFeeRule,
@@ -263,6 +264,7 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
           const statusLabel = getStatusLabel(device);
           const statusClass = getStatusClass(device);
           const photoUrl = devicePhotoUrls[deviceUUID];
+          const beaconInfo = getRegisteredDeviceBeaconInfo(device);
 
           return (
             <article className="reg-card" key={deviceUUID}>
@@ -295,6 +297,11 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
                     {device.serial_number ? (
                       <span className="reg-chip reg-chip-muted">
                         SN: {device.serial_number}
+                      </span>
+                    ) : null}
+                    {beaconInfo ? (
+                      <span className="reg-chip reg-chip-beacon">
+                        Beacon · {beaconInfo.beacon_mac}
                       </span>
                     ) : null}
                     {matchedRule ? (
