@@ -63,11 +63,6 @@ const ZONE_TYPE_LABELS: Record<ZoneDraft["zone_type"], string> = {
   speed_limit: "Speed limit",
 };
 
-const PUNISHMENT_ACTION_LABELS: Record<string, string> = {
-  warning: "Warning",
-  points: "Points",
-  admin_review: "Admin review",
-};
 
 function createDefaultPunishmentPolicy(): SchoolZonePunishmentPolicy {
   return {
@@ -814,129 +809,231 @@ export function ZonesScreen(props: Props) {
                     />
                   </label>
                   <div className="field field-span-2">
-                    <span>Punishment rules</span>
-                    <div className="management-table-scroll">
-                      <table className="management-table">
-                        <thead>
-                          <tr>
-                            <th>From</th>
-                            <th>Through</th>
-                            <th>Action</th>
-                            <th>Points</th>
-                            <th>Notify</th>
-                            <th>Review</th>
-                            <th />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedPunishmentRules.map((rule, index) => (
-                            <tr key={`${rule.min_count}-${index}`}>
-                              <td>
-                                <input
-                                  min={1}
-                                  step={1}
-                                  type="number"
-                                  value={rule.min_count}
-                                  onChange={(event) =>
-                                    patchPunishmentRule(selectedZoneDraft, index, {
-                                      min_count: Number(event.target.value),
-                                    })
-                                  }
-                                />
-                              </td>
-                              <td>
-                                <input
-                                  min={1}
-                                  step={1}
-                                  type="number"
-                                  value={rule.max_count ?? ""}
-                                  placeholder="No limit"
-                                  onChange={(event) =>
-                                    patchPunishmentRule(selectedZoneDraft, index, {
-                                      max_count: event.target.value
-                                        ? Number(event.target.value)
-                                        : null,
-                                    })
-                                  }
-                                />
-                              </td>
-                              <td>
-                                <select
-                                  value={rule.punishment_action}
-                                  onChange={(event) =>
-                                    patchPunishmentRule(selectedZoneDraft, index, {
-                                      punishment_action: event.target.value,
-                                    })
-                                  }
-                                >
-                                  {Object.entries(PUNISHMENT_ACTION_LABELS).map(
-                                    ([value, label]) => (
-                                      <option key={value} value={value}>
-                                        {label}
-                                      </option>
-                                    ),
+                    <span>Violation escalation</span>
+                    <p className="pz-help">
+                      Define consequences for each violation count in this zone. Tiers apply in order — a student's total violation count for this zone determines which tier is triggered.
+                    </p>
+                    <div className="pz-tiers">
+                      {selectedPunishmentRules.map((rule, index) => {
+                        const openEnded = rule.max_count == null;
+                        const single =
+                          !openEnded && rule.max_count === rule.min_count;
+                        return (
+                          <div
+                            key={`${rule.min_count}-${index}`}
+                            className="pz-tier"
+                          >
+                            <div className="pz-tier-left">
+                              <div className="pz-tier-badge">{index + 1}</div>
+                              {index < selectedPunishmentRules.length - 1 && (
+                                <div className="pz-tier-connector" />
+                              )}
+                            </div>
+                            <div className="pz-tier-body">
+                              <div className="pz-tier-header">
+                                <div className="pz-range-row">
+                                  <span className="pz-range-pre">
+                                    Violation
+                                  </span>
+                                  <input
+                                    className="pz-range-input"
+                                    min={1}
+                                    step={1}
+                                    type="number"
+                                    value={rule.min_count}
+                                    onChange={(e) =>
+                                      patchPunishmentRule(
+                                        selectedZoneDraft,
+                                        index,
+                                        { min_count: Number(e.target.value) },
+                                      )
+                                    }
+                                  />
+                                  {!single && !openEnded && (
+                                    <>
+                                      <span className="pz-range-sep">–</span>
+                                      <input
+                                        className="pz-range-input"
+                                        min={rule.min_count}
+                                        step={1}
+                                        type="number"
+                                        value={rule.max_count ?? ""}
+                                        onChange={(e) =>
+                                          patchPunishmentRule(
+                                            selectedZoneDraft,
+                                            index,
+                                            {
+                                              max_count: e.target.value
+                                                ? Number(e.target.value)
+                                                : null,
+                                            },
+                                          )
+                                        }
+                                      />
+                                    </>
                                   )}
-                                </select>
-                              </td>
-                              <td>
-                                <input
-                                  min={0}
-                                  step={1}
-                                  type="number"
-                                  value={rule.points_lost}
-                                  onChange={(event) =>
-                                    patchPunishmentRule(selectedZoneDraft, index, {
-                                      points_lost: Number(event.target.value),
-                                    })
-                                  }
-                                />
-                              </td>
-                              <td>
-                                <input
-                                  type="checkbox"
-                                  checked={rule.notify_student}
-                                  onChange={(event) =>
-                                    patchPunishmentRule(selectedZoneDraft, index, {
-                                      notify_student: event.target.checked,
-                                    })
-                                  }
-                                />
-                              </td>
-                              <td>
-                                <input
-                                  type="checkbox"
-                                  checked={rule.dashboard_review_required}
-                                  onChange={(event) =>
-                                    patchPunishmentRule(selectedZoneDraft, index, {
-                                      dashboard_review_required: event.target.checked,
-                                    })
-                                  }
-                                />
-                              </td>
-                              <td>
-                                <button
-                                  className="secondary-button"
-                                  type="button"
-                                  onClick={() =>
-                                    removePunishmentRule(selectedZoneDraft, index)
-                                  }
-                                  disabled={selectedPunishmentRules.length <= 1}
-                                >
-                                  Remove
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                                  {openEnded && (
+                                    <span className="pz-range-open">
+                                      and above
+                                    </span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className={`pz-nolimit-btn${openEnded ? " pz-nolimit-btn-on" : ""}`}
+                                    title={
+                                      openEnded
+                                        ? "Set an upper limit"
+                                        : "Remove upper limit"
+                                    }
+                                    onClick={() =>
+                                      patchPunishmentRule(
+                                        selectedZoneDraft,
+                                        index,
+                                        {
+                                          max_count: openEnded
+                                            ? rule.min_count
+                                            : null,
+                                        },
+                                      )
+                                    }
+                                  >
+                                    {openEnded ? "No limit" : "Set limit"}
+                                  </button>
+                                </div>
+                                {selectedPunishmentRules.length > 1 && (
+                                  <button
+                                    type="button"
+                                    className="pz-remove-btn"
+                                    onClick={() =>
+                                      removePunishmentRule(
+                                        selectedZoneDraft,
+                                        index,
+                                      )
+                                    }
+                                    title="Remove tier"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="pz-action-group">
+                                {(
+                                  [
+                                    {
+                                      value: "warning",
+                                      icon: "⚠️",
+                                      label: "Warning only",
+                                    },
+                                    {
+                                      value: "points",
+                                      icon: "📉",
+                                      label: "Deduct points",
+                                    },
+                                    {
+                                      value: "admin_review",
+                                      icon: "🔍",
+                                      label: "Admin review",
+                                    },
+                                  ] as const
+                                ).map(({ value, icon, label }) => (
+                                  <button
+                                    key={value}
+                                    type="button"
+                                    className={`pz-action-btn pz-action-${value}${rule.punishment_action === value ? " pz-action-btn-active" : ""}`}
+                                    onClick={() =>
+                                      patchPunishmentRule(
+                                        selectedZoneDraft,
+                                        index,
+                                        { punishment_action: value },
+                                      )
+                                    }
+                                  >
+                                    <span>{icon}</span>
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+
+                              {(rule.punishment_action === "points" ||
+                                rule.punishment_action === "admin_review") && (
+                                <div className="pz-points-row">
+                                  <label
+                                    htmlFor={`pz-pts-${index}`}
+                                    className="pz-points-label"
+                                  >
+                                    Points deducted
+                                  </label>
+                                  <input
+                                    id={`pz-pts-${index}`}
+                                    className="pz-points-input"
+                                    min={0}
+                                    step={1}
+                                    type="number"
+                                    value={rule.points_lost}
+                                    onChange={(e) =>
+                                      patchPunishmentRule(
+                                        selectedZoneDraft,
+                                        index,
+                                        { points_lost: Number(e.target.value) },
+                                      )
+                                    }
+                                  />
+                                  <span className="pz-points-unit">pts</span>
+                                </div>
+                              )}
+
+                              <div className="pz-toggles">
+                                <label className="pz-toggle">
+                                  <input
+                                    type="checkbox"
+                                    checked={rule.notify_student}
+                                    onChange={(e) =>
+                                      patchPunishmentRule(
+                                        selectedZoneDraft,
+                                        index,
+                                        { notify_student: e.target.checked },
+                                      )
+                                    }
+                                  />
+                                  <span className="pz-toggle-track" />
+                                  <span className="pz-toggle-label">
+                                    📲 Notify student
+                                  </span>
+                                </label>
+                                <label className="pz-toggle">
+                                  <input
+                                    type="checkbox"
+                                    checked={rule.dashboard_review_required}
+                                    onChange={(e) =>
+                                      patchPunishmentRule(
+                                        selectedZoneDraft,
+                                        index,
+                                        {
+                                          dashboard_review_required:
+                                            e.target.checked,
+                                        },
+                                      )
+                                    }
+                                  />
+                                  <span className="pz-toggle-track" />
+                                  <span className="pz-toggle-label">
+                                    🔎 Require admin review
+                                  </span>
+                                </label>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div className="form-actions">
+                    <div className="pz-tier-actions">
                       <button
                         className="secondary-button"
                         type="button"
                         onClick={() => addPunishmentRule(selectedZoneDraft)}
                       >
-                        Add rule
+                        + Add tier
                       </button>
                       <button
                         className="secondary-button"
@@ -947,7 +1044,7 @@ export function ZonesScreen(props: Props) {
                           })
                         }
                       >
-                        Reset template
+                        Reset to defaults
                       </button>
                     </div>
                   </div>

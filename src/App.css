@@ -13275,3 +13275,324 @@
   font-size: 0.75rem;
   opacity: 0.8;
 }
+
+/* ── Punishment zone tier cards (pz-) ─────────────────────────── */
+
+.pz-help {
+  margin: 4px 0 14px;
+  font-size: 0.8rem;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.pz-tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.pz-tier {
+  display: flex;
+  gap: 0;
+  align-items: stretch;
+}
+
+.pz-tier-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 36px;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.pz-tier-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #112d4e;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.pz-tier-connector {
+  flex: 1;
+  width: 2px;
+  background: #d1d5db;
+  margin: 4px 0;
+  min-height: 16px;
+}
+
+.pz-tier-body {
+  flex: 1;
+  background: #fff;
+  border: 1px solid #e2e6ea;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  margin-left: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.pz-tier-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pz-range-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pz-range-pre {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.pz-range-input {
+  width: 52px;
+  padding: 4px 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  text-align: center;
+  background: #f9fafb;
+  color: #112d4e;
+  font-weight: 600;
+}
+
+.pz-range-input:focus {
+  outline: none;
+  border-color: #112d4e;
+  background: #fff;
+}
+
+.pz-range-sep {
+  font-size: 0.82rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.pz-range-open {
+  font-size: 0.8rem;
+  color: #27CC5E;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pz-nolimit-btn {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 20px;
+  border: 1px solid #d1d5db;
+  background: #f3f4f6;
+  color: #6b7280;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.pz-nolimit-btn:hover {
+  border-color: #27CC5E;
+  color: #27CC5E;
+  background: #f0fdf4;
+}
+
+.pz-nolimit-btn-on {
+  border-color: #27CC5E;
+  color: #15803d;
+  background: #dcfce7;
+}
+
+.pz-remove-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid #fca5a5;
+  background: #fff;
+  color: #ef4444;
+  font-size: 0.7rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+  margin-left: auto;
+}
+
+.pz-remove-btn:hover {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+
+.pz-action-group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pz-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1.5px solid #e2e6ea;
+  background: #f9fafb;
+  color: #374151;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.pz-action-btn:hover {
+  border-color: #9ca3af;
+  background: #f3f4f6;
+}
+
+.pz-action-btn-active.pz-action-warning {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+  font-weight: 700;
+}
+
+.pz-action-btn-active.pz-action-points {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #1e40af;
+  font-weight: 700;
+}
+
+.pz-action-btn-active.pz-action-admin_review {
+  border-color: #8b5cf6;
+  background: #f5f3ff;
+  color: #5b21b6;
+  font-weight: 700;
+}
+
+.pz-points-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #eff6ff;
+  border-radius: 8px;
+  border: 1px solid #bfdbfe;
+}
+
+.pz-points-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #1e40af;
+  white-space: nowrap;
+}
+
+.pz-points-input {
+  width: 68px;
+  padding: 4px 8px;
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: center;
+  color: #1e40af;
+  background: #fff;
+}
+
+.pz-points-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.pz-points-unit {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #3b82f6;
+}
+
+.pz-toggles {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.pz-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.pz-toggle input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.pz-toggle-track {
+  position: relative;
+  display: inline-block;
+  width: 34px;
+  height: 19px;
+  background: #d1d5db;
+  border-radius: 20px;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.pz-toggle-track::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 15px;
+  height: 15px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.pz-toggle input:checked ~ .pz-toggle-track {
+  background: #27CC5E;
+}
+
+.pz-toggle input:checked ~ .pz-toggle-track::after {
+  transform: translateX(15px);
+}
+
+.pz-toggle-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.pz-tier-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  padding-left: 46px;
+}
