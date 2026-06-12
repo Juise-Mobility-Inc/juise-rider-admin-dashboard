@@ -13,6 +13,10 @@ import {
   sanitizeCsvFilename,
   type CsvCell,
 } from "../../lib/csv";
+import type {
+  SchoolZonePunishmentPolicy,
+  SchoolZonePunishmentRule,
+} from "../../lib/api";
 
 type ZoneDraft = {
   id: string;
@@ -22,6 +26,7 @@ type ZoneDraft = {
   zone_type: "no_go" | "speed_limit";
   speed_limit_mph: string;
   polygon: PackMapPoint[];
+  punishment_policy: SchoolZonePunishmentPolicy;
 };
 
 type Props = {
@@ -50,12 +55,118 @@ const zoneCsvColumns = [
   "zone_type",
   "speed_limit_mph",
   "polygon",
+  "punishment_policy",
 ] as const;
 
 const ZONE_TYPE_LABELS: Record<ZoneDraft["zone_type"], string> = {
   no_go: "No-go",
   speed_limit: "Speed limit",
 };
+
+const PUNISHMENT_ACTION_LABELS: Record<string, string> = {
+  warning: "Warning",
+  points: "Points",
+  admin_review: "Admin review",
+};
+
+function createDefaultPunishmentPolicy(): SchoolZonePunishmentPolicy {
+  return {
+    rules: [
+      {
+        min_count: 1,
+        max_count: 1,
+        points_lost: 0,
+        notify_student: true,
+        dashboard_review_required: false,
+        punishment_action: "warning",
+      },
+      {
+        min_count: 2,
+        max_count: 2,
+        points_lost: 5,
+        notify_student: true,
+        dashboard_review_required: false,
+        punishment_action: "points",
+      },
+      {
+        min_count: 3,
+        max_count: null,
+        points_lost: 5,
+        notify_student: true,
+        dashboard_review_required: true,
+        punishment_action: "admin_review",
+      },
+    ],
+  };
+}
+
+function normalizePunishmentRule(
+  value: unknown,
+  index: number,
+): SchoolZonePunishmentRule {
+  const fallback = createDefaultPunishmentPolicy().rules[
+    Math.min(index, createDefaultPunishmentPolicy().rules.length - 1)
+  ];
+  if (!value || typeof value !== "object") {
+    return fallback;
+  }
+  const record = value as Partial<SchoolZonePunishmentRule> & {
+    max_count?: number | string | null;
+  };
+  const minCount = Number(record.min_count);
+  const rawMaxCount = record.max_count as number | string | null | undefined;
+  const maxCount =
+    rawMaxCount == null || rawMaxCount === ""
+      ? null
+      : Number(rawMaxCount);
+  const pointsLost = Number(record.points_lost);
+
+  return {
+    min_count: Number.isFinite(minCount) && minCount > 0 ? Math.floor(minCount) : fallback.min_count,
+    max_count:
+      maxCount == null
+        ? null
+        : Number.isFinite(maxCount) && maxCount > 0
+          ? Math.floor(maxCount)
+          : fallback.max_count,
+    points_lost:
+      Number.isFinite(pointsLost) && pointsLost >= 0
+        ? Math.floor(pointsLost)
+        : fallback.points_lost,
+    notify_student:
+      typeof record.notify_student === "boolean"
+        ? record.notify_student
+        : fallback.notify_student,
+    dashboard_review_required:
+      typeof record.dashboard_review_required === "boolean"
+        ? record.dashboard_review_required
+        : fallback.dashboard_review_required,
+    punishment_action:
+      typeof record.punishment_action === "string" && record.punishment_action.trim()
+        ? record.punishment_action.trim()
+        : fallback.punishment_action,
+  };
+}
+
+function normalizePunishmentPolicy(value: unknown): SchoolZonePunishmentPolicy {
+  if (typeof value === "string" && value.trim()) {
+    try {
+      return normalizePunishmentPolicy(JSON.parse(value) as unknown);
+    } catch {
+      return createDefaultPunishmentPolicy();
+    }
+  }
+  if (!value || typeof value !== "object") {
+    return createDefaultPunishmentPolicy();
+  }
+  const rules = (value as Partial<SchoolZonePunishmentPolicy>).rules;
+  if (!Array.isArray(rules) || rules.length === 0) {
+    return createDefaultPunishmentPolicy();
+  }
+  return {
+    rules: rules.map(normalizePunishmentRule).sort((a, b) => a.min_count - b.min_count),
+  };
+}
 
 function normalizeZoneType(value: string): ZoneDraft["zone_type"] {
   const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
@@ -135,6 +246,57 @@ export function ZonesScreen(props: Props) {
     );
   }
 
+  function patchPunishmentRule(
+    zone: ZoneDraft,
+    index: number,
+    patch: Partial<SchoolZonePunishmentRule>,
+  ) {
+    const policy = normalizePunishmentPolicy(zone.punishment_policy);
+    patchZone(zone.id, {
+      punishment_policy: {
+        rules: policy.rules.map((rule, ruleIndex) =>
+          ruleIndex === index ? normalizePunishmentRule({ ...rule, ...patch }, ruleIndex) : rule,
+        ),
+      },
+    });
+  }
+
+  function addPunishmentRule(zone: ZoneDraft) {
+    const policy = normalizePunishmentPolicy(zone.punishment_policy);
+    const lastRule = policy.rules[policy.rules.length - 1];
+    const nextMin = Math.max(
+      1,
+      (lastRule?.max_count ?? lastRule?.min_count ?? policy.rules.length) + 1,
+    );
+    patchZone(zone.id, {
+      punishment_policy: {
+        rules: [
+          ...policy.rules,
+          {
+            min_count: nextMin,
+            max_count: null,
+            points_lost: lastRule?.points_lost ?? 5,
+            notify_student: true,
+            dashboard_review_required: false,
+            punishment_action: "points",
+          },
+        ],
+      },
+    });
+  }
+
+  function removePunishmentRule(zone: ZoneDraft, index: number) {
+    const policy = normalizePunishmentPolicy(zone.punishment_policy);
+    if (policy.rules.length <= 1) {
+      return;
+    }
+    patchZone(zone.id, {
+      punishment_policy: {
+        rules: policy.rules.filter((_, ruleIndex) => ruleIndex !== index),
+      },
+    });
+  }
+
   async function saveModalZone() {
     const didSave = await handleSaveZones(zoneDrafts);
     if (didSave) {
@@ -160,6 +322,7 @@ export function ZonesScreen(props: Props) {
           zone.zone_type,
           zone.speed_limit_mph,
           JSON.stringify(zone.polygon),
+          JSON.stringify(normalizePunishmentPolicy(zone.punishment_policy)),
         ] satisfies CsvCell[],
     );
 
@@ -196,6 +359,9 @@ export function ZonesScreen(props: Props) {
               ? row.speed_limit_mph ?? row.speed_limit ?? "15"
               : "",
           polygon: parsePolygonValue(row.polygon ?? row.points ?? ""),
+          punishment_policy: normalizePunishmentPolicy(
+            row.punishment_policy ?? row.policy ?? "",
+          ),
         };
       })
       .filter(
@@ -243,6 +409,9 @@ export function ZonesScreen(props: Props) {
           polygon.id === (selectedZoneDraft.zone_uuid || selectedZoneDraft.id),
       ) ?? null)
     : null;
+  const selectedPunishmentRules = selectedZoneDraft
+    ? normalizePunishmentPolicy(selectedZoneDraft.punishment_policy).rules
+    : [];
 
   return (
     <section className="panel management-page">
@@ -644,6 +813,144 @@ export function ZonesScreen(props: Props) {
                       rows={3}
                     />
                   </label>
+                  <div className="field field-span-2">
+                    <span>Punishment rules</span>
+                    <div className="management-table-scroll">
+                      <table className="management-table">
+                        <thead>
+                          <tr>
+                            <th>From</th>
+                            <th>Through</th>
+                            <th>Action</th>
+                            <th>Points</th>
+                            <th>Notify</th>
+                            <th>Review</th>
+                            <th />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedPunishmentRules.map((rule, index) => (
+                            <tr key={`${rule.min_count}-${index}`}>
+                              <td>
+                                <input
+                                  min={1}
+                                  step={1}
+                                  type="number"
+                                  value={rule.min_count}
+                                  onChange={(event) =>
+                                    patchPunishmentRule(selectedZoneDraft, index, {
+                                      min_count: Number(event.target.value),
+                                    })
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  min={1}
+                                  step={1}
+                                  type="number"
+                                  value={rule.max_count ?? ""}
+                                  placeholder="No limit"
+                                  onChange={(event) =>
+                                    patchPunishmentRule(selectedZoneDraft, index, {
+                                      max_count: event.target.value
+                                        ? Number(event.target.value)
+                                        : null,
+                                    })
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <select
+                                  value={rule.punishment_action}
+                                  onChange={(event) =>
+                                    patchPunishmentRule(selectedZoneDraft, index, {
+                                      punishment_action: event.target.value,
+                                    })
+                                  }
+                                >
+                                  {Object.entries(PUNISHMENT_ACTION_LABELS).map(
+                                    ([value, label]) => (
+                                      <option key={value} value={value}>
+                                        {label}
+                                      </option>
+                                    ),
+                                  )}
+                                </select>
+                              </td>
+                              <td>
+                                <input
+                                  min={0}
+                                  step={1}
+                                  type="number"
+                                  value={rule.points_lost}
+                                  onChange={(event) =>
+                                    patchPunishmentRule(selectedZoneDraft, index, {
+                                      points_lost: Number(event.target.value),
+                                    })
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="checkbox"
+                                  checked={rule.notify_student}
+                                  onChange={(event) =>
+                                    patchPunishmentRule(selectedZoneDraft, index, {
+                                      notify_student: event.target.checked,
+                                    })
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="checkbox"
+                                  checked={rule.dashboard_review_required}
+                                  onChange={(event) =>
+                                    patchPunishmentRule(selectedZoneDraft, index, {
+                                      dashboard_review_required: event.target.checked,
+                                    })
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <button
+                                  className="secondary-button"
+                                  type="button"
+                                  onClick={() =>
+                                    removePunishmentRule(selectedZoneDraft, index)
+                                  }
+                                  disabled={selectedPunishmentRules.length <= 1}
+                                >
+                                  Remove
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="form-actions">
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={() => addPunishmentRule(selectedZoneDraft)}
+                      >
+                        Add rule
+                      </button>
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={() =>
+                          patchZone(selectedZoneDraft.id, {
+                            punishment_policy: createDefaultPunishmentPolicy(),
+                          })
+                        }
+                      >
+                        Reset template
+                      </button>
+                    </div>
+                  </div>
                 </div>
                 <div className="form-actions">
                   <button

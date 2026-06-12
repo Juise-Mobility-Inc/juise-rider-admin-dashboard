@@ -52,6 +52,7 @@ import {
         type SchoolChallengeParticipantProgress,
         type SchoolPOI,
         type SchoolZone,
+        type SchoolZonePunishmentPolicy,
         type SchoolTerm,
         type RegisteredDevice,
         type StudentProfileBundle,
@@ -241,6 +242,7 @@ interface ZoneDraft {
         zone_type: "no_go" | "speed_limit";
         speed_limit_mph: string;
         polygon: PackMapPoint[];
+        punishment_policy: SchoolZonePunishmentPolicy;
 }
 
 interface SignupFormState {
@@ -426,6 +428,37 @@ function createEmptyPOIDraft(): POIDraft {
         };
 }
 
+function createDefaultZonePunishmentPolicy(): SchoolZonePunishmentPolicy {
+        return {
+                rules: [
+                        {
+                                min_count: 1,
+                                max_count: 1,
+                                points_lost: 0,
+                                notify_student: true,
+                                dashboard_review_required: false,
+                                punishment_action: "warning",
+                        },
+                        {
+                                min_count: 2,
+                                max_count: 2,
+                                points_lost: 5,
+                                notify_student: true,
+                                dashboard_review_required: false,
+                                punishment_action: "points",
+                        },
+                        {
+                                min_count: 3,
+                                max_count: null,
+                                points_lost: 5,
+                                notify_student: true,
+                                dashboard_review_required: true,
+                                punishment_action: "admin_review",
+                        },
+                ],
+        };
+}
+
 function zoneToDraft(zone: SchoolZone): ZoneDraft {
         return {
                 id: zone.zone_uuid || makeDraftId(),
@@ -447,6 +480,7 @@ function zoneToDraft(zone: SchoolZone): ZoneDraft {
                                                 lng: point.lng,
                                         }))
                         : [],
+                punishment_policy: zone.punishment_policy ?? createDefaultZonePunishmentPolicy(),
         };
 }
 
@@ -461,6 +495,7 @@ function createEmptyZoneDraft(
                 zone_type: zoneType,
                 speed_limit_mph: zoneType === "speed_limit" ? "15" : "",
                 polygon: [],
+                punishment_policy: createDefaultZonePunishmentPolicy(),
         };
 }
 
@@ -3527,6 +3562,7 @@ function App() {
                                                         description: zone.description.trim(),
                                                         zone_type: zone.zone_type,
                                                         speed_limit_mph: parsedSpeedLimit,
+                                                        punishment_policy: zone.punishment_policy,
                                                         polygon: zone.polygon.map((point) => ({
                                                                 lat: point.lat,
                                                                 lng: point.lng,
@@ -3540,6 +3576,7 @@ function App() {
                                                 description: zone.description.trim(),
                                                 zone_type: zone.zone_type,
                                                 speed_limit_mph: null,
+                                                punishment_policy: zone.punishment_policy,
                                                 polygon: zone.polygon.map((point) => ({
                                                         lat: point.lat,
                                                         lng: point.lng,

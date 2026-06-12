@@ -17,8 +17,11 @@ import {
   fetchSchoolPOIs,
   fetchSchoolStudentRoster,
   fetchSchoolZones,
+  fetchRouteHistoryPenaltyReviews,
   fetchStudentRouteHistory,
   signSchoolMedia,
+  updateRouteHistoryPenaltyReview,
+  type RouteHistoryPenaltyReview,
   type SchoolPOI,
   type SchoolStudentRosterEntry,
   type SchoolZone,
@@ -35,6 +38,7 @@ const STUDENT_ROUTE_CONCURRENCY = 4;
 type LoadStatus = "idle" | "loading" | "ready" | "error";
 type ViolationTypeFilter = "all" | "speed_limit" | "no_go";
 type SourceFilter = "all" | "tracked" | "untracked";
+type ReviewFilter = "all" | "needs_review";
 
 interface LoadState {
   status: LoadStatus;
@@ -65,6 +69,7 @@ interface RideViolationRecord {
   session: StudentRouteHistorySession;
   event: StudentRouteHistoryPenaltyEvent;
   matchingZone: SchoolZone | null;
+  review: RouteHistoryPenaltyReview | null;
   snippet: RideSnippetContext;
 }
 
@@ -249,12 +254,50 @@ function studentUUID(entry: SchoolStudentRosterEntry): string {
   return entry.membership.user_uuid?.trim() || entry.user.k_guid;
 }
 
+function routePenaltyReviewKey(
+  userUUID: string,
+  sessionID: string,
+  zoneUUID: string,
+  occurredAt?: number | null,
+): string {
+  return [
+    userUUID.trim(),
+    sessionID.trim(),
+    zoneUUID.trim(),
+    normalizeUnixSeconds(occurredAt),
+  ].join(":");
+}
+
 function isUntrackedSession(session: StudentRouteHistorySession): boolean {
   return session.tracking_source.trim().toLowerCase() === "auto";
 }
 
 function sourceLabel(session: StudentRouteHistorySession): string {
   return isUntrackedSession(session) ? "Background / untracked" : "Tracked ride";
+}
+
+function punishmentActionLabel(action?: string | null): string {
+  switch (action) {
+    case "warning":
+      return "Warning";
+    case "points":
+      return "Points";
+    case "admin_review":
+      return "Admin review";
+    default:
+      return action?.trim() || "Penalty";
+  }
+}
+
+function pointsLostLabel(points: number): string {
+  return points > 0 ? `-${points.toLocaleString()} pts` : "Warning only";
+}
+
+function recordNeedsReview(record: RideViolationRecord): boolean {
+  if (record.review?.status === "open") {
+    return true;
+  }
+  return Boolean(record.event.dashboard_review_required && !record.review);
 }
 
 function typeLabel(zoneType: string): string {
@@ -532,7 +575,20 @@ function getPenaltyConfidence(
 function buildViolationRows(
   bundles: StudentRouteBundle[],
   zones: SchoolZone[],
+  reviews: RouteHistoryPenaltyReview[],
 ): RideViolationRecord[] {
+  const reviewByEvent = new Map(
+    reviews.map((review) => [
+      routePenaltyReviewKey(
+        review.user_uuid,
+        review.session_id,
+        review.zone_uuid,
+        review.occurred_at,
+      ),
+      review,
+    ]),
+  );
+
   return bundles
     .flatMap((bundle) => {
       const userUUID = studentUUID(bundle.entry);
@@ -550,6 +606,15 @@ function buildViolationRows(
             session,
             event,
             matchingZone,
+            review:
+              reviewByEvent.get(
+                routePenaltyReviewKey(
+                  userUUID,
+                  session.session_id,
+                  event.zone_uuid,
+                  event.occurred_at,
+                ),
+              ) ?? null,
             snippet: buildRidePenaltyContext(session, event),
           };
         }),
@@ -573,7 +638,12 @@ function eventCsvRow(record: RideViolationRecord): CsvCell[] {
     eventTitle(record.event, record.matchingZone),
     record.event.reason,
     formatDateTime(record.event.occurred_at),
+    record.event.violation_count ?? record.review?.violation_count ?? "",
+    punishmentActionLabel(record.event.punishment_action ?? record.review?.punishment_action),
     record.event.points_lost,
+    record.event.dashboard_review_required ?? Boolean(record.review),
+    record.review?.status ?? "",
+    record.review?.notes ?? "",
     record.event.speed_limit_mph ?? "",
     maxSpeed == null ? "" : (maxSpeed * 2.2369362920544).toFixed(1),
     record.event.confidence_percent ?? "",
@@ -611,7 +681,12 @@ const violationCsvHeaders = [
   "title",
   "reason",
   "occurred_at",
+  "violation_count",
+  "punishment_action",
   "points_lost",
+  "dashboard_review_required",
+  "review_status",
+  "review_notes",
   "speed_limit_mph",
   "max_speed_mph",
   "confidence_percent",
@@ -761,10 +836,12 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
   });
   const [bundles, setBundles] = useState<StudentRouteBundle[]>([]);
   const [zones, setZones] = useState<SchoolZone[]>([]);
+  const [reviews, setReviews] = useState<RouteHistoryPenaltyReview[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const pendingSessionId = useRef<string | null>(searchParams.get("session"));
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [typeFilter, setTypeFilter] = useState<ViolationTypeFilter>("all");
+  const [reviewFilter, setReviewFilter] = useState<ReviewFilter>("all");
   const [selectedZoneUUIDs, setSelectedZoneUUIDs] = useState<Set<string>>(() => {
     const raw = searchParams.get("zones");
     return raw ? new Set(raw.split(",").filter(Boolean)) : new Set();
@@ -791,6 +868,8 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
   const poiFilterRef = useRef<HTMLDivElement>(null);
   const [confidenceInfoOpen, setConfidenceInfoOpen] = useState(false);
   const confidenceInfoRef = useRef<HTMLDivElement>(null);
+  const [reviewNotes, setReviewNotes] = useState("");
+  const [reviewBusy, setReviewBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -815,13 +894,19 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
       setBundles([]);
       setZones([]);
       setPois([]);
+      setReviews([]);
       setSelectedId(null);
 
       try {
-        const [roster, schoolZones, schoolPois] = await Promise.all([
+        const [roster, schoolZones, schoolPois, penaltyReviews] = await Promise.all([
           fetchSchoolStudentRoster(managedAppId, activeSchoolId),
           fetchSchoolZones(managedAppId, activeSchoolId).catch(() => [] as SchoolZone[]),
           fetchSchoolPOIs(managedAppId, activeSchoolId).catch(() => [] as SchoolPOI[]),
+          fetchRouteHistoryPenaltyReviews(managedAppId, activeSchoolId, {
+            status: "open",
+            limit: 200,
+            offset: 0,
+          }).catch(() => [] as RouteHistoryPenaltyReview[]),
         ]);
 
         if (cancelled) {
@@ -830,6 +915,7 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
 
         setZones(schoolZones);
         setPois(schoolPois);
+        setReviews(penaltyReviews);
         setLoadState({
           status: "loading",
           message: "Loading route history for students...",
@@ -967,7 +1053,10 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
     return () => document.removeEventListener("mousedown", handleClick);
   }, [poiFilterOpen]);
 
-  const allViolations = useMemo(() => buildViolationRows(bundles, zones), [bundles, zones]);
+  const allViolations = useMemo(
+    () => buildViolationRows(bundles, zones, reviews),
+    [bundles, zones, reviews],
+  );
   const penaltyZoneOptions = useMemo(() => {
     const byZone = new Map<string, { title: string; zoneType: string; pointsList: number[] }>();
     for (const record of allViolations) {
@@ -1043,6 +1132,7 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
       if (sourceFilter === "untracked" && !isUntrackedSession(record.session)) return false;
       if (typeFilter === "speed_limit" && record.event.zone_type !== "speed_limit") return false;
       if (typeFilter === "no_go" && record.event.zone_type === "speed_limit") return false;
+      if (reviewFilter === "needs_review" && !recordNeedsReview(record)) return false;
       if (startSec !== null || endSec !== null) {
         const at = normalizeUnixSeconds(record.event.occurred_at);
         if (startSec !== null && at < startSec) return false;
@@ -1059,7 +1149,7 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
     });
 
     return filtered;
-  }, [allViolations, sourceFilter, typeFilter, selectedZoneUUIDs, selectedPOIUUIDs, selectedStudentUUIDs, startDate, endDate, sortOrder]);
+  }, [allViolations, sourceFilter, typeFilter, reviewFilter, selectedZoneUUIDs, selectedPOIUUIDs, selectedStudentUUIDs, startDate, endDate, sortOrder]);
 
   useEffect(() => {
     if (filteredViolations.length === 0) {
@@ -1085,6 +1175,11 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
     () => filteredViolations.find((record) => record.id === selectedId) ?? null,
     [filteredViolations, selectedId],
   );
+
+  useEffect(() => {
+    setReviewNotes(selectedRecord?.review?.notes ?? "");
+  }, [selectedRecord?.id, selectedRecord?.review?.notes]);
+
   const selectedConfidence = selectedRecord
     ? getPenaltyConfidence(selectedRecord.session, selectedRecord.event)
     : null;
@@ -1098,6 +1193,7 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
     (record) => record.event.zone_type === "speed_limit",
   ).length;
   const noGoCount = allViolations.length - speedCount;
+  const reviewCount = allViolations.filter(recordNeedsReview).length;
 
   function handleDownloadFilteredCsv() {
     downloadCsv(
@@ -1116,6 +1212,37 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
       ),
       [snippetCsvHeaders, ...snippetCsvRows(selectedRecord)],
     );
+  }
+
+  async function handleUpdateSelectedReview(status: "resolved" | "dismissed") {
+    if (!selectedRecord?.review || reviewBusy) {
+      return;
+    }
+    setReviewBusy(true);
+    try {
+      const updated = await updateRouteHistoryPenaltyReview(
+        managedAppId,
+        activeSchoolId,
+        selectedRecord.review.review_uuid,
+        {
+          status,
+          notes: reviewNotes,
+        },
+      );
+      setReviews((current) =>
+        current.map((review) =>
+          review.review_uuid === updated.review_uuid ? updated : review,
+        ),
+      );
+    } catch (error) {
+      setLoadState((current) => ({
+        ...current,
+        status: "error",
+        message: getErrorMessage(error),
+      }));
+    } finally {
+      setReviewBusy(false);
+    }
   }
 
   return (
@@ -1165,6 +1292,10 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
         <div className="rv-summary-item">
           <span>No-go zones</span>
           <strong>{noGoCount.toLocaleString()}</strong>
+        </div>
+        <div className="rv-summary-item">
+          <span>Needs review</span>
+          <strong>{reviewCount.toLocaleString()}</strong>
         </div>
       </section>
 
@@ -1289,6 +1420,13 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
           <option value="all">All types</option>
           <option value="speed_limit">Speed zones</option>
           <option value="no_go">No-go zones</option>
+        </select>
+        <select
+          value={reviewFilter}
+          onChange={(event) => setReviewFilter(event.target.value as ReviewFilter)}
+        >
+          <option value="all">All review states</option>
+          <option value="needs_review">Needs review</option>
         </select>
 
         {/* Penalty zone multi-select filter */}
@@ -1503,7 +1641,17 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
                     <span className="rv-event-meta">
                       <span>{typeLabel(record.event.zone_type)}</span>
                       <span>{sourceLabel(record.session)}</span>
-                      <span>-{record.event.points_lost.toLocaleString()} pts</span>
+                      <span>{pointsLostLabel(record.event.points_lost)}</span>
+                      <span>
+                        {punishmentActionLabel(
+                          record.event.punishment_action ??
+                            record.review?.punishment_action,
+                        )}
+                        {record.event.violation_count ?? record.review?.violation_count
+                          ? ` #${record.event.violation_count ?? record.review?.violation_count}`
+                          : ""}
+                      </span>
+                      {recordNeedsReview(record) ? <span>Needs review</span> : null}
                       <span>
                         Confidence {confidence.score}% ({confidence.label})
                       </span>
@@ -1560,8 +1708,25 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
                   <strong>{formatDateTime(selectedRecord.event.occurred_at)}</strong>
                 </div>
                 <div>
-                  <span>Points lost</span>
-                  <strong>-{selectedRecord.event.points_lost.toLocaleString()}</strong>
+                  <span>Outcome</span>
+                  <strong>{pointsLostLabel(selectedRecord.event.points_lost)}</strong>
+                </div>
+                <div>
+                  <span>Violation count</span>
+                  <strong>
+                    {selectedRecord.event.violation_count ??
+                      selectedRecord.review?.violation_count ??
+                      "—"}
+                  </strong>
+                </div>
+                <div>
+                  <span>Punishment action</span>
+                  <strong>
+                    {punishmentActionLabel(
+                      selectedRecord.event.punishment_action ??
+                        selectedRecord.review?.punishment_action,
+                    )}
+                  </strong>
                 </div>
                 <div>
                   <span>Snippet</span>
@@ -1674,6 +1839,58 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
                   </>
                 ) : null}
               </div>
+
+              {selectedRecord.review || selectedRecord.event.dashboard_review_required ? (
+                <div className="rv-load-panel">
+                  <div>
+                    <strong>
+                      {selectedRecord.review?.status === "open"
+                        ? "Admin review needed"
+                        : selectedRecord.review
+                          ? `Review ${selectedRecord.review.status}`
+                          : "Review requested"}
+                    </strong>
+                    <span>
+                      {selectedRecord.review
+                        ? `Review ${selectedRecord.review.review_uuid}`
+                        : "This event was marked for dashboard review, but no review row was returned."}
+                    </span>
+                  </div>
+                  {selectedRecord.review?.status === "open" ? (
+                    <div className="form-grid">
+                      <label className="field field-span-2">
+                        <span>Review notes</span>
+                        <textarea
+                          rows={3}
+                          value={reviewNotes}
+                          onChange={(event) => setReviewNotes(event.target.value)}
+                          placeholder="Add notes before resolving or dismissing."
+                        />
+                      </label>
+                      <div className="form-actions">
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={() => void handleUpdateSelectedReview("dismissed")}
+                          disabled={reviewBusy}
+                        >
+                          Dismiss
+                        </button>
+                        <button
+                          className="primary-button"
+                          type="button"
+                          onClick={() => void handleUpdateSelectedReview("resolved")}
+                          disabled={reviewBusy}
+                        >
+                          {reviewBusy ? "Saving..." : "Resolve"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : selectedRecord.review?.notes ? (
+                    <p className="muted-text">{selectedRecord.review.notes}</p>
+                  ) : null}
+                </div>
+              ) : null}
 
               <div className="rv-map-shell">
                 <MapContainer

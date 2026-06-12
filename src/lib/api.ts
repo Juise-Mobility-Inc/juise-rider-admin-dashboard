@@ -75,6 +75,19 @@ export interface SchoolZonePoint {
   lng: number;
 }
 
+export interface SchoolZonePunishmentRule {
+  min_count: number;
+  max_count?: number | null;
+  points_lost: number;
+  notify_student: boolean;
+  dashboard_review_required: boolean;
+  punishment_action: "warning" | "points" | "admin_review" | string;
+}
+
+export interface SchoolZonePunishmentPolicy {
+  rules: SchoolZonePunishmentRule[];
+}
+
 export interface SchoolZone {
   zone_uuid: string;
   app_id: string;
@@ -84,6 +97,7 @@ export interface SchoolZone {
   zone_type: "no_go" | "speed_limit";
   speed_limit_mph?: number | null;
   polygon: SchoolZonePoint[];
+  punishment_policy?: SchoolZonePunishmentPolicy | null;
   active: boolean;
   created_at: number;
   updated_at: number;
@@ -271,6 +285,7 @@ export interface SchoolZoneWriteInput {
   zone_type: "no_go" | "speed_limit";
   speed_limit_mph?: number | null;
   polygon: SchoolZonePoint[];
+  punishment_policy?: SchoolZonePunishmentPolicy;
 }
 
 export interface UserSchoolChallengeProgress {
@@ -653,6 +668,7 @@ export interface StudentRouteHistoryVisitedPOI {
 export interface StudentRouteHistoryPenaltyEvent {
   zone_uuid: string;
   school_id: string;
+  term_uuid?: string | null;
   title: string;
   description: string;
   zone_type: "no_go" | "speed_limit" | string;
@@ -664,6 +680,10 @@ export interface StudentRouteHistoryPenaltyEvent {
   duration_ms: number;
   points_lost: number;
   occurred_at: number;
+  violation_count?: number | null;
+  punishment_action?: "warning" | "points" | "admin_review" | string | null;
+  notify_student?: boolean | null;
+  dashboard_review_required?: boolean | null;
   confidence_percent?: number | null;
   evidence_point_count?: number | null;
 }
@@ -710,6 +730,34 @@ interface RouteHistorySummary {
   total_bonus_points: number;
   total_penalty_points: number;
   total_point_count: number;
+}
+
+export interface RouteHistoryPenaltyReview {
+  review_uuid: string;
+  event_uuid: string;
+  app_id: string;
+  school_id: string;
+  user_uuid: string;
+  session_id: string;
+  zone_uuid: string;
+  term_uuid?: string | null;
+  violation_count: number;
+  punishment_action: "warning" | "points" | "admin_review" | string;
+  points_lost: number;
+  reason: string;
+  occurred_at: number;
+  status: "open" | "resolved" | "dismissed" | string;
+  notes: string;
+  reviewed_by_user_uuid?: string | null;
+  reviewed_at?: number | null;
+  metadata?: Record<string, unknown> | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface RouteHistoryPenaltyReviewUpdateInput {
+  status: "open" | "resolved" | "dismissed";
+  notes?: string;
 }
 
 export interface SchoolIncomeCategoryTotal {
@@ -861,7 +909,7 @@ export interface SignedSchoolMediaItem {
 type ServiceName = "auth" | "nebula" | "hubStore" | "kcaProxy";
 
 interface RequestOptions {
-  method?: "GET" | "POST" | "PUT" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   authRequired?: boolean;
   appIdHeader?: string;
@@ -2170,6 +2218,44 @@ export async function fetchStudentRouteHistory(
   );
 
   return normalizeStudentRouteHistorySessions(sessions);
+}
+
+export async function fetchRouteHistoryPenaltyReviews(
+  managedAppId: string,
+  schoolId: string,
+  options: { status?: string; limit?: number; offset?: number } = {},
+): Promise<RouteHistoryPenaltyReview[]> {
+  const search = new URLSearchParams();
+  if (options.status?.trim()) {
+    search.set("status", options.status.trim());
+  }
+  search.set("limit", String(options.limit ?? 50));
+  search.set("offset", String(options.offset ?? 0));
+
+  return request<RouteHistoryPenaltyReview[]>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/route-history-penalty-reviews?${search.toString()}`,
+    {
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
+export async function updateRouteHistoryPenaltyReview(
+  managedAppId: string,
+  schoolId: string,
+  reviewUUID: string,
+  input: RouteHistoryPenaltyReviewUpdateInput,
+): Promise<RouteHistoryPenaltyReview> {
+  return request<RouteHistoryPenaltyReview>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/route-history-penalty-reviews/${encodeURIComponent(reviewUUID)}`,
+    {
+      method: "PATCH",
+      body: input,
+      appIdHeader: managedAppId,
+    },
+  );
 }
 
 function normalizeRouteUnixSeconds(value?: number | null): number {
