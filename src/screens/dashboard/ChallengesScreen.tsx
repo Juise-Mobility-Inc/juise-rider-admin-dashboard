@@ -13,12 +13,15 @@ import {
 
 type ChallengeDraft = {
   challenge_uuid: string;
+  challenge_type: "route_metric" | "scavenger_hunt";
   audience_type: "user" | "campaign_group";
   title: string;
   description: string;
   image_url: string;
   metric_type: "distance_miles" | "points";
   target_value: string;
+  min_accuracy_meters: string;
+  checkpoints: ChallengeCheckpointDraft[];
   start_time: string;
   end_time: string;
   active: boolean;
@@ -26,6 +29,20 @@ type ChallengeDraft = {
   repeat_interval_value: string;
   repeat_interval_unit: "days" | "weeks";
   repeat_count: string;
+};
+
+type ChallengeCheckpointDraft = {
+  checkpoint_uuid: string;
+  title: string;
+  description: string;
+  clue: string;
+  image_url: string;
+  latitude: string;
+  longitude: string;
+  radius_meters: string;
+  prize_points: string;
+  sort_order: string;
+  active: boolean;
 };
 
 type DetailRowComponent = ComponentType<{
@@ -46,6 +63,7 @@ const challengeExportColumns = [
   "challenge_title",
   "challenge_description",
   "challenge_image_url",
+  "challenge_type",
   "challenge_audience_type",
   "challenge_audience_label",
   "challenge_status",
@@ -53,6 +71,7 @@ const challengeExportColumns = [
   "challenge_metric_type",
   "challenge_target_value",
   "challenge_target_label",
+  "challenge_checkpoint_count",
   "challenge_start_time",
   "challenge_end_time",
   "summary_joined_count",
@@ -80,6 +99,9 @@ const challengeExportColumns = [
   "participant_completion_percent",
   "participant_completed",
   "participant_total_sessions",
+  "participant_checkpoint_count",
+  "participant_visited_checkpoint_count",
+  "participant_game_points_awarded",
   "participant_last_activity_at",
 ] as const;
 
@@ -147,6 +169,38 @@ function formatChallengeAudienceLabel(
   return audienceType === "campaign_group" ? "Campaign" : "Student";
 }
 
+function isScavengerHuntChallenge(
+  challenge: Pick<SchoolChallenge, "challenge_type">,
+): boolean {
+  return challenge.challenge_type === "scavenger_hunt";
+}
+
+function formatChallengeTypeLabel(
+  challengeType?: SchoolChallenge["challenge_type"] | ChallengeDraft["challenge_type"],
+): string {
+  return challengeType === "scavenger_hunt" ? "Scavenger hunt" : "Ride / points";
+}
+
+function getChallengeCheckpointCount(challenge: SchoolChallenge): number {
+  return (challenge.checkpoints ?? []).filter((checkpoint) => checkpoint.active).length;
+}
+
+function getDraftActiveCheckpointCount(draft: ChallengeDraft): number {
+  return draft.checkpoints.filter((checkpoint) => checkpoint.active).length;
+}
+
+function formatChallengeGoalLabel(
+  challenge: SchoolChallenge,
+  formatChallengeMetricValue: Props["formatChallengeMetricValue"],
+): string {
+  if (isScavengerHuntChallenge(challenge)) {
+    const count = getChallengeCheckpointCount(challenge) || challenge.target_value;
+    return `${count} stop${count === 1 ? "" : "s"}`;
+  }
+
+  return formatChallengeMetricValue(challenge.metric_type, challenge.target_value);
+}
+
 type ChallengeExportParams = {
   challenge: SchoolChallenge;
   participants: SchoolChallengeParticipantProgress[];
@@ -187,15 +241,18 @@ function downloadChallengeCSV({
         )
       : "";
   const challengeStatus = resolveChallengeStatus(challenge);
-  const targetLabel = formatChallengeMetricValue(
-    challenge.metric_type,
-    challenge.target_value,
-  );
+  const checkpointCount = getChallengeCheckpointCount(challenge);
+  const targetLabel = isScavengerHuntChallenge(challenge)
+    ? `${checkpointCount || challenge.target_value} stop${
+        (checkpointCount || challenge.target_value) === 1 ? "" : "s"
+      }`
+    : formatChallengeMetricValue(challenge.metric_type, challenge.target_value);
   const baseRow: ChallengeExportRow = {
     challenge_uuid: challenge.challenge_uuid,
     challenge_title: challenge.title,
     challenge_description: challenge.description,
     challenge_image_url: challenge.image_url,
+    challenge_type: formatChallengeTypeLabel(challenge.challenge_type),
     challenge_audience_type: challenge.audience_type,
     challenge_audience_label: formatChallengeAudienceLabel(challenge.audience_type),
     challenge_status: challengeStatus,
@@ -203,6 +260,7 @@ function downloadChallengeCSV({
     challenge_metric_type: challenge.metric_type,
     challenge_target_value: challenge.target_value,
     challenge_target_label: targetLabel,
+    challenge_checkpoint_count: checkpointCount,
     challenge_start_time: formatDateTimeForDisplay(challenge.start_time),
     challenge_end_time: formatDateTimeForDisplay(challenge.end_time),
     summary_joined_count: participantSummary.joined,
@@ -262,6 +320,9 @@ function downloadChallengeCSV({
       participant_completion_percent: Math.round(participant.completion_percent),
       participant_completed: participant.completed,
       participant_total_sessions: participant.total_sessions,
+      participant_checkpoint_count: participant.checkpoint_count ?? "",
+      participant_visited_checkpoint_count: participant.visited_checkpoint_count ?? "",
+      participant_game_points_awarded: participant.game_points_awarded ?? "",
       participant_last_activity_at: participant.last_activity_at
         ? formatDateTimeForDisplay(participant.last_activity_at)
         : "",
@@ -317,6 +378,101 @@ export function ChallengesScreen(props: Props) {
   const nothingSelected = !selectedChallengeId || (selectedChallengeId !== newChallengeSelectionId && !selectedChallenge);
   const selectedChallengeIsCampaign =
     selectedChallenge?.audience_type === "campaign_group";
+  const draftIsScavengerHunt = challengeDraft.challenge_type === "scavenger_hunt";
+
+  function createEmptyCheckpointDraft(sortOrder = challengeDraft.checkpoints.length + 1) {
+    return {
+      checkpoint_uuid: "",
+      title: "",
+      description: "",
+      clue: "",
+      image_url: "",
+      latitude: "",
+      longitude: "",
+      radius_meters: "50",
+      prize_points: "0",
+      sort_order: String(sortOrder),
+      active: true,
+    };
+  }
+
+  function setChallengeType(challengeType: ChallengeDraft["challenge_type"]) {
+    setChallengeDraft((current) => {
+      if (challengeType === "scavenger_hunt") {
+        const checkpoints =
+          current.checkpoints.length > 0
+            ? current.checkpoints
+            : [createEmptyCheckpointDraft(1)];
+        return {
+          ...current,
+          challenge_type: "scavenger_hunt",
+          audience_type: "user",
+          metric_type: "points",
+          target_value: String(
+            checkpoints.filter((checkpoint) => checkpoint.active).length || 1,
+          ),
+          repeat_enabled: false,
+          checkpoints,
+        };
+      }
+
+      return {
+        ...current,
+        challenge_type: "route_metric",
+        target_value:
+          current.target_value ||
+          (current.metric_type === "points" ? "100" : "10"),
+      };
+    });
+  }
+
+  function updateCheckpointDraft(index: number, patch: Partial<ChallengeCheckpointDraft>) {
+    setChallengeDraft((current) => {
+      const checkpoints = current.checkpoints.map((checkpoint, checkpointIndex) =>
+        checkpointIndex === index ? { ...checkpoint, ...patch } : checkpoint,
+      );
+      return {
+        ...current,
+        checkpoints,
+        target_value:
+          current.challenge_type === "scavenger_hunt"
+            ? String(checkpoints.filter((checkpoint) => checkpoint.active).length || 1)
+            : current.target_value,
+      };
+    });
+  }
+
+  function addCheckpointDraft() {
+    setChallengeDraft((current) => ({
+      ...current,
+      checkpoints: [
+        ...current.checkpoints,
+        createEmptyCheckpointDraft(current.checkpoints.length + 1),
+      ],
+      target_value:
+        current.challenge_type === "scavenger_hunt"
+          ? String(
+              current.checkpoints.filter((checkpoint) => checkpoint.active).length + 1,
+            )
+          : current.target_value,
+    }));
+  }
+
+  function removeCheckpointDraft(index: number) {
+    setChallengeDraft((current) => {
+      const checkpoints = current.checkpoints.filter(
+        (_checkpoint, checkpointIndex) => checkpointIndex !== index,
+      );
+      return {
+        ...current,
+        checkpoints,
+        target_value:
+          current.challenge_type === "scavenger_hunt"
+            ? String(checkpoints.filter((checkpoint) => checkpoint.active).length || 1)
+            : current.target_value,
+      };
+    });
+  }
 
   function handleSelectNew() {
     setSelectedChallengeId(newChallengeSelectionId);
@@ -401,8 +557,8 @@ export function ChallengesScreen(props: Props) {
                       <div className="challenge-roster-info">
                         <strong className="challenge-roster-title">{ch.title}</strong>
                         <span className="challenge-roster-meta">
-                          {formatChallengeAudienceLabel(ch.audience_type)} challenge ·{" "}
-                          {formatChallengeMetricValue(ch.metric_type, ch.target_value)}
+                          {formatChallengeTypeLabel(ch.challenge_type)} ·{" "}
+                          {formatChallengeGoalLabel(ch, formatChallengeMetricValue)}
                         </span>
                       </div>
                       <span className={`challenge-status-badge ${statusClass(status)}`}>
@@ -452,8 +608,8 @@ export function ChallengesScreen(props: Props) {
                         <div className="challenge-roster-info">
                           <strong className="challenge-roster-title">{ch.title}</strong>
                           <span className="challenge-roster-meta">
-                            {formatChallengeAudienceLabel(ch.audience_type)} challenge ·{" "}
-                            {formatChallengeMetricValue(ch.metric_type, ch.target_value)}
+                            {formatChallengeTypeLabel(ch.challenge_type)} ·{" "}
+                            {formatChallengeGoalLabel(ch, formatChallengeMetricValue)}
                           </span>
                         </div>
                         <span className={`challenge-status-badge ${statusClass(status)}`}>
@@ -529,9 +685,14 @@ export function ChallengesScreen(props: Props) {
                   ) : null}
                   <div className="challenge-form-preview-chips">
                     <span className="challenge-form-chip">
-                      {formatChallengeAudienceLabel(challengeDraft.audience_type)} challenge
+                      {formatChallengeTypeLabel(challengeDraft.challenge_type)}
                     </span>
-                    {challengeDraft.metric_type && challengeDraft.target_value ? (
+                    {draftIsScavengerHunt ? (
+                      <span className="challenge-form-chip">
+                        {getDraftActiveCheckpointCount(challengeDraft)} active stop
+                        {getDraftActiveCheckpointCount(challengeDraft) === 1 ? "" : "s"}
+                      </span>
+                    ) : challengeDraft.metric_type && challengeDraft.target_value ? (
                       <span className="challenge-form-chip">
                         🎯{" "}
                         {formatChallengeMetricValue(
@@ -561,9 +722,22 @@ export function ChallengesScreen(props: Props) {
                   <div className="challenge-form-section-label">Details</div>
                   <div className="form-grid">
                     <label className="field">
+                      <span>Challenge type</span>
+                      <select
+                        value={challengeDraft.challenge_type}
+                        onChange={(e) =>
+                          setChallengeType(e.target.value as ChallengeDraft["challenge_type"])
+                        }
+                      >
+                        <option value="route_metric">Ride / Points Challenge</option>
+                        <option value="scavenger_hunt">Scavenger Hunt</option>
+                      </select>
+                    </label>
+                    <label className="field">
                       <span>Audience</span>
                       <select
                         value={challengeDraft.audience_type}
+                        disabled={draftIsScavengerHunt}
                         onChange={(e) =>
                           setChallengeDraft((c) => ({
                             ...c,
@@ -602,57 +776,97 @@ export function ChallengesScreen(props: Props) {
                 {/* Section: Goal */}
                 <div className="challenge-form-section">
                   <div className="challenge-form-section-label">Goal</div>
-                  <div className="form-grid">
-                    <label className="field">
-                      <span>Metric</span>
-                      <select
-                        value={challengeDraft.metric_type}
-                        onChange={(e) =>
-                          setChallengeDraft((c) => ({
-                            ...c,
-                            metric_type: e.target.value as ChallengeDraft["metric_type"],
-                            target_value:
-                              e.target.value === "points"
-                                ? c.metric_type === "points"
-                                  ? c.target_value
-                                  : "100"
-                                : c.metric_type === "distance_miles"
-                                  ? c.target_value
-                                  : "10",
-                          }))
-                        }
-                      >
-                        <option value="distance_miles">Distance (miles)</option>
-                        <option value="points">Points</option>
-                      </select>
-                    </label>
-                    <label className="field">
-                      <span>
-                        Target{" "}
-                        {challengeDraft.metric_type === "points" ? "(pts)" : "(mi)"}
-                      </span>
-                      <input
-                        type="number"
-                        min="0"
-                        step={challengeDraft.metric_type === "points" ? "1" : "0.1"}
-                        value={challengeDraft.target_value}
-                        onChange={(e) =>
-                          setChallengeDraft((c) => ({ ...c, target_value: e.target.value }))
-                        }
-                        placeholder={challengeDraft.metric_type === "points" ? "100" : "10"}
-                      />
-                    </label>
-                    <label className="field checkbox-field">
-                      <span>Active</span>
-                      <input
-                        type="checkbox"
-                        checked={challengeDraft.active}
-                        onChange={(e) =>
-                          setChallengeDraft((c) => ({ ...c, active: e.target.checked }))
-                        }
-                      />
-                    </label>
-                  </div>
+                  {draftIsScavengerHunt ? (
+                    <div className="form-grid">
+                      <label className="field">
+                        <span>Completion target</span>
+                        <input
+                          value={`${getDraftActiveCheckpointCount(challengeDraft)} active stop${
+                            getDraftActiveCheckpointCount(challengeDraft) === 1 ? "" : "s"
+                          }`}
+                          disabled
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Minimum GPS accuracy (m)</span>
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={challengeDraft.min_accuracy_meters}
+                          onChange={(e) =>
+                            setChallengeDraft((c) => ({
+                              ...c,
+                              min_accuracy_meters: e.target.value,
+                            }))
+                          }
+                          placeholder="50"
+                        />
+                      </label>
+                      <label className="field checkbox-field">
+                        <span>Active</span>
+                        <input
+                          type="checkbox"
+                          checked={challengeDraft.active}
+                          onChange={(e) =>
+                            setChallengeDraft((c) => ({ ...c, active: e.target.checked }))
+                          }
+                        />
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="form-grid">
+                      <label className="field">
+                        <span>Metric</span>
+                        <select
+                          value={challengeDraft.metric_type}
+                          onChange={(e) =>
+                            setChallengeDraft((c) => ({
+                              ...c,
+                              metric_type: e.target.value as ChallengeDraft["metric_type"],
+                              target_value:
+                                e.target.value === "points"
+                                  ? c.metric_type === "points"
+                                    ? c.target_value
+                                    : "100"
+                                  : c.metric_type === "distance_miles"
+                                    ? c.target_value
+                                    : "10",
+                            }))
+                          }
+                        >
+                          <option value="distance_miles">Distance (miles)</option>
+                          <option value="points">Points</option>
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>
+                          Target{" "}
+                          {challengeDraft.metric_type === "points" ? "(pts)" : "(mi)"}
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step={challengeDraft.metric_type === "points" ? "1" : "0.1"}
+                          value={challengeDraft.target_value}
+                          onChange={(e) =>
+                            setChallengeDraft((c) => ({ ...c, target_value: e.target.value }))
+                          }
+                          placeholder={challengeDraft.metric_type === "points" ? "100" : "10"}
+                        />
+                      </label>
+                      <label className="field checkbox-field">
+                        <span>Active</span>
+                        <input
+                          type="checkbox"
+                          checked={challengeDraft.active}
+                          onChange={(e) =>
+                            setChallengeDraft((c) => ({ ...c, active: e.target.checked }))
+                          }
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
 
                 {/* Section: Schedule */}
@@ -682,7 +896,7 @@ export function ChallengesScreen(props: Props) {
                   </div>
                 </div>
 
-                {!challengeDraft.challenge_uuid ? (
+                {!challengeDraft.challenge_uuid && !draftIsScavengerHunt ? (
                   <div className="challenge-form-section">
                     <div className="challenge-form-section-label">Schedule repeat</div>
                     <div className="form-grid">
@@ -758,6 +972,181 @@ export function ChallengesScreen(props: Props) {
                           </label>
                         </>
                       ) : null}
+                    </div>
+                  </div>
+                ) : null}
+
+                {draftIsScavengerHunt ? (
+                  <div className="challenge-form-section">
+                    <div className="challenge-form-section-header">
+                      <div>
+                        <div className="challenge-form-section-label">Stops</div>
+                        <p className="muted-text">
+                          Users must check in inside each active stop radius to complete
+                          the hunt.
+                        </p>
+                      </div>
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={addCheckpointDraft}
+                      >
+                        Add Stop
+                      </button>
+                    </div>
+                    {challengeDraft.checkpoints.length === 0 ? (
+                      <p className="empty-state">Add at least one stop to create this hunt.</p>
+                    ) : null}
+                    <div className="challenge-stop-list">
+                      {challengeDraft.checkpoints.map((checkpoint, index) => (
+                        <div className="challenge-stop-card" key={`${checkpoint.checkpoint_uuid || "new"}-${index}`}>
+                          <div className="challenge-stop-card-header">
+                            <strong>Stop {index + 1}</strong>
+                            <div className="challenge-stop-actions">
+                              <label className="challenge-stop-active">
+                                <input
+                                  type="checkbox"
+                                  checked={checkpoint.active}
+                                  onChange={(e) =>
+                                    updateCheckpointDraft(index, {
+                                      active: e.target.checked,
+                                    })
+                                  }
+                                />
+                                Active
+                              </label>
+                              <button
+                                className="secondary-button"
+                                type="button"
+                                onClick={() => removeCheckpointDraft(index)}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                          <div className="form-grid">
+                            <label className="field">
+                              <span>Title</span>
+                              <input
+                                value={checkpoint.title}
+                                onChange={(e) =>
+                                  updateCheckpointDraft(index, {
+                                    title: e.target.value,
+                                  })
+                                }
+                                placeholder="Campus mural"
+                              />
+                            </label>
+                            <label className="field">
+                              <span>Order</span>
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={checkpoint.sort_order}
+                                onChange={(e) =>
+                                  updateCheckpointDraft(index, {
+                                    sort_order: e.target.value,
+                                  })
+                                }
+                              />
+                            </label>
+                            <label className="field field-span-2">
+                              <span>Clue</span>
+                              <input
+                                value={checkpoint.clue}
+                                onChange={(e) =>
+                                  updateCheckpointDraft(index, {
+                                    clue: e.target.value,
+                                  })
+                                }
+                                placeholder="Find the wall with the bright blue lightning bolt."
+                              />
+                            </label>
+                            <label className="field field-span-2">
+                              <span>Description</span>
+                              <textarea
+                                value={checkpoint.description}
+                                onChange={(e) =>
+                                  updateCheckpointDraft(index, {
+                                    description: e.target.value,
+                                  })
+                                }
+                                placeholder="Optional extra context shown after or before check-in."
+                                rows={2}
+                              />
+                            </label>
+                            <label className="field">
+                              <span>Latitude</span>
+                              <input
+                                type="number"
+                                step="0.000001"
+                                value={checkpoint.latitude}
+                                onChange={(e) =>
+                                  updateCheckpointDraft(index, {
+                                    latitude: e.target.value,
+                                  })
+                                }
+                                placeholder="42.673536"
+                              />
+                            </label>
+                            <label className="field">
+                              <span>Longitude</span>
+                              <input
+                                type="number"
+                                step="0.000001"
+                                value={checkpoint.longitude}
+                                onChange={(e) =>
+                                  updateCheckpointDraft(index, {
+                                    longitude: e.target.value,
+                                  })
+                                }
+                                placeholder="-83.198075"
+                              />
+                            </label>
+                            <label className="field">
+                              <span>Radius (m)</span>
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={checkpoint.radius_meters}
+                                onChange={(e) =>
+                                  updateCheckpointDraft(index, {
+                                    radius_meters: e.target.value,
+                                  })
+                                }
+                              />
+                            </label>
+                            <label className="field">
+                              <span>Prize points</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={checkpoint.prize_points}
+                                onChange={(e) =>
+                                  updateCheckpointDraft(index, {
+                                    prize_points: e.target.value,
+                                  })
+                                }
+                              />
+                            </label>
+                            <label className="field field-span-2">
+                              <span>Image URL</span>
+                              <input
+                                value={checkpoint.image_url}
+                                onChange={(e) =>
+                                  updateCheckpointDraft(index, {
+                                    image_url: e.target.value,
+                                  })
+                                }
+                                placeholder="https://example.com/stop.jpg"
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ) : null}
@@ -887,14 +1276,10 @@ export function ChallengesScreen(props: Props) {
                     ) : null}
                     <div className="challenge-detail-chips">
                       <span className="challenge-form-chip">
-                        {formatChallengeAudienceLabel(selectedChallenge.audience_type)} challenge
+                        {formatChallengeTypeLabel(selectedChallenge.challenge_type)}
                       </span>
                       <span className="challenge-form-chip">
-                        🎯{" "}
-                        {formatChallengeMetricValue(
-                          selectedChallenge.metric_type,
-                          selectedChallenge.target_value,
-                        )}
+                        🎯 {formatChallengeGoalLabel(selectedChallenge, formatChallengeMetricValue)}
                       </span>
                       <span className="challenge-form-chip">
                         📅 {formatDateTimeForDisplay(selectedChallenge.start_time)} →{" "}
@@ -912,19 +1297,55 @@ export function ChallengesScreen(props: Props) {
                     onClick={() =>
                       setChallengeDraft({
                         challenge_uuid: selectedChallenge.challenge_uuid,
-                        audience_type: selectedChallenge.audience_type,
+                        challenge_type:
+                          selectedChallenge.challenge_type === "scavenger_hunt"
+                            ? "scavenger_hunt"
+                            : "route_metric",
+                        audience_type:
+                          selectedChallenge.challenge_type === "scavenger_hunt"
+                            ? "user"
+                            : selectedChallenge.audience_type,
                         title: selectedChallenge.title,
                         description: selectedChallenge.description,
                         image_url: selectedChallenge.image_url,
-                        metric_type: selectedChallenge.metric_type,
-                        target_value: String(selectedChallenge.target_value),
+                        metric_type:
+                          selectedChallenge.challenge_type === "scavenger_hunt"
+                            ? "points"
+                            : selectedChallenge.metric_type,
+                        target_value:
+                          selectedChallenge.challenge_type === "scavenger_hunt"
+                            ? String(
+                                getChallengeCheckpointCount(selectedChallenge) ||
+                                  selectedChallenge.target_value,
+                              )
+                            : String(selectedChallenge.target_value),
+                        min_accuracy_meters:
+                          typeof selectedChallenge.game_config?.min_accuracy_meters === "number"
+                            ? String(selectedChallenge.game_config.min_accuracy_meters)
+                            : "50",
+                        checkpoints: (selectedChallenge.checkpoints ?? [])
+                          .slice()
+                          .sort((left, right) => left.sort_order - right.sort_order)
+                          .map((checkpoint, index) => ({
+                            checkpoint_uuid: checkpoint.checkpoint_uuid,
+                            title: checkpoint.title,
+                            description: checkpoint.description,
+                            clue: checkpoint.clue,
+                            image_url: checkpoint.image_url,
+                            latitude: String(checkpoint.latitude),
+                            longitude: String(checkpoint.longitude),
+                            radius_meters: String(checkpoint.radius_meters),
+                            prize_points: String(checkpoint.prize_points),
+                            sort_order: String(checkpoint.sort_order || index + 1),
+                            active: checkpoint.active,
+                          })),
                         start_time: selectedChallenge.start_time
-                          ? new Date(selectedChallenge.start_time)
+                          ? new Date(selectedChallenge.start_time * 1000)
                               .toISOString()
                               .slice(0, 16)
                           : "",
                         end_time: selectedChallenge.end_time
-                          ? new Date(selectedChallenge.end_time)
+                          ? new Date(selectedChallenge.end_time * 1000)
                               .toISOString()
                               .slice(0, 16)
                           : "",
@@ -1033,6 +1454,13 @@ export function ChallengesScreen(props: Props) {
                       const avatarSeed = isCampaignParticipant
                         ? participant.campaign_group_name?.[0]
                         : participant.first_name?.[0] || participant.username?.[0];
+                      const isScavengerHunt = selectedChallenge
+                        ? isScavengerHuntChallenge(selectedChallenge)
+                        : false;
+                      const visitedStops =
+                        participant.visited_checkpoint_count ?? participant.progress_value;
+                      const totalStops =
+                        participant.checkpoint_count ?? participant.target_value;
 
                       return (
                         <article
@@ -1066,19 +1494,33 @@ export function ChallengesScreen(props: Props) {
 
                           <div className="challenge-progress-meta">
                             <div className="challenge-progress-copy">
-                              <strong>
-                                {formatChallengeMetricValue(
-                                  participant.metric_type,
-                                  participant.progress_value,
-                                )}
-                              </strong>
-                              <span>
-                                of{" "}
-                                {formatChallengeMetricValue(
-                                  participant.metric_type,
-                                  participant.target_value,
-                                )}
-                              </span>
+                              {isScavengerHunt ? (
+                                <>
+                                  <strong>
+                                    {visitedStops} / {totalStops} stops
+                                  </strong>
+                                  <span>
+                                    {participant.game_points_awarded ?? 0} point
+                                    {(participant.game_points_awarded ?? 0) === 1 ? "" : "s"} awarded
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <strong>
+                                    {formatChallengeMetricValue(
+                                      participant.metric_type,
+                                      participant.progress_value,
+                                    )}
+                                  </strong>
+                                  <span>
+                                    of{" "}
+                                    {formatChallengeMetricValue(
+                                      participant.metric_type,
+                                      participant.target_value,
+                                    )}
+                                  </span>
+                                </>
+                              )}
                             </div>
                             <span className="challenge-progress-percent">
                               {Math.round(participant.completion_percent)}%
@@ -1100,10 +1542,17 @@ export function ChallengesScreen(props: Props) {
                                 {(participant.member_count ?? 0) === 1 ? "" : "s"}
                               </span>
                             ) : null}
-                            <span>
-                              {participant.total_sessions} session
-                              {participant.total_sessions !== 1 ? "s" : ""}
-                            </span>
+                            {isScavengerHunt ? (
+                              <span>
+                                {participant.game_points_awarded ?? 0} hunt point
+                                {(participant.game_points_awarded ?? 0) === 1 ? "" : "s"}
+                              </span>
+                            ) : (
+                              <span>
+                                {participant.total_sessions} session
+                                {participant.total_sessions !== 1 ? "s" : ""}
+                              </span>
+                            )}
                             <span>
                               Joined {formatDateTimeForDisplay(participant.joined_at)}
                             </span>

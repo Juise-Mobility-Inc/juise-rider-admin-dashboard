@@ -103,16 +103,56 @@ export interface SchoolZone {
   updated_at: number;
 }
 
+export type SchoolChallengeType = "route_metric" | "scavenger_hunt";
+
+export interface SchoolChallengeCheckpoint {
+  checkpoint_uuid: string;
+  challenge_uuid: string;
+  app_id: string;
+  school_id: string;
+  title: string;
+  description: string;
+  clue: string;
+  image_url: string;
+  latitude: number;
+  longitude: number;
+  radius_meters: number;
+  prize_points: number;
+  sort_order: number;
+  active: boolean;
+  metadata?: Record<string, unknown>;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface SchoolChallengeCheckpointWriteInput {
+  checkpoint_uuid?: string;
+  title: string;
+  description: string;
+  clue: string;
+  image_url: string;
+  latitude: number;
+  longitude: number;
+  radius_meters: number;
+  prize_points: number;
+  sort_order: number;
+  active?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
 export interface SchoolChallenge {
   challenge_uuid: string;
   app_id: string;
   school_id: string;
+  challenge_type?: SchoolChallengeType;
   audience_type: "user" | "campaign_group";
   title: string;
   description: string;
   image_url: string;
   metric_type: "distance_miles" | "points";
   target_value: number;
+  game_config?: Record<string, unknown>;
+  checkpoints?: SchoolChallengeCheckpoint[];
   start_time: number;
   end_time: number;
   active: boolean;
@@ -121,12 +161,15 @@ export interface SchoolChallenge {
 }
 
 export interface SchoolChallengeWriteInput {
+  challenge_type?: SchoolChallengeType;
   audience_type: "user" | "campaign_group";
   title: string;
   description: string;
   image_url: string;
   metric_type: "distance_miles" | "points";
   target_value: number;
+  game_config?: Record<string, unknown>;
+  checkpoints?: SchoolChallengeCheckpointWriteInput[];
   start_time: number;
   end_time: number;
   active?: boolean;
@@ -225,6 +268,9 @@ export interface SchoolChallengeParticipantProgress {
   completion_percent: number;
   completed: boolean;
   total_sessions: number;
+  checkpoint_count?: number;
+  visited_checkpoint_count?: number;
+  game_points_awarded?: number;
   last_activity_at?: number | null;
 }
 
@@ -295,6 +341,9 @@ export interface UserSchoolChallengeProgress {
   completion_percent: number;
   completed: boolean;
   total_sessions: number;
+  checkpoint_count?: number;
+  visited_checkpoint_count?: number;
+  game_points_awarded?: number;
   last_activity_at?: number | null;
 }
 

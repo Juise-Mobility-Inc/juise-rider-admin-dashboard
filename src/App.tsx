@@ -49,7 +49,10 @@ import {
         type School,
         type SchoolColorScheme,
         type SchoolChallenge,
+        type SchoolChallengeCheckpointWriteInput,
+        type SchoolChallengeType,
         type SchoolChallengeParticipantProgress,
+        type SchoolChallengeWriteInput,
         type SchoolPOI,
         type SchoolZone,
         type SchoolZonePunishmentPolicy,
@@ -271,14 +274,31 @@ interface PackEditDraft {
         lng: string;
 }
 
+interface ChallengeCheckpointDraft {
+        checkpoint_uuid: string;
+        title: string;
+        description: string;
+        clue: string;
+        image_url: string;
+        latitude: string;
+        longitude: string;
+        radius_meters: string;
+        prize_points: string;
+        sort_order: string;
+        active: boolean;
+}
+
 interface ChallengeDraft {
         challenge_uuid: string;
+        challenge_type: SchoolChallengeType;
         audience_type: "user" | "campaign_group";
         title: string;
         description: string;
         image_url: string;
         metric_type: "distance_miles" | "points";
         target_value: string;
+        min_accuracy_meters: string;
+        checkpoints: ChallengeCheckpointDraft[];
         start_time: string;
         end_time: string;
         active: boolean;
@@ -533,18 +553,103 @@ function formatDateTimeLocalValue(value?: number): string {
         return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
+function normalizeChallengeType(
+        challengeType?: SchoolChallenge["challenge_type"],
+): SchoolChallengeType {
+        return challengeType === "scavenger_hunt"
+                ? "scavenger_hunt"
+                : "route_metric";
+}
+
+function getScavengerHuntMinAccuracy(
+        challenge: Pick<SchoolChallenge, "game_config">,
+): string {
+        const value = challenge.game_config?.min_accuracy_meters;
+        return typeof value === "number" && Number.isFinite(value) && value > 0
+                ? String(value)
+                : "50";
+}
+
+function checkpointToDraft(
+        checkpoint: NonNullable<SchoolChallenge["checkpoints"]>[number],
+        index: number,
+): ChallengeCheckpointDraft {
+        return {
+                checkpoint_uuid: checkpoint.checkpoint_uuid,
+                title: checkpoint.title,
+                description: checkpoint.description,
+                clue: checkpoint.clue,
+                image_url: checkpoint.image_url,
+                latitude: String(checkpoint.latitude),
+                longitude: String(checkpoint.longitude),
+                radius_meters: String(checkpoint.radius_meters),
+                prize_points: String(checkpoint.prize_points),
+                sort_order: String(checkpoint.sort_order || index + 1),
+                active: checkpoint.active,
+        };
+}
+
+function checkpointDraftToWriteInput(
+        checkpoint: ChallengeCheckpointDraft,
+        index: number,
+): SchoolChallengeCheckpointWriteInput {
+        const title = checkpoint.title.trim();
+        if (!title) {
+                throw new Error(`Stop ${index + 1} needs a title.`);
+        }
+
+        const latitude = Number(checkpoint.latitude.trim());
+        const longitude = Number(checkpoint.longitude.trim());
+        const radiusMeters = Number(checkpoint.radius_meters.trim());
+        const prizePoints = Number.parseInt(checkpoint.prize_points.trim() || "0", 10);
+        const sortOrder = Number.parseInt(checkpoint.sort_order.trim() || String(index + 1), 10);
+
+        if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+                throw new Error(`Stop ${index + 1} needs a valid latitude.`);
+        }
+        if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+                throw new Error(`Stop ${index + 1} needs a valid longitude.`);
+        }
+        if (!Number.isFinite(radiusMeters) || radiusMeters <= 0) {
+                throw new Error(`Stop ${index + 1} needs a radius greater than 0 meters.`);
+        }
+        if (!Number.isFinite(prizePoints) || prizePoints < 0) {
+                throw new Error(`Stop ${index + 1} prize points must be 0 or more.`);
+        }
+        if (!Number.isFinite(sortOrder) || sortOrder <= 0) {
+                throw new Error(`Stop ${index + 1} order must be greater than 0.`);
+        }
+
+        return {
+                checkpoint_uuid: checkpoint.checkpoint_uuid || undefined,
+                title,
+                description: checkpoint.description.trim(),
+                clue: checkpoint.clue.trim(),
+                image_url: checkpoint.image_url.trim(),
+                latitude,
+                longitude,
+                radius_meters: radiusMeters,
+                prize_points: prizePoints,
+                sort_order: sortOrder,
+                active: checkpoint.active,
+        };
+}
+
 function createEmptyChallengeDraft(): ChallengeDraft {
         const now = new Date();
         const end = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
         return {
                 challenge_uuid: "",
+                challenge_type: "route_metric",
                 audience_type: "user",
                 title: "",
                 description: "",
                 image_url: "",
                 metric_type: "distance_miles",
                 target_value: "10",
+                min_accuracy_meters: "50",
+                checkpoints: [],
                 start_time: formatDateTimeLocalValue(Math.floor(now.getTime() / 1000)),
                 end_time: formatDateTimeLocalValue(Math.floor(end.getTime() / 1000)),
                 active: true,
@@ -556,14 +661,28 @@ function createEmptyChallengeDraft(): ChallengeDraft {
 }
 
 function challengeToDraft(challenge: SchoolChallenge): ChallengeDraft {
+        const challengeType = normalizeChallengeType(challenge.challenge_type);
+        const checkpoints = (challenge.checkpoints ?? [])
+                .slice()
+                .sort((left, right) => left.sort_order - right.sort_order)
+                .map(checkpointToDraft);
+
         return {
                 challenge_uuid: challenge.challenge_uuid,
-                audience_type: challenge.audience_type,
+                challenge_type: challengeType,
+                audience_type:
+                        challengeType === "scavenger_hunt" ? "user" : challenge.audience_type,
                 title: challenge.title,
                 description: challenge.description,
                 image_url: challenge.image_url,
-                metric_type: challenge.metric_type,
-                target_value: String(challenge.target_value),
+                metric_type:
+                        challengeType === "scavenger_hunt" ? "points" : challenge.metric_type,
+                target_value:
+                        challengeType === "scavenger_hunt"
+                                ? String(checkpoints.filter((checkpoint) => checkpoint.active).length || challenge.target_value)
+                                : String(challenge.target_value),
+                min_accuracy_meters: getScavengerHuntMinAccuracy(challenge),
+                checkpoints,
                 start_time: formatDateTimeLocalValue(challenge.start_time),
                 end_time: formatDateTimeLocalValue(challenge.end_time),
                 active: challenge.active,
@@ -584,6 +703,13 @@ function challengeToResubmitDraft(challenge: SchoolChallenge): ChallengeDraft {
         return {
                 ...challengeToDraft(challenge),
                 challenge_uuid: "",
+                checkpoints: (challenge.checkpoints ?? [])
+                        .slice()
+                        .sort((left, right) => left.sort_order - right.sort_order)
+                        .map((checkpoint, index) => ({
+                                ...checkpointToDraft(checkpoint, index),
+                                checkpoint_uuid: "",
+                        })),
                 start_time: formatDateTimeLocalValue(now),
                 end_time: formatDateTimeLocalValue(now + durationSeconds),
                 active: true,
@@ -3662,11 +3788,39 @@ function App() {
                 let endTime = 0;
                 let repeatCount = 1;
                 let repeatIntervalValue = 1;
+                let checkpointInputs: SchoolChallengeCheckpointWriteInput[] = [];
+                let minAccuracyMeters = 50;
+                const isScavengerHunt =
+                        challengeDraft.challenge_type === "scavenger_hunt";
 
                 try {
-                        targetValue = Number(challengeDraft.target_value.trim());
-                        if (!Number.isFinite(targetValue) || targetValue <= 0) {
-                                throw new Error("Challenge target must be greater than 0.");
+                        if (isScavengerHunt) {
+                                checkpointInputs = challengeDraft.checkpoints.map(
+                                        checkpointDraftToWriteInput,
+                                );
+                                const activeCheckpointCount = checkpointInputs.filter(
+                                        (checkpoint) => checkpoint.active !== false,
+                                ).length;
+                                if (activeCheckpointCount <= 0) {
+                                        throw new Error(
+                                                "Scavenger hunts need at least one active stop.",
+                                        );
+                                }
+                                targetValue = activeCheckpointCount;
+                                minAccuracyMeters = Number(
+                                        challengeDraft.min_accuracy_meters.trim() || "50",
+                                );
+                                if (
+                                        !Number.isFinite(minAccuracyMeters) ||
+                                        minAccuracyMeters <= 0
+                                ) {
+                                        throw new Error("Minimum GPS accuracy must be greater than 0.");
+                                }
+                        } else {
+                                targetValue = Number(challengeDraft.target_value.trim());
+                                if (!Number.isFinite(targetValue) || targetValue <= 0) {
+                                        throw new Error("Challenge target must be greater than 0.");
+                                }
                         }
 
                         startTime = parseDateTimeLocalInput(
@@ -3680,7 +3834,11 @@ function App() {
                         if (endTime <= startTime) {
                                 throw new Error("Challenge end must be after the start time.");
                         }
-                        if (challengeDraft.repeat_enabled && !challengeDraft.challenge_uuid) {
+                        if (
+                                !isScavengerHunt &&
+                                challengeDraft.repeat_enabled &&
+                                !challengeDraft.challenge_uuid
+                        ) {
                                 repeatCount = Number.parseInt(challengeDraft.repeat_count.trim(), 10);
                                 repeatIntervalValue = Number.parseInt(
                                         challengeDraft.repeat_interval_value.trim(),
@@ -3710,17 +3868,24 @@ function App() {
 
                 setChallengeBusy(true);
                 try {
-                        const payload = {
-                                audience_type: challengeDraft.audience_type,
+                        const payload: SchoolChallengeWriteInput = {
+                                challenge_type: challengeDraft.challenge_type,
+                                audience_type: isScavengerHunt
+                                        ? "user"
+                                        : challengeDraft.audience_type,
                                 title: challengeDraft.title.trim(),
                                 description: challengeDraft.description.trim(),
                                 image_url: challengeDraft.image_url.trim(),
-                                metric_type: challengeDraft.metric_type,
+                                metric_type: isScavengerHunt ? "points" : challengeDraft.metric_type,
                                 target_value: targetValue,
+                                game_config: isScavengerHunt
+                                        ? { min_accuracy_meters: minAccuracyMeters }
+                                        : {},
+                                checkpoints: isScavengerHunt ? checkpointInputs : [],
                                 start_time: startTime,
                                 end_time: endTime,
                                 active: challengeDraft.active,
-                        } as const;
+                        };
 
                         const savedChallenges = challengeDraft.challenge_uuid
                                 ? [
@@ -3735,7 +3900,9 @@ function App() {
                                                 await createSchoolChallenge(
                                                         context.managedAppId,
                                                         activeSchoolId,
-                                                        challengeDraft.repeat_enabled && repeatCount > 1
+                                                        !isScavengerHunt &&
+                                                                challengeDraft.repeat_enabled &&
+                                                                repeatCount > 1
                                                                 ? {
                                                                                 ...payload,
                                                                                 repeat: {
