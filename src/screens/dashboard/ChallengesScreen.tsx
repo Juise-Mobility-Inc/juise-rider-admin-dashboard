@@ -1608,7 +1608,7 @@ export function ChallengesScreen(props: Props) {
             onClick={closeStopModal}
           >
             <div
-              className="management-modal-sheet stop-modal-sheet"
+              className="management-modal-sheet poi-editor-modal stop-modal-sheet"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -1627,9 +1627,9 @@ export function ChallengesScreen(props: Props) {
               </div>
 
               {/* Body: map + fields */}
-              <div className="stop-modal-body">
+              <div className="management-modal-grid">
                 {/* Map column */}
-                <div className="stop-modal-map-col">
+                <div className="management-modal-map">
                   <PackLocationPicker
                     value={modalPinValue}
                     radiusMeters={modalRadiusMeters}
@@ -1664,7 +1664,7 @@ export function ChallengesScreen(props: Props) {
                 </div>
 
                 {/* Fields column */}
-                <div className="stop-modal-fields-col">
+                <div className="data-section stop-modal-fields-col">
                   <div className="form-grid">
                     <label className="field field-span-2">
                       <span>Stop name</span>
