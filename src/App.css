@@ -1526,6 +1526,72 @@
         gap: 20px;
 }
 
+.challenge-master-panel-games {
+        gap: 18px;
+}
+
+.challenge-games-hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
+        gap: 18px;
+        align-items: stretch;
+        padding: 18px;
+        border: 1px solid rgba(17, 45, 78, 0.1);
+        border-radius: 18px;
+        background:
+                linear-gradient(135deg, rgba(39, 160, 92, 0.12), rgba(246, 174, 45, 0.1)),
+                rgba(255, 255, 255, 0.72);
+}
+
+.challenge-games-hero-copy {
+        display: grid;
+        gap: 8px;
+        align-content: center;
+}
+
+.challenge-games-hero-copy h3 {
+        margin: 0;
+        font-size: clamp(1.18rem, 1.8vw, 1.6rem);
+        letter-spacing: 0;
+}
+
+.challenge-games-hero-copy p {
+        margin: 0;
+        max-width: 720px;
+        color: var(--muted-strong);
+        line-height: 1.55;
+}
+
+.challenge-games-stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        align-content: center;
+}
+
+.challenge-games-stat {
+        display: grid;
+        gap: 4px;
+        min-height: 96px;
+        align-content: center;
+        padding: 14px;
+        border: 1px solid rgba(17, 45, 78, 0.1);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.72);
+}
+
+.challenge-games-stat strong {
+        font-size: 1.4rem;
+        line-height: 1;
+}
+
+.challenge-games-stat span {
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 800;
+        text-transform: uppercase;
+}
+
 .challenge-layout {
         display: grid;
         grid-template-columns: 300px minmax(0, 1fr);
@@ -8280,6 +8346,15 @@
                 padding: 18px;
         }
 
+        .challenge-games-stats,
+        .challenge-game-guide {
+                grid-template-columns: 1fr;
+        }
+
+        .challenge-games-hero {
+                grid-template-columns: 1fr;
+        }
+
         .login-hero {
                 padding: 28px 24px;
                 min-height: 32vh;
@@ -10850,9 +10925,9 @@
 }
 
 .mo-stat-chip--beacons {
-	background: rgba(236, 72, 153, 0.12);
-	color: #be185d;
-	border: 1px solid rgba(236, 72, 153, 0.28);
+        background: rgba(236, 72, 153, 0.12);
+        color: #be185d;
+        border: 1px solid rgba(236, 72, 153, 0.28);
 }
 
 .mo-layer-bar {
@@ -10887,8 +10962,8 @@
 }
 
 .mo-layer-btn:disabled {
-	cursor: not-allowed;
-	opacity: 0.58;
+        cursor: not-allowed;
+        opacity: 0.58;
 }
 
 .mo-layer-btn--on {
@@ -10936,53 +11011,53 @@
 }
 
 .beacon-location-marker.leaflet-div-icon {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	border: 3px solid #fff;
-	border-radius: 999px;
-	background: rgba(2, 6, 23, 0.9);
-	box-shadow:
-		0 14px 32px rgba(2, 6, 23, 0.38),
-		0 0 0 8px rgba(236, 72, 153, 0.24),
-		0 0 0 13px rgba(255, 255, 255, 0.56);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 3px solid #fff;
+        border-radius: 999px;
+        background: rgba(2, 6, 23, 0.9);
+        box-shadow:
+                0 14px 32px rgba(2, 6, 23, 0.38),
+                0 0 0 8px rgba(236, 72, 153, 0.24),
+                0 0 0 13px rgba(255, 255, 255, 0.56);
 }
 
 .beacon-location-marker-core {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 40px;
-	height: 40px;
-	border: 2px solid rgba(255, 255, 255, 0.82);
-	border-radius: 999px;
-	background: linear-gradient(135deg, #f43f8c, #be185d);
-	color: #fff;
-	line-height: 1;
-	box-shadow: inset 0 -5px 12px rgba(2, 6, 23, 0.2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border: 2px solid rgba(255, 255, 255, 0.82);
+        border-radius: 999px;
+        background: linear-gradient(135deg, #f43f8c, #be185d);
+        color: #fff;
+        line-height: 1;
+        box-shadow: inset 0 -5px 12px rgba(2, 6, 23, 0.2);
 }
 
 .beacon-location-marker-core svg {
-	width: 29px;
-	height: 29px;
-	stroke: currentColor;
-	stroke-width: 2.8;
-	stroke-linecap: round;
-	stroke-linejoin: round;
-	fill: none;
+        width: 29px;
+        height: 29px;
+        stroke: currentColor;
+        stroke-width: 2.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        fill: none;
 }
 
 .beacon-location-marker--stale.leaflet-div-icon {
-	background: rgba(15, 23, 42, 0.86);
-	box-shadow:
-		0 14px 32px rgba(15, 23, 42, 0.3),
-		0 0 0 8px rgba(100, 116, 139, 0.24),
-		0 0 0 13px rgba(255, 255, 255, 0.46);
+        background: rgba(15, 23, 42, 0.86);
+        box-shadow:
+                0 14px 32px rgba(15, 23, 42, 0.3),
+                0 0 0 8px rgba(100, 116, 139, 0.24),
+                0 0 0 13px rgba(255, 255, 255, 0.46);
 }
 
 .beacon-location-marker--stale .beacon-location-marker-core {
-	color: rgba(255, 255, 255, 0.82);
-	background: linear-gradient(135deg, #94a3b8, #475569);
+        color: rgba(255, 255, 255, 0.82);
+        background: linear-gradient(135deg, #94a3b8, #475569);
 }
 
 .mo-empty-overlay {
@@ -11070,13 +11145,13 @@
 }
 
 .mo-popup-badge--beacon {
-	background: #fdf2f8;
-	color: #be185d;
+        background: #fdf2f8;
+        color: #be185d;
 }
 
 .mo-popup-badge--beacon-stale {
-	background: #f1f5f9;
-	color: #475569;
+        background: #f1f5f9;
+        color: #475569;
 }
 
 .mo-popup-title {
@@ -11157,8 +11232,8 @@
 }
 
 .mo-popup-nav-btn--beacon {
-	background: #be185d;
-	color: #fff;
+        background: #be185d;
+        color: #fff;
 }
 
 .settings-grid {
@@ -11382,8 +11457,8 @@
 }
 
 .reg-chip-beacon {
-	background: rgba(236, 72, 153, 0.12);
-	color: #be185d;
+        background: rgba(236, 72, 153, 0.12);
+        color: #be185d;
 }
 
 /* ── Fee rule card improvements ── */

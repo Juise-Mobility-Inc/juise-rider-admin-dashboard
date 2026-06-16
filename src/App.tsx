@@ -4971,7 +4971,16 @@ function App() {
                                                                                         ? "nav-sub-item nav-sub-item-active"
                                                                                         : "nav-sub-item"
                                                                         }>
-                                                                        Challenges and Campaigns
+                                                                        Ride Challenges
+                                                                </NavLink>
+                                                                <NavLink
+                                                                        to="/challenge-games"
+                                                                        className={({ isActive }) =>
+                                                                                isActive
+                                                                                        ? "nav-sub-item nav-sub-item-active"
+                                                                                        : "nav-sub-item"
+                                                                        }>
+                                                                        Challenge Games
                                                                 </NavLink>
                                                                 <NavLink
                                                                         to="/notifications"
