@@ -13858,3 +13858,166 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Compact stop cards ── */
+.challenge-stop-compact-list {
+  display: grid;
+  gap: 10px;
+}
+
+.challenge-stop-compact-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  transition: box-shadow 0.15s;
+}
+
+.challenge-stop-compact-card:hover {
+  box-shadow: 0 2px 12px rgba(17, 45, 78, 0.09);
+}
+
+.challenge-stop-compact-card-inactive {
+  opacity: 0.52;
+}
+
+.challenge-stop-mini-map {
+  flex-shrink: 0;
+  width: 76px;
+  height: 76px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(39, 204, 94, 0.07);
+  border: 1px solid rgba(39, 204, 94, 0.2);
+}
+
+.challenge-stop-mini-map-placeholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 1.6rem;
+  color: var(--muted);
+}
+
+.challenge-stop-compact-info {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.challenge-stop-compact-num {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.challenge-stop-compact-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.challenge-stop-compact-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.challenge-stop-compact-points {
+  font-weight: 700;
+  color: #27CC5E;
+}
+
+.challenge-stop-inactive-tag {
+  background: rgba(17, 45, 78, 0.08);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 99px;
+}
+
+.challenge-stop-compact-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── Stop editor modal ── */
+.stop-modal-sheet {
+  width: min(900px, calc(100vw - 32px));
+  max-height: min(90vh, 800px);
+}
+
+.stop-modal-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.stop-modal-map-col .pack-map-shell {
+  height: 400px;
+}
+
+.stop-modal-map-col .pack-map {
+  height: 100%;
+}
+
+.stop-modal-fields-col {
+  display: grid;
+  gap: 4px;
+}
+
+.stop-radius-track {
+  display: grid;
+  gap: 4px;
+}
+
+.stop-radius-slider {
+  width: 100%;
+  height: 4px;
+  accent-color: #27CC5E;
+  cursor: pointer;
+}
+
+.stop-radius-range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.stop-radius-value {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #27CC5E;
+}
+
+@media (max-width: 680px) {
+  .stop-modal-body {
+    grid-template-columns: 1fr;
+  }
+  .challenge-stop-compact-card {
+    flex-wrap: wrap;
+  }
+  .challenge-stop-compact-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
