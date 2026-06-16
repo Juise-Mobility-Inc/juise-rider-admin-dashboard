@@ -563,6 +563,35 @@ export function ChallengesScreen(props: Props) {
   }
 
   const [stopImageBusy, setStopImageBusy] = useState(false);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  function handleCheckpointDragStart(index: number) {
+    setDragIndex(index);
+  }
+  function handleCheckpointDragOver(e: React.DragEvent, index: number) {
+    e.preventDefault();
+    if (dragOverIndex !== index) setDragOverIndex(index);
+  }
+  function handleCheckpointDrop(toIndex: number) {
+    if (dragIndex === null || dragIndex === toIndex) {
+      setDragIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    setChallengeDraft((prev) => {
+      const items = [...prev.checkpoints];
+      const [moved] = items.splice(dragIndex, 1);
+      items.splice(toIndex, 0, moved);
+      return { ...prev, checkpoints: items };
+    });
+    setDragIndex(null);
+    setDragOverIndex(null);
+  }
+  function handleCheckpointDragEnd() {
+    setDragIndex(null);
+    setDragOverIndex(null);
+  }
 
   async function handleStopImageUpload(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -1122,11 +1151,28 @@ export function ChallengesScreen(props: Props) {
                           Number.isFinite(radiusM) && radiusM > 0 ? radiusM : 50;
                         return (
                           <div
-                            className={`challenge-stop-compact-card${!checkpoint.active ? " challenge-stop-compact-card-inactive" : ""}`}
+                            className={[
+                              "challenge-stop-compact-card",
+                              !checkpoint.active ? "challenge-stop-compact-card-inactive" : "",
+                              dragIndex === index ? "challenge-stop-compact-card-dragging" : "",
+                              dragOverIndex === index && dragIndex !== index ? "challenge-stop-compact-card-drag-over" : "",
+                            ].filter(Boolean).join(" ")}
                             key={`${checkpoint.checkpoint_uuid || "new"}-${index}`}
+                            draggable
+                            onDragStart={() => handleCheckpointDragStart(index)}
+                            onDragOver={(e) => handleCheckpointDragOver(e, index)}
+                            onDrop={() => handleCheckpointDrop(index)}
+                            onDragEnd={handleCheckpointDragEnd}
                           >
-                            <div className="challenge-stop-mini-map">
-                              {hasPin ? (
+                            <div className="challenge-stop-drag-handle" title="Drag to reorder">⠿</div>
+                            <div className="challenge-stop-thumb-wrap">
+                              {checkpoint.image_url ? (
+                                <img
+                                  src={checkpoint.image_url}
+                                  className="challenge-stop-thumb-img"
+                                  alt={checkpoint.title || "Stop image"}
+                                />
+                              ) : hasPin ? (
                                 <StopMiniMap
                                   key={`mini-${index}-${stopLat}-${stopLng}`}
                                   lat={stopLat}
@@ -1136,6 +1182,7 @@ export function ChallengesScreen(props: Props) {
                               ) : (
                                 <div className="challenge-stop-mini-map-placeholder">📍</div>
                               )}
+                              <span className="challenge-stop-thumb-num">{index + 1}</span>
                             </div>
                             <div className="challenge-stop-compact-info">
                               <div className="challenge-stop-compact-num">Stop {index + 1}</div>
