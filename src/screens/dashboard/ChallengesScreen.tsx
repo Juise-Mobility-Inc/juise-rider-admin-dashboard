@@ -114,6 +114,7 @@ type ChallengeExportColumn = (typeof challengeExportColumns)[number];
 type ChallengeExportRow = Partial<Record<ChallengeExportColumn, CsvCell>>;
 
 type Props = {
+  mode?: "challenges" | "games";
   activeSchoolId: string;
   challengeBusy: boolean;
   challengeListBusy: boolean;

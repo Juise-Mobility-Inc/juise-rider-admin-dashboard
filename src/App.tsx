@@ -123,6 +123,7 @@ type Section =
         | "pois"
         | "zones"
         | "challenges"
+        | "challengeGames"
         | "students"
         | "notifications"
         | "vehicleRegistrations"
@@ -150,7 +151,8 @@ const dashboardSections: Array<{
         { section: "terms", label: "School Terms", path: "/terms" },
         { section: "pois", label: "School POIs", path: "/pois" },
         { section: "zones", label: "School Zones", path: "/zones" },
-        { section: "challenges", label: "Challenges", path: "/challenges" },
+        { section: "challenges", label: "Ride Challenges", path: "/challenges" },
+        { section: "challengeGames", label: "Challenge Games", path: "/challenge-games" },
         { section: "students", label: "Students", path: "/students" },
         { section: "notifications", label: "Notifications", path: "/notifications" },
         {
@@ -561,6 +563,16 @@ function normalizeChallengeType(
                 : "route_metric";
 }
 
+function isChallengeManagementSection(section: Section): boolean {
+        return section === "challenges" || section === "challengeGames";
+}
+
+function isScavengerHuntChallengeRecord(
+        challenge: Pick<SchoolChallenge, "challenge_type">,
+): boolean {
+        return normalizeChallengeType(challenge.challenge_type) === "scavenger_hunt";
+}
+
 function getScavengerHuntMinAccuracy(
         challenge: Pick<SchoolChallenge, "game_config">,
 ): string {
@@ -657,6 +669,19 @@ function createEmptyChallengeDraft(): ChallengeDraft {
                 repeat_interval_value: "",
                 repeat_interval_unit: "weeks",
                 repeat_count: "",
+        };
+}
+
+function createEmptyScavengerHuntDraft(): ChallengeDraft {
+        return {
+                ...createEmptyChallengeDraft(),
+                challenge_type: "scavenger_hunt",
+                audience_type: "user",
+                metric_type: "points",
+                target_value: "1",
+                min_accuracy_meters: "50",
+                repeat_enabled: false,
+                checkpoints: [],
         };
 }
 
@@ -1433,6 +1458,7 @@ function App() {
         const activeSchoolId = scopedSchoolId;
         const currentSection =
                 resolveSectionFromPathname(location.pathname) ?? "dashboard";
+        const isChallengeGamesSection = currentSection === "challengeGames";
         const deferredStudentRosterSearch = useDeferredValue(studentRosterSearch);
         const studentsDispatch = useAppDispatch();
         const {
@@ -1492,26 +1518,35 @@ function App() {
                 [activeZoneDraftId, zoneDrafts],
         );
 
+        const visibleSchoolChallenges = useMemo(
+                () =>
+                        schoolChallenges.filter((challenge) =>
+                                isChallengeGamesSection
+                                        ? isScavengerHuntChallengeRecord(challenge)
+                                        : !isScavengerHuntChallengeRecord(challenge),
+                        ),
+                [isChallengeGamesSection, schoolChallenges],
+        );
         const selectedChallenge = useMemo(
                 () =>
-                        schoolChallenges.find(
+                        visibleSchoolChallenges.find(
                                 (challenge) => challenge.challenge_uuid === selectedChallengeId,
                         ) ?? null,
-                [schoolChallenges, selectedChallengeId],
+                [visibleSchoolChallenges, selectedChallengeId],
         );
         const currentAndUpcomingChallenges = useMemo(
                 () =>
-                        schoolChallenges.filter(
+                        visibleSchoolChallenges.filter(
                                 (challenge) => resolveChallengeStatus(challenge) !== "Ended",
                         ),
-                [schoolChallenges],
+                [visibleSchoolChallenges],
         );
         const pastChallenges = useMemo(
                 () =>
-                        schoolChallenges.filter(
+                        visibleSchoolChallenges.filter(
                                 (challenge) => resolveChallengeStatus(challenge) === "Ended",
                         ),
-                [schoolChallenges],
+                [visibleSchoolChallenges],
         );
 
         const selectedPoiLocation = useMemo<PackMapPoint | null>(() => {
@@ -2694,7 +2729,7 @@ function App() {
         }, [activeSchoolId, context.managedAppId, currentSection, session]);
 
         useEffect(() => {
-                if (!session || currentSection !== "challenges" || !activeSchoolId) {
+                if (!session || !isChallengeManagementSection(currentSection) || !activeSchoolId) {
                         return;
                 }
 
@@ -2734,9 +2769,43 @@ function App() {
         }, [activeSchoolId, context.managedAppId, currentSection, session]);
 
         useEffect(() => {
+                if (!isChallengeManagementSection(currentSection)) {
+                        return;
+                }
+                if (selectedChallengeId === newChallengeSelectionId) {
+                        if (isChallengeGamesSection && challengeDraft.challenge_type !== "scavenger_hunt") {
+                                setChallengeDraft(createEmptyScavengerHuntDraft());
+                        }
+                        if (!isChallengeGamesSection && challengeDraft.challenge_type !== "route_metric") {
+                                setChallengeDraft(createEmptyChallengeDraft());
+                        }
+                        setChallengeParticipants([]);
+                        return;
+                }
+                if (visibleSchoolChallenges.length === 0) {
+                        setSelectedChallengeId("");
+                        setChallengeDraft(createEmptyChallengeDraft());
+                        setChallengeParticipants([]);
+                        return;
+                }
+                if (!selectedChallenge) {
+                        setSelectedChallengeId(visibleSchoolChallenges[0]?.challenge_uuid ?? "");
+                        return;
+                }
+                setChallengeDraft(challengeToDraft(selectedChallenge));
+        }, [
+                currentSection,
+                challengeDraft.challenge_type,
+                isChallengeGamesSection,
+                selectedChallenge,
+                selectedChallengeId,
+                visibleSchoolChallenges,
+        ]);
+
+        useEffect(() => {
                 if (
                         !session ||
-                        currentSection !== "challenges" ||
+                        !isChallengeManagementSection(currentSection) ||
                         !activeSchoolId ||
                         !selectedChallenge ||
                         selectedChallengeId === newChallengeSelectionId
@@ -4503,6 +4572,7 @@ function App() {
                         case "challenges":
                                 return (
                                         <ChallengesScreen
+                                                mode="challenges"
                                                 activeSchoolId={activeSchoolId}
                                                 challengeBusy={challengeBusy}
                                                 challengeListBusy={challengeListBusy}
@@ -4519,7 +4589,49 @@ function App() {
                                                 handleCopyChallengeForResubmit={handleCopyChallengeForResubmit}
                                                 handleChallengeImageFileChange={handleChallengeImageFileChange}
                                                 selectedChallenge={selectedChallenge}
-                                                schoolChallenges={schoolChallenges}
+                                                schoolChallenges={visibleSchoolChallenges}
+                                                currentAndUpcomingChallenges={currentAndUpcomingChallenges}
+                                                pastChallenges={pastChallenges}
+                                                challengeParticipants={challengeParticipants}
+                                                challengeParticipantSummary={challengeParticipantSummary}
+                                                resolveChallengeStatus={resolveChallengeStatus}
+                                                formatChallengeMetricValue={formatChallengeMetricValue}
+                                                formatDateTimeForDisplay={formatDateTimeForDisplay}
+                                                formatNebulaUserName={formatNebulaUserName}
+                                                EntityImagePreview={(
+                                                        props: Parameters<typeof EntityImagePreview>[0],
+                                                ) => (
+                                                        <EntityImagePreview
+                                                                {...props}
+                                                                onPreview={handleOpenImagePreview}
+                                                        />
+                                                )}
+                                                DetailRow={DetailRow}
+                                                newChallengeSelectionId={newChallengeSelectionId}
+                                                handleImagePreview={handleOpenImagePreview}
+                                        />
+                                );
+                        case "challengeGames":
+                                return (
+                                        <ChallengesScreen
+                                                mode="games"
+                                                activeSchoolId={activeSchoolId}
+                                                challengeBusy={challengeBusy}
+                                                challengeListBusy={challengeListBusy}
+                                                challengeParticipantsBusy={challengeParticipantsBusy}
+                                                challengeImageUploadBusy={challengeImageUploadBusy}
+                                                selectedChallengeId={selectedChallengeId}
+                                                setSelectedChallengeId={setSelectedChallengeId}
+                                                challengeDraft={challengeDraft}
+                                                setChallengeDraft={setChallengeDraft}
+                                                createEmptyChallengeDraft={createEmptyChallengeDraft}
+                                                refreshSchoolChallenges={refreshSchoolChallenges}
+                                                handleSaveChallenge={handleSaveChallenge}
+                                                handleDeleteSelectedChallenge={handleDeleteSelectedChallenge}
+                                                handleCopyChallengeForResubmit={handleCopyChallengeForResubmit}
+                                                handleChallengeImageFileChange={handleChallengeImageFileChange}
+                                                selectedChallenge={selectedChallenge}
+                                                schoolChallenges={visibleSchoolChallenges}
                                                 currentAndUpcomingChallenges={currentAndUpcomingChallenges}
                                                 pastChallenges={pastChallenges}
                                                 challengeParticipants={challengeParticipants}
