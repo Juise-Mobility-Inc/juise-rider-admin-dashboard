@@ -13650,3 +13650,136 @@
   margin-top: 4px;
   padding-left: 46px;
 }
+
+/* ── Challenge stop cards — map layout ──────────────────────── */
+
+.challenge-stop-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--muted);
+  background: rgba(17,45,78,0.03);
+  border-radius: 12px;
+  border: 1.5px dashed var(--panel-border);
+}
+
+.challenge-stop-empty span {
+  font-size: 2rem;
+}
+
+.challenge-stop-empty p {
+  margin: 0;
+  font-size: 0.85rem;
+  max-width: 280px;
+  line-height: 1.5;
+}
+
+.challenge-stop-card-inactive {
+  opacity: 0.6;
+}
+
+.challenge-stop-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.challenge-stop-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #112d4e;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.challenge-stop-pinned {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #15803d;
+  background: #dcfce7;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.challenge-stop-no-pin {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.challenge-stop-toggle {
+  gap: 6px;
+}
+
+.challenge-stop-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.challenge-stop-map-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.challenge-stop-map-col .pack-map-shell {
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.challenge-stop-map-col .pack-map {
+  height: 240px;
+}
+
+.challenge-stop-coords {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.72rem;
+  font-family: monospace;
+  color: #6b7280;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+.challenge-stop-clear-pin {
+  font-size: 0.7rem;
+  color: #ef4444;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.challenge-stop-clear-pin:hover {
+  text-decoration: underline;
+}
+
+.challenge-stop-form-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+@media (max-width: 860px) {
+  .challenge-stop-body {
+    grid-template-columns: 1fr;
+  }
+}

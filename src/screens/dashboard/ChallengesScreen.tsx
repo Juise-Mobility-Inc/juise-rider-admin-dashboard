@@ -1,4 +1,9 @@
 import type { ChangeEvent, ComponentType, Dispatch, FormEvent, SetStateAction } from "react";
+import {
+  PackLocationPicker,
+  type PackMapMarker,
+  type PackMapPoint,
+} from "../../components/PackLocationPicker";
 
 import type {
   SchoolChallenge,
@@ -982,8 +987,8 @@ export function ChallengesScreen(props: Props) {
                       <div>
                         <div className="challenge-form-section-label">Stops</div>
                         <p className="muted-text">
-                          Users must check in inside each active stop radius to complete
-                          the hunt.
+                          Students must ride within each stop's radius to check in. Click
+                          the map to place a pin, then set the check-in radius.
                         </p>
                       </div>
                       <button
@@ -991,162 +996,242 @@ export function ChallengesScreen(props: Props) {
                         type="button"
                         onClick={addCheckpointDraft}
                       >
-                        Add Stop
+                        + Add stop
                       </button>
                     </div>
                     {challengeDraft.checkpoints.length === 0 ? (
-                      <p className="empty-state">Add at least one stop to create this hunt.</p>
+                      <div className="challenge-stop-empty">
+                        <span>📍</span>
+                        <p>No stops yet. Add at least one stop to create a scavenger hunt.</p>
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={addCheckpointDraft}
+                        >
+                          + Add first stop
+                        </button>
+                      </div>
                     ) : null}
                     <div className="challenge-stop-list">
-                      {challengeDraft.checkpoints.map((checkpoint, index) => (
-                        <div className="challenge-stop-card" key={`${checkpoint.checkpoint_uuid || "new"}-${index}`}>
-                          <div className="challenge-stop-card-header">
-                            <strong>Stop {index + 1}</strong>
-                            <div className="challenge-stop-actions">
-                              <label className="challenge-stop-active">
-                                <input
-                                  type="checkbox"
-                                  checked={checkpoint.active}
-                                  onChange={(e) =>
+                      {challengeDraft.checkpoints.map((checkpoint, index) => {
+                        const stopLat = parseFloat(checkpoint.latitude);
+                        const stopLng = parseFloat(checkpoint.longitude);
+                        const hasPin =
+                          Number.isFinite(stopLat) &&
+                          Number.isFinite(stopLng) &&
+                          stopLat !== 0;
+                        const pinValue: PackMapPoint | null = hasPin
+                          ? { lat: stopLat, lng: stopLng }
+                          : null;
+                        const radiusM = parseFloat(checkpoint.radius_meters);
+                        const radiusMeters = Number.isFinite(radiusM) && radiusM > 0
+                          ? radiusM
+                          : undefined;
+
+                        const otherStopMarkers: PackMapMarker[] = challengeDraft.checkpoints
+                          .filter((_, i) => i !== index)
+                          .reduce<PackMapMarker[]>((acc, cp, i) => {
+                            const lat = parseFloat(cp.latitude);
+                            const lng = parseFloat(cp.longitude);
+                            if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat === 0) {
+                              return acc;
+                            }
+                            const otherRadius = parseFloat(cp.radius_meters);
+                            acc.push({
+                              id: cp.checkpoint_uuid || `stop-other-${i}`,
+                              label: cp.title || `Stop ${i + 1}`,
+                              lat,
+                              lng,
+                              radiusMeters: Number.isFinite(otherRadius) && otherRadius > 0
+                                ? otherRadius
+                                : undefined,
+                            });
+                            return acc;
+                          }, []);
+
+                        return (
+                          <div
+                            className={`challenge-stop-card${!checkpoint.active ? " challenge-stop-card-inactive" : ""}`}
+                            key={`${checkpoint.checkpoint_uuid || "new"}-${index}`}
+                          >
+                            {/* Card header */}
+                            <div className="challenge-stop-card-header">
+                              <div className="challenge-stop-badge">
+                                <span className="challenge-stop-num">{index + 1}</span>
+                                {hasPin ? (
+                                  <span className="challenge-stop-pinned">📍 pinned</span>
+                                ) : (
+                                  <span className="challenge-stop-no-pin">no pin — click map</span>
+                                )}
+                              </div>
+                              <div className="challenge-stop-actions">
+                                <label className="pz-toggle challenge-stop-toggle">
+                                  <input
+                                    type="checkbox"
+                                    checked={checkpoint.active}
+                                    onChange={(e) =>
+                                      updateCheckpointDraft(index, {
+                                        active: e.target.checked,
+                                      })
+                                    }
+                                  />
+                                  <span className="pz-toggle-track" />
+                                  <span className="pz-toggle-label">Active</span>
+                                </label>
+                                <button
+                                  className="secondary-button"
+                                  type="button"
+                                  onClick={() => removeCheckpointDraft(index)}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Map + form side-by-side */}
+                            <div className="challenge-stop-body">
+                              {/* Left: map */}
+                              <div className="challenge-stop-map-col">
+                                <PackLocationPicker
+                                  value={pinValue}
+                                  radiusMeters={radiusMeters}
+                                  otherMarkers={otherStopMarkers}
+                                  onChange={(point) =>
                                     updateCheckpointDraft(index, {
-                                      active: e.target.checked,
+                                      latitude: String(point.lat),
+                                      longitude: String(point.lng),
                                     })
                                   }
+                                  onPlaceSelect={(point, label) => {
+                                    updateCheckpointDraft(index, {
+                                      latitude: String(point.lat),
+                                      longitude: String(point.lng),
+                                      title: checkpoint.title.trim()
+                                        ? checkpoint.title
+                                        : label,
+                                    });
+                                  }}
                                 />
-                                Active
-                              </label>
-                              <button
-                                className="secondary-button"
-                                type="button"
-                                onClick={() => removeCheckpointDraft(index)}
-                              >
-                                Remove
-                              </button>
+                                {hasPin && (
+                                  <div className="challenge-stop-coords">
+                                    {stopLat.toFixed(5)}, {stopLng.toFixed(5)}
+                                    <button
+                                      type="button"
+                                      className="challenge-stop-clear-pin"
+                                      onClick={() =>
+                                        updateCheckpointDraft(index, {
+                                          latitude: "",
+                                          longitude: "",
+                                        })
+                                      }
+                                      title="Clear pin"
+                                    >
+                                      ✕ Clear pin
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Right: fields */}
+                              <div className="challenge-stop-form-col">
+                                <div className="form-grid">
+                                  <label className="field">
+                                    <span>Stop title</span>
+                                    <input
+                                      value={checkpoint.title}
+                                      onChange={(e) =>
+                                        updateCheckpointDraft(index, {
+                                          title: e.target.value,
+                                        })
+                                      }
+                                      placeholder="Campus mural"
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>Order</span>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      step="1"
+                                      value={checkpoint.sort_order}
+                                      onChange={(e) =>
+                                        updateCheckpointDraft(index, {
+                                          sort_order: e.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field field-span-2">
+                                    <span>Clue</span>
+                                    <input
+                                      value={checkpoint.clue}
+                                      onChange={(e) =>
+                                        updateCheckpointDraft(index, {
+                                          clue: e.target.value,
+                                        })
+                                      }
+                                      placeholder="Find the wall with the bright blue lightning bolt."
+                                    />
+                                  </label>
+                                  <label className="field field-span-2">
+                                    <span>Description</span>
+                                    <textarea
+                                      value={checkpoint.description}
+                                      onChange={(e) =>
+                                        updateCheckpointDraft(index, {
+                                          description: e.target.value,
+                                        })
+                                      }
+                                      placeholder="Optional context shown after check-in."
+                                      rows={2}
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>Check-in radius (m)</span>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      step="1"
+                                      value={checkpoint.radius_meters}
+                                      onChange={(e) =>
+                                        updateCheckpointDraft(index, {
+                                          radius_meters: e.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>Prize points</span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      value={checkpoint.prize_points}
+                                      onChange={(e) =>
+                                        updateCheckpointDraft(index, {
+                                          prize_points: e.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field field-span-2">
+                                    <span>Stop image URL</span>
+                                    <input
+                                      value={checkpoint.image_url}
+                                      onChange={(e) =>
+                                        updateCheckpointDraft(index, {
+                                          image_url: e.target.value,
+                                        })
+                                      }
+                                      placeholder="https://example.com/stop.jpg"
+                                    />
+                                  </label>
+                                </div>
+                              </div>
                             </div>
                           </div>
-                          <div className="form-grid">
-                            <label className="field">
-                              <span>Title</span>
-                              <input
-                                value={checkpoint.title}
-                                onChange={(e) =>
-                                  updateCheckpointDraft(index, {
-                                    title: e.target.value,
-                                  })
-                                }
-                                placeholder="Campus mural"
-                              />
-                            </label>
-                            <label className="field">
-                              <span>Order</span>
-                              <input
-                                type="number"
-                                min="1"
-                                step="1"
-                                value={checkpoint.sort_order}
-                                onChange={(e) =>
-                                  updateCheckpointDraft(index, {
-                                    sort_order: e.target.value,
-                                  })
-                                }
-                              />
-                            </label>
-                            <label className="field field-span-2">
-                              <span>Clue</span>
-                              <input
-                                value={checkpoint.clue}
-                                onChange={(e) =>
-                                  updateCheckpointDraft(index, {
-                                    clue: e.target.value,
-                                  })
-                                }
-                                placeholder="Find the wall with the bright blue lightning bolt."
-                              />
-                            </label>
-                            <label className="field field-span-2">
-                              <span>Description</span>
-                              <textarea
-                                value={checkpoint.description}
-                                onChange={(e) =>
-                                  updateCheckpointDraft(index, {
-                                    description: e.target.value,
-                                  })
-                                }
-                                placeholder="Optional extra context shown after or before check-in."
-                                rows={2}
-                              />
-                            </label>
-                            <label className="field">
-                              <span>Latitude</span>
-                              <input
-                                type="number"
-                                step="0.000001"
-                                value={checkpoint.latitude}
-                                onChange={(e) =>
-                                  updateCheckpointDraft(index, {
-                                    latitude: e.target.value,
-                                  })
-                                }
-                                placeholder="42.673536"
-                              />
-                            </label>
-                            <label className="field">
-                              <span>Longitude</span>
-                              <input
-                                type="number"
-                                step="0.000001"
-                                value={checkpoint.longitude}
-                                onChange={(e) =>
-                                  updateCheckpointDraft(index, {
-                                    longitude: e.target.value,
-                                  })
-                                }
-                                placeholder="-83.198075"
-                              />
-                            </label>
-                            <label className="field">
-                              <span>Radius (m)</span>
-                              <input
-                                type="number"
-                                min="1"
-                                step="1"
-                                value={checkpoint.radius_meters}
-                                onChange={(e) =>
-                                  updateCheckpointDraft(index, {
-                                    radius_meters: e.target.value,
-                                  })
-                                }
-                              />
-                            </label>
-                            <label className="field">
-                              <span>Prize points</span>
-                              <input
-                                type="number"
-                                min="0"
-                                step="1"
-                                value={checkpoint.prize_points}
-                                onChange={(e) =>
-                                  updateCheckpointDraft(index, {
-                                    prize_points: e.target.value,
-                                  })
-                                }
-                              />
-                            </label>
-                            <label className="field field-span-2">
-                              <span>Image URL</span>
-                              <input
-                                value={checkpoint.image_url}
-                                onChange={(e) =>
-                                  updateCheckpointDraft(index, {
-                                    image_url: e.target.value,
-                                  })
-                                }
-                                placeholder="https://example.com/stop.jpg"
-                              />
-                            </label>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 ) : null}
