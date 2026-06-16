@@ -13960,19 +13960,19 @@
 
 /* ── Stop editor modal ── */
 .stop-modal-sheet {
-  width: min(900px, calc(100vw - 32px));
-  max-height: min(90vh, 800px);
+  width: min(1280px, calc(100vw - 32px));
+  max-height: min(96vh, 980px);
 }
 
 .stop-modal-body {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 24px;
   align-items: start;
 }
 
 .stop-modal-map-col .pack-map-shell {
-  height: 400px;
+  height: 560px;
 }
 
 .stop-modal-map-col .pack-map {
