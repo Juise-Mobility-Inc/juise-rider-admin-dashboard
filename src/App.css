@@ -1526,6 +1526,72 @@
         gap: 20px;
 }
 
+.challenge-master-panel-games {
+        gap: 18px;
+}
+
+.challenge-games-hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
+        gap: 18px;
+        align-items: stretch;
+        padding: 18px;
+        border: 1px solid rgba(17, 45, 78, 0.1);
+        border-radius: 18px;
+        background:
+                linear-gradient(135deg, rgba(39, 160, 92, 0.12), rgba(246, 174, 45, 0.1)),
+                rgba(255, 255, 255, 0.72);
+}
+
+.challenge-games-hero-copy {
+        display: grid;
+        gap: 8px;
+        align-content: center;
+}
+
+.challenge-games-hero-copy h3 {
+        margin: 0;
+        font-size: clamp(1.18rem, 1.8vw, 1.6rem);
+        letter-spacing: 0;
+}
+
+.challenge-games-hero-copy p {
+        margin: 0;
+        max-width: 720px;
+        color: var(--muted-strong);
+        line-height: 1.55;
+}
+
+.challenge-games-stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        align-content: center;
+}
+
+.challenge-games-stat {
+        display: grid;
+        gap: 4px;
+        min-height: 96px;
+        align-content: center;
+        padding: 14px;
+        border: 1px solid rgba(17, 45, 78, 0.1);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.72);
+}
+
+.challenge-games-stat strong {
+        font-size: 1.4rem;
+        line-height: 1;
+}
+
+.challenge-games-stat span {
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 800;
+        text-transform: uppercase;
+}
+
 .challenge-layout {
         display: grid;
         grid-template-columns: 300px minmax(0, 1fr);
@@ -1655,7 +1721,16 @@
 }
 
 .challenge-roster-img-fallback {
-        font-size: 1.2rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        font-size: 0.72rem;
+        font-weight: 900;
+        color: var(--text-strong);
+        letter-spacing: 0.04em;
+        background: rgba(246, 174, 45, 0.16);
 }
 
 .challenge-roster-info {
@@ -1726,7 +1801,16 @@
 }
 
 .challenge-empty-icon {
-        font-size: 3rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 64px;
+        height: 64px;
+        border-radius: 18px;
+        background: rgba(17, 45, 78, 0.08);
+        color: var(--text-strong);
+        font-size: 1.1rem;
+        font-weight: 900;
         line-height: 1;
 }
 
@@ -1832,6 +1916,99 @@
         margin: 4px 0 0;
 }
 
+.challenge-game-type-card {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        padding: 14px;
+        border: 1px solid rgba(39, 160, 92, 0.18);
+        border-radius: 14px;
+        background: rgba(39, 160, 92, 0.08);
+}
+
+.challenge-game-type-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 46px;
+        height: 46px;
+        border-radius: 14px;
+        background: #0f5132;
+        color: #ffffff;
+        font-size: 0.78rem;
+        font-weight: 900;
+}
+
+.challenge-game-type-copy {
+        display: grid;
+        gap: 3px;
+        min-width: 0;
+}
+
+.challenge-game-type-copy strong {
+        font-size: 0.98rem;
+}
+
+.challenge-game-type-copy span {
+        color: var(--muted-strong);
+        font-size: 0.84rem;
+        line-height: 1.45;
+}
+
+.challenge-game-type-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        padding: 6px 10px;
+        color: #1a6b3e;
+        background: rgba(255, 255, 255, 0.7);
+        border: 1px solid rgba(39, 160, 92, 0.18);
+        font-size: 0.74rem;
+        font-weight: 800;
+        white-space: nowrap;
+}
+
+.challenge-game-guide {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+}
+
+.challenge-game-step {
+        display: grid;
+        gap: 5px;
+        padding: 12px;
+        border: 1px solid rgba(17, 45, 78, 0.09);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.7);
+}
+
+.challenge-game-step span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 999px;
+        background: rgba(246, 174, 45, 0.2);
+        color: #6b4200;
+        font-size: 0.72rem;
+        font-weight: 900;
+}
+
+.challenge-game-step strong {
+        font-size: 0.86rem;
+}
+
+.challenge-game-step p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.78rem;
+        line-height: 1.45;
+}
+
 .challenge-stop-list {
         display: grid;
         gap: 12px;
@@ -1857,6 +2034,45 @@
 
 .challenge-stop-card-header {
         justify-content: space-between;
+}
+
+.challenge-stop-title-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+}
+
+.challenge-stop-title-row > div {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+}
+
+.challenge-stop-title-row strong {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+}
+
+.challenge-stop-title-row span:not(.challenge-stop-number) {
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 700;
+}
+
+.challenge-stop-number {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 12px;
+        background: rgba(17, 45, 78, 0.1);
+        color: var(--text-strong);
+        font-size: 0.86rem;
+        font-weight: 900;
+        flex-shrink: 0;
 }
 
 .challenge-stop-active {
@@ -8203,6 +8419,10 @@
                 grid-template-columns: 1fr;
         }
 
+        .challenge-games-hero {
+                grid-template-columns: 1fr;
+        }
+
         .challenge-sidebar-list {
                 max-height: 40vh;
                 border-right: none;
@@ -8278,6 +8498,11 @@
         .workspace,
         .sidebar {
                 padding: 18px;
+        }
+
+        .challenge-games-stats,
+        .challenge-game-guide {
+                grid-template-columns: 1fr;
         }
 
         .login-hero {
