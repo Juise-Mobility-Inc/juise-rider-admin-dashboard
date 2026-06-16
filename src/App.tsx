@@ -4609,6 +4609,10 @@ function App() {
                                                 DetailRow={DetailRow}
                                                 newChallengeSelectionId={newChallengeSelectionId}
                                                 handleImagePreview={handleOpenImagePreview}
+                                                uploadStopImage={async (file) => {
+                                                        const r = await uploadSchoolChallengeImage(context.managedAppId, activeSchoolId, file);
+                                                        return r.public_url;
+                                                }}
                                         />
                                 );
                         case "challengeGames":
@@ -4651,6 +4655,10 @@ function App() {
                                                 DetailRow={DetailRow}
                                                 newChallengeSelectionId={newChallengeSelectionId}
                                                 handleImagePreview={handleOpenImagePreview}
+                                                uploadStopImage={async (file) => {
+                                                        const r = await uploadSchoolChallengeImage(context.managedAppId, activeSchoolId, file);
+                                                        return r.public_url;
+                                                }}
                                         />
                                 );
                         case "students":

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Circle, CircleMarker, MapContainer, TileLayer } from "react-leaflet";
 import {
   PackLocationPicker,
+  type PackMapMarker,
   type PackMapPoint,
 } from "../../components/PackLocationPicker";
 
@@ -192,6 +193,7 @@ type Props = {
     alt: string,
     label?: string,
   ) => void;
+  uploadStopImage?: (file: File) => Promise<string>;
 };
 
 function statusClass(status: string): string {
@@ -407,6 +409,7 @@ export function ChallengesScreen(props: Props) {
     EntityImagePreview,
     newChallengeSelectionId,
     handleImagePreview,
+    uploadStopImage,
   } = props;
 
   const isCreating =
@@ -557,6 +560,21 @@ export function ChallengesScreen(props: Props) {
 
   function updateModalDraft(patch: Partial<ChallengeCheckpointDraft>) {
     setStopModal((prev) => ({ ...prev, draft: { ...prev.draft, ...patch } }));
+  }
+
+  const [stopImageBusy, setStopImageBusy] = useState(false);
+
+  async function handleStopImageUpload(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !uploadStopImage) return;
+    setStopImageBusy(true);
+    try {
+      const url = await uploadStopImage(file);
+      updateModalDraft({ image_url: url });
+    } finally {
+      setStopImageBusy(false);
+    }
   }
 
   function handleSelectNew() {
@@ -1599,6 +1617,24 @@ export function ChallengesScreen(props: Props) {
           stopModal.index !== null
             ? `Edit stop ${stopModal.index + 1}`
             : "New stop";
+        const otherStopMarkers: PackMapMarker[] = challengeDraft.checkpoints.reduce<PackMapMarker[]>(
+          (acc, cp, i) => {
+            if (i === stopModal.index) return acc;
+            const lat = parseFloat(cp.latitude);
+            const lng = parseFloat(cp.longitude);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat === 0) return acc;
+            const r = parseFloat(cp.radius_meters);
+            acc.push({
+              id: cp.checkpoint_uuid || `other-${i}`,
+              label: cp.title || `Stop ${i + 1}`,
+              lat,
+              lng,
+              radiusMeters: Number.isFinite(r) && r > 0 ? r : undefined,
+            });
+            return acc;
+          },
+          [],
+        );
         return (
           <div
             className="management-modal-backdrop"
@@ -1633,6 +1669,7 @@ export function ChallengesScreen(props: Props) {
                   <PackLocationPicker
                     value={modalPinValue}
                     radiusMeters={modalRadiusMeters}
+                    otherMarkers={otherStopMarkers}
                     onChange={(point) =>
                       updateModalDraft({
                         latitude: String(point.lat),
@@ -1747,15 +1784,40 @@ export function ChallengesScreen(props: Props) {
                       />
                     </label>
 
-                    <label className="field field-span-2">
-                      <span>Stop image URL</span>
-                      <input
-                        value={d.image_url}
-                        onChange={(e) =>
-                          updateModalDraft({ image_url: e.target.value })
-                        }
-                        placeholder="https://example.com/stop.jpg"
-                      />
+                    <label className="field field-span-2" style={{ display: "block" }}>
+                      <span>Stop image</span>
+                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                        <input
+                          value={d.image_url}
+                          onChange={(e) =>
+                            updateModalDraft({ image_url: e.target.value })
+                          }
+                          placeholder="https://example.com/stop.jpg"
+                          style={{ flex: 1, minWidth: 0 }}
+                        />
+                        {uploadStopImage && (
+                          <label
+                            className="secondary-button"
+                            style={{ flexShrink: 0, cursor: stopImageBusy ? "default" : "pointer", opacity: stopImageBusy ? 0.6 : 1 }}
+                          >
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp,image/gif"
+                              style={{ display: "none" }}
+                              onChange={handleStopImageUpload}
+                              disabled={stopImageBusy}
+                            />
+                            {stopImageBusy ? "Uploading…" : "Upload"}
+                          </label>
+                        )}
+                      </div>
+                      {d.image_url && (
+                        <img
+                          src={d.image_url}
+                          alt="Stop preview"
+                          style={{ width: "100%", maxHeight: "120px", objectFit: "cover", borderRadius: "8px", marginTop: "6px" }}
+                        />
+                      )}
                     </label>
 
                     <label className="pz-toggle field-span-2" style={{ justifySelf: "start" }}>
