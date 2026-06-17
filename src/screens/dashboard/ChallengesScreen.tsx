@@ -1544,42 +1544,38 @@ export function ChallengesScreen(props: Props) {
             {/* Selected existing challenge detail */}
             {selectedChallenge && !isCreating ? (
               <div className="challenge-detail-view">
-                {/* Cover + title hero */}
-                <div className="challenge-detail-hero">
-                  {selectedChallenge.image_url.trim() ? (
-                    <img
-                      className="challenge-detail-cover"
-                      src={selectedChallenge.image_url}
-                      alt={selectedChallenge.title}
-                      onClick={() =>
-                        handleImagePreview(
-                          selectedChallenge.image_url,
-                          selectedChallenge.title,
-                          selectedChallenge.title,
-                        )
-                      }
-                    />
-                  ) : null}
-                  <div className="challenge-detail-hero-info">
-                    <div className="challenge-detail-hero-badges">
-                      <span
-                        className={`challenge-status-badge ${statusClass(resolveChallengeStatus(selectedChallenge))}`}
-                      >
+                {/* Compact header: thumbnail + title/chips + actions all in one row */}
+                <div className="challenge-detail-compact-header">
+                  <div className="challenge-detail-compact-thumb">
+                    {selectedChallenge.image_url.trim() ? (
+                      <img
+                        src={selectedChallenge.image_url}
+                        alt={selectedChallenge.title}
+                        onClick={() =>
+                          handleImagePreview(
+                            selectedChallenge.image_url,
+                            selectedChallenge.title,
+                            selectedChallenge.title,
+                          )
+                        }
+                      />
+                    ) : (
+                      <span className="challenge-detail-compact-thumb-fallback">
+                        {isGamesMode ? "SH" : "CH"}
+                      </span>
+                    )}
+                  </div>
+                  <div className="challenge-detail-compact-info">
+                    <div className="challenge-detail-compact-title-row">
+                      <h3 className="challenge-detail-compact-title">{selectedChallenge.title}</h3>
+                      <span className={`challenge-status-badge ${statusClass(resolveChallengeStatus(selectedChallenge))}`}>
                         {resolveChallengeStatus(selectedChallenge)}
                       </span>
                       {selectedChallenge.active ? null : (
-                        <span className="challenge-status-badge challenge-status-ended">
-                          Inactive
-                        </span>
+                        <span className="challenge-status-badge challenge-status-ended">Inactive</span>
                       )}
                     </div>
-                    <h3 className="challenge-detail-title">{selectedChallenge.title}</h3>
-                    {selectedChallenge.description ? (
-                      <p className="challenge-detail-desc">
-                        {selectedChallenge.description}
-                      </p>
-                    ) : null}
-                    <div className="challenge-detail-chips">
+                    <div className="challenge-detail-compact-chips">
                       <span className="challenge-form-chip">
                         {formatChallengeTypeLabel(selectedChallenge.challenge_type)}
                       </span>
@@ -1587,96 +1583,93 @@ export function ChallengesScreen(props: Props) {
                         🎯 {formatChallengeGoalLabel(selectedChallenge, formatChallengeMetricValue)}
                       </span>
                       <span className="challenge-form-chip">
-                        📅 {formatDateTimeForDisplay(selectedChallenge.start_time)} →{" "}
-                        {formatDateTimeForDisplay(selectedChallenge.end_time)}
+                        📅 {formatDateTimeForDisplay(selectedChallenge.start_time)} → {formatDateTimeForDisplay(selectedChallenge.end_time)}
                       </span>
                     </div>
                   </div>
-                </div>
-
-                {/* Edit button */}
-                <div className="form-actions">
-                  <button
-                    className="secondary-button"
-                    type="button"
-                    onClick={() =>
-                      setChallengeDraft({
-                        challenge_uuid: selectedChallenge.challenge_uuid,
-                        challenge_type:
-                          selectedChallenge.challenge_type === "scavenger_hunt"
-                            ? "scavenger_hunt"
-                            : "route_metric",
-                        audience_type:
-                          selectedChallenge.challenge_type === "scavenger_hunt"
-                            ? "user"
-                            : selectedChallenge.audience_type,
-                        title: selectedChallenge.title,
-                        description: selectedChallenge.description,
-                        image_url: selectedChallenge.image_url,
-                        metric_type:
-                          selectedChallenge.challenge_type === "scavenger_hunt"
-                            ? "points"
-                            : selectedChallenge.metric_type,
-                        target_value:
-                          selectedChallenge.challenge_type === "scavenger_hunt"
-                            ? String(
-                                getChallengeCheckpointCount(selectedChallenge) ||
-                                  selectedChallenge.target_value,
-                              )
-                            : String(selectedChallenge.target_value),
-                        min_accuracy_meters:
-                          typeof selectedChallenge.game_config?.min_accuracy_meters === "number"
-                            ? String(selectedChallenge.game_config.min_accuracy_meters)
-                            : "50",
-                        checkpoints: (selectedChallenge.checkpoints ?? [])
-                          .slice()
-                          .sort((left, right) => left.sort_order - right.sort_order)
-                          .map((checkpoint, index) => ({
-                            checkpoint_uuid: checkpoint.checkpoint_uuid,
-                            title: checkpoint.title,
-                            description: checkpoint.description,
-                            clue: checkpoint.clue,
-                            image_url: checkpoint.image_url,
-                            latitude: String(checkpoint.latitude),
-                            longitude: String(checkpoint.longitude),
-                            radius_meters: String(checkpoint.radius_meters),
-                            prize_points: String(checkpoint.prize_points),
-                            sort_order: String(checkpoint.sort_order || index + 1),
-                            active: checkpoint.active,
-                          })),
-                        start_time: selectedChallenge.start_time
-                          ? new Date(selectedChallenge.start_time * 1000)
-                              .toISOString()
-                              .slice(0, 16)
-                          : "",
-                        end_time: selectedChallenge.end_time
-                          ? new Date(selectedChallenge.end_time * 1000)
-                              .toISOString()
-                              .slice(0, 16)
-                          : "",
-                        active: selectedChallenge.active,
-                        repeat_enabled: false,
-                        repeat_interval_value: "",
-                        repeat_interval_unit: "weeks",
-                        repeat_count: "",
-                      })
-                    }
-                  >
-                    Edit {itemLabelTitle}
-                  </button>
-                  {resolveChallengeStatus(selectedChallenge) === "Ended" ? (
+                  <div className="challenge-detail-compact-actions">
                     <button
-                      className="primary-button"
+                      className="secondary-button"
                       type="button"
-                      onClick={() => handleCopyChallengeForResubmit(selectedChallenge)}
-                      disabled={challengeBusy}
+                      onClick={() =>
+                        setChallengeDraft({
+                          challenge_uuid: selectedChallenge.challenge_uuid,
+                          challenge_type:
+                            selectedChallenge.challenge_type === "scavenger_hunt"
+                              ? "scavenger_hunt"
+                              : "route_metric",
+                          audience_type:
+                            selectedChallenge.challenge_type === "scavenger_hunt"
+                              ? "user"
+                              : selectedChallenge.audience_type,
+                          title: selectedChallenge.title,
+                          description: selectedChallenge.description,
+                          image_url: selectedChallenge.image_url,
+                          metric_type:
+                            selectedChallenge.challenge_type === "scavenger_hunt"
+                              ? "points"
+                              : selectedChallenge.metric_type,
+                          target_value:
+                            selectedChallenge.challenge_type === "scavenger_hunt"
+                              ? String(
+                                  getChallengeCheckpointCount(selectedChallenge) ||
+                                    selectedChallenge.target_value,
+                                )
+                              : String(selectedChallenge.target_value),
+                          min_accuracy_meters:
+                            typeof selectedChallenge.game_config?.min_accuracy_meters === "number"
+                              ? String(selectedChallenge.game_config.min_accuracy_meters)
+                              : "50",
+                          checkpoints: (selectedChallenge.checkpoints ?? [])
+                            .slice()
+                            .sort((left, right) => left.sort_order - right.sort_order)
+                            .map((checkpoint, index) => ({
+                              checkpoint_uuid: checkpoint.checkpoint_uuid,
+                              title: checkpoint.title,
+                              description: checkpoint.description,
+                              clue: checkpoint.clue,
+                              image_url: checkpoint.image_url,
+                              latitude: String(checkpoint.latitude),
+                              longitude: String(checkpoint.longitude),
+                              radius_meters: String(checkpoint.radius_meters),
+                              prize_points: String(checkpoint.prize_points),
+                              sort_order: String(checkpoint.sort_order || index + 1),
+                              active: checkpoint.active,
+                            })),
+                          start_time: selectedChallenge.start_time
+                            ? new Date(selectedChallenge.start_time * 1000)
+                                .toISOString()
+                                .slice(0, 16)
+                            : "",
+                          end_time: selectedChallenge.end_time
+                            ? new Date(selectedChallenge.end_time * 1000)
+                                .toISOString()
+                                .slice(0, 16)
+                            : "",
+                          active: selectedChallenge.active,
+                          repeat_enabled: false,
+                          repeat_interval_value: "",
+                          repeat_interval_unit: "weeks",
+                          repeat_count: "",
+                        })
+                      }
                     >
-                      {isGamesMode ? "Copy & Resubmit Game" : "Copy & Resubmit"}
+                      Edit
                     </button>
-                  ) : null}
+                    {resolveChallengeStatus(selectedChallenge) === "Ended" ? (
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={() => handleCopyChallengeForResubmit(selectedChallenge)}
+                        disabled={challengeBusy}
+                      >
+                        Copy &amp; Resubmit
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
 
-                {/* Detail tab switcher — only for scavenger hunts */}
+                {/* Tab switcher — only for scavenger hunts, immediately below header */}
                 {isScavengerHuntChallenge(selectedChallenge) ? (
                   <div className="challenge-detail-tab-switcher">
                     <button
