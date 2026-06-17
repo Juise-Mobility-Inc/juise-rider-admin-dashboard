@@ -529,9 +529,10 @@ export function ChallengesScreen(props: Props) {
     uploadStopImage,
   } = props;
 
+  const [editMode, setEditMode] = useState(false);
   const isCreating =
     selectedChallengeId === newChallengeSelectionId && !challengeDraft.challenge_uuid;
-  const isEditing = Boolean(challengeDraft.challenge_uuid);
+  const isEditing = editMode && Boolean(challengeDraft.challenge_uuid);
   const selectedChallengeIsCampaign =
     selectedChallenge?.audience_type === "campaign_group";
   const draftIsScavengerHunt = challengeDraft.challenge_type === "scavenger_hunt";
@@ -722,6 +723,7 @@ export function ChallengesScreen(props: Props) {
   }
 
   useEffect(() => {
+    setEditMode(false);
     if (selectedChallengeId && selectedChallengeId !== newChallengeSelectionId) {
       setScreenTab("participants");
     } else {
@@ -879,68 +881,7 @@ export function ChallengesScreen(props: Props) {
                 <button
                   className="secondary-button"
                   type="button"
-                  onClick={() =>
-                    setChallengeDraft({
-                      challenge_uuid: selectedChallenge.challenge_uuid,
-                      challenge_type:
-                        selectedChallenge.challenge_type === "scavenger_hunt"
-                          ? "scavenger_hunt"
-                          : "route_metric",
-                      audience_type:
-                        selectedChallenge.challenge_type === "scavenger_hunt"
-                          ? "user"
-                          : selectedChallenge.audience_type,
-                      title: selectedChallenge.title,
-                      description: selectedChallenge.description,
-                      image_url: selectedChallenge.image_url,
-                      metric_type:
-                        selectedChallenge.challenge_type === "scavenger_hunt"
-                          ? "points"
-                          : selectedChallenge.metric_type,
-                      target_value:
-                        selectedChallenge.challenge_type === "scavenger_hunt"
-                          ? String(
-                              getChallengeCheckpointCount(selectedChallenge) ||
-                                selectedChallenge.target_value,
-                            )
-                          : String(selectedChallenge.target_value),
-                      min_accuracy_meters:
-                        typeof selectedChallenge.game_config?.min_accuracy_meters === "number"
-                          ? String(selectedChallenge.game_config.min_accuracy_meters)
-                          : "50",
-                      checkpoints: (selectedChallenge.checkpoints ?? [])
-                        .slice()
-                        .sort((left, right) => left.sort_order - right.sort_order)
-                        .map((checkpoint, index) => ({
-                          checkpoint_uuid: checkpoint.checkpoint_uuid,
-                          title: checkpoint.title,
-                          description: checkpoint.description,
-                          clue: checkpoint.clue,
-                          image_url: checkpoint.image_url,
-                          latitude: String(checkpoint.latitude),
-                          longitude: String(checkpoint.longitude),
-                          radius_meters: String(checkpoint.radius_meters),
-                          prize_points: String(checkpoint.prize_points),
-                          sort_order: String(checkpoint.sort_order || index + 1),
-                          active: checkpoint.active,
-                        })),
-                      start_time: selectedChallenge.start_time
-                        ? new Date(selectedChallenge.start_time * 1000)
-                            .toISOString()
-                            .slice(0, 16)
-                        : "",
-                      end_time: selectedChallenge.end_time
-                        ? new Date(selectedChallenge.end_time * 1000)
-                            .toISOString()
-                            .slice(0, 16)
-                        : "",
-                      active: selectedChallenge.active,
-                      repeat_enabled: false,
-                      repeat_interval_value: "",
-                      repeat_interval_unit: "weeks",
-                      repeat_count: "",
-                    })
-                  }
+                  onClick={() => setEditMode(true)}
                 >
                   Edit
                 </button>
@@ -964,7 +905,7 @@ export function ChallengesScreen(props: Props) {
               type="button"
               className={`challenge-screen-tab ${screenTab === "list" && !isCreating && !isEditing ? "challenge-screen-tab-active" : ""}`}
               onClick={() => {
-                if (isEditing) setChallengeDraft(createEmptyChallengeDraft());
+                if (editMode) setEditMode(false);
                 if (isCreating) setSelectedChallengeId("");
                 setScreenTab("list");
               }}
@@ -975,8 +916,8 @@ export function ChallengesScreen(props: Props) {
               type="button"
               className={`challenge-screen-tab ${screenTab === "participants" && !isCreating && !isEditing ? "challenge-screen-tab-active" : ""}`}
               onClick={() => {
-                if (isCreating) return;
-                if (isEditing) setChallengeDraft(createEmptyChallengeDraft());
+                if (isCreating) setSelectedChallengeId("");
+                if (editMode) setEditMode(false);
                 setScreenTab("participants");
               }}
               disabled={!selectedChallenge && !isEditing}
@@ -1686,7 +1627,7 @@ export function ChallengesScreen(props: Props) {
                     <button
                       className="secondary-button"
                       type="button"
-                      onClick={() => setChallengeDraft(createEmptyChallengeDraft())}
+                      onClick={() => setEditMode(false)}
                     >
                       Cancel
                     </button>
