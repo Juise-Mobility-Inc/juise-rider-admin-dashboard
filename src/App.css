@@ -2097,6 +2097,175 @@
         padding: 20px 24px 24px;
 }
 
+/* ── Screen-level tab layout ── */
+.challenge-screen-layout {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        min-height: 0;
+        flex: 1;
+}
+
+.challenge-screen-tabs {
+        display: flex;
+        gap: 4px;
+        padding: 0 0 0 0;
+        border-bottom: 2px solid var(--panel-border, #e2e8f0);
+        margin-bottom: 0;
+        flex-shrink: 0;
+}
+
+.challenge-screen-tab {
+        padding: 10px 18px;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        color: #64748b;
+        border-bottom: 3px solid transparent;
+        margin-bottom: -2px;
+        border-radius: 6px 6px 0 0;
+        transition: color 0.15s, border-color 0.15s;
+}
+
+.challenge-screen-tab:hover:not(:disabled) {
+        color: #112d4e;
+        background: rgba(17,45,78,0.04);
+}
+
+.challenge-screen-tab:disabled {
+        opacity: 0.4;
+        cursor: default;
+}
+
+.challenge-screen-tab-active {
+        color: #27CC5E;
+        border-bottom-color: #27CC5E;
+        font-weight: 600;
+}
+
+/* ── Challenges table ── */
+.challenge-table-section {
+        padding: 16px 0 0;
+        overflow-x: auto;
+}
+
+.challenge-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+}
+
+.challenge-table-th {
+        text-align: left;
+        padding: 8px 12px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #64748b;
+        border-bottom: 1px solid var(--panel-border, #e2e8f0);
+        white-space: nowrap;
+}
+
+.challenge-table-td {
+        padding: 10px 12px;
+        vertical-align: middle;
+        border-bottom: 1px solid rgba(226,232,240,0.6);
+}
+
+.challenge-table-row {
+        cursor: pointer;
+        transition: background 0.12s;
+}
+
+.challenge-table-row:hover {
+        background: rgba(39,204,94,0.06);
+}
+
+.challenge-table-row-selected {
+        background: rgba(39,204,94,0.1);
+}
+
+.challenge-table-row-selected:hover {
+        background: rgba(39,204,94,0.14);
+}
+
+.challenge-table-group-row {
+        cursor: default;
+}
+
+.challenge-table-group-label {
+        padding: 10px 12px 6px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #94a3b8;
+        background: #f8fafc;
+}
+
+.challenge-table-title-cell {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+}
+
+.challenge-table-thumb {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        border-radius: 8px;
+        overflow: hidden;
+        background: rgba(17,45,78,0.08);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 700;
+        color: #64748b;
+}
+
+.challenge-table-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+}
+
+.challenge-table-title {
+        font-weight: 600;
+        color: #112d4e;
+        font-size: 14px;
+}
+
+.challenge-table-type {
+        font-size: 12px;
+        margin-top: 1px;
+}
+
+.challenge-table-muted {
+        color: #64748b;
+        font-size: 13px;
+        white-space: nowrap;
+}
+
+.challenge-table-action-cell {
+        text-align: right;
+        white-space: nowrap;
+}
+
+.challenge-table-view-arrow {
+        color: #94a3b8;
+        font-size: 16px;
+        transition: color 0.12s, transform 0.12s;
+}
+
+.challenge-table-row:hover .challenge-table-view-arrow {
+        color: #27CC5E;
+        transform: translateX(2px);
+}
+
 /* Compact header: thumbnail + title/chips + actions in one row */
 .challenge-detail-compact-header {
         display: flex;

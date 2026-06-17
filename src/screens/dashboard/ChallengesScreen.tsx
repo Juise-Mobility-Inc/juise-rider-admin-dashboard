@@ -532,7 +532,6 @@ export function ChallengesScreen(props: Props) {
   const isCreating =
     selectedChallengeId === newChallengeSelectionId && !challengeDraft.challenge_uuid;
   const isEditing = Boolean(challengeDraft.challenge_uuid);
-  const nothingSelected = !selectedChallengeId || (selectedChallengeId !== newChallengeSelectionId && !selectedChallenge);
   const selectedChallengeIsCampaign =
     selectedChallenge?.audience_type === "campaign_group";
   const draftIsScavengerHunt = challengeDraft.challenge_type === "scavenger_hunt";
@@ -690,7 +689,7 @@ export function ChallengesScreen(props: Props) {
   }
 
   const [stopImageBusy, setStopImageBusy] = useState(false);
-  const [detailTab, setDetailTab] = useState<"participants" | "live">("participants");
+  const [screenTab, setScreenTab] = useState<"list" | "participants" | "live">("list");
   const [showLiveMap, setShowLiveMap] = useState(true);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -723,8 +722,12 @@ export function ChallengesScreen(props: Props) {
   }
 
   useEffect(() => {
-    setDetailTab("participants");
-  }, [selectedChallengeId]);
+    if (selectedChallengeId && selectedChallengeId !== newChallengeSelectionId) {
+      setScreenTab("participants");
+    } else {
+      setScreenTab("list");
+    }
+  }, [selectedChallengeId, newChallengeSelectionId]);
 
   async function handleStopImageUpload(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -826,154 +829,300 @@ export function ChallengesScreen(props: Props) {
       ) : null}
 
       {activeSchoolId ? (
-        <div className="challenge-layout">
-          {/* ══ LEFT: challenge list ══ */}
-          <div className="challenge-sidebar-list">
-            {/* Active & Upcoming */}
-            <div className="challenge-list-section">
-              <div className="challenge-list-section-header">
-                <span>{activeListLabel}</span>
-                <span className="challenge-list-count">
-                  {currentAndUpcomingChallenges.length}
-                </span>
+        <div className="challenge-screen-layout">
+
+          {/* Compact info header — visible when a challenge is selected and not creating/editing */}
+          {selectedChallenge && !isCreating && !isEditing ? (
+            <div className="challenge-detail-compact-header">
+              <div className="challenge-detail-compact-thumb">
+                {selectedChallenge.image_url.trim() ? (
+                  <img
+                    src={selectedChallenge.image_url}
+                    alt={selectedChallenge.title}
+                    onClick={() =>
+                      handleImagePreview(
+                        selectedChallenge.image_url,
+                        selectedChallenge.title,
+                        selectedChallenge.title,
+                      )
+                    }
+                  />
+                ) : (
+                  <span className="challenge-detail-compact-thumb-fallback">
+                    {isGamesMode ? "SH" : "CH"}
+                  </span>
+                )}
               </div>
-
-              {challengeListBusy ? (
-                <p className="muted-text" style={{ padding: "8px 0" }}>Loading…</p>
-              ) : currentAndUpcomingChallenges.length === 0 ? (
-                <p className="challenge-list-empty">
-                  {isGamesMode
-                    ? "No live or scheduled games yet."
-                    : "No live or upcoming challenges yet."}
-                </p>
-              ) : null}
-
-              <div className="challenge-roster">
-                {currentAndUpcomingChallenges.map((ch) => {
-                  const status = resolveChallengeStatus(ch);
-                  const isSelected = ch.challenge_uuid === selectedChallengeId;
-                  return (
-                    <button
-                      key={ch.challenge_uuid}
-                      className={`challenge-roster-item ${isSelected ? "challenge-roster-item-active" : ""}`}
-                      type="button"
-                      onClick={() => setSelectedChallengeId(ch.challenge_uuid)}
-                    >
-                      <div className="challenge-roster-thumb">
-                        {ch.image_url.trim() ? (
-                          <img
-                            src={ch.image_url}
-                            alt={ch.title}
-                            className="challenge-roster-img"
-                          />
-                        ) : (
-                          <span className="challenge-roster-img-fallback">
-                            {isGamesMode ? "SH" : "CH"}
-                          </span>
-                        )}
-                      </div>
-                      <div className="challenge-roster-info">
-                        <strong className="challenge-roster-title">{ch.title}</strong>
-                        <span className="challenge-roster-meta">
-                          {formatChallengeTypeLabel(ch.challenge_type)} ·{" "}
-                          {formatChallengeGoalLabel(ch, formatChallengeMetricValue)}
-                        </span>
-                      </div>
-                      <span className={`challenge-status-badge ${statusClass(status)}`}>
-                        {status}
-                      </span>
-                    </button>
-                  );
-                })}
+              <div className="challenge-detail-compact-info">
+                <div className="challenge-detail-compact-title-row">
+                  <h3 className="challenge-detail-compact-title">{selectedChallenge.title}</h3>
+                  <span className={`challenge-status-badge ${statusClass(resolveChallengeStatus(selectedChallenge))}`}>
+                    {resolveChallengeStatus(selectedChallenge)}
+                  </span>
+                  {selectedChallenge.active ? null : (
+                    <span className="challenge-status-badge challenge-status-ended">Inactive</span>
+                  )}
+                </div>
+                <div className="challenge-detail-compact-chips">
+                  <span className="challenge-form-chip">
+                    {formatChallengeTypeLabel(selectedChallenge.challenge_type)}
+                  </span>
+                  <span className="challenge-form-chip">
+                    🎯 {formatChallengeGoalLabel(selectedChallenge, formatChallengeMetricValue)}
+                  </span>
+                  <span className="challenge-form-chip">
+                    📅 {formatDateTimeForDisplay(selectedChallenge.start_time)} → {formatDateTimeForDisplay(selectedChallenge.end_time)}
+                  </span>
+                </div>
               </div>
-            </div>
-
-            {/* Past challenges */}
-            <div className="challenge-list-section">
-              <div className="challenge-list-section-header">
-                <span>{pastListLabel}</span>
-                <span className="challenge-list-count">{pastChallenges.length}</span>
-              </div>
-
-              {!challengeListBusy && pastChallenges.length === 0 ? (
-                <p className="challenge-list-empty">
-                  {isGamesMode
-                    ? "Ended games will appear here."
-                    : "Ended challenges will appear here."}
-                </p>
-              ) : null}
-
-              <div className="challenge-roster">
-                {pastChallenges.map((ch) => {
-                  const status = resolveChallengeStatus(ch);
-                  const isSelected = ch.challenge_uuid === selectedChallengeId;
-                  return (
-                    <div className="challenge-history-item" key={ch.challenge_uuid}>
-                      <button
-                        className={`challenge-roster-item ${isSelected ? "challenge-roster-item-active" : ""}`}
-                        type="button"
-                        onClick={() => setSelectedChallengeId(ch.challenge_uuid)}
-                      >
-                        <div className="challenge-roster-thumb">
-                          {ch.image_url.trim() ? (
-                            <img
-                              src={ch.image_url}
-                              alt={ch.title}
-                              className="challenge-roster-img"
-                            />
-                          ) : (
-                            <span className="challenge-roster-img-fallback">
-                              {isGamesMode ? "SH" : "CH"}
-                            </span>
-                          )}
-                        </div>
-                        <div className="challenge-roster-info">
-                          <strong className="challenge-roster-title">{ch.title}</strong>
-                          <span className="challenge-roster-meta">
-                            {formatChallengeTypeLabel(ch.challenge_type)} ·{" "}
-                            {formatChallengeGoalLabel(ch, formatChallengeMetricValue)}
-                          </span>
-                        </div>
-                        <span className={`challenge-status-badge ${statusClass(status)}`}>
-                          {status}
-                        </span>
-                      </button>
-                      <button
-                        className="secondary-button challenge-history-copy-button"
-                        type="button"
-                        onClick={() => handleCopyChallengeForResubmit(ch)}
-                        disabled={challengeBusy}
-                      >
-                        Copy &amp; Resubmit{isGamesMode ? " Game" : ""}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* ══ RIGHT: detail / create panel ══ */}
-          <div className="challenge-detail-panel">
-            {/* Empty state */}
-            {nothingSelected ? (
-              <div className="challenge-empty-detail">
-                <span className="challenge-empty-icon">{isGamesMode ? "SH" : "CH"}</span>
-                <h3>Select a {itemLabel}</h3>
-                <p>
-                  {isGamesMode
-                    ? "Choose a scavenger hunt to edit stops and review player progress, or create a new game."
-                    : "Choose a challenge from the list to view its details, student progress, and edit it, or create a new one."}
-                </p>
+              <div className="challenge-detail-compact-actions">
                 <button
-                  className="primary-button"
+                  className="secondary-button"
                   type="button"
-                  onClick={handleSelectNew}
+                  onClick={() =>
+                    setChallengeDraft({
+                      challenge_uuid: selectedChallenge.challenge_uuid,
+                      challenge_type:
+                        selectedChallenge.challenge_type === "scavenger_hunt"
+                          ? "scavenger_hunt"
+                          : "route_metric",
+                      audience_type:
+                        selectedChallenge.challenge_type === "scavenger_hunt"
+                          ? "user"
+                          : selectedChallenge.audience_type,
+                      title: selectedChallenge.title,
+                      description: selectedChallenge.description,
+                      image_url: selectedChallenge.image_url,
+                      metric_type:
+                        selectedChallenge.challenge_type === "scavenger_hunt"
+                          ? "points"
+                          : selectedChallenge.metric_type,
+                      target_value:
+                        selectedChallenge.challenge_type === "scavenger_hunt"
+                          ? String(
+                              getChallengeCheckpointCount(selectedChallenge) ||
+                                selectedChallenge.target_value,
+                            )
+                          : String(selectedChallenge.target_value),
+                      min_accuracy_meters:
+                        typeof selectedChallenge.game_config?.min_accuracy_meters === "number"
+                          ? String(selectedChallenge.game_config.min_accuracy_meters)
+                          : "50",
+                      checkpoints: (selectedChallenge.checkpoints ?? [])
+                        .slice()
+                        .sort((left, right) => left.sort_order - right.sort_order)
+                        .map((checkpoint, index) => ({
+                          checkpoint_uuid: checkpoint.checkpoint_uuid,
+                          title: checkpoint.title,
+                          description: checkpoint.description,
+                          clue: checkpoint.clue,
+                          image_url: checkpoint.image_url,
+                          latitude: String(checkpoint.latitude),
+                          longitude: String(checkpoint.longitude),
+                          radius_meters: String(checkpoint.radius_meters),
+                          prize_points: String(checkpoint.prize_points),
+                          sort_order: String(checkpoint.sort_order || index + 1),
+                          active: checkpoint.active,
+                        })),
+                      start_time: selectedChallenge.start_time
+                        ? new Date(selectedChallenge.start_time * 1000)
+                            .toISOString()
+                            .slice(0, 16)
+                        : "",
+                      end_time: selectedChallenge.end_time
+                        ? new Date(selectedChallenge.end_time * 1000)
+                            .toISOString()
+                            .slice(0, 16)
+                        : "",
+                      active: selectedChallenge.active,
+                      repeat_enabled: false,
+                      repeat_interval_value: "",
+                      repeat_interval_unit: "weeks",
+                      repeat_count: "",
+                    })
+                  }
                 >
-                  {createButtonLabel}
+                  Edit
                 </button>
+                {resolveChallengeStatus(selectedChallenge) === "Ended" ? (
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => handleCopyChallengeForResubmit(selectedChallenge)}
+                    disabled={challengeBusy}
+                  >
+                    Copy &amp; Resubmit
+                  </button>
+                ) : null}
               </div>
-            ) : null}
+            </div>
+          ) : null}
+
+          {/* Screen-level nav tabs — hidden while creating/editing */}
+          {!isCreating && !isEditing ? (
+            <div className="challenge-screen-tabs">
+              <button
+                type="button"
+                className={`challenge-screen-tab ${screenTab === "list" ? "challenge-screen-tab-active" : ""}`}
+                onClick={() => setScreenTab("list")}
+              >
+                {isGamesMode ? "Games" : "Challenges"}
+              </button>
+              <button
+                type="button"
+                className={`challenge-screen-tab ${screenTab === "participants" ? "challenge-screen-tab-active" : ""}`}
+                onClick={() => { if (selectedChallenge) setScreenTab("participants"); }}
+                disabled={!selectedChallenge}
+                title={!selectedChallenge ? `Select a ${itemLabel} first` : undefined}
+              >
+                Participants
+              </button>
+              {selectedChallenge && isScavengerHuntChallenge(selectedChallenge) ? (
+                <button
+                  type="button"
+                  className={`challenge-screen-tab ${screenTab === "live" ? "challenge-screen-tab-active" : ""}`}
+                  onClick={() => setScreenTab("live")}
+                >
+                  Live Progress
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* ── Tab: Challenges table ── */}
+          {!isCreating && !isEditing && screenTab === "list" ? (
+            <div className="challenge-table-section">
+              {challengeListBusy ? (
+                <p className="muted-text" style={{ padding: "16px 0" }}>Loading…</p>
+              ) : schoolChallenges.length === 0 ? (
+                <div className="challenge-empty-detail">
+                  <span className="challenge-empty-icon">{isGamesMode ? "SH" : "CH"}</span>
+                  <h3>No {isGamesMode ? "games" : "challenges"} yet</h3>
+                  <p>Create your first {itemLabel} to get started.</p>
+                  <button className="primary-button" type="button" onClick={handleSelectNew}>
+                    {createButtonLabel}
+                  </button>
+                </div>
+              ) : (
+                <table className="challenge-table">
+                  <thead>
+                    <tr>
+                      <th className="challenge-table-th">{isGamesMode ? "Game" : "Challenge"}</th>
+                      <th className="challenge-table-th">Status</th>
+                      <th className="challenge-table-th">Goal</th>
+                      <th className="challenge-table-th">Dates</th>
+                      <th className="challenge-table-th"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentAndUpcomingChallenges.length > 0 ? (
+                      <Fragment>
+                        <tr className="challenge-table-group-row">
+                          <td colSpan={5} className="challenge-table-group-label">{activeListLabel}</td>
+                        </tr>
+                        {currentAndUpcomingChallenges.map((ch) => {
+                          const status = resolveChallengeStatus(ch);
+                          const isSelected = ch.challenge_uuid === selectedChallengeId;
+                          return (
+                            <tr
+                              key={ch.challenge_uuid}
+                              className={`challenge-table-row ${isSelected ? "challenge-table-row-selected" : ""}`}
+                              onClick={() => { setSelectedChallengeId(ch.challenge_uuid); setScreenTab("participants"); }}
+                            >
+                              <td className="challenge-table-td">
+                                <div className="challenge-table-title-cell">
+                                  <div className="challenge-table-thumb">
+                                    {ch.image_url.trim() ? <img src={ch.image_url} alt={ch.title} /> : <span>{isGamesMode ? "SH" : "CH"}</span>}
+                                  </div>
+                                  <div>
+                                    <div className="challenge-table-title">{ch.title}</div>
+                                    <div className="challenge-table-type muted-text">{formatChallengeTypeLabel(ch.challenge_type)}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="challenge-table-td">
+                                <span className={`challenge-status-badge ${statusClass(status)}`}>{status}</span>
+                              </td>
+                              <td className="challenge-table-td challenge-table-muted">
+                                {formatChallengeGoalLabel(ch, formatChallengeMetricValue)}
+                              </td>
+                              <td className="challenge-table-td challenge-table-muted">
+                                {formatDateTimeForDisplay(ch.start_time)} → {formatDateTimeForDisplay(ch.end_time)}
+                              </td>
+                              <td className="challenge-table-td challenge-table-action-cell">
+                                <span className="challenge-table-view-arrow">→</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
+                    ) : null}
+                    {pastChallenges.length > 0 ? (
+                      <Fragment>
+                        <tr className="challenge-table-group-row">
+                          <td colSpan={5} className="challenge-table-group-label">{pastListLabel}</td>
+                        </tr>
+                        {pastChallenges.map((ch) => {
+                          const status = resolveChallengeStatus(ch);
+                          const isSelected = ch.challenge_uuid === selectedChallengeId;
+                          return (
+                            <tr
+                              key={ch.challenge_uuid}
+                              className={`challenge-table-row ${isSelected ? "challenge-table-row-selected" : ""}`}
+                              onClick={() => { setSelectedChallengeId(ch.challenge_uuid); setScreenTab("participants"); }}
+                            >
+                              <td className="challenge-table-td">
+                                <div className="challenge-table-title-cell">
+                                  <div className="challenge-table-thumb">
+                                    {ch.image_url.trim() ? <img src={ch.image_url} alt={ch.title} /> : <span>{isGamesMode ? "SH" : "CH"}</span>}
+                                  </div>
+                                  <div>
+                                    <div className="challenge-table-title">{ch.title}</div>
+                                    <div className="challenge-table-type muted-text">{formatChallengeTypeLabel(ch.challenge_type)}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="challenge-table-td">
+                                <span className={`challenge-status-badge ${statusClass(status)}`}>{status}</span>
+                              </td>
+                              <td className="challenge-table-td challenge-table-muted">
+                                {formatChallengeGoalLabel(ch, formatChallengeMetricValue)}
+                              </td>
+                              <td className="challenge-table-td challenge-table-muted">
+                                {formatDateTimeForDisplay(ch.start_time)} → {formatDateTimeForDisplay(ch.end_time)}
+                              </td>
+                              <td className="challenge-table-td challenge-table-action-cell">
+                                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                                  <button
+                                    className="secondary-button"
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleCopyChallengeForResubmit(ch); }}
+                                    disabled={challengeBusy}
+                                  >
+                                    Copy &amp; Resubmit
+                                  </button>
+                                  <span className="challenge-table-view-arrow">→</span>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
+                    ) : null}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          ) : null}
+
+          {/* Participants empty state when no challenge selected */}
+          {!isCreating && !isEditing && screenTab === "participants" && !selectedChallenge ? (
+            <div className="challenge-empty-detail">
+              <span className="challenge-empty-icon">{isGamesMode ? "SH" : "CH"}</span>
+              <h3>Select a {itemLabel}</h3>
+              <p>Pick a row from the {isGamesMode ? "Games" : "Challenges"} tab to view participant progress.</p>
+            </div>
+          ) : null}
 
             {/* Create / Edit form */}
             {(isCreating || isEditing) ? (
@@ -1541,156 +1690,8 @@ export function ChallengesScreen(props: Props) {
               </form>
             ) : null}
 
-            {/* Selected existing challenge detail */}
-            {selectedChallenge && !isCreating ? (
-              <div className="challenge-detail-view">
-                {/* Compact header: thumbnail + title/chips + actions all in one row */}
-                <div className="challenge-detail-compact-header">
-                  <div className="challenge-detail-compact-thumb">
-                    {selectedChallenge.image_url.trim() ? (
-                      <img
-                        src={selectedChallenge.image_url}
-                        alt={selectedChallenge.title}
-                        onClick={() =>
-                          handleImagePreview(
-                            selectedChallenge.image_url,
-                            selectedChallenge.title,
-                            selectedChallenge.title,
-                          )
-                        }
-                      />
-                    ) : (
-                      <span className="challenge-detail-compact-thumb-fallback">
-                        {isGamesMode ? "SH" : "CH"}
-                      </span>
-                    )}
-                  </div>
-                  <div className="challenge-detail-compact-info">
-                    <div className="challenge-detail-compact-title-row">
-                      <h3 className="challenge-detail-compact-title">{selectedChallenge.title}</h3>
-                      <span className={`challenge-status-badge ${statusClass(resolveChallengeStatus(selectedChallenge))}`}>
-                        {resolveChallengeStatus(selectedChallenge)}
-                      </span>
-                      {selectedChallenge.active ? null : (
-                        <span className="challenge-status-badge challenge-status-ended">Inactive</span>
-                      )}
-                    </div>
-                    <div className="challenge-detail-compact-chips">
-                      <span className="challenge-form-chip">
-                        {formatChallengeTypeLabel(selectedChallenge.challenge_type)}
-                      </span>
-                      <span className="challenge-form-chip">
-                        🎯 {formatChallengeGoalLabel(selectedChallenge, formatChallengeMetricValue)}
-                      </span>
-                      <span className="challenge-form-chip">
-                        📅 {formatDateTimeForDisplay(selectedChallenge.start_time)} → {formatDateTimeForDisplay(selectedChallenge.end_time)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="challenge-detail-compact-actions">
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={() =>
-                        setChallengeDraft({
-                          challenge_uuid: selectedChallenge.challenge_uuid,
-                          challenge_type:
-                            selectedChallenge.challenge_type === "scavenger_hunt"
-                              ? "scavenger_hunt"
-                              : "route_metric",
-                          audience_type:
-                            selectedChallenge.challenge_type === "scavenger_hunt"
-                              ? "user"
-                              : selectedChallenge.audience_type,
-                          title: selectedChallenge.title,
-                          description: selectedChallenge.description,
-                          image_url: selectedChallenge.image_url,
-                          metric_type:
-                            selectedChallenge.challenge_type === "scavenger_hunt"
-                              ? "points"
-                              : selectedChallenge.metric_type,
-                          target_value:
-                            selectedChallenge.challenge_type === "scavenger_hunt"
-                              ? String(
-                                  getChallengeCheckpointCount(selectedChallenge) ||
-                                    selectedChallenge.target_value,
-                                )
-                              : String(selectedChallenge.target_value),
-                          min_accuracy_meters:
-                            typeof selectedChallenge.game_config?.min_accuracy_meters === "number"
-                              ? String(selectedChallenge.game_config.min_accuracy_meters)
-                              : "50",
-                          checkpoints: (selectedChallenge.checkpoints ?? [])
-                            .slice()
-                            .sort((left, right) => left.sort_order - right.sort_order)
-                            .map((checkpoint, index) => ({
-                              checkpoint_uuid: checkpoint.checkpoint_uuid,
-                              title: checkpoint.title,
-                              description: checkpoint.description,
-                              clue: checkpoint.clue,
-                              image_url: checkpoint.image_url,
-                              latitude: String(checkpoint.latitude),
-                              longitude: String(checkpoint.longitude),
-                              radius_meters: String(checkpoint.radius_meters),
-                              prize_points: String(checkpoint.prize_points),
-                              sort_order: String(checkpoint.sort_order || index + 1),
-                              active: checkpoint.active,
-                            })),
-                          start_time: selectedChallenge.start_time
-                            ? new Date(selectedChallenge.start_time * 1000)
-                                .toISOString()
-                                .slice(0, 16)
-                            : "",
-                          end_time: selectedChallenge.end_time
-                            ? new Date(selectedChallenge.end_time * 1000)
-                                .toISOString()
-                                .slice(0, 16)
-                            : "",
-                          active: selectedChallenge.active,
-                          repeat_enabled: false,
-                          repeat_interval_value: "",
-                          repeat_interval_unit: "weeks",
-                          repeat_count: "",
-                        })
-                      }
-                    >
-                      Edit
-                    </button>
-                    {resolveChallengeStatus(selectedChallenge) === "Ended" ? (
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        onClick={() => handleCopyChallengeForResubmit(selectedChallenge)}
-                        disabled={challengeBusy}
-                      >
-                        Copy &amp; Resubmit
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-
-                {/* Tab switcher — only for scavenger hunts, immediately below header */}
-                {isScavengerHuntChallenge(selectedChallenge) ? (
-                  <div className="challenge-detail-tab-switcher">
-                    <button
-                      type="button"
-                      className={`challenge-detail-tab ${detailTab === "participants" ? "challenge-detail-tab-active" : ""}`}
-                      onClick={() => setDetailTab("participants")}
-                    >
-                      Participants
-                    </button>
-                    <button
-                      type="button"
-                      className={`challenge-detail-tab ${detailTab === "live" ? "challenge-detail-tab-active" : ""}`}
-                      onClick={() => setDetailTab("live")}
-                    >
-                      Live Progress
-                    </button>
-                  </div>
-                ) : null}
-
                 {/* Participant stats */}
-                {detailTab === "participants" ? (
+                {screenTab === "participants" && selectedChallenge && !isCreating && !isEditing ? (
                 <div className="challenge-participants-section">
                   <div className="challenge-participants-header">
                     <h4>
@@ -1902,7 +1903,7 @@ export function ChallengesScreen(props: Props) {
                 ) : null}
 
                 {/* Live Progress tab — scavenger hunts only */}
-                {detailTab === "live" && isScavengerHuntChallenge(selectedChallenge) ? (() => {
+                {screenTab === "live" && selectedChallenge && isScavengerHuntChallenge(selectedChallenge) ? (() => {
                   const checkpoints = (selectedChallenge.checkpoints ?? [])
                     .slice()
                     .sort((a, b) => a.sort_order - b.sort_order);
@@ -2033,9 +2034,6 @@ export function ChallengesScreen(props: Props) {
                     </div>
                   );
                 })() : null}
-              </div>
-            ) : null}
-          </div>
         </div>
       ) : null}
       {/* ── Stop editor modal ── */}
