@@ -958,36 +958,46 @@ export function ChallengesScreen(props: Props) {
             </div>
           ) : null}
 
-          {/* Screen-level nav tabs — hidden while creating/editing */}
-          {!isCreating && !isEditing ? (
-            <div className="challenge-screen-tabs">
+          {/* Screen-level nav tabs — always visible; clicking while editing/creating cancels form */}
+          <div className="challenge-screen-tabs">
+            <button
+              type="button"
+              className={`challenge-screen-tab ${screenTab === "list" && !isCreating && !isEditing ? "challenge-screen-tab-active" : ""}`}
+              onClick={() => {
+                if (isEditing) setChallengeDraft(createEmptyChallengeDraft());
+                if (isCreating) setSelectedChallengeId("");
+                setScreenTab("list");
+              }}
+            >
+              {isGamesMode ? "Games" : "Challenges"}
+            </button>
+            <button
+              type="button"
+              className={`challenge-screen-tab ${screenTab === "participants" && !isCreating && !isEditing ? "challenge-screen-tab-active" : ""}`}
+              onClick={() => {
+                if (isCreating) return;
+                if (isEditing) setChallengeDraft(createEmptyChallengeDraft());
+                setScreenTab("participants");
+              }}
+              disabled={!selectedChallenge && !isEditing}
+              title={!selectedChallenge && !isEditing ? `Select a ${itemLabel} first` : undefined}
+            >
+              Participants
+            </button>
+            {selectedChallenge && isScavengerHuntChallenge(selectedChallenge) ? (
               <button
                 type="button"
-                className={`challenge-screen-tab ${screenTab === "list" ? "challenge-screen-tab-active" : ""}`}
-                onClick={() => setScreenTab("list")}
+                className={`challenge-screen-tab ${screenTab === "live" && !isCreating && !isEditing ? "challenge-screen-tab-active" : ""}`}
+                onClick={() => {
+                  if (isCreating) return;
+                  if (isEditing) setChallengeDraft(createEmptyChallengeDraft());
+                  setScreenTab("live");
+                }}
               >
-                {isGamesMode ? "Games" : "Challenges"}
+                Live Progress
               </button>
-              <button
-                type="button"
-                className={`challenge-screen-tab ${screenTab === "participants" ? "challenge-screen-tab-active" : ""}`}
-                onClick={() => { if (selectedChallenge) setScreenTab("participants"); }}
-                disabled={!selectedChallenge}
-                title={!selectedChallenge ? `Select a ${itemLabel} first` : undefined}
-              >
-                Participants
-              </button>
-              {selectedChallenge && isScavengerHuntChallenge(selectedChallenge) ? (
-                <button
-                  type="button"
-                  className={`challenge-screen-tab ${screenTab === "live" ? "challenge-screen-tab-active" : ""}`}
-                  onClick={() => setScreenTab("live")}
-                >
-                  Live Progress
-                </button>
-              ) : null}
-            </div>
-          ) : null}
+            ) : null}
+          </div>
 
           {/* ── Tab: Challenges table ── */}
           {!isCreating && !isEditing && screenTab === "list" ? (
@@ -1682,6 +1692,14 @@ export function ChallengesScreen(props: Props) {
                       className="secondary-button"
                       type="button"
                       onClick={() => setSelectedChallengeId("")}
+                    >
+                      Cancel
+                    </button>
+                  ) : isEditing ? (
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => setChallengeDraft(createEmptyChallengeDraft())}
                     >
                       Cancel
                     </button>
