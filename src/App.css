@@ -2173,6 +2173,114 @@
         box-shadow: 0 1px 4px rgba(0,0,0,0.08);
 }
 
+/* Live Progress map section */
+.live-progress-map-toggle {
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255,255,255,0.7);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.live-progress-map-toggle:hover {
+  background: #fff;
+  color: var(--text-strong);
+}
+
+.live-progress-map-section {
+  display: grid;
+  gap: 8px;
+}
+
+.live-progress-map-legend {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.live-progress-map-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.live-progress-map-legend-targeted {
+  color: #b45309;
+}
+
+.live-progress-map-legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #f59e0b;
+  flex-shrink: 0;
+}
+
+.live-progress-map-legend-dot-grey {
+  background: #64748b;
+}
+
+.live-progress-map-container {
+  height: 320px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--panel-border);
+  background: #f1f5f9;
+}
+
+.live-progress-stop-tooltip {
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.live-progress-stop-label {
+  display: block;
+  background: rgba(255,255,255,0.92);
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 3px 7px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  backdrop-filter: blur(2px);
+}
+
+.live-progress-stop-label-targeted {
+  background: rgba(251,191,36,0.18);
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.live-progress-stop-students {
+  display: block;
+  background: rgba(251,191,36,0.12);
+  border: 1px solid #fcd34d;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  padding: 2px 7px 3px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: #78350f;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Live Progress tab */
 .live-progress-list {
         display: grid;

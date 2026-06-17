@@ -1,6 +1,6 @@
 import type { ChangeEvent, ComponentType, Dispatch, FormEvent, SetStateAction } from "react";
-import { useEffect, useState } from "react";
-import { Circle, CircleMarker, MapContainer, TileLayer } from "react-leaflet";
+import { Fragment, useEffect, useState } from "react";
+import { Circle, CircleMarker, MapContainer, TileLayer, Tooltip, useMap } from "react-leaflet";
 import {
   PackLocationPicker,
   type PackMapMarker,
@@ -9,6 +9,7 @@ import {
 
 import type {
   SchoolChallenge,
+  SchoolChallengeCheckpoint,
   SchoolChallengeParticipantProgress,
 } from "../../lib/api";
 import {
@@ -141,6 +142,120 @@ function StopMiniMap({ lat, lng, radiusMeters }: { lat: number; lng: number; rad
         radius={6}
         pathOptions={{ color: "#fff", fillColor: "#27CC5E", fillOpacity: 1, weight: 2.5 }}
       />
+    </MapContainer>
+  );
+}
+
+function LiveProgressMapFitter({ stops }: { stops: SchoolChallengeCheckpoint[] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (stops.length === 0) return;
+    if (stops.length === 1) {
+      map.setView([stops[0].latitude, stops[0].longitude], 16);
+      return;
+    }
+    const lats = stops.map((s) => s.latitude);
+    const lngs = stops.map((s) => s.longitude);
+    map.fitBounds(
+      [[Math.min(...lats), Math.min(...lngs)], [Math.max(...lats), Math.max(...lngs)]],
+      { padding: [32, 32] },
+    );
+  }, [map, stops]);
+  return null;
+}
+
+function LiveProgressMap({
+  checkpoints,
+  inProgressParticipants,
+  formatNebulaUserName,
+}: {
+  checkpoints: SchoolChallengeCheckpoint[];
+  inProgressParticipants: SchoolChallengeParticipantProgress[];
+  formatNebulaUserName: (profile: { first_name?: string; last_name?: string; username?: string; email?: string }) => string;
+}) {
+  const mappableStops = checkpoints.filter(
+    (cp) => Number.isFinite(cp.latitude) && Number.isFinite(cp.longitude) && cp.latitude !== 0,
+  );
+
+  if (mappableStops.length === 0) {
+    return <p className="muted-text" style={{ textAlign: "center", padding: "16px 0" }}>No stops have location data yet.</p>;
+  }
+
+  const targetMap = new Map<string, string[]>();
+  for (const p of inProgressParticipants) {
+    const idx = p.visited_checkpoint_count ?? 0;
+    const cp = checkpoints[idx];
+    if (!cp) continue;
+    const key = cp.checkpoint_uuid;
+    if (!targetMap.has(key)) targetMap.set(key, []);
+    targetMap.get(key)!.push(
+      formatNebulaUserName({
+        first_name: p.first_name,
+        last_name: p.last_name,
+        email: p.email,
+        username: p.username,
+      }),
+    );
+  }
+
+  return (
+    <MapContainer
+      center={[mappableStops[0].latitude, mappableStops[0].longitude]}
+      zoom={14}
+      scrollWheelZoom={false}
+      attributionControl={false}
+      style={{ width: "100%", height: "100%", borderRadius: "inherit" }}
+    >
+      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      <LiveProgressMapFitter stops={mappableStops} />
+      {mappableStops.map((cp, i) => {
+        const studentsHere = targetMap.get(cp.checkpoint_uuid) ?? [];
+        const isTargeted = studentsHere.length > 0;
+        const stopNumber = checkpoints.indexOf(cp) + 1;
+        return (
+          <Fragment key={cp.checkpoint_uuid}>
+            {cp.radius_meters > 0 && (
+              <Circle
+                center={[cp.latitude, cp.longitude]}
+                radius={cp.radius_meters}
+                pathOptions={
+                  isTargeted
+                    ? { color: "#f59e0b", fillColor: "#f59e0b", fillOpacity: 0.2, weight: 2.5 }
+                    : { color: "#94a3b8", fillColor: "#94a3b8", fillOpacity: 0.1, weight: 1.5 }
+                }
+              />
+            )}
+            {isTargeted && cp.radius_meters > 0 && (
+              <Circle
+                center={[cp.latitude, cp.longitude]}
+                radius={cp.radius_meters * 1.45}
+                pathOptions={{ color: "#f59e0b", fillColor: "transparent", fillOpacity: 0, weight: 2, opacity: 0.5, dashArray: "6 5" }}
+              />
+            )}
+            <CircleMarker
+              center={[cp.latitude, cp.longitude]}
+              radius={isTargeted ? 9 : 7}
+              pathOptions={
+                isTargeted
+                  ? { color: "#fff", fillColor: "#f59e0b", fillOpacity: 1, weight: 2.5 }
+                  : { color: "#fff", fillColor: "#64748b", fillOpacity: 1, weight: 2 }
+              }
+            >
+              <Tooltip permanent direction="top" offset={[0, -10]} className="live-progress-stop-tooltip">
+                <span className={`live-progress-stop-label${isTargeted ? " live-progress-stop-label-targeted" : ""}`}>
+                  {stopNumber}. {cp.title || `Stop ${stopNumber}`}
+                </span>
+                {isTargeted && (
+                  <span className="live-progress-stop-students">
+                    → {studentsHere.slice(0, 3).join(", ")}
+                    {studentsHere.length > 3 ? ` +${studentsHere.length - 3} more` : ""}
+                  </span>
+                )}
+              </Tooltip>
+            </CircleMarker>
+          </Fragment>
+        );
+      })}
     </MapContainer>
   );
 }
@@ -576,6 +691,7 @@ export function ChallengesScreen(props: Props) {
 
   const [stopImageBusy, setStopImageBusy] = useState(false);
   const [detailTab, setDetailTab] = useState<"participants" | "live">("participants");
+  const [showLiveMap, setShowLiveMap] = useState(true);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
@@ -1822,12 +1938,41 @@ export function ChallengesScreen(props: Props) {
                     <div className="challenge-participants-section">
                       <div className="challenge-participants-header">
                         <h4>Live Progress</h4>
-                        <div className="challenge-participant-stats">
-                          <span><strong>{inProgress.length}</strong> in progress</span>
-                          <span><strong>{completed.length}</strong> completed</span>
-                          <span><strong>{left.length}</strong> left</span>
+                        <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                          <div className="challenge-participant-stats">
+                            <span><strong>{inProgress.length}</strong> in progress</span>
+                            <span><strong>{completed.length}</strong> completed</span>
+                            <span><strong>{left.length}</strong> left</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="live-progress-map-toggle"
+                            onClick={() => setShowLiveMap((v) => !v)}
+                          >
+                            {showLiveMap ? "Hide map" : "Show map"}
+                          </button>
                         </div>
                       </div>
+
+                      {showLiveMap && (
+                        <div className="live-progress-map-section">
+                          <div className="live-progress-map-legend">
+                            <span className="live-progress-map-legend-item live-progress-map-legend-targeted">
+                              <span className="live-progress-map-legend-dot" /> Current target
+                            </span>
+                            <span className="live-progress-map-legend-item">
+                              <span className="live-progress-map-legend-dot live-progress-map-legend-dot-grey" /> Other stops
+                            </span>
+                          </div>
+                          <div className="live-progress-map-container">
+                            <LiveProgressMap
+                              checkpoints={checkpoints}
+                              inProgressParticipants={inProgress}
+                              formatNebulaUserName={formatNebulaUserName}
+                            />
+                          </div>
+                        </div>
+                      )}
 
                       {challengeParticipantsBusy ? (
                         <p className="muted-text">Loading player progress…</p>
