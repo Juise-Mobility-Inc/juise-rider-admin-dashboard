@@ -1,5 +1,5 @@
 import type { ChangeEvent, ComponentType, Dispatch, FormEvent, SetStateAction } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Circle, CircleMarker, MapContainer, TileLayer } from "react-leaflet";
 import {
   PackLocationPicker,
@@ -575,6 +575,7 @@ export function ChallengesScreen(props: Props) {
   }
 
   const [stopImageBusy, setStopImageBusy] = useState(false);
+  const [detailTab, setDetailTab] = useState<"participants" | "live">("participants");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
@@ -604,6 +605,10 @@ export function ChallengesScreen(props: Props) {
     setDragIndex(null);
     setDragOverIndex(null);
   }
+
+  useEffect(() => {
+    setDetailTab("participants");
+  }, [selectedChallengeId]);
 
   async function handleStopImageUpload(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -1555,7 +1560,28 @@ export function ChallengesScreen(props: Props) {
                   ) : null}
                 </div>
 
+                {/* Detail tab switcher — only for scavenger hunts */}
+                {isScavengerHuntChallenge(selectedChallenge) ? (
+                  <div className="challenge-detail-tab-switcher">
+                    <button
+                      type="button"
+                      className={`challenge-detail-tab ${detailTab === "participants" ? "challenge-detail-tab-active" : ""}`}
+                      onClick={() => setDetailTab("participants")}
+                    >
+                      Participants
+                    </button>
+                    <button
+                      type="button"
+                      className={`challenge-detail-tab ${detailTab === "live" ? "challenge-detail-tab-active" : ""}`}
+                      onClick={() => setDetailTab("live")}
+                    >
+                      Live Progress
+                    </button>
+                  </div>
+                ) : null}
+
                 {/* Participant stats */}
+                {detailTab === "participants" ? (
                 <div className="challenge-participants-section">
                   <div className="challenge-participants-header">
                     <h4>
@@ -1648,7 +1674,7 @@ export function ChallengesScreen(props: Props) {
                       const avatarSeed = isCampaignParticipant
                         ? participant.campaign_group_name?.[0]
                         : participant.first_name?.[0] || participant.username?.[0];
-                      const isScavengerHunt = selectedChallenge
+                      const isScavengerHuntSelected = selectedChallenge
                         ? isScavengerHuntChallenge(selectedChallenge)
                         : false;
                       const visitedStops =
@@ -1688,7 +1714,7 @@ export function ChallengesScreen(props: Props) {
 
                           <div className="challenge-progress-meta">
                             <div className="challenge-progress-copy">
-                              {isScavengerHunt ? (
+                              {isScavengerHuntSelected ? (
                                 <>
                                   <strong>
                                     {visitedStops} / {totalStops} stops
@@ -1736,7 +1762,7 @@ export function ChallengesScreen(props: Props) {
                                 {(participant.member_count ?? 0) === 1 ? "" : "s"}
                               </span>
                             ) : null}
-                            {isScavengerHunt ? (
+                            {isScavengerHuntSelected ? (
                               <span>
                                 {participant.game_points_awarded ?? 0} hunt point
                                 {(participant.game_points_awarded ?? 0) === 1 ? "" : "s"}
@@ -1764,6 +1790,111 @@ export function ChallengesScreen(props: Props) {
                     })}
                   </div>
                 </div>
+                ) : null}
+
+                {/* Live Progress tab — scavenger hunts only */}
+                {detailTab === "live" && isScavengerHuntChallenge(selectedChallenge) ? (() => {
+                  const checkpoints = (selectedChallenge.checkpoints ?? [])
+                    .slice()
+                    .sort((a, b) => a.sort_order - b.sort_order);
+                  const totalCheckpoints = checkpoints.filter((cp) => cp.active).length || selectedChallenge.target_value;
+
+                  const sorted = challengeParticipants.slice().sort((a, b) => {
+                    const scoreA = a.completed ? -1 : a.active ? (a.visited_checkpoint_count ?? 0) : -2;
+                    const scoreB = b.completed ? -1 : b.active ? (b.visited_checkpoint_count ?? 0) : -2;
+                    if (a.completed && !b.completed) return 1;
+                    if (!a.completed && b.completed) return -1;
+                    if (!a.active && a.completed === false && b.active) return 1;
+                    if (a.active && !b.active && b.completed === false) return -1;
+                    return scoreB - scoreA;
+                  });
+
+                  const inProgress = sorted.filter((p) => p.active && !p.completed);
+                  const completed = sorted.filter((p) => p.completed);
+                  const left = sorted.filter((p) => !p.active && !p.completed);
+                  const orderedParticipants = [
+                    ...inProgress.sort((a, b) => (b.visited_checkpoint_count ?? 0) - (a.visited_checkpoint_count ?? 0)),
+                    ...completed,
+                    ...left,
+                  ];
+
+                  return (
+                    <div className="challenge-participants-section">
+                      <div className="challenge-participants-header">
+                        <h4>Live Progress</h4>
+                        <div className="challenge-participant-stats">
+                          <span><strong>{inProgress.length}</strong> in progress</span>
+                          <span><strong>{completed.length}</strong> completed</span>
+                          <span><strong>{left.length}</strong> left</span>
+                        </div>
+                      </div>
+
+                      {challengeParticipantsBusy ? (
+                        <p className="muted-text">Loading player progress…</p>
+                      ) : orderedParticipants.length === 0 ? (
+                        <p className="empty-state">No players have joined this game yet.</p>
+                      ) : null}
+
+                      <div className="live-progress-list">
+                        {orderedParticipants.map((participant) => {
+                          const name = formatNebulaUserName({
+                            first_name: participant.first_name,
+                            last_name: participant.last_name,
+                            email: participant.email,
+                            username: participant.username,
+                          });
+                          const avatarLetter = (participant.first_name?.[0] || participant.username?.[0] || "?").toUpperCase();
+                          const visited = participant.visited_checkpoint_count ?? 0;
+                          const currentCheckpoint = checkpoints[visited];
+                          const stepLabel = participant.completed
+                            ? `Finished all ${totalCheckpoints} stop${Number(totalCheckpoints) === 1 ? "" : "s"}`
+                            : currentCheckpoint
+                              ? `Step ${visited + 1} of ${totalCheckpoints} — ${currentCheckpoint.title || "Unnamed stop"}`
+                              : `Step ${visited} of ${totalCheckpoints}`;
+
+                          return (
+                            <div className="live-progress-row" key={participant.participation_uuid}>
+                              <div className="participant-avatar live-progress-avatar">
+                                {avatarLetter}
+                              </div>
+                              <div className="live-progress-info">
+                                <div className="live-progress-name">{name}</div>
+                                <div className="live-progress-step muted-text">{stepLabel}</div>
+                                <div className="live-progress-bar-wrap">
+                                  <div className="live-progress-steps">
+                                    {Array.from({ length: Number(totalCheckpoints) }).map((_, i) => (
+                                      <div
+                                        key={i}
+                                        className={`live-progress-step-pip ${
+                                          participant.completed || i < visited
+                                            ? "live-progress-step-pip-done"
+                                            : i === visited && !participant.completed
+                                              ? "live-progress-step-pip-current"
+                                              : "live-progress-step-pip-pending"
+                                        }`}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                              <span
+                                className={`challenge-status-badge ${
+                                  participant.completed
+                                    ? "challenge-status-live"
+                                    : participant.active
+                                      ? "challenge-status-upcoming"
+                                      : "challenge-status-ended"
+                                }`}
+                              >
+                                {participant.completed ? "Completed" : participant.active ? "In Progress" : "Left"}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })() : null}
               </div>
             ) : null}
           </div>
