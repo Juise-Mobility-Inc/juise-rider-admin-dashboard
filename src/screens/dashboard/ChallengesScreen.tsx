@@ -923,7 +923,7 @@ export function ChallengesScreen(props: Props) {
                             <tr
                               key={ch.challenge_uuid}
                               className={`challenge-table-row ${isSelected ? "challenge-table-row-selected" : ""}`}
-                              onClick={() => { setSelectedChallengeId(ch.challenge_uuid); setScreenTab("details"); }}
+                              onClick={() => { setSelectedChallengeId(ch.challenge_uuid); setScreenTab("details"); setEditMode(true); }}
                             >
                               <td className="challenge-table-td">
                                 <div className="challenge-table-title-cell">
@@ -965,7 +965,7 @@ export function ChallengesScreen(props: Props) {
                             <tr
                               key={ch.challenge_uuid}
                               className={`challenge-table-row ${isSelected ? "challenge-table-row-selected" : ""}`}
-                              onClick={() => { setSelectedChallengeId(ch.challenge_uuid); setScreenTab("details"); }}
+                              onClick={() => { setSelectedChallengeId(ch.challenge_uuid); setScreenTab("details"); setEditMode(true); }}
                             >
                               <td className="challenge-table-td">
                                 <div className="challenge-table-title-cell">
@@ -991,9 +991,9 @@ export function ChallengesScreen(props: Props) {
                                 <button
                                   className="primary-button"
                                   type="button"
-                                  onClick={(e) => { e.stopPropagation(); setSelectedChallengeId(ch.challenge_uuid); setScreenTab("details"); }}
+                                  onClick={(e) => { e.stopPropagation(); setSelectedChallengeId(ch.challenge_uuid); setScreenTab("details"); setEditMode(true); }}
                                 >
-                                  View More
+                                  Edit
                                 </button>
                               </td>
                             </tr>
