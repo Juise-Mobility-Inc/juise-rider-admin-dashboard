@@ -993,7 +993,7 @@ export function ChallengesScreen(props: Props) {
                                   type="button"
                                   onClick={(e) => { e.stopPropagation(); setSelectedChallengeId(ch.challenge_uuid); setScreenTab("details"); setEditMode(true); }}
                                 >
-                                  Edit
+                                  Edit →
                                 </button>
                               </td>
                             </tr>
