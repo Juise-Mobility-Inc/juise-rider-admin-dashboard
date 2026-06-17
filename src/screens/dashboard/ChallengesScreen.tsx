@@ -712,7 +712,8 @@ export function ChallengesScreen(props: Props) {
       const items = [...prev.checkpoints];
       const [moved] = items.splice(dragIndex, 1);
       items.splice(toIndex, 0, moved);
-      return { ...prev, checkpoints: items };
+      const reindexed = items.map((cp, i) => ({ ...cp, sort_order: String(i + 1) }));
+      return { ...prev, checkpoints: reindexed };
     });
     setDragIndex(null);
     setDragOverIndex(null);
