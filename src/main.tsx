@@ -7,7 +7,7 @@ import "leaflet/dist/leaflet.css";
 import App from "./App.tsx";
 import { store } from "./store";
 
-const Router = import.meta.env.PROD ? HashRouter : BrowserRouter;
+export const Router = import.meta.env.PROD ? HashRouter : BrowserRouter;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

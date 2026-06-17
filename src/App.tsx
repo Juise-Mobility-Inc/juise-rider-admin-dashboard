@@ -300,6 +300,8 @@ interface ChallengeDraft {
         metric_type: "distance_miles" | "points";
         target_value: string;
         min_accuracy_meters: string;
+        required_dwell_seconds: string;
+        grand_prize_points: string;
         checkpoints: ChallengeCheckpointDraft[];
         start_time: string;
         end_time: string;
@@ -581,6 +583,24 @@ function getScavengerHuntMinAccuracy(
                 : "50";
 }
 
+function getScavengerHuntRequiredDwellSeconds(
+        challenge: Pick<SchoolChallenge, "game_config">,
+): string {
+        const value = challenge.game_config?.required_dwell_seconds;
+        return typeof value === "number" && Number.isFinite(value) && value > 0
+                ? String(value)
+                : "30";
+}
+
+function getScavengerHuntGrandPrizePoints(
+        challenge: Pick<SchoolChallenge, "game_config">,
+): string {
+        const value = challenge.game_config?.grand_prize_points;
+        return typeof value === "number" && Number.isFinite(value) && value > 0
+                ? String(value)
+                : "0";
+}
+
 function checkpointToDraft(
         checkpoint: NonNullable<SchoolChallenge["checkpoints"]>[number],
         index: number,
@@ -676,6 +696,8 @@ function createEmptyChallengeDraft(): ChallengeDraft {
                 metric_type: "distance_miles",
                 target_value: "10",
                 min_accuracy_meters: "50",
+                required_dwell_seconds: "30",
+                grand_prize_points: "0",
                 checkpoints: [],
                 start_time: formatDateTimeLocalValue(Math.floor(now.getTime() / 1000)),
                 end_time: formatDateTimeLocalValue(Math.floor(end.getTime() / 1000)),
@@ -695,6 +717,8 @@ function createEmptyScavengerHuntDraft(): ChallengeDraft {
                 metric_type: "points",
                 target_value: "1",
                 min_accuracy_meters: "50",
+                required_dwell_seconds: "30",
+                grand_prize_points: "0",
                 repeat_enabled: false,
                 checkpoints: [createEmptyChallengeCheckpointDraft(1)],
         };
@@ -722,6 +746,8 @@ function challengeToDraft(challenge: SchoolChallenge): ChallengeDraft {
                                 ? String(checkpoints.filter((checkpoint) => checkpoint.active).length || challenge.target_value)
                                 : String(challenge.target_value),
                 min_accuracy_meters: getScavengerHuntMinAccuracy(challenge),
+                required_dwell_seconds: getScavengerHuntRequiredDwellSeconds(challenge),
+                grand_prize_points: getScavengerHuntGrandPrizePoints(challenge),
                 checkpoints,
                 start_time: formatDateTimeLocalValue(challenge.start_time),
                 end_time: formatDateTimeLocalValue(challenge.end_time),
@@ -3868,6 +3894,8 @@ function App() {
                 let repeatIntervalValue = 1;
                 let checkpointInputs: SchoolChallengeCheckpointWriteInput[] = [];
                 let minAccuracyMeters = 50;
+                let requiredDwellSeconds = 30;
+                let grandPrizePoints = 0;
                 const isScavengerHunt =
                         challengeDraft.challenge_type === "scavenger_hunt";
 
@@ -3893,6 +3921,24 @@ function App() {
                                         minAccuracyMeters <= 0
                                 ) {
                                         throw new Error("Minimum GPS accuracy must be greater than 0.");
+                                }
+                                requiredDwellSeconds = Number(
+                                        challengeDraft.required_dwell_seconds.trim() || "30",
+                                );
+                                if (
+                                        !Number.isFinite(requiredDwellSeconds) ||
+                                        requiredDwellSeconds <= 0
+                                ) {
+                                        throw new Error("Required visit time must be greater than 0 seconds.");
+                                }
+                                grandPrizePoints = Number(
+                                        challengeDraft.grand_prize_points.trim() || "0",
+                                );
+                                if (
+                                        !Number.isFinite(grandPrizePoints) ||
+                                        grandPrizePoints < 0
+                                ) {
+                                        throw new Error("Grand prize points must be 0 or greater.");
                                 }
                         } else {
                                 targetValue = Number(challengeDraft.target_value.trim());
@@ -3957,7 +4003,13 @@ function App() {
                                 metric_type: isScavengerHunt ? "points" : challengeDraft.metric_type,
                                 target_value: targetValue,
                                 game_config: isScavengerHunt
-                                        ? { min_accuracy_meters: minAccuracyMeters }
+                                        ? {
+                                                        sequential_unlock: true,
+                                                        min_accuracy_meters: minAccuracyMeters,
+                                                        required_dwell_seconds: requiredDwellSeconds,
+                                                        grand_prize_points: grandPrizePoints,
+                                                        dwell_sample_interval_seconds: 5,
+                                                }
                                         : {},
                                 checkpoints: isScavengerHunt ? checkpointInputs : [],
                                 start_time: startTime,
@@ -4589,52 +4641,6 @@ function App() {
                                 return (
                                         <ChallengesScreen
                                                 mode="challenges"
-                                                activeSchoolId={activeSchoolId}
-                                                challengeBusy={challengeBusy}
-                                                challengeListBusy={challengeListBusy}
-                                                challengeParticipantsBusy={challengeParticipantsBusy}
-                                                challengeImageUploadBusy={challengeImageUploadBusy}
-                                                selectedChallengeId={selectedChallengeId}
-                                                setSelectedChallengeId={setSelectedChallengeId}
-                                                challengeDraft={challengeDraft}
-                                                setChallengeDraft={setChallengeDraft}
-                                                createEmptyChallengeDraft={createEmptyChallengeDraft}
-                                                refreshSchoolChallenges={refreshSchoolChallenges}
-                                                handleSaveChallenge={handleSaveChallenge}
-                                                handleDeleteSelectedChallenge={handleDeleteSelectedChallenge}
-                                                handleCopyChallengeForResubmit={handleCopyChallengeForResubmit}
-                                                handleChallengeImageFileChange={handleChallengeImageFileChange}
-                                                selectedChallenge={selectedChallenge}
-                                                schoolChallenges={visibleSchoolChallenges}
-                                                currentAndUpcomingChallenges={currentAndUpcomingChallenges}
-                                                pastChallenges={pastChallenges}
-                                                challengeParticipants={challengeParticipants}
-                                                challengeParticipantSummary={challengeParticipantSummary}
-                                                resolveChallengeStatus={resolveChallengeStatus}
-                                                formatChallengeMetricValue={formatChallengeMetricValue}
-                                                formatDateTimeForDisplay={formatDateTimeForDisplay}
-                                                formatNebulaUserName={formatNebulaUserName}
-                                                EntityImagePreview={(
-                                                        props: Parameters<typeof EntityImagePreview>[0],
-                                                ) => (
-                                                        <EntityImagePreview
-                                                                {...props}
-                                                                onPreview={handleOpenImagePreview}
-                                                        />
-                                                )}
-                                                DetailRow={DetailRow}
-                                                newChallengeSelectionId={newChallengeSelectionId}
-                                                handleImagePreview={handleOpenImagePreview}
-                                                uploadStopImage={async (file) => {
-                                                        const r = await uploadSchoolChallengeImage(context.managedAppId, activeSchoolId, file);
-                                                        return r.public_url;
-                                                }}
-                                        />
-                                );
-                        case "challengeGames":
-                                return (
-                                        <ChallengesScreen
-                                                mode="games"
                                                 activeSchoolId={activeSchoolId}
                                                 challengeBusy={challengeBusy}
                                                 challengeListBusy={challengeListBusy}
