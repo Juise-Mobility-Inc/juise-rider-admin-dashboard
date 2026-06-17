@@ -689,7 +689,7 @@ export function ChallengesScreen(props: Props) {
   }
 
   const [stopImageBusy, setStopImageBusy] = useState(false);
-  const [screenTab, setScreenTab] = useState<"list" | "participants" | "live">("list");
+  const [screenTab, setScreenTab] = useState<"list" | "participants">("list");
   const [showLiveMap, setShowLiveMap] = useState(true);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -984,19 +984,6 @@ export function ChallengesScreen(props: Props) {
             >
               Participants
             </button>
-            {selectedChallenge && isScavengerHuntChallenge(selectedChallenge) ? (
-              <button
-                type="button"
-                className={`challenge-screen-tab ${screenTab === "live" && !isCreating && !isEditing ? "challenge-screen-tab-active" : ""}`}
-                onClick={() => {
-                  if (isCreating) return;
-                  if (isEditing) setChallengeDraft(createEmptyChallengeDraft());
-                  setScreenTab("live");
-                }}
-              >
-                Live Progress
-              </button>
-            ) : null}
           </div>
 
           {/* ── Tab: Challenges table ── */}
@@ -1920,8 +1907,8 @@ export function ChallengesScreen(props: Props) {
                 </div>
                 ) : null}
 
-                {/* Live Progress tab — scavenger hunts only */}
-                {screenTab === "live" && selectedChallenge && isScavengerHuntChallenge(selectedChallenge) ? (() => {
+                {/* Live Progress — scavenger hunts, shown inside Participants tab */}
+                {screenTab === "participants" && !isCreating && !isEditing && selectedChallenge && isScavengerHuntChallenge(selectedChallenge) ? (() => {
                   const checkpoints = (selectedChallenge.checkpoints ?? [])
                     .slice()
                     .sort((a, b) => a.sort_order - b.sort_order);
