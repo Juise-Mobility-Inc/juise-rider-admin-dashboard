@@ -1008,63 +1008,133 @@ export function ChallengesScreen(props: Props) {
             </div>
           ) : null}
 
-          {/* ── Details tab: challenge info panel ── */}
+          {/* ── Details tab: rich challenge overview ── */}
           {screenTab === "details" && !editMode && !isCreating && selectedChallenge ? (
-            <div className="challenge-info-panel">
-              <div className="challenge-info-panel-thumb">
+            <div className="challenge-detail-view-panel">
+
+              {/* ── Header card ── */}
+              <div className="cdv-header-card">
                 {selectedChallenge.image_url.trim() ? (
                   <img
                     src={selectedChallenge.image_url}
                     alt={selectedChallenge.title}
-                    className="challenge-info-panel-img"
+                    className="cdv-header-img"
                     onClick={() => handleImagePreview(selectedChallenge.image_url, selectedChallenge.title, selectedChallenge.title)}
                   />
                 ) : (
-                  <span className="challenge-detail-compact-thumb-fallback">
-                    {isGamesMode ? "SH" : "CH"}
-                  </span>
+                  <div className="cdv-header-img-placeholder">
+                    {isGamesMode ? "🗺️" : "🏆"}
+                  </div>
                 )}
+                <div className="cdv-header-meta">
+                  <div className="cdv-header-chips">
+                    <span className="challenge-form-chip">{formatChallengeTypeLabel(selectedChallenge.challenge_type)}</span>
+                    <span className="challenge-form-chip">🎯 {formatChallengeGoalLabel(selectedChallenge, formatChallengeMetricValue)}</span>
+                    <span className={`challenge-status-badge ${statusClass(resolveChallengeStatus(selectedChallenge))}`}>{resolveChallengeStatus(selectedChallenge)}</span>
+                    {!selectedChallenge.active ? <span className="challenge-status-badge challenge-status-ended">Inactive</span> : null}
+                  </div>
+                  <div className="cdv-dates">
+                    <span className="cdv-dates-label">Start</span>
+                    <span className="cdv-dates-value">{formatDateTimeForDisplay(selectedChallenge.start_time)}</span>
+                    <span className="cdv-dates-sep">→</span>
+                    <span className="cdv-dates-label">End</span>
+                    <span className="cdv-dates-value">{formatDateTimeForDisplay(selectedChallenge.end_time)}</span>
+                  </div>
+                  {selectedChallenge.description.trim() ? (
+                    <p className="cdv-description">{selectedChallenge.description}</p>
+                  ) : null}
+                </div>
               </div>
-              <div className="challenge-info-panel-body">
-                <div className="challenge-detail-compact-chips">
-                  <span className="challenge-form-chip">
-                    {formatChallengeTypeLabel(selectedChallenge.challenge_type)}
+
+              {/* ── Stats row ── */}
+              <div className="cdv-stats-row">
+                <div className="cdv-stat">
+                  <span className="cdv-stat-value">{challengeParticipantSummary.joined}</span>
+                  <span className="cdv-stat-label">Joined</span>
+                </div>
+                <div className="cdv-stat">
+                  <span className="cdv-stat-value">{challengeParticipantSummary.completed}</span>
+                  <span className="cdv-stat-label">Completed</span>
+                </div>
+                <div className="cdv-stat">
+                  <span className="cdv-stat-value">
+                    {challengeParticipantSummary.joined > 0
+                      ? `${Math.round((challengeParticipantSummary.completed / challengeParticipantSummary.joined) * 100)}%`
+                      : "—"}
                   </span>
-                  <span className="challenge-form-chip">
-                    🎯 {formatChallengeGoalLabel(selectedChallenge, formatChallengeMetricValue)}
-                  </span>
-                  <span className="challenge-form-chip">
-                    📅 {formatDateTimeForDisplay(selectedChallenge.start_time)} → {formatDateTimeForDisplay(selectedChallenge.end_time)}
-                  </span>
-                  {challengeParticipantSummary.joined > 0 ? (
-                    <span className="challenge-form-chip">
-                      👥 {challengeParticipantSummary.joined} joined · {Math.round((challengeParticipantSummary.completed / challengeParticipantSummary.joined) * 100)}% completion
+                  <span className="cdv-stat-label">Completion</span>
+                </div>
+                {isScavengerHuntChallenge(selectedChallenge) ? (
+                  <div className="cdv-stat">
+                    <span className="cdv-stat-value">
+                      {(selectedChallenge.checkpoints ?? []).filter(cp => cp.active).length}
                     </span>
-                  ) : null}
-                </div>
-                {selectedChallenge.description.trim() ? (
-                  <p className="challenge-info-panel-desc">{selectedChallenge.description}</p>
+                    <span className="cdv-stat-label">Active stops</span>
+                  </div>
                 ) : null}
-                <div className="form-actions">
-                  <button
-                    className="primary-button"
-                    type="button"
-                    onClick={() => setEditMode(true)}
-                  >
-                    Edit {itemLabelTitle}
-                  </button>
-                  {resolveChallengeStatus(selectedChallenge) === "Ended" ? (
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={() => handleCopyChallengeForResubmit(selectedChallenge)}
-                      disabled={challengeBusy}
-                    >
-                      Copy &amp; Resubmit
-                    </button>
-                  ) : null}
-                </div>
               </div>
+
+              {/* ── Stops list (scavenger hunts) ── */}
+              {isScavengerHuntChallenge(selectedChallenge) && (selectedChallenge.checkpoints ?? []).length > 0 ? (
+                <div className="cdv-stops-section">
+                  <h4 className="cdv-section-title">Hunt Stops</h4>
+                  <div className="cdv-stops-list">
+                    {(selectedChallenge.checkpoints ?? [])
+                      .slice()
+                      .sort((a, b) => a.sort_order - b.sort_order)
+                      .map((cp, idx) => (
+                        <div key={cp.checkpoint_uuid} className={`cdv-stop-card ${!cp.active ? "cdv-stop-card-inactive" : ""}`}>
+                          <div className="cdv-stop-number">{idx + 1}</div>
+                          {cp.image_url.trim() ? (
+                            <img
+                              src={cp.image_url}
+                              alt={cp.title}
+                              className="cdv-stop-img"
+                              onClick={() => handleImagePreview(cp.image_url, cp.title, cp.title)}
+                            />
+                          ) : null}
+                          <div className="cdv-stop-body">
+                            <div className="cdv-stop-title-row">
+                              <span className="cdv-stop-title">{cp.title || `Stop ${idx + 1}`}</span>
+                              {!cp.active ? <span className="cdv-stop-inactive-badge">Inactive</span> : null}
+                              {cp.prize_points > 0 ? (
+                                <span className="cdv-stop-points">🏅 {cp.prize_points} pts</span>
+                              ) : null}
+                            </div>
+                            {cp.clue.trim() ? (
+                              <p className="cdv-stop-clue">🔍 <em>{cp.clue}</em></p>
+                            ) : null}
+                            {cp.description.trim() ? (
+                              <p className="cdv-stop-desc">{cp.description}</p>
+                            ) : null}
+                            <div className="cdv-stop-meta">
+                              <span className="cdv-stop-meta-chip">📍 {cp.latitude.toFixed(5)}, {cp.longitude.toFixed(5)}</span>
+                              <span className="cdv-stop-meta-chip">⭕ {cp.radius_meters}m radius</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {/* ── Actions ── */}
+              <div className="cdv-actions">
+                <button className="primary-button" type="button" onClick={() => setEditMode(true)}>
+                  Edit {itemLabelTitle}
+                </button>
+                {resolveChallengeStatus(selectedChallenge) === "Ended" ? (
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => handleCopyChallengeForResubmit(selectedChallenge)}
+                    disabled={challengeBusy}
+                  >
+                    Copy &amp; Resubmit
+                  </button>
+                ) : null}
+              </div>
+
             </div>
           ) : null}
 
