@@ -690,7 +690,7 @@ export function ChallengesScreen(props: Props) {
   }
 
   const [stopImageBusy, setStopImageBusy] = useState(false);
-  const [screenTab, setScreenTab] = useState<"list" | "participants">("list");
+  const [screenTab, setScreenTab] = useState<"list" | "details" | "participants">("list");
   const [showLiveMap, setShowLiveMap] = useState(true);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -724,11 +724,10 @@ export function ChallengesScreen(props: Props) {
 
   useEffect(() => {
     setEditMode(false);
-    if (selectedChallengeId && selectedChallengeId !== newChallengeSelectionId) {
-      setScreenTab("participants");
-    } else {
+    if (!selectedChallengeId) {
       setScreenTab("list");
     }
+    // Don't auto-navigate when a challenge is (re)selected — user controls the view
   }, [selectedChallengeId, newChallengeSelectionId]);
 
   async function handleStopImageUpload(e: ChangeEvent<HTMLInputElement>) {
@@ -747,6 +746,7 @@ export function ChallengesScreen(props: Props) {
   function handleSelectNew() {
     const draft = createEmptyChallengeDraft();
     setSelectedChallengeId(newChallengeSelectionId);
+    setScreenTab("details");
     setChallengeDraft(
       isGamesMode
         ? {
@@ -833,102 +833,60 @@ export function ChallengesScreen(props: Props) {
       {activeSchoolId ? (
         <div className="challenge-screen-layout">
 
-          {/* Compact info header — visible when a challenge is selected and not creating/editing */}
-          {selectedChallenge && !isCreating && !isEditing ? (
-            <div className="challenge-detail-compact-header">
-              <div className="challenge-detail-compact-thumb">
-                {selectedChallenge.image_url.trim() ? (
-                  <img
-                    src={selectedChallenge.image_url}
-                    alt={selectedChallenge.title}
-                    onClick={() =>
-                      handleImagePreview(
-                        selectedChallenge.image_url,
-                        selectedChallenge.title,
-                        selectedChallenge.title,
-                      )
-                    }
-                  />
-                ) : (
-                  <span className="challenge-detail-compact-thumb-fallback">
-                    {isGamesMode ? "SH" : "CH"}
-                  </span>
-                )}
-              </div>
-              <div className="challenge-detail-compact-info">
-                <div className="challenge-detail-compact-title-row">
-                  <h3 className="challenge-detail-compact-title">{selectedChallenge.title}</h3>
-                  <span className={`challenge-status-badge ${statusClass(resolveChallengeStatus(selectedChallenge))}`}>
-                    {resolveChallengeStatus(selectedChallenge)}
-                  </span>
-                  {selectedChallenge.active ? null : (
-                    <span className="challenge-status-badge challenge-status-ended">Inactive</span>
-                  )}
-                </div>
-                <div className="challenge-detail-compact-chips">
-                  <span className="challenge-form-chip">
-                    {formatChallengeTypeLabel(selectedChallenge.challenge_type)}
-                  </span>
-                  <span className="challenge-form-chip">
-                    🎯 {formatChallengeGoalLabel(selectedChallenge, formatChallengeMetricValue)}
-                  </span>
-                  <span className="challenge-form-chip">
-                    📅 {formatDateTimeForDisplay(selectedChallenge.start_time)} → {formatDateTimeForDisplay(selectedChallenge.end_time)}
-                  </span>
-                </div>
-              </div>
-              <div className="challenge-detail-compact-actions">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => setEditMode(true)}
-                >
-                  Edit
-                </button>
-                {resolveChallengeStatus(selectedChallenge) === "Ended" ? (
-                  <button
-                    className="secondary-button"
-                    type="button"
-                    onClick={() => handleCopyChallengeForResubmit(selectedChallenge)}
-                    disabled={challengeBusy}
-                  >
-                    Copy &amp; Resubmit
-                  </button>
+          {/* Detail view: back button + title bar */}
+          {screenTab !== "list" ? (
+            <div className="challenge-detail-top">
+              <button
+                type="button"
+                className="challenge-back-btn"
+                onClick={() => {
+                  setEditMode(false);
+                  if (isCreating) setSelectedChallengeId("");
+                  setScreenTab("list");
+                }}
+              >
+                ← {isGamesMode ? "Games" : "Challenges"}
+              </button>
+              <div className="challenge-detail-top-meta">
+                <h3 className="challenge-detail-top-title">
+                  {isCreating ? `New ${itemLabel}` : (selectedChallenge?.title ?? "")}
+                </h3>
+                {selectedChallenge && !isCreating ? (
+                  <div className="challenge-detail-top-badges">
+                    <span className={`challenge-status-badge ${statusClass(resolveChallengeStatus(selectedChallenge))}`}>
+                      {resolveChallengeStatus(selectedChallenge)}
+                    </span>
+                    {!selectedChallenge.active ? (
+                      <span className="challenge-status-badge challenge-status-ended">Inactive</span>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
             </div>
           ) : null}
 
-          {/* Screen-level nav tabs — always visible; clicking while editing/creating cancels form */}
-          <div className="challenge-screen-tabs">
-            <button
-              type="button"
-              className={`challenge-screen-tab ${screenTab === "list" && !isCreating && !isEditing ? "challenge-screen-tab-active" : ""}`}
-              onClick={() => {
-                if (editMode) setEditMode(false);
-                if (isCreating) setSelectedChallengeId("");
-                setScreenTab("list");
-              }}
-            >
-              {isGamesMode ? "Games" : "Challenges"}
-            </button>
-            <button
-              type="button"
-              className={`challenge-screen-tab ${screenTab === "participants" && !isCreating && !isEditing ? "challenge-screen-tab-active" : ""}`}
-              onClick={() => {
-                if (isCreating) setSelectedChallengeId("");
-                if (editMode) setEditMode(false);
-                setScreenTab("participants");
-              }}
-              disabled={!selectedChallenge && !isEditing}
-              title={!selectedChallenge && !isEditing ? `Select a ${itemLabel} first` : undefined}
-            >
-              Participants
-            </button>
-          </div>
+          {/* Detail tabs — Details | Participants (hidden while creating) */}
+          {screenTab !== "list" && !isCreating ? (
+            <div className="challenge-screen-tabs">
+              <button
+                type="button"
+                className={`challenge-screen-tab ${screenTab === "details" ? "challenge-screen-tab-active" : ""}`}
+                onClick={() => { setEditMode(false); setScreenTab("details"); }}
+              >
+                Details
+              </button>
+              <button
+                type="button"
+                className={`challenge-screen-tab ${screenTab === "participants" ? "challenge-screen-tab-active" : ""}`}
+                onClick={() => { setEditMode(false); setScreenTab("participants"); }}
+              >
+                Participants
+              </button>
+            </div>
+          ) : null}
 
-          {/* ── Tab: Challenges table ── */}
-          {!isCreating && !isEditing && screenTab === "list" ? (
+          {/* ── Challenges list view ── */}
+          {screenTab === "list" ? (
             <div className="challenge-table-section">
               {challengeListBusy ? (
                 <p className="muted-text" style={{ padding: "16px 0" }}>Loading…</p>
@@ -965,7 +923,7 @@ export function ChallengesScreen(props: Props) {
                             <tr
                               key={ch.challenge_uuid}
                               className={`challenge-table-row ${isSelected ? "challenge-table-row-selected" : ""}`}
-                              onClick={() => { setSelectedChallengeId(ch.challenge_uuid); setScreenTab("participants"); }}
+                              onClick={() => { setSelectedChallengeId(ch.challenge_uuid); setScreenTab("details"); }}
                             >
                               <td className="challenge-table-td">
                                 <div className="challenge-table-title-cell">
@@ -1007,7 +965,7 @@ export function ChallengesScreen(props: Props) {
                             <tr
                               key={ch.challenge_uuid}
                               className={`challenge-table-row ${isSelected ? "challenge-table-row-selected" : ""}`}
-                              onClick={() => { setSelectedChallengeId(ch.challenge_uuid); setScreenTab("participants"); }}
+                              onClick={() => { setSelectedChallengeId(ch.challenge_uuid); setScreenTab("details"); }}
                             >
                               <td className="challenge-table-td">
                                 <div className="challenge-table-title-cell">
@@ -1030,17 +988,13 @@ export function ChallengesScreen(props: Props) {
                                 {formatDateTimeForDisplay(ch.start_time)} → {formatDateTimeForDisplay(ch.end_time)}
                               </td>
                               <td className="challenge-table-td challenge-table-action-cell">
-                                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                                  <button
-                                    className="secondary-button"
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleCopyChallengeForResubmit(ch); }}
-                                    disabled={challengeBusy}
-                                  >
-                                    Copy &amp; Resubmit
-                                  </button>
-                                  <span className="challenge-table-view-arrow">→</span>
-                                </div>
+                                <button
+                                  className="primary-button"
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setSelectedChallengeId(ch.challenge_uuid); setScreenTab("details"); }}
+                                >
+                                  View More
+                                </button>
                               </td>
                             </tr>
                           );
@@ -1053,17 +1007,68 @@ export function ChallengesScreen(props: Props) {
             </div>
           ) : null}
 
-          {/* Participants empty state when no challenge selected */}
-          {!isCreating && !isEditing && screenTab === "participants" && !selectedChallenge ? (
-            <div className="challenge-empty-detail">
-              <span className="challenge-empty-icon">{isGamesMode ? "SH" : "CH"}</span>
-              <h3>Select a {itemLabel}</h3>
-              <p>Pick a row from the {isGamesMode ? "Games" : "Challenges"} tab to view participant progress.</p>
+          {/* ── Details tab: challenge info panel ── */}
+          {screenTab === "details" && !editMode && !isCreating && selectedChallenge ? (
+            <div className="challenge-info-panel">
+              <div className="challenge-info-panel-thumb">
+                {selectedChallenge.image_url.trim() ? (
+                  <img
+                    src={selectedChallenge.image_url}
+                    alt={selectedChallenge.title}
+                    className="challenge-info-panel-img"
+                    onClick={() => handleImagePreview(selectedChallenge.image_url, selectedChallenge.title, selectedChallenge.title)}
+                  />
+                ) : (
+                  <span className="challenge-detail-compact-thumb-fallback">
+                    {isGamesMode ? "SH" : "CH"}
+                  </span>
+                )}
+              </div>
+              <div className="challenge-info-panel-body">
+                <div className="challenge-detail-compact-chips">
+                  <span className="challenge-form-chip">
+                    {formatChallengeTypeLabel(selectedChallenge.challenge_type)}
+                  </span>
+                  <span className="challenge-form-chip">
+                    🎯 {formatChallengeGoalLabel(selectedChallenge, formatChallengeMetricValue)}
+                  </span>
+                  <span className="challenge-form-chip">
+                    📅 {formatDateTimeForDisplay(selectedChallenge.start_time)} → {formatDateTimeForDisplay(selectedChallenge.end_time)}
+                  </span>
+                  {challengeParticipantSummary.joined > 0 ? (
+                    <span className="challenge-form-chip">
+                      👥 {challengeParticipantSummary.joined} joined · {Math.round((challengeParticipantSummary.completed / challengeParticipantSummary.joined) * 100)}% completion
+                    </span>
+                  ) : null}
+                </div>
+                {selectedChallenge.description.trim() ? (
+                  <p className="challenge-info-panel-desc">{selectedChallenge.description}</p>
+                ) : null}
+                <div className="form-actions">
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={() => setEditMode(true)}
+                  >
+                    Edit {itemLabelTitle}
+                  </button>
+                  {resolveChallengeStatus(selectedChallenge) === "Ended" ? (
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => handleCopyChallengeForResubmit(selectedChallenge)}
+                      disabled={challengeBusy}
+                    >
+                      Copy &amp; Resubmit
+                    </button>
+                  ) : null}
+                </div>
+              </div>
             </div>
           ) : null}
 
             {/* Create / Edit form */}
-            {(isCreating || isEditing) ? (
+            {screenTab !== "list" && (isCreating || isEditing) ? (
               <form className="challenge-editor-form" onSubmit={handleSaveChallenge}>
                 {/* Form header */}
                 <div className="challenge-form-header">
@@ -1637,7 +1642,7 @@ export function ChallengesScreen(props: Props) {
             ) : null}
 
                 {/* Participant stats */}
-                {screenTab === "participants" && selectedChallenge && !isCreating && !isEditing ? (
+                {screenTab === "participants" && selectedChallenge ? (
                 <div className="challenge-participants-section">
                   <div className="challenge-participants-header">
                     <h4>
@@ -1849,7 +1854,7 @@ export function ChallengesScreen(props: Props) {
                 ) : null}
 
                 {/* Live Progress — scavenger hunts, shown inside Participants tab */}
-                {screenTab === "participants" && !isCreating && !isEditing && selectedChallenge && isScavengerHuntChallenge(selectedChallenge) ? (() => {
+                {screenTab === "participants" && selectedChallenge && isScavengerHuntChallenge(selectedChallenge) ? (() => {
                   const checkpoints = (selectedChallenge.checkpoints ?? [])
                     .slice()
                     .sort((a, b) => a.sort_order - b.sort_order);

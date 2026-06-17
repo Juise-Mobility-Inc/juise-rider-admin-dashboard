@@ -2352,6 +2352,112 @@
         font-size: 0.8rem;
 }
 
+/* ── Master→detail: back bar + detail title ── */
+.challenge-detail-top {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 0 4px;
+        border-bottom: 1px solid var(--panel-border);
+        margin-bottom: 4px;
+}
+
+.challenge-back-btn {
+        background: none;
+        border: 1px solid var(--panel-border);
+        border-radius: 8px;
+        padding: 6px 12px;
+        font-size: 0.82rem;
+        color: var(--muted);
+        cursor: pointer;
+        white-space: nowrap;
+        flex-shrink: 0;
+        transition: background 0.15s, color 0.15s;
+}
+
+.challenge-back-btn:hover {
+        background: rgba(17,45,78,0.06);
+        color: var(--navy, #112d4e);
+}
+
+.challenge-detail-top-meta {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        min-width: 0;
+}
+
+.challenge-detail-top-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        margin: 0;
+        color: var(--navy, #112d4e);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+}
+
+.challenge-detail-top-badges {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+}
+
+/* ── Challenge info panel (Details tab) ── */
+.challenge-info-panel {
+        display: flex;
+        gap: 18px;
+        padding: 18px;
+        background: var(--panel-bg, #f8fafc);
+        border: 1px solid var(--panel-border);
+        border-radius: 14px;
+        margin-bottom: 2px;
+}
+
+.challenge-info-panel-thumb {
+        width: 80px;
+        height: 80px;
+        min-width: 80px;
+        border-radius: 12px;
+        overflow: hidden;
+        background: rgba(17,45,78,0.07);
+        flex-shrink: 0;
+}
+
+.challenge-info-panel-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        cursor: zoom-in;
+        display: block;
+}
+
+.challenge-info-panel-thumb .challenge-detail-compact-thumb-fallback {
+        width: 80px;
+        height: 80px;
+        font-size: 0.85rem;
+}
+
+.challenge-info-panel-body {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+}
+
+.challenge-info-panel-desc {
+        font-size: 0.875rem;
+        color: var(--muted);
+        margin: 0;
+        line-height: 1.5;
+}
+
+.challenge-info-panel .form-actions {
+        margin-top: 4px;
+}
+
 /* Detail tab switcher (Participants / Live Progress) */
 .challenge-detail-tab-switcher {
         display: flex;
