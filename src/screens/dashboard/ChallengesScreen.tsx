@@ -382,6 +382,7 @@ function downloadChallengeCSV({
 
 export function ChallengesScreen(props: Props) {
   const {
+    mode = "challenges",
     activeSchoolId,
     challengeBusy,
     challengeListBusy,
@@ -398,6 +399,7 @@ export function ChallengesScreen(props: Props) {
     handleCopyChallengeForResubmit,
     handleChallengeImageFileChange,
     selectedChallenge,
+    schoolChallenges,
     currentAndUpcomingChallenges,
     pastChallenges,
     challengeParticipants,
@@ -419,6 +421,16 @@ export function ChallengesScreen(props: Props) {
   const selectedChallengeIsCampaign =
     selectedChallenge?.audience_type === "campaign_group";
   const draftIsScavengerHunt = challengeDraft.challenge_type === "scavenger_hunt";
+  const isGamesMode = mode === "games";
+  const itemLabel = isGamesMode ? "game" : "challenge";
+  const itemLabelTitle = isGamesMode ? "Game" : "Challenge";
+  const createButtonLabel = isGamesMode ? "+ New Game" : "+ New Challenge";
+  const activeListLabel = isGamesMode ? "Live & scheduled games" : "Active & Upcoming";
+  const pastListLabel = isGamesMode ? "Archived games" : "Past";
+  const activeStopCount = getDraftActiveCheckpointCount(challengeDraft);
+  const totalStopCount = challengeDraft.checkpoints.length;
+  const totalGameCount = schoolChallenges.length;
+  const totalScheduledGameCount = currentAndUpcomingChallenges.length;
 
   function createEmptyCheckpointDraft(sortOrder = challengeDraft.checkpoints.length + 1) {
     return {
@@ -607,17 +619,37 @@ export function ChallengesScreen(props: Props) {
   }
 
   function handleSelectNew() {
+    const draft = createEmptyChallengeDraft();
     setSelectedChallengeId(newChallengeSelectionId);
-    setChallengeDraft(createEmptyChallengeDraft());
+    setChallengeDraft(
+      isGamesMode
+        ? {
+            ...draft,
+            challenge_type: "scavenger_hunt",
+            audience_type: "user",
+            metric_type: "points",
+            target_value: "1",
+            min_accuracy_meters: draft.min_accuracy_meters || "50",
+            repeat_enabled: false,
+            checkpoints: [createEmptyCheckpointDraft(1)],
+          }
+        : {
+            ...draft,
+            challenge_type: "route_metric",
+            checkpoints: [],
+          },
+    );
   }
 
   return (
-    <section className="panel challenge-master-panel">
+    <section
+      className={`panel challenge-master-panel ${isGamesMode ? "challenge-master-panel-games" : ""}`}
+    >
       {/* ── Page header ── */}
       <div className="panel-header">
         <div>
-          <p className="eyebrow">Campaigns</p>
-          <h2>School challenges</h2>
+          <p className="eyebrow">{isGamesMode ? "Games" : "Campaigns"}</p>
+          <h2>{isGamesMode ? "Challenge Games" : "School challenges"}</h2>
         </div>
         <div className="form-actions">
           <button
@@ -626,7 +658,7 @@ export function ChallengesScreen(props: Props) {
             onClick={handleSelectNew}
             disabled={!activeSchoolId}
           >
-            + New Challenge
+            {createButtonLabel}
           </button>
           <button
             className="secondary-button"
@@ -643,6 +675,35 @@ export function ChallengesScreen(props: Props) {
         <p className="empty-state">This admin login is not scoped to a school.</p>
       ) : null}
 
+      {activeSchoolId && isGamesMode ? (
+        <div className="challenge-games-hero">
+          <div className="challenge-games-hero-copy">
+            <p className="eyebrow">Scavenger hunt builder</p>
+            <h3>Design GPS check-in games students can join from the app.</h3>
+            <p>
+              Add temporary hunt stops, set a check-in radius, choose optional
+              point prizes, and track each player&apos;s progress from the same screen.
+            </p>
+          </div>
+          <div className="challenge-games-stats" aria-label="Challenge game summary">
+            <span className="challenge-games-stat">
+              <strong>{totalScheduledGameCount}</strong>
+              <span>Live or scheduled</span>
+            </span>
+            <span className="challenge-games-stat">
+              <strong>{totalGameCount}</strong>
+              <span>Total games</span>
+            </span>
+            <span className="challenge-games-stat">
+              <strong>
+                {draftIsScavengerHunt ? `${activeStopCount}/${totalStopCount}` : "0/0"}
+              </strong>
+              <span>Draft stops active</span>
+            </span>
+          </div>
+        </div>
+      ) : null}
+
       {activeSchoolId ? (
         <div className="challenge-layout">
           {/* ══ LEFT: challenge list ══ */}
@@ -650,7 +711,7 @@ export function ChallengesScreen(props: Props) {
             {/* Active & Upcoming */}
             <div className="challenge-list-section">
               <div className="challenge-list-section-header">
-                <span>Active &amp; Upcoming</span>
+                <span>{activeListLabel}</span>
                 <span className="challenge-list-count">
                   {currentAndUpcomingChallenges.length}
                 </span>
@@ -660,7 +721,9 @@ export function ChallengesScreen(props: Props) {
                 <p className="muted-text" style={{ padding: "8px 0" }}>Loading…</p>
               ) : currentAndUpcomingChallenges.length === 0 ? (
                 <p className="challenge-list-empty">
-                  No live or upcoming challenges yet.
+                  {isGamesMode
+                    ? "No live or scheduled games yet."
+                    : "No live or upcoming challenges yet."}
                 </p>
               ) : null}
 
@@ -683,7 +746,9 @@ export function ChallengesScreen(props: Props) {
                             className="challenge-roster-img"
                           />
                         ) : (
-                          <span className="challenge-roster-img-fallback">🏆</span>
+                          <span className="challenge-roster-img-fallback">
+                            {isGamesMode ? "SH" : "CH"}
+                          </span>
                         )}
                       </div>
                       <div className="challenge-roster-info">
@@ -705,13 +770,15 @@ export function ChallengesScreen(props: Props) {
             {/* Past challenges */}
             <div className="challenge-list-section">
               <div className="challenge-list-section-header">
-                <span>Past</span>
+                <span>{pastListLabel}</span>
                 <span className="challenge-list-count">{pastChallenges.length}</span>
               </div>
 
               {!challengeListBusy && pastChallenges.length === 0 ? (
                 <p className="challenge-list-empty">
-                  Ended challenges will appear here.
+                  {isGamesMode
+                    ? "Ended games will appear here."
+                    : "Ended challenges will appear here."}
                 </p>
               ) : null}
 
@@ -734,7 +801,9 @@ export function ChallengesScreen(props: Props) {
                               className="challenge-roster-img"
                             />
                           ) : (
-                            <span className="challenge-roster-img-fallback">🏆</span>
+                            <span className="challenge-roster-img-fallback">
+                              {isGamesMode ? "SH" : "CH"}
+                            </span>
                           )}
                         </div>
                         <div className="challenge-roster-info">
@@ -754,7 +823,7 @@ export function ChallengesScreen(props: Props) {
                         onClick={() => handleCopyChallengeForResubmit(ch)}
                         disabled={challengeBusy}
                       >
-                        Copy &amp; Resubmit
+                        Copy &amp; Resubmit{isGamesMode ? " Game" : ""}
                       </button>
                     </div>
                   );
@@ -768,18 +837,19 @@ export function ChallengesScreen(props: Props) {
             {/* Empty state */}
             {nothingSelected ? (
               <div className="challenge-empty-detail">
-                <span className="challenge-empty-icon">🏆</span>
-                <h3>Select a challenge</h3>
+                <span className="challenge-empty-icon">{isGamesMode ? "SH" : "CH"}</span>
+                <h3>Select a {itemLabel}</h3>
                 <p>
-                  Choose a challenge from the list to view its details, student
-                  progress, and edit it — or create a new one.
+                  {isGamesMode
+                    ? "Choose a scavenger hunt to edit stops and review player progress, or create a new game."
+                    : "Choose a challenge from the list to view its details, student progress, and edit it, or create a new one."}
                 </p>
                 <button
                   className="primary-button"
                   type="button"
                   onClick={handleSelectNew}
                 >
-                  + New Challenge
+                  {createButtonLabel}
                 </button>
               </div>
             ) : null}
@@ -791,10 +861,11 @@ export function ChallengesScreen(props: Props) {
                 <div className="challenge-form-header">
                   <div>
                     <p className="eyebrow">
-                      {isEditing ? "Editing challenge" : "New challenge"}
+                      {isEditing ? `Editing ${itemLabel}` : `New ${itemLabel}`}
                     </p>
                     <h3>
-                      {challengeDraft.title.trim() || (isEditing ? "Untitled" : "Create a challenge")}
+                      {challengeDraft.title.trim() ||
+                        (isEditing ? "Untitled" : `Create a ${itemLabel}`)}
                     </h3>
                   </div>
                   {challengeBusy ? <span className="muted-text">Saving…</span> : null}
@@ -805,12 +876,12 @@ export function ChallengesScreen(props: Props) {
                   {challengeDraft.image_url.trim() ? (
                     <img
                       src={challengeDraft.image_url}
-                      alt="Challenge cover"
+                      alt={`${itemLabelTitle} cover`}
                       className="challenge-form-preview-img"
                       onClick={() =>
                         handleImagePreview(
                           challengeDraft.image_url,
-                          challengeDraft.title || "Challenge",
+                          challengeDraft.title || itemLabelTitle,
                         )
                       }
                     />
@@ -852,35 +923,51 @@ export function ChallengesScreen(props: Props) {
                 {/* Section: Details */}
                 <div className="challenge-form-section">
                   <div className="challenge-form-section-label">Details</div>
+                  {isGamesMode ? (
+                    <div className="challenge-game-type-card">
+                      <div className="challenge-game-type-icon">SH</div>
+                      <div className="challenge-game-type-copy">
+                        <strong>Scavenger Hunt</strong>
+                        <span>
+                          Individual challenge game with manual GPS check-ins and
+                          optional per-stop point prizes.
+                        </span>
+                      </div>
+                      <span className="challenge-game-type-pill">Student game</span>
+                    </div>
+                  ) : null}
                   <div className="form-grid">
-                    <label className="field">
-                      <span>Challenge type</span>
-                      <select
-                        value={challengeDraft.challenge_type}
-                        onChange={(e) =>
-                          setChallengeType(e.target.value as ChallengeDraft["challenge_type"])
-                        }
-                      >
-                        <option value="route_metric">Ride / Points Challenge</option>
-                        <option value="scavenger_hunt">Scavenger Hunt</option>
-                      </select>
-                    </label>
-                    <label className="field">
-                      <span>Audience</span>
-                      <select
-                        value={challengeDraft.audience_type}
-                        disabled={draftIsScavengerHunt}
-                        onChange={(e) =>
-                          setChallengeDraft((c) => ({
-                            ...c,
-                            audience_type: e.target.value as ChallengeDraft["audience_type"],
-                          }))
-                        }
-                      >
-                        <option value="user">Student challenge</option>
-                        <option value="campaign_group">Campaign challenge</option>
-                      </select>
-                    </label>
+                    {!isGamesMode ? (
+                      <>
+                        <label className="field">
+                          <span>Challenge type</span>
+                          <select
+                            value={challengeDraft.challenge_type}
+                            onChange={(e) =>
+                              setChallengeType(e.target.value as ChallengeDraft["challenge_type"])
+                            }
+                          >
+                            <option value="route_metric">Ride / Points Challenge</option>
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span>Audience</span>
+                          <select
+                            value={challengeDraft.audience_type}
+                            disabled={draftIsScavengerHunt}
+                            onChange={(e) =>
+                              setChallengeDraft((c) => ({
+                                ...c,
+                                audience_type: e.target.value as ChallengeDraft["audience_type"],
+                              }))
+                            }
+                          >
+                            <option value="user">Student challenge</option>
+                            <option value="campaign_group">Campaign challenge</option>
+                          </select>
+                        </label>
+                      </>
+                    ) : null}
                     <label className="field field-span-2">
                       <span>Title</span>
                       <input
@@ -888,7 +975,11 @@ export function ChallengesScreen(props: Props) {
                         onChange={(e) =>
                           setChallengeDraft((c) => ({ ...c, title: e.target.value }))
                         }
-                        placeholder="Ride 25 miles in 7 days"
+                        placeholder={
+                          isGamesMode
+                            ? "Downtown scavenger hunt"
+                            : "Ride 25 miles in 7 days"
+                        }
                       />
                     </label>
                     <label className="field field-span-2">
@@ -898,7 +989,11 @@ export function ChallengesScreen(props: Props) {
                         onChange={(e) =>
                           setChallengeDraft((c) => ({ ...c, description: e.target.value }))
                         }
-                        placeholder="Invite students to participate and explain how they win."
+                        placeholder={
+                          isGamesMode
+                            ? "Invite students to visit each stop and check in from the app."
+                            : "Invite students to participate and explain how they win."
+                        }
                         rows={3}
                       />
                     </label>
@@ -1125,6 +1220,23 @@ export function ChallengesScreen(props: Props) {
                         + Add stop
                       </button>
                     </div>
+                    <div className="challenge-game-guide">
+                      <div className="challenge-game-step">
+                        <span>1</span>
+                        <strong>Add stops</strong>
+                        <p>Use temporary game-only locations with a title and clue.</p>
+                      </div>
+                      <div className="challenge-game-step">
+                        <span>2</span>
+                        <strong>Set the radius</strong>
+                        <p>Choose how close the student must be for a valid check-in.</p>
+                      </div>
+                      <div className="challenge-game-step">
+                        <span>3</span>
+                        <strong>Pick rewards</strong>
+                        <p>Set per-stop point prizes, including zero-point clue stops.</p>
+                      </div>
+                    </div>
                     {challengeDraft.checkpoints.length === 0 ? (
                       <div className="challenge-stop-empty">
                         <span>📍</span>
@@ -1229,8 +1341,8 @@ export function ChallengesScreen(props: Props) {
                   <div className="challenge-image-field">
                     <EntityImagePreview
                       imageUrl={challengeDraft.image_url}
-                      label={challengeDraft.title || "Challenge"}
-                      altSuffix="challenge"
+                      label={challengeDraft.title || itemLabelTitle}
+                      altSuffix={itemLabel}
                       fallbackLabel="Cover image preview"
                     />
                     <div className="challenge-image-field-controls">
@@ -1293,7 +1405,7 @@ export function ChallengesScreen(props: Props) {
                       ? "Saving…"
                       : challengeDraft.challenge_uuid
                         ? "Save Changes"
-                        : "Create Challenge"}
+                        : `Create ${itemLabelTitle}`}
                   </button>
                   {isCreating ? (
                     <button
@@ -1429,7 +1541,7 @@ export function ChallengesScreen(props: Props) {
                       })
                     }
                   >
-                    Edit Challenge
+                    Edit {itemLabelTitle}
                   </button>
                   {resolveChallengeStatus(selectedChallenge) === "Ended" ? (
                     <button
@@ -1438,7 +1550,7 @@ export function ChallengesScreen(props: Props) {
                       onClick={() => handleCopyChallengeForResubmit(selectedChallenge)}
                       disabled={challengeBusy}
                     >
-                      Copy &amp; Resubmit
+                      {isGamesMode ? "Copy & Resubmit Game" : "Copy & Resubmit"}
                     </button>
                   ) : null}
                 </div>
@@ -1447,7 +1559,9 @@ export function ChallengesScreen(props: Props) {
                 <div className="challenge-participants-section">
                   <div className="challenge-participants-header">
                     <h4>
-                      {selectedChallengeIsCampaign
+                      {isGamesMode
+                        ? "Player progress"
+                        : selectedChallengeIsCampaign
                         ? "Campaign progress"
                         : "Student progress"}
                     </h4>
@@ -1496,13 +1610,21 @@ export function ChallengesScreen(props: Props) {
 
                   {challengeParticipantsBusy ? (
                     <p className="muted-text">
-                      Loading {selectedChallengeIsCampaign ? "campaign" : "student"} progress…
+                      Loading{" "}
+                      {isGamesMode
+                        ? "player"
+                        : selectedChallengeIsCampaign
+                          ? "campaign"
+                          : "student"}{" "}
+                      progress…
                     </p>
                   ) : !challengeParticipantsBusy && challengeParticipants.length === 0 ? (
                     <p className="empty-state">
                       {selectedChallengeIsCampaign
                         ? "No campaign groups have joined this challenge yet."
-                        : "No students have joined this challenge yet."}
+                        : isGamesMode
+                          ? "No players have joined this game yet."
+                          : "No students have joined this challenge yet."}
                     </p>
                   ) : null}
 
