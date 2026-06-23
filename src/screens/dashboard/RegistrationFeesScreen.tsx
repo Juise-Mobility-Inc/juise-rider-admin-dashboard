@@ -32,26 +32,35 @@ const emptyDraft: Draft = {
   active: true,
 };
 
-const deviceTypes = ["", "bike", "scooter", "ebike", "escooter", "other"];
-const powertrainTypes = ["", "electric", "non_electric"] as const;
+const deviceTypeOptions = [
+  { value: "", label: "Any device" },
+  { value: "bike", label: "Bike", icon: "🚲" },
+  { value: "scooter", label: "Scooter", icon: "🛴" },
+  { value: "ebike", label: "E-Bike", icon: "⚡🚲" },
+  { value: "escooter", label: "E-Scooter", icon: "⚡🛴" },
+  { value: "other", label: "Other", icon: "🚗" },
+];
 
-const deviceTypeLabels: Record<string, string> = {
-  "": "Any device",
-  bike: "Bike",
-  scooter: "Scooter",
-  ebike: "E-Bike",
-  escooter: "E-Scooter",
-  other: "Other",
-};
-
-const powertrainLabels: Record<string, string> = {
-  "": "Any",
-  electric: "Electric",
-  non_electric: "Non-electric",
-};
+const powertrainOptions = [
+  { value: "", label: "Any" },
+  { value: "electric", label: "Electric" },
+  { value: "non_electric", label: "Non-electric" },
+];
 
 function isAlwaysElectric(deviceType: string) {
   return deviceType === "ebike" || deviceType === "escooter";
+}
+
+function deviceLabel(type: string | null | undefined) {
+  return deviceTypeOptions.find((o) => o.value === (type ?? ""))?.label ?? type ?? "Any";
+}
+
+function deviceIcon(type: string | null | undefined) {
+  return deviceTypeOptions.find((o) => o.value === (type ?? ""))?.icon ?? "🚗";
+}
+
+function powertrainLabel(type: string | null | undefined) {
+  return powertrainOptions.find((o) => o.value === (type ?? ""))?.label ?? type ?? "Any";
 }
 
 function formatCurrency(cents: number) {
@@ -59,10 +68,6 @@ function formatCurrency(cents: number) {
     style: "currency",
     currency: "USD",
   }).format(cents / 100);
-}
-
-function formatValue(value?: string | null) {
-  return value?.trim() || "Any";
 }
 
 function amountToCents(value: string) {
@@ -76,9 +81,7 @@ function getErrorMessage(error: unknown) {
 
 function inputFromDraft(draft: Draft): RegisteredDeviceFeeRuleInput | null {
   const amount_cents = amountToCents(draft.amount);
-  if (amount_cents == null) {
-    return null;
-  }
+  if (amount_cents == null) return null;
   return {
     device_type: draft.device_type.trim() || null,
     powertrain_type: draft.powertrain_type || null,
@@ -102,28 +105,22 @@ function draftFromRule(rule: RegisteredDeviceFeeRule): Draft {
   };
 }
 
-function DeviceIcon({ type }: { type: string }) {
-  if (type === "ebike" || type === "bike") return <span>🚲</span>;
-  if (type === "escooter" || type === "scooter") return <span>🛴</span>;
-  return <span>🚗</span>;
-}
-
 export function RegistrationFeesScreen({ activeSchoolId, managedAppId }: Props) {
   const [rules, setRules] = useState<RegisteredDeviceFeeRule[]>([]);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
   const alwaysElectric = isAlwaysElectric(draft.device_type);
+  const isEditing = Boolean(draft.fee_rule_uuid);
 
   const sortedRules = useMemo(
     () =>
-      [...rules].sort((left, right) => {
-        if (left.active !== right.active) {
-          return left.active ? -1 : 1;
-        }
-        return right.updated_at - left.updated_at;
+      [...rules].sort((a, b) => {
+        if (a.active !== b.active) return a.active ? -1 : 1;
+        return b.updated_at - a.updated_at;
       }),
     [rules],
   );
@@ -133,16 +130,17 @@ export function RegistrationFeesScreen({ activeSchoolId, managedAppId }: Props) 
   async function refreshRules() {
     if (!activeSchoolId || !managedAppId) {
       setRules([]);
+      setLoading(false);
       return;
     }
-    setBusy(true);
+    setLoading(true);
     setError("");
     try {
       setRules(await fetchRegisteredDeviceFeeRules(managedAppId, activeSchoolId));
-    } catch (nextError) {
-      setError(getErrorMessage(nextError));
+    } catch (e) {
+      setError(getErrorMessage(e));
     } finally {
-      setBusy(false);
+      setLoading(false);
     }
   }
 
@@ -150,18 +148,18 @@ export function RegistrationFeesScreen({ activeSchoolId, managedAppId }: Props) 
     void refreshRules();
   }, [activeSchoolId, managedAppId]);
 
-  function handleDeviceTypeChange(nextDeviceType: string) {
-    setDraft((current) => ({
-      ...current,
-      device_type: nextDeviceType,
-      powertrain_type: isAlwaysElectric(nextDeviceType) ? "electric" : current.powertrain_type,
+  function handleDeviceTypeChange(next: string) {
+    setDraft((d) => ({
+      ...d,
+      device_type: next,
+      powertrain_type: isAlwaysElectric(next) ? "electric" : d.powertrain_type,
     }));
   }
 
   async function handleSave() {
     const input = inputFromDraft(draft);
     if (!input) {
-      setError("Amount is required.");
+      setError("Enter a valid amount.");
       return;
     }
     setBusy(true);
@@ -169,48 +167,37 @@ export function RegistrationFeesScreen({ activeSchoolId, managedAppId }: Props) 
     setSuccess("");
     try {
       const saved = draft.fee_rule_uuid
-        ? await updateRegisteredDeviceFeeRule(
-            managedAppId,
-            activeSchoolId,
-            draft.fee_rule_uuid,
-            input,
-          )
+        ? await updateRegisteredDeviceFeeRule(managedAppId, activeSchoolId, draft.fee_rule_uuid, input)
         : await createRegisteredDeviceFeeRule(managedAppId, activeSchoolId, input);
-      setRules((current) =>
-        current.some((rule) => rule.fee_rule_uuid === saved.fee_rule_uuid)
-          ? current.map((rule) =>
-              rule.fee_rule_uuid === saved.fee_rule_uuid ? saved : rule,
-            )
-          : [saved, ...current],
+      setRules((cur) =>
+        cur.some((r) => r.fee_rule_uuid === saved.fee_rule_uuid)
+          ? cur.map((r) => (r.fee_rule_uuid === saved.fee_rule_uuid ? saved : r))
+          : [saved, ...cur],
       );
       setDraft(emptyDraft);
-      setSuccess("Registration fee rule saved.");
-    } catch (nextError) {
-      setError(getErrorMessage(nextError));
+      setSuccess(isEditing ? "Rule updated." : "Rule created.");
+    } catch (e) {
+      setError(getErrorMessage(e));
     } finally {
       setBusy(false);
     }
   }
 
   async function handleDelete(rule: RegisteredDeviceFeeRule) {
-    if (!window.confirm(`Delete ${rule.label || "this registration fee"}?`)) {
-      return;
-    }
+    if (!window.confirm(`Delete "${rule.label || "this fee rule"}"?`)) return;
     setBusy(true);
     setError("");
     setSuccess("");
     try {
       await deleteRegisteredDeviceFeeRule(managedAppId, activeSchoolId, rule.fee_rule_uuid);
-      setRules((current) =>
-        current.map((candidate) =>
-          candidate.fee_rule_uuid === rule.fee_rule_uuid
-            ? { ...candidate, active: false }
-            : candidate,
+      setRules((cur) =>
+        cur.map((r) =>
+          r.fee_rule_uuid === rule.fee_rule_uuid ? { ...r, active: false } : r,
         ),
       );
-      setSuccess("Registration fee rule deleted.");
-    } catch (nextError) {
-      setError(getErrorMessage(nextError));
+      setSuccess("Rule deleted.");
+    } catch (e) {
+      setError(getErrorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -218,182 +205,224 @@ export function RegistrationFeesScreen({ activeSchoolId, managedAppId }: Props) 
 
   return (
     <section className="dashboard-panel">
-      <div className="section-header">
+      {/* Header */}
+      <div className="rf-header">
         <div>
           <p className="eyebrow">Vehicle registration</p>
-          <h2>Registration Fees</h2>
-          <p className="muted-text">
-            Match fees by device type. Leave a field as "Any" for a school-wide fallback.
-            E-bikes and e-scooters are always electric.
+          <h2 className="rf-title">Registration Fees</h2>
+          <p className="rf-subtitle">
+            Define fees by device type. Leave a field as "Any" to create a fallback rule for all devices.
           </p>
         </div>
-        <button className="secondary-button" type="button" onClick={() => void refreshRules()}>
-          Refresh
+        <button className="rf-refresh-btn" type="button" onClick={() => void refreshRules()} disabled={loading}>
+          {loading ? "Loading…" : "Refresh"}
         </button>
       </div>
 
-      <div className="settings-grid">
-        <div className="settings-card">
-          <h3>{draft.fee_rule_uuid ? "Edit fee rule" : "New fee rule"}</h3>
+      <div className="rf-layout">
+        {/* ── Form ── */}
+        <div className="rf-form-card">
+          <div className="rf-form-heading">
+            {isEditing ? (
+              <>
+                <span className="rf-form-icon">✏️</span>
+                <div>
+                  <p className="rf-form-title">Editing rule</p>
+                  <p className="rf-form-sub">{draft.label || "Untitled rule"}</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <span className="rf-form-icon">＋</span>
+                <div>
+                  <p className="rf-form-title">New fee rule</p>
+                  <p className="rf-form-sub">Fill in the fields below to add a rule.</p>
+                </div>
+              </>
+            )}
+          </div>
 
-          <label className="field">
-            <span>Device type</span>
-            <select
-              value={draft.device_type}
-              onChange={(event) => handleDeviceTypeChange(event.target.value)}
-            >
-              {deviceTypes.map((type) => (
-                <option key={type || "any"} value={type}>
-                  {deviceTypeLabels[type] ?? type}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="rf-fields">
+            {/* Row: device + amount */}
+            <div className="rf-row-2">
+              <label className="rf-field">
+                <span className="rf-label">Device type</span>
+                <select
+                  className="rf-select"
+                  value={draft.device_type}
+                  onChange={(e) => handleDeviceTypeChange(e.target.value)}
+                >
+                  {deviceTypeOptions.map((o) => (
+                    <option key={o.value || "any"} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-          {alwaysElectric ? (
-            <div className="reg-powertrain-auto">
-              <span className="reg-powertrain-auto-icon">⚡</span>
-              <span>Powertrain — <strong>Electric</strong> (auto-assigned for {deviceTypeLabels[draft.device_type]})</span>
+              <label className="rf-field">
+                <span className="rf-label">Amount</span>
+                <div className="rf-amount-wrap">
+                  <span className="rf-amount-prefix">$</span>
+                  <input
+                    className="rf-input rf-amount-input"
+                    value={draft.amount}
+                    onChange={(e) => setDraft((d) => ({ ...d, amount: e.target.value }))}
+                    placeholder="0.00"
+                    inputMode="decimal"
+                  />
+                </div>
+              </label>
             </div>
-          ) : (
-            <label className="field">
-              <span>Powertrain</span>
-              <select
-                value={draft.powertrain_type}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    powertrain_type: event.target.value as Draft["powertrain_type"],
-                  }))
-                }
-              >
-                {powertrainTypes.map((type) => (
-                  <option key={type || "any"} value={type}>
-                    {powertrainLabels[type] ?? type}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
 
-          <label className="field">
-            <span>Amount</span>
-            <input
-              value={draft.amount}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, amount: event.target.value }))
-              }
-              placeholder="$25.00"
-            />
-          </label>
-          <label className="field">
-            <span>Label</span>
-            <input
-              value={draft.label}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, label: event.target.value }))
-              }
-              placeholder="Annual bike registration"
-            />
-          </label>
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={draft.active}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, active: event.target.checked }))
-              }
-            />
-            Active
-          </label>
-          {error ? <p className="error-text">{error}</p> : null}
-          {success ? <p className="success-text">{success}</p> : null}
-          <div className="modal-actions">
+            {/* Powertrain */}
+            {alwaysElectric ? (
+              <div className="rf-field">
+                <span className="rf-label">Powertrain</span>
+                <div className="rf-locked-pill">
+                  <span className="rf-locked-pill-dot" />
+                  ⚡ Electric — auto-assigned
+                </div>
+              </div>
+            ) : (
+              <label className="rf-field">
+                <span className="rf-label">Powertrain</span>
+                <select
+                  className="rf-select"
+                  value={draft.powertrain_type}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, powertrain_type: e.target.value as Draft["powertrain_type"] }))
+                  }
+                >
+                  {powertrainOptions.map((o) => (
+                    <option key={o.value || "any"} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            {/* Label */}
+            <label className="rf-field">
+              <span className="rf-label">Label</span>
+              <input
+                className="rf-input"
+                value={draft.label}
+                onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
+                placeholder="e.g. Annual e-bike registration"
+              />
+            </label>
+
+            {/* Active toggle */}
+            <label className="rf-toggle-row">
+              <div className={`rf-toggle${draft.active ? " rf-toggle-on" : ""}`}>
+                <div className="rf-toggle-thumb" />
+              </div>
+              <input
+                type="checkbox"
+                className="rf-toggle-input"
+                checked={draft.active}
+                onChange={(e) => setDraft((d) => ({ ...d, active: e.target.checked }))}
+              />
+              <span className="rf-toggle-label">Rule is active</span>
+            </label>
+          </div>
+
+          {error ? <p className="rf-msg rf-msg-error">{error}</p> : null}
+          {success ? <p className="rf-msg rf-msg-success">{success}</p> : null}
+
+          <div className="rf-form-actions">
             <button
-              className="primary-button"
+              className="rf-btn-primary"
               type="button"
               disabled={busy}
               onClick={() => void handleSave()}
             >
-              {busy ? "Saving…" : "Save rule"}
+              {busy ? "Saving…" : isEditing ? "Save changes" : "Add rule"}
             </button>
-            {draft.fee_rule_uuid ? (
+            {isEditing ? (
               <button
-                className="secondary-button"
+                className="rf-btn-ghost"
                 type="button"
-                onClick={() => setDraft(emptyDraft)}
+                onClick={() => { setDraft(emptyDraft); setError(""); setSuccess(""); }}
               >
-                Cancel edit
+                Cancel
               </button>
             ) : null}
           </div>
         </div>
 
-        <div className="settings-card">
-          <div className="settings-card-header-row">
-            <h3>Fee rules</h3>
-            {activeCount > 0 ? (
-              <span className="fee-rule-active-badge">{activeCount} active</span>
-            ) : null}
+        {/* ── Rules list ── */}
+        <div className="rf-list-card">
+          <div className="rf-list-header">
+            <h3 className="rf-list-title">Fee rules</h3>
+            <div className="rf-list-meta">
+              {activeCount > 0 ? (
+                <span className="rf-active-badge">{activeCount} active</span>
+              ) : null}
+              <span className="rf-total-badge">{sortedRules.length} total</span>
+            </div>
           </div>
-          <div className="fee-rule-list">
-            {sortedRules.map((rule) => {
-              const deviceLabel = rule.device_type
-                ? (deviceTypeLabels[rule.device_type] ?? rule.device_type)
-                : "Any device";
-              const ruleIsAlwaysElectric = isAlwaysElectric(rule.device_type ?? "");
-              const powertrainLabel = ruleIsAlwaysElectric
-                ? "Electric"
-                : rule.powertrain_type
-                  ? (powertrainLabels[rule.powertrain_type] ?? formatValue(rule.powertrain_type))
-                  : "Any powertrain";
-              return (
-                <article
-                  className={`fee-rule-card${rule.active ? "" : " fee-rule-card-inactive"}`}
-                  key={rule.fee_rule_uuid}
-                >
-                  <div className="fee-rule-card-top">
-                    <div className="fee-rule-card-info">
-                      <div className="fee-rule-card-title-row">
-                        <DeviceIcon type={rule.device_type ?? ""} />
-                        <strong>{rule.label || "Registration fee"}</strong>
-                      </div>
-                      <div className="fee-rule-chips">
-                        <span className="reg-chip">{deviceLabel}</span>
-                        <span className={`reg-chip${ruleIsAlwaysElectric ? " reg-chip-electric" : ""}`}>
-                          {ruleIsAlwaysElectric ? "⚡ " : ""}{powertrainLabel}
+
+          {loading ? (
+            <div className="rf-empty">
+              <p className="rf-empty-text">Loading…</p>
+            </div>
+          ) : sortedRules.length === 0 ? (
+            <div className="rf-empty">
+              <p className="rf-empty-icon">📋</p>
+              <p className="rf-empty-text">No fee rules yet.</p>
+              <p className="rf-empty-sub">Add your first rule using the form.</p>
+            </div>
+          ) : (
+            <div className="rf-rule-list">
+              {sortedRules.map((rule) => {
+                const electric = isAlwaysElectric(rule.device_type ?? "");
+                const ptLabel = electric
+                  ? "Electric"
+                  : powertrainLabel(rule.powertrain_type);
+                return (
+                  <div
+                    key={rule.fee_rule_uuid}
+                    className={`rf-rule-row${rule.active ? "" : " rf-rule-row-inactive"}`}
+                  >
+                    <div className="rf-rule-icon">{deviceIcon(rule.device_type)}</div>
+                    <div className="rf-rule-body">
+                      <p className="rf-rule-name">{rule.label || "Untitled rule"}</p>
+                      <div className="rf-rule-chips">
+                        <span className="rf-chip">{deviceLabel(rule.device_type)}</span>
+                        <span className={`rf-chip${electric ? " rf-chip-electric" : ""}`}>
+                          {electric ? "⚡ " : ""}{ptLabel}
                         </span>
-                        {!rule.active ? (
-                          <span className="reg-chip reg-chip-muted">Inactive</span>
-                        ) : null}
+                        {!rule.active && (
+                          <span className="rf-chip rf-chip-inactive">Inactive</span>
+                        )}
                       </div>
                     </div>
-                    <span className="fee-rule-amount">{formatCurrency(rule.amount_cents)}</span>
+                    <p className="rf-rule-amount">{formatCurrency(rule.amount_cents)}</p>
+                    <div className="rf-rule-actions">
+                      <button
+                        className="rf-action-btn"
+                        type="button"
+                        onClick={() => { setDraft(draftFromRule(rule)); setError(""); setSuccess(""); }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="rf-action-btn rf-action-btn-danger"
+                        type="button"
+                        disabled={busy || !rule.active}
+                        onClick={() => void handleDelete(rule)}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
-                  <div className="inline-actions">
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={() => setDraft(draftFromRule(rule))}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      className="danger-button"
-                      type="button"
-                      disabled={busy || !rule.active}
-                      onClick={() => void handleDelete(rule)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-            {sortedRules.length === 0 ? (
-              <p className="muted-text">No registration fee rules yet.</p>
-            ) : null}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </section>

@@ -12392,7 +12392,7 @@
         color: #b91c1c;
 }
 
-/* chips */
+/* chips (shared, used by other screens) */
 .reg-chip {
         font-size: 0.72rem;
         padding: 2px 7px;
@@ -12401,61 +12401,422 @@
         color: var(--text-strong);
         white-space: nowrap;
 }
+.reg-chip-muted { color: var(--muted); }
+.reg-chip-fee { background: rgba(59, 130, 246, 0.1); color: #1d4ed8; }
+.reg-chip-beacon { background: rgba(236, 72, 153, 0.12); color: #be185d; }
 
-.reg-chip-muted {
+/* ── Registration Fees screen (rf-*) ── */
+.rf-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+}
+.rf-title {
+        margin: 0.15rem 0 0.3rem;
+}
+.rf-subtitle {
         color: var(--muted);
+        font-size: 0.88rem;
+        margin: 0;
+        max-width: 52ch;
+}
+.rf-refresh-btn {
+        flex-shrink: 0;
+        padding: 8px 16px;
+        border-radius: 999px;
+        border: 1px solid var(--panel-border);
+        background: var(--panel-bg);
+        color: var(--text);
+        font: inherit;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: background 120ms;
+}
+.rf-refresh-btn:hover:not(:disabled) {
+        background: var(--panel-bg-elevated, rgba(255,255,255,0.7));
+}
+.rf-refresh-btn:disabled { opacity: 0.5; cursor: default; }
+
+.rf-layout {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        gap: 1.25rem;
+        align-items: start;
+}
+@media (max-width: 860px) {
+        .rf-layout { grid-template-columns: 1fr; }
 }
 
-.reg-chip-fee {
-        background: rgba(59, 130, 246, 0.1);
-        color: #1d4ed8;
+/* Form card */
+.rf-form-card {
+        border: 1px solid var(--panel-border);
+        border-radius: 18px;
+        background: var(--panel-bg);
+        box-shadow: var(--panel-shadow);
+        overflow: hidden;
 }
-
-.reg-chip-beacon {
-        background: rgba(236, 72, 153, 0.12);
-        color: #be185d;
-}
-
-.reg-chip-electric {
-        background: rgba(234, 179, 8, 0.12);
-        color: #92400e;
-}
-
-.reg-powertrain-auto {
+.rf-form-heading {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 9px 12px;
-        border-radius: 8px;
-        background: rgba(234, 179, 8, 0.08);
-        border: 1px solid rgba(234, 179, 8, 0.25);
-        font-size: 0.85rem;
-        color: var(--text-strong);
+        gap: 12px;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--panel-border);
+        background: var(--panel-bg-elevated, rgba(255,255,255,0.5));
 }
-
-.reg-powertrain-auto-icon {
+.rf-form-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: var(--panel-border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
         font-size: 1rem;
         flex-shrink: 0;
 }
-
-.fee-rule-card-title-row {
+.rf-form-title {
+        margin: 0;
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: var(--text-strong);
+}
+.rf-form-sub {
+        margin: 1px 0 0;
+        font-size: 0.78rem;
+        color: var(--muted);
+}
+.rf-fields {
+        display: flex;
+        flex-direction: column;
+        gap: 0.9rem;
+        padding: 1.25rem;
+}
+.rf-row-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+}
+.rf-field {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+}
+.rf-label {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+}
+.rf-input,
+.rf-select {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid var(--input-border);
+        border-radius: 10px;
+        background: var(--field-bg, rgba(255,255,255,0.82));
+        color: var(--text-strong);
+        padding: 9px 11px;
+        font: inherit;
+        font-size: 0.9rem;
+        transition: border-color 140ms, box-shadow 140ms;
+}
+.rf-input:focus,
+.rf-select:focus {
+        outline: none;
+        border-color: var(--brand-primary, #16425b);
+        box-shadow: 0 0 0 3px rgba(22, 66, 91, 0.08);
+}
+.rf-amount-wrap {
+        position: relative;
         display: flex;
         align-items: center;
-        gap: 6px;
+}
+.rf-amount-prefix {
+        position: absolute;
+        left: 11px;
+        color: var(--muted);
+        font-size: 0.9rem;
+        pointer-events: none;
+}
+.rf-amount-input {
+        padding-left: 22px;
+}
+.rf-locked-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 8px 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(234, 179, 8, 0.3);
+        background: rgba(234, 179, 8, 0.07);
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: #78350f;
+}
+.rf-locked-pill-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #eab308;
+        flex-shrink: 0;
 }
 
-/* ── Fee rule card improvements ── */
+/* Toggle */
+.rf-toggle-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        user-select: none;
+}
+.rf-toggle-input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+}
+.rf-toggle {
+        width: 36px;
+        height: 20px;
+        border-radius: 999px;
+        background: var(--panel-border);
+        position: relative;
+        transition: background 200ms;
+        flex-shrink: 0;
+}
+.rf-toggle-on {
+        background: #27CC5E;
+}
+.rf-toggle-thumb {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        transition: transform 200ms;
+}
+.rf-toggle-on .rf-toggle-thumb {
+        transform: translateX(16px);
+}
+.rf-toggle-label {
+        font-size: 0.88rem;
+        color: var(--text);
+}
+
+/* Form messages */
+.rf-msg {
+        margin: 0 1.25rem;
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 0.83rem;
+}
+.rf-msg-error {
+        background: rgba(179, 58, 58, 0.08);
+        color: #8a1f1f;
+        border: 1px solid rgba(179, 58, 58, 0.16);
+}
+.rf-msg-success {
+        background: rgba(39, 204, 94, 0.08);
+        color: #166534;
+        border: 1px solid rgba(39, 204, 94, 0.2);
+}
+
+/* Form actions */
+.rf-form-actions {
+        display: flex;
+        gap: 0.6rem;
+        padding: 1rem 1.25rem;
+        border-top: 1px solid var(--panel-border);
+}
+.rf-btn-primary {
+        flex: 1;
+        padding: 10px 16px;
+        border-radius: 999px;
+        border: none;
+        background: linear-gradient(135deg, #16425b, #1f6f78);
+        color: #f5efe5;
+        font: inherit;
+        font-weight: 700;
+        font-size: 0.88rem;
+        cursor: pointer;
+        transition: opacity 140ms;
+}
+.rf-btn-primary:disabled { opacity: 0.5; cursor: default; }
+.rf-btn-primary:hover:not(:disabled) { opacity: 0.9; }
+.rf-btn-ghost {
+        padding: 10px 14px;
+        border-radius: 999px;
+        border: 1px solid var(--panel-border);
+        background: transparent;
+        color: var(--text);
+        font: inherit;
+        font-size: 0.88rem;
+        cursor: pointer;
+}
+.rf-btn-ghost:hover { background: var(--panel-border); }
+
+/* List card */
+.rf-list-card {
+        border: 1px solid var(--panel-border);
+        border-radius: 18px;
+        background: var(--panel-bg);
+        box-shadow: var(--panel-shadow);
+        overflow: hidden;
+}
+.rf-list-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--panel-border);
+        background: var(--panel-bg-elevated, rgba(255,255,255,0.5));
+}
+.rf-list-title {
+        margin: 0;
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--text-strong);
+}
+.rf-list-meta {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+}
+.rf-active-badge {
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 2px 9px;
+        border-radius: 99px;
+        background: rgba(39, 204, 94, 0.12);
+        color: #15803d;
+}
+.rf-total-badge {
+        font-size: 0.7rem;
+        font-weight: 600;
+        padding: 2px 9px;
+        border-radius: 99px;
+        background: var(--panel-border);
+        color: var(--muted);
+}
+
+/* Empty state */
+.rf-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        padding: 2.5rem 1rem;
+        text-align: center;
+}
+.rf-empty-icon { font-size: 2rem; margin-bottom: 4px; }
+.rf-empty-text { font-weight: 600; color: var(--text-strong); margin: 0; }
+.rf-empty-sub { font-size: 0.83rem; color: var(--muted); margin: 0; }
+
+/* Rule rows */
+.rf-rule-list { display: flex; flex-direction: column; }
+.rf-rule-row {
+        display: grid;
+        grid-template-columns: 36px 1fr auto auto;
+        align-items: center;
+        gap: 12px;
+        padding: 0.85rem 1.25rem;
+        border-bottom: 1px solid var(--panel-border);
+        transition: background 120ms;
+}
+.rf-rule-row:last-child { border-bottom: none; }
+.rf-rule-row:hover { background: var(--panel-bg-elevated, rgba(255,255,255,0.4)); }
+.rf-rule-row-inactive { opacity: 0.45; }
+
+.rf-rule-icon {
+        font-size: 1.2rem;
+        text-align: center;
+        line-height: 1;
+}
+.rf-rule-body {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+}
+.rf-rule-name {
+        margin: 0;
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: var(--text-strong);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+}
+.rf-rule-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+}
+.rf-chip {
+        font-size: 0.69rem;
+        font-weight: 600;
+        padding: 1px 7px;
+        border-radius: 99px;
+        background: var(--panel-border);
+        color: var(--text-strong);
+        white-space: nowrap;
+}
+.rf-chip-electric {
+        background: rgba(234, 179, 8, 0.14);
+        color: #78350f;
+}
+.rf-chip-inactive {
+        background: rgba(100,100,100,0.08);
+        color: var(--muted);
+}
+.rf-rule-amount {
+        font-size: 1rem;
+        font-weight: 800;
+        color: var(--text-strong);
+        white-space: nowrap;
+}
+.rf-rule-actions {
+        display: flex;
+        gap: 6px;
+}
+.rf-action-btn {
+        padding: 5px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--panel-border);
+        background: transparent;
+        font: inherit;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--text);
+        cursor: pointer;
+        transition: background 120ms, color 120ms;
+}
+.rf-action-btn:hover:not(:disabled) {
+        background: var(--panel-border);
+}
+.rf-action-btn-danger {
+        color: #8a1f1f;
+        border-color: rgba(179, 58, 58, 0.2);
+}
+.rf-action-btn-danger:hover:not(:disabled) {
+        background: rgba(179, 58, 58, 0.08);
+}
+.rf-action-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* settings-card improvements (kept for other screens) */
 .settings-card-header-row {
         display: flex;
         align-items: center;
         justify-content: space-between;
         margin-bottom: 0.75rem;
 }
-
-.settings-card-header-row h3 {
-        margin: 0;
-}
-
+.settings-card-header-row h3 { margin: 0; }
 .fee-rule-active-badge {
         font-size: 0.7rem;
         font-weight: 700;
@@ -12464,7 +12825,6 @@
         background: rgba(34, 197, 94, 0.12);
         color: #15803d;
 }
-
 .fee-rule-card-top {
         display: flex;
         align-items: flex-start;
@@ -12472,7 +12832,6 @@
         gap: 0.75rem;
         margin-bottom: 0.6rem;
 }
-
 .fee-rule-card-info {
         flex: 1;
         min-width: 0;
@@ -12480,13 +12839,7 @@
         flex-direction: column;
         gap: 4px;
 }
-
-.fee-rule-chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-}
-
+.fee-rule-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .fee-rule-amount {
         font-size: 1.05rem;
         font-weight: 700;
@@ -12494,10 +12847,7 @@
         white-space: nowrap;
         flex-shrink: 0;
 }
-
-.fee-rule-card-inactive {
-        opacity: 0.55;
-}
+.fee-rule-card-inactive { opacity: 0.55; }
 
 /* ── Student ride violations ── */
 .ride-violations-screen {
