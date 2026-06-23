@@ -6426,6 +6426,26 @@
         min-height: 140px;
 }
 
+.notification-audience-desc {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 11px 16px;
+        margin: 0 0 4px;
+        border-radius: 10px;
+        background: rgba(22, 66, 91, 0.05);
+        border: 1px solid rgba(22, 66, 91, 0.1);
+        font-size: 0.85rem;
+        color: var(--text);
+        line-height: 1.45;
+}
+
+.notification-audience-desc-icon {
+        font-size: 1rem;
+        flex-shrink: 0;
+        margin-top: 1px;
+}
+
 .notification-preview-panel {
         display: grid;
         gap: 14px;
