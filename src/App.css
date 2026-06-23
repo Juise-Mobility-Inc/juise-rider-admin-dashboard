@@ -12416,6 +12416,34 @@
         color: #be185d;
 }
 
+.reg-chip-electric {
+        background: rgba(234, 179, 8, 0.12);
+        color: #92400e;
+}
+
+.reg-powertrain-auto {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 12px;
+        border-radius: 8px;
+        background: rgba(234, 179, 8, 0.08);
+        border: 1px solid rgba(234, 179, 8, 0.25);
+        font-size: 0.85rem;
+        color: var(--text-strong);
+}
+
+.reg-powertrain-auto-icon {
+        font-size: 1rem;
+        flex-shrink: 0;
+}
+
+.fee-rule-card-title-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+}
+
 /* ── Fee rule card improvements ── */
 .settings-card-header-row {
         display: flex;
