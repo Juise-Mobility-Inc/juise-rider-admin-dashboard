@@ -524,9 +524,28 @@
         flex-shrink: 0;
 }
 
+/* Badge inside a child nav item — larger and pushed to the right */
+.nav-sub-item .nav-badge {
+        min-width: 20px;
+        height: 20px;
+        font-size: 0.7rem;
+        margin-left: auto;
+}
+
 .nav-group-header:hover {
         background: rgba(255, 255, 255, 0.05);
         color: var(--sidebar-text);
+}
+
+.nav-group-header-open {
+        color: var(--sidebar-text);
+        background: rgba(255, 255, 255, 0.07);
+        border-radius: 10px 10px 0 0;
+}
+
+.nav-group-header-open .nav-group-header-label {
+        color: #fff;
+        opacity: 0.95;
 }
 
 .nav-group-chevron {
@@ -553,7 +572,9 @@
 }
 
 .nav-sub-item {
-        display: block;
+        display: flex;
+        align-items: center;
+        gap: 8px;
         border-radius: 14px;
         padding: 9px 12px;
         text-align: left;

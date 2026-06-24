@@ -5074,7 +5074,7 @@ function App() {
                                         {/* Juise Packs section */}
                                         <div className="nav-group">
                                                 <button
-                                                        className="nav-group-header"
+                                                        className={`nav-group-header${openNavGroups.juisePacks ? " nav-group-header-open" : ""}`}
                                                         type="button"
                                                         onClick={() =>
                                                                 setOpenNavGroups((p) => ({ ...p, juisePacks: !p.juisePacks }))
@@ -5149,7 +5149,7 @@ function App() {
                                         {/* Vehicles section */}
                                         <div className="nav-group">
                                                 <button
-                                                        className="nav-group-header"
+                                                        className={`nav-group-header${openNavGroups.vehicles ? " nav-group-header-open" : ""}`}
                                                         type="button"
                                                         onClick={() =>
                                                                 setOpenNavGroups((p) => ({ ...p, vehicles: !p.vehicles }))
@@ -5204,7 +5204,7 @@ function App() {
                                         {/* Parking and Ride Enforcement group */}
                                         <div className="nav-group">
                                                 <button
-                                                        className="nav-group-header"
+                                                        className={`nav-group-header${openNavGroups.parkingEnforcement ? " nav-group-header-open" : ""}`}
                                                         type="button"
                                                         onClick={() =>
                                                                 setOpenNavGroups((p) => ({
