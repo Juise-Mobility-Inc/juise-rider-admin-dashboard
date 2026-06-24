@@ -537,16 +537,6 @@
         color: var(--sidebar-text);
 }
 
-.nav-group-header-open {
-        color: var(--sidebar-text);
-        background: rgba(255, 255, 255, 0.07);
-        border-radius: 10px 10px 0 0;
-}
-
-.nav-group-header-open .nav-group-header-label {
-        color: #fff;
-        opacity: 0.95;
-}
 
 .nav-group-chevron {
         font-size: 1.05rem;
