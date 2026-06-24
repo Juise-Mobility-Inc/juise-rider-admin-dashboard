@@ -5081,7 +5081,7 @@ function App() {
                                                         }>
                                                         <span className="nav-group-header-label">
                                                                 Juise Packs
-                                                                {reservations.length > 0 && (
+                                                                {!openNavGroups.juisePacks && reservations.length > 0 && (
                                                                         <span className="nav-badge">{reservations.length}</span>
                                                                 )}
                                                         </span>
@@ -5109,6 +5109,9 @@ function App() {
                                                                                         : "nav-sub-item"
                                                                         }>
                                                                         View Parking Reservations
+                                                                        {reservations.length > 0 && (
+                                                                                <span className="nav-badge">{reservations.length}</span>
+                                                                        )}
                                                                 </NavLink>
                                                         </div>
                                                 )}
@@ -5153,7 +5156,7 @@ function App() {
                                                         }>
                                                         <span className="nav-group-header-label">
                                                                 Vehicles
-                                                                {pendingVehicleCount !== null && pendingVehicleCount > 0 && (
+                                                                {!openNavGroups.vehicles && pendingVehicleCount !== null && pendingVehicleCount > 0 && (
                                                                         <span className="nav-badge">{pendingVehicleCount}</span>
                                                                 )}
                                                         </span>
@@ -5181,6 +5184,9 @@ function App() {
                                                                                         : "nav-sub-item"
                                                                         }>
                                                                         Vehicle Registrations
+                                                                        {pendingVehicleCount !== null && pendingVehicleCount > 0 && (
+                                                                                <span className="nav-badge">{pendingVehicleCount}</span>
+                                                                        )}
                                                                 </NavLink>
                                                                 <NavLink
                                                                         to="/registration-fees"
@@ -5208,7 +5214,7 @@ function App() {
                                                         }>
                                                         <span className="nav-group-header-label">
                                                                 Compliance Enforcement
-                                                                {openEnforcementCount !== null && openEnforcementCount > 0 && (
+                                                                {!openNavGroups.parkingEnforcement && openEnforcementCount !== null && openEnforcementCount > 0 && (
                                                                         <span className="nav-badge">{openEnforcementCount}</span>
                                                                 )}
                                                         </span>
@@ -5227,6 +5233,9 @@ function App() {
                                                                                         : "nav-sub-item"
                                                                         }>
                                                                         Parking Enforcement Reports
+                                                                        {openEnforcementCount !== null && openEnforcementCount > 0 && (
+                                                                                <span className="nav-badge">{openEnforcementCount}</span>
+                                                                        )}
                                                                 </NavLink>
                                                                 <NavLink
                                                                         to="/student-ride-violations"
