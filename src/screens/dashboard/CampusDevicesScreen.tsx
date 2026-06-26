@@ -129,6 +129,17 @@ function formatTimestampFull(unix: number) {
   });
 }
 
+function timeAgo(unix: number): string {
+  const ms = unix < 1e11 ? unix * 1000 : unix;
+  const diffSec = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  return `${Math.floor(diffHr / 24)}d ago`;
+}
+
 function capitalize(str: string) {
   if (!str) return "";
   return str.charAt(0).toUpperCase() + str.slice(1).replace(/_/g, " ");
@@ -584,6 +595,11 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                           ? "Beacon (stale)"
                           : "Beacon (live)"
                         : "Beacon location"}
+                      {liveLocation?.observed_at != null && (
+                        <span className="cd-legend-age">
+                          {timeAgo(liveLocation.observed_at)}
+                        </span>
+                      )}
                     </span>
                   )}
                   {selectedViolations.some(
@@ -764,6 +780,11 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                             <span>Status</span>
                             <strong>
                               {liveLocation.stale ? "Stale" : "Live"}
+                              {liveLocation.observed_at != null && (
+                                <span className="cd-ping-age">
+                                  {" · "}{timeAgo(liveLocation.observed_at)}
+                                </span>
+                              )}
                             </strong>
                           </div>
                           {liveLocation.observed_at != null && (
@@ -856,6 +877,9 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                               <span>Last seen</span>
                               <strong>
                                 {formatTimestampFull(beaconMeta.lastSeen)}
+                                <span className="cd-ping-age">
+                                  {" · "}{timeAgo(beaconMeta.lastSeen)}
+                                </span>
                               </strong>
                             </div>
                           )}
@@ -1100,9 +1124,7 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                                   className={`cd-table-beacon-dot${liveBeacon && !liveBeacon.stale ? " cd-table-beacon-live" : ""}`}
                                   title={
                                     liveBeacon
-                                      ? liveBeacon.stale
-                                        ? "Beacon stale"
-                                        : "Beacon live"
+                                      ? `${liveBeacon.stale ? "Beacon stale" : "Beacon live"}${liveBeacon.observed_at != null ? ` · ${timeAgo(liveBeacon.observed_at)}` : ""}`
                                       : "Has beacon"
                                   }
                                 >
