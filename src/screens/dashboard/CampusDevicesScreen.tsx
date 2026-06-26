@@ -540,7 +540,7 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
         : beaconMeta?.position ?? null;
 
     const beaconMapLabel = liveLocation
-      ? `${beaconInfo?.beacon_mac ?? "Beacon"} \u00b7 ${liveLocation.stale ? "stale" : "live"}`
+      ? `${beaconInfo?.beacon_mac ?? "Beacon"} \u00b7 ${liveLocation.stale ? "stale" : "live"}${liveLocation.observed_at != null ? ` \u00b7 ${timeAgo(liveLocation.observed_at)}` : ""}`
       : beaconInfo?.beacon_mac
         ? `${beaconInfo.beacon_mac} (metadata)`
         : "Last known location";
@@ -595,11 +595,6 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
                           ? "Beacon (stale)"
                           : "Beacon (live)"
                         : "Beacon location"}
-                      {liveLocation?.observed_at != null && (
-                        <span className="cd-legend-age">
-                          {timeAgo(liveLocation.observed_at)}
-                        </span>
-                      )}
                     </span>
                   )}
                   {selectedViolations.some(
