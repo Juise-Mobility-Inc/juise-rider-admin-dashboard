@@ -4853,7 +4853,7 @@ function App() {
                                         />
                                 );
                         case "sightingsMap":
-                                return <SightingsMapScreen />;
+                                return import.meta.env.DEV ? <SightingsMapScreen /> : null;
                         case "packs":
                                 return (
                                         <PacksScreen
@@ -4994,13 +4994,15 @@ function App() {
                                                 }>
                                                 Map Overview
                                         </NavLink>
-                                        <NavLink
-                                                to="/sightings-map"
-                                                className={({ isActive }) =>
-                                                        isActive ? "nav-button nav-button-active" : "nav-button"
-                                                }>
-                                                Sightings Map
-                                        </NavLink>
+                                        {import.meta.env.DEV && (
+                                                <NavLink
+                                                        to="/sightings-map"
+                                                        className={({ isActive }) =>
+                                                                isActive ? "nav-button nav-button-active" : "nav-button"
+                                                        }>
+                                                        Sightings Map
+                                                </NavLink>
+                                        )}
                                         <NavLink
                                                 to="/reports"
                                                 className={({ isActive }) =>
