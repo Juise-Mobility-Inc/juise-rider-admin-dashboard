@@ -4853,7 +4853,7 @@ function App() {
                                         />
                                 );
                         case "sightingsMap":
-                                return import.meta.env.DEV ? <SightingsMapScreen /> : null;
+                                return <SightingsMapScreen />;
                         case "packs":
                                 return (
                                         <PacksScreen
