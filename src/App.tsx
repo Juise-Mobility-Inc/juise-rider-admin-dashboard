@@ -106,6 +106,7 @@ import { VehicleRegistrationsScreen } from "./screens/dashboard/VehicleRegistrat
 import { ViolationFeesScreen } from "./screens/dashboard/ViolationFeesScreen";
 import { ZonesScreen } from "./screens/dashboard/ZonesScreen";
 import { MapOverviewScreen } from "./screens/dashboard/MapOverviewScreen";
+import { SightingsMapScreen } from "./screens/dashboard/SightingsMapScreen";
 import {
         loadSelectedStudentDetail,
         loadStudentRoster,
@@ -135,7 +136,8 @@ type Section =
         | "reports"
         | "packs"
         | "reservations"
-        | "mapOverview";
+        | "mapOverview"
+        | "sightingsMap";
 type PackTab = "create" | "existing";
 type BannerTone = "success" | "error" | "info";
 type AuthMode = "login" | "signup";
@@ -188,6 +190,7 @@ const dashboardSections: Array<{
         { section: "reports", label: "Reports", path: "/reports" },
         { section: "packs", label: "Juise Packs", path: "/packs" },
         { section: "mapOverview", label: "Map Overview", path: "/map-overview" },
+        { section: "sightingsMap", label: "Sightings Map", path: "/sightings-map" },
         {
                 section: "reservations",
                 label: "Pending Reservations",
@@ -4849,6 +4852,8 @@ function App() {
                                                 adminUserUUID={session?.claims.user_uuid ?? ""}
                                         />
                                 );
+                        case "sightingsMap":
+                                return <SightingsMapScreen />;
                         case "packs":
                                 return (
                                         <PacksScreen
@@ -4988,6 +4993,13 @@ function App() {
                                                         isActive ? "nav-button nav-button-active" : "nav-button"
                                                 }>
                                                 Map Overview
+                                        </NavLink>
+                                        <NavLink
+                                                to="/sightings-map"
+                                                className={({ isActive }) =>
+                                                        isActive ? "nav-button nav-button-active" : "nav-button"
+                                                }>
+                                                Sightings Map
                                         </NavLink>
                                         <NavLink
                                                 to="/reports"

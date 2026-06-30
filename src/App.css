@@ -15437,6 +15437,325 @@
   border-top: 2.5px solid #27CC5E !important;
 }
 
+/* ── Sightings Map Screen ─────────────────────────────────────────────────── */
+
+.sm-root {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sm-sidebar {
+  width: 300px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 16px;
+  border-right: 1px solid #e5e7eb;
+  overflow-y: auto;
+  background: #fff;
+}
+
+.sm-sidebar-top {}
+
+.sm-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #112d4e;
+  margin: 0 0 3px;
+}
+
+.sm-subtitle {
+  font-size: 0.78rem;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.sm-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 20px 12px;
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s;
+  background: #f9fafb;
+  user-select: none;
+}
+
+.sm-dropzone:hover,
+.sm-dropzone:focus-visible {
+  border-color: #27CC5E;
+  background: #f0fdf4;
+  outline: none;
+}
+
+.sm-dropzone--dragging {
+  border-color: #27CC5E;
+  background: #f0fdf4;
+}
+
+.sm-dropzone--compact {
+  padding: 12px;
+  flex-direction: row;
+  gap: 8px;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.sm-dropzone-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.sm-dropzone--compact .sm-dropzone-icon {
+  font-size: 1.1rem;
+}
+
+.sm-dropzone-prompt {
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.sm-dropzone-hint {
+  font-size: 0.74rem;
+  color: #9ca3af;
+}
+
+.sm-dropzone-filename {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #112d4e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+
+.sm-dropzone-replace {
+  font-size: 0.73rem;
+  color: #9ca3af;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.sm-upload-error {
+  font-size: 0.8rem;
+  color: #dc2626;
+  background: #fef2f2;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.sm-stats-strip {
+  display: flex;
+  gap: 8px;
+}
+
+.sm-stat-pill {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #f3f4f6;
+  border-radius: 9px;
+  padding: 8px 6px;
+}
+
+.sm-stat-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #112d4e;
+  line-height: 1;
+}
+
+.sm-stat-label {
+  font-size: 0.7rem;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.sm-timerange {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 9px;
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sm-timerange-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sm-timerange-vals {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.76rem;
+  color: #374151;
+}
+
+.sm-timerange-arrow {
+  color: #9ca3af;
+  font-size: 0.7rem;
+}
+
+.sm-routes-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.sm-routes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sm-routes-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sm-toggle-all-btn {
+  font-size: 0.75rem;
+  color: #27CC5E;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-weight: 600;
+}
+
+.sm-toggle-all-btn:hover {
+  text-decoration: underline;
+}
+
+.sm-routes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sm-route-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: #f9fafb;
+  cursor: pointer;
+  transition: background 0.12s;
+  user-select: none;
+}
+
+.sm-route-row:hover {
+  background: #f3f4f6;
+}
+
+.sm-route-row:focus-visible {
+  outline: 2px solid #27CC5E;
+  outline-offset: 1px;
+}
+
+.sm-route-row--off {
+  opacity: 0.45;
+}
+
+.sm-route-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+
+.sm-route-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.sm-route-mac {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #112d4e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sm-route-devid {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  font-family: monospace;
+}
+
+.sm-route-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: #e5e7eb;
+  color: #374151;
+  border-radius: 20px;
+  padding: 2px 7px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sm-map-wrap {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.sm-map-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #9ca3af;
+  background: #f9fafb;
+}
+
+.sm-map-empty-icon {
+  font-size: 2.5rem;
+}
+
+.sm-map-empty strong {
+  font-size: 1rem;
+  color: #374151;
+}
+
+.sm-map-empty span {
+  font-size: 0.82rem;
+  color: #9ca3af;
+  text-align: center;
+  max-width: 240px;
+}
+
 @media (max-width: 680px) {
   .stop-modal-body {
     grid-template-columns: 1fr;
