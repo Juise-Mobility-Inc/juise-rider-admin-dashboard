@@ -12348,6 +12348,158 @@
         color: #fff;
 }
 
+/* ── Map Overview: POI/Pack detail modal ── */
+.mo-detail-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 1100;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: rgba(7, 16, 28, 0.68);
+        backdrop-filter: blur(12px);
+}
+
+.mo-detail-modal-sheet {
+        width: min(560px, 100%);
+        max-height: min(88vh, 720px);
+        overflow-y: auto;
+        display: grid;
+        gap: 18px;
+        padding: 26px;
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        background: linear-gradient(
+                180deg,
+                rgba(253, 254, 255, 0.98),
+                rgba(246, 250, 252, 0.96)
+        );
+        box-shadow: 0 24px 72px rgba(7, 16, 28, 0.26);
+}
+
+.mo-detail-modal-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+}
+
+.mo-detail-modal-header-copy {
+        display: grid;
+        gap: 8px;
+}
+
+.mo-detail-modal-header-copy h3 {
+        margin: 0;
+        font-size: 1.4rem;
+        color: var(--navy);
+}
+
+.mo-detail-modal-close {
+        flex-shrink: 0;
+}
+
+.mo-detail-modal-desc {
+        margin: 0;
+        color: var(--muted-strong);
+        font-size: 0.9rem;
+        line-height: 1.5;
+}
+
+.mo-detail-modal-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+        padding: 16px;
+        border-radius: 16px;
+        border: 1px solid var(--panel-border);
+        background: rgba(255, 255, 255, 0.6);
+}
+
+.mo-detail-modal-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+}
+
+.mo-detail-modal-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--muted);
+        font-weight: 700;
+}
+
+.mo-detail-modal-value {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--navy);
+}
+
+.mo-detail-modal-spots {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+}
+
+.mo-detail-modal-spot-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+}
+
+.mo-detail-modal-spot-chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: rgba(29, 78, 216, 0.12);
+        color: #1d4ed8;
+        font-size: 12px;
+        font-weight: 700;
+}
+
+.mo-detail-modal-spot-chip--inactive {
+        background: rgba(107, 114, 128, 0.12);
+        color: #4b5563;
+}
+
+.mo-detail-modal-spot-chip--open {
+        background: rgba(34, 197, 94, 0.15);
+        color: #15803d;
+}
+
+.mo-detail-modal-spot-chip--reserved {
+        background: rgba(245, 158, 11, 0.18);
+        color: #92400e;
+}
+
+.mo-detail-modal-pack-photo {
+        width: 100%;
+        max-height: 220px;
+        object-fit: cover;
+        border-radius: 16px;
+        border: 1px solid var(--panel-border);
+}
+
+.mo-detail-modal-manage-link {
+        appearance: none;
+        border: none;
+        background: none;
+        padding: 0;
+        color: #1d4ed8;
+        font-size: 13px;
+        font-weight: 700;
+        text-align: left;
+        cursor: pointer;
+        justify-self: start;
+}
+
+.mo-detail-modal-manage-link:hover {
+        text-decoration: underline;
+}
+
 .settings-grid {
         display: grid;
         grid-template-columns: minmax(280px, 0.85fr) minmax(320px, 1.15fr);

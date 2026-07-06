@@ -24,15 +24,32 @@ import {
 	staleBeaconLocationIcon,
 } from "../../lib/mapIcons";
 import {
-	fetchSchoolBeaconLocations,
-	fetchSchoolZones,
-	fetchSchoolPOIs,
-	fetchAdminSchoolPacks,
-	type SchoolZone,
-	type SchoolPOI,
-	type Pack,
-	type SchoolRegisteredDeviceBeaconLocation,
+        fetchSchoolBeaconLocations,
+        fetchSchoolZones,
+        fetchSchoolPOIs,
+        fetchAdminSchoolPacks,
+        fetchSchoolTermReservations,
+        type SchoolZone,
+        type SchoolPOI,
+        type Pack,
+        type SchoolRegisteredDeviceBeaconLocation,
+        type PackSpotReservation,
 } from "../../lib/api";
+
+function getPackPhotoUrl(pack: Pick<Pack, "photo"> | null | undefined): string {
+        return pack?.photo?.path_do_spaces?.trim() ?? "";
+}
+
+function isReservationCurrentlyActive(
+        reservation: PackSpotReservation,
+        nowSeconds: number,
+): boolean {
+        if (!reservation.active) return false;
+        if (reservation.status.toLowerCase() !== "approved") return false;
+        if (reservation.start_time && reservation.start_time > nowSeconds) return false;
+        if (reservation.end_time && reservation.end_time < nowSeconds) return false;
+        return true;
+}
 
 function MapInvalidator() {
 	const map = useMap();
@@ -124,20 +141,21 @@ export function MapOverviewScreen({
 	managedAppId,
 	adminUserUUID,
 }: Props) {
-	const navigate = useNavigate();
-	const [zones, setZones] = useState<SchoolZone[]>([]);
-	const [pois, setPois] = useState<SchoolPOI[]>([]);
-	const [packs, setPacks] = useState<Pack[]>([]);
-	const [beaconLocations, setBeaconLocations] = useState<
-		SchoolRegisteredDeviceBeaconLocation[]
-	>([]);
-	const [loading, setLoading] = useState(false);
-	const [error, setError] = useState("");
-	const [beaconLoading, setBeaconLoading] = useState(false);
-	const [beaconError, setBeaconError] = useState("");
-	const [beaconLastRefreshAt, setBeaconLastRefreshAt] = useState<number | null>(
-		null,
-	);
+        const navigate = useNavigate();
+        const [zones, setZones] = useState<SchoolZone[]>([]);
+        const [pois, setPois] = useState<SchoolPOI[]>([]);
+        const [packs, setPacks] = useState<Pack[]>([]);
+        const [reservations, setReservations] = useState<PackSpotReservation[]>([]);
+        const [beaconLocations, setBeaconLocations] = useState<
+                SchoolRegisteredDeviceBeaconLocation[]
+        >([]);
+        const [loading, setLoading] = useState(false);
+        const [error, setError] = useState("");
+        const [beaconLoading, setBeaconLoading] = useState(false);
+        const [beaconError, setBeaconError] = useState("");
+        const [beaconLastRefreshAt, setBeaconLastRefreshAt] = useState<number | null>(
+                null,
+        );
 
 	const [showNoGoZones, setShowNoGoZones] = useState(true);
 	const [showSpeedZones, setShowSpeedZones] = useState(true);
@@ -145,33 +163,39 @@ export function MapOverviewScreen({
 	const [showPacks, setShowPacks] = useState(true);
 	const [showBeacons, setShowBeacons] = useState(true);
 
-	useEffect(() => {
-		if (!activeSchoolId || !managedAppId) return;
-		let dead = false;
-		setLoading(true);
-		setError("");
-		Promise.all([
-			fetchSchoolZones(managedAppId, activeSchoolId),
-			fetchSchoolPOIs(managedAppId, activeSchoolId),
-			fetchAdminSchoolPacks(adminUserUUID, managedAppId, activeSchoolId),
-		])
-			.then(([z, p, pk]) => {
-				if (dead) return;
-				setZones(z);
-				setPois(p);
-				setPacks(pk);
-			})
-			.catch((e) => {
-				if (!dead)
-					setError(e instanceof Error ? e.message : "Failed to load map data");
-			})
-			.finally(() => {
-				if (!dead) setLoading(false);
-			});
-		return () => {
-			dead = true;
-		};
-	}, [activeSchoolId, managedAppId, adminUserUUID]);
+        const [selectedPoi, setSelectedPoi] = useState<SchoolPOI | null>(null);
+        const [selectedPack, setSelectedPack] = useState<Pack | null>(null);
+        const [selectedZone, setSelectedZone] = useState<SchoolZone | null>(null);
+
+        useEffect(() => {
+                if (!activeSchoolId || !managedAppId) return;
+                let dead = false;
+                setLoading(true);
+                setError("");
+                Promise.all([
+                        fetchSchoolZones(managedAppId, activeSchoolId),
+                        fetchSchoolPOIs(managedAppId, activeSchoolId),
+                        fetchAdminSchoolPacks(adminUserUUID, managedAppId, activeSchoolId),
+                        fetchSchoolTermReservations(adminUserUUID, managedAppId, activeSchoolId),
+                ])
+                        .then(([z, p, pk, res]) => {
+                                if (dead) return;
+                                setZones(z);
+                                setPois(p);
+                                setPacks(pk);
+                                setReservations(res);
+                        })
+                        .catch((e) => {
+                                if (!dead)
+                                        setError(e instanceof Error ? e.message : "Failed to load map data");
+                        })
+                        .finally(() => {
+                                if (!dead) setLoading(false);
+                        });
+                return () => {
+                        dead = true;
+                };
+        }, [activeSchoolId, managedAppId, adminUserUUID]);
 
 	const refreshBeaconLocations = useCallback(async () => {
 		if (!activeSchoolId || !managedAppId) {
@@ -216,39 +240,68 @@ export function MapOverviewScreen({
 		return () => window.clearInterval(refreshTimer);
 	}, [activeSchoolId, managedAppId, refreshBeaconLocations]);
 
-	const noGoZones = useMemo(
-		() =>
-			zones.filter(
-				(z) => z.zone_type === "no_go" && z.polygon.length >= 3 && z.active,
-			),
-		[zones],
-	);
-	const speedZones = useMemo(
-		() =>
-			zones.filter(
-				(z) =>
-					z.zone_type === "speed_limit" && z.polygon.length >= 3 && z.active,
-			),
-		[zones],
-	);
-	const validPOIs = useMemo(
-		() => pois.filter((p) => p.active && p.lat != null && p.lng != null),
-		[pois],
-	);
-	const packsWithLocation = useMemo(
-		() =>
-			packs.filter((p) => p.location?.lat != null && p.location?.lng != null),
-		[packs],
-	);
-	const beaconLocationsWithLocation = useMemo(
-		() =>
-			beaconLocations.filter(
-				(location) =>
-					isValidCoordinate(location.latitude) &&
-					isValidCoordinate(location.longitude),
-			),
-		[beaconLocations],
-	);
+        const noGoZones = useMemo(
+                () =>
+                        zones.filter(
+                                (z) => z.zone_type === "no_go" && z.polygon.length >= 3 && z.active,
+                        ),
+                [zones],
+        );
+        const speedZones = useMemo(
+                () =>
+                        zones.filter(
+                                (z) =>
+                                        z.zone_type === "speed_limit" && z.polygon.length >= 3 && z.active,
+                        ),
+                [zones],
+        );
+        const validPOIs = useMemo(
+                () => pois.filter((p) => p.active && p.lat != null && p.lng != null),
+                [pois],
+        );
+        const packsWithLocation = useMemo(
+                () =>
+                        packs.filter((p) => p.location?.lat != null && p.location?.lng != null),
+                [packs],
+        );
+        const selectedZonePointsLost = useMemo(() => {
+                if (!selectedZone) return null;
+                const rules = selectedZone.punishment_policy?.rules ?? [];
+                if (rules.length === 0) return null;
+                return rules.reduce(
+                        (max, rule) => (rule.points_lost > max ? rule.points_lost : max),
+                        rules[0].points_lost,
+                );
+        }, [selectedZone]);
+        const selectedPackSpotStatuses = useMemo(() => {
+                if (!selectedPack) return [];
+                const nowSeconds = Math.floor(Date.now() / 1000);
+                return selectedPack.spots
+                        .slice()
+                        .sort((a, b) => a.spot_number - b.spot_number)
+                        .map((spot) => {
+                                const isReserved = reservations.some(
+                                        (r) =>
+                                                r.spot_uuid === spot.spot_uuid &&
+                                                isReservationCurrentlyActive(r, nowSeconds),
+                                );
+                                return {
+                                        spot_uuid: spot.spot_uuid,
+                                        spot_number: spot.spot_number,
+                                        active: spot.active,
+                                        reserved: isReserved,
+                                };
+                        });
+        }, [selectedPack, reservations]);
+        const beaconLocationsWithLocation = useMemo(
+                () =>
+                        beaconLocations.filter(
+                                (location) =>
+                                        isValidCoordinate(location.latitude) &&
+                                        isValidCoordinate(location.longitude),
+                        ),
+                [beaconLocations],
+        );
 
 	const mapView = useMemo((): {
 		center: [number, number];
@@ -431,185 +484,147 @@ export function MapOverviewScreen({
 						anchorKey={mapView.anchorKey}
 					/>
 
-					{showNoGoZones &&
-						noGoZones.map((z) => (
-							<Polygon
-								key={z.zone_uuid}
-								positions={z.polygon.map((p): [number, number] => [
-									p.lat,
-									p.lng,
-								])}
-								pathOptions={{
-									color: "#b91c1c",
-									fillColor: "#ef4444",
-									fillOpacity: 0.35,
-									weight: 3.5,
-								}}>
-								<Tooltip sticky direction="top">
-									<strong>{z.title || "No-go zone"}</strong>
-									<br />⛔ Students must not enter
-								</Tooltip>
-								<Popup minWidth={200} maxWidth={260}>
-									<div className="mo-popup">
-										<span className="mo-popup-badge mo-popup-badge--nogo">
-											⛔ No-go zone
-										</span>
-										<div className="mo-popup-title">
-											{z.title || "No-go zone"}
-										</div>
-										{z.description ? (
-											<div className="mo-popup-desc">{z.description}</div>
-										) : null}
-										<div className="mo-popup-meta">
-											Students must not enter this area
-										</div>
-										<button
-											className="mo-popup-nav-btn mo-popup-nav-btn--nogo"
-											onClick={() => navigate("/zones")}>
-											Open Penalty Zones →
-										</button>
-									</div>
-								</Popup>
-							</Polygon>
-						))}
+                                        {showNoGoZones &&
+                                                noGoZones.map((z) => (
+                                                        <Polygon
+                                                                key={z.zone_uuid}
+                                                                positions={z.polygon.map((p): [number, number] => [
+                                                                        p.lat,
+                                                                        p.lng,
+                                                                ])}
+                                                                pathOptions={{
+                                                                        color: "#b91c1c",
+                                                                        fillColor: "#ef4444",
+                                                                        fillOpacity: 0.35,
+                                                                        weight: 3.5,
+                                                                }}
+                                                                eventHandlers={{
+                                                                        click: () => setSelectedZone(z),
+                                                                }}>
+                                                                <Tooltip sticky direction="top">
+                                                                        <strong>{z.title || "No-go zone"}</strong>
+                                                                        <br />⛔ Students must not enter
+                                                                </Tooltip>
+                                                        </Polygon>
+                                                ))}
 
-					{showSpeedZones &&
-						speedZones.map((z) => (
-							<Polygon
-								key={z.zone_uuid}
-								positions={z.polygon.map((p): [number, number] => [
-									p.lat,
-									p.lng,
-								])}
-								pathOptions={{
-									color: "#b45309",
-									fillColor: "#f59e0b",
-									fillOpacity: 0.25,
-									weight: 3,
-								}}>
-								<Tooltip sticky direction="top">
-									<strong>{z.title || "Speed limit zone"}</strong>
-									{z.speed_limit_mph != null ? (
-										<> — {z.speed_limit_mph} mph</>
-									) : null}
-								</Tooltip>
-								<Popup minWidth={200} maxWidth={260}>
-									<div className="mo-popup">
-										<span className="mo-popup-badge mo-popup-badge--speed">
-											🚦 Speed limit zone
-										</span>
-										<div className="mo-popup-title">
-											{z.title || "Speed limit zone"}
-										</div>
-										{z.description ? (
-											<div className="mo-popup-desc">{z.description}</div>
-										) : null}
-										{z.speed_limit_mph != null ? (
-											<div className="mo-popup-meta mo-popup-meta--speed">
-												{z.speed_limit_mph} mph limit
-											</div>
-										) : null}
-										<button
-											className="mo-popup-nav-btn mo-popup-nav-btn--speed"
-											onClick={() => navigate("/zones")}>
-											Open Penalty Zones →
-										</button>
-									</div>
-								</Popup>
-							</Polygon>
-						))}
+                                        {showSpeedZones &&
+                                                speedZones.map((z) => (
+                                                        <Polygon
+                                                                key={z.zone_uuid}
+                                                                positions={z.polygon.map((p): [number, number] => [
+                                                                        p.lat,
+                                                                        p.lng,
+                                                                ])}
+                                                                pathOptions={{
+                                                                        color: "#b45309",
+                                                                        fillColor: "#f59e0b",
+                                                                        fillOpacity: 0.25,
+                                                                        weight: 3,
+                                                                }}
+                                                                eventHandlers={{
+                                                                        click: () => setSelectedZone(z),
+                                                                }}>
+                                                                <Tooltip sticky direction="top">
+                                                                        <strong>{z.title || "Speed limit zone"}</strong>
+                                                                        {z.speed_limit_mph != null ? (
+                                                                                <> — {z.speed_limit_mph} mph</>
+                                                                        ) : null}
+                                                                </Tooltip>
+                                                        </Polygon>
+                                                ))}
 
-					{showPOIs &&
-						validPOIs.map((poi) => (
-							<Fragment key={poi.poi_uuid}>
-								<Circle
-									center={[poi.lat, poi.lng]}
-									radius={poi.radius_meters}
-									pathOptions={{
-										color: "#15803d",
-										fillColor: "#27cc5e",
-										fillOpacity: 0.15,
-										weight: 2,
-									}}
-								/>
-								<Marker position={[poi.lat, poi.lng]} icon={unvisitedPoiIcon}>
-									<Tooltip sticky direction="top">
-										<strong>{poi.title || "Point of Interest"}</strong>
-										{poi.bonus_points > 0 ? (
-											<>
-												<br />⭐ {poi.bonus_points} bonus pts
-											</>
-										) : null}
-									</Tooltip>
-									<Popup minWidth={200} maxWidth={260}>
-										<div className="mo-popup">
-											<span className="mo-popup-badge mo-popup-badge--poi">
-												⭐ Point of Interest
-											</span>
-											<div className="mo-popup-title">
-												{poi.title || "Point of Interest"}
-											</div>
-											{poi.description ? (
-												<div className="mo-popup-desc">{poi.description}</div>
-											) : null}
-											{poi.bonus_points > 0 ? (
-												<div className="mo-popup-meta">
-													{poi.bonus_points} bonus points on check-in
-												</div>
-											) : null}
-											<div className="mo-popup-meta">
-												Radius: {Math.round(poi.radius_meters * 3.281)} ft
-											</div>
-											<button
-												className="mo-popup-nav-btn mo-popup-nav-btn--poi"
-												onClick={() => navigate("/pois")}>
-												Open POI Setup →
-											</button>
-										</div>
-									</Popup>
-								</Marker>
-							</Fragment>
-						))}
+                                        {showPOIs &&
+                                                validPOIs.map((poi) => (
+                                                        <Fragment key={poi.poi_uuid}>
+                                                                <Circle
+                                                                        center={[poi.lat, poi.lng]}
+                                                                        radius={poi.radius_meters}
+                                                                        pathOptions={{
+                                                                                color: "#15803d",
+                                                                                fillColor: "#27cc5e",
+                                                                                fillOpacity: 0.15,
+                                                                                weight: 2,
+                                                                        }}
+                                                                />
+                                                                <Marker position={[poi.lat, poi.lng]} icon={unvisitedPoiIcon}>
+                                                                        <Tooltip sticky direction="top">
+                                                                                <strong>{poi.title || "Check-in spot"}</strong>
+                                                                                {poi.bonus_points > 0 ? (
+                                                                                        <>
+                                                                                                <br />⭐ {poi.bonus_points} bonus pts
+                                                                                        </>
+                                                                                ) : null}
+                                                                        </Tooltip>
+                                                                        <Popup minWidth={200} maxWidth={260}>
+                                                                                <div className="mo-popup">
+                                                                                        <span className="mo-popup-badge mo-popup-badge--poi">
+                                                                                                ⭐ Check-in spot
+                                                                                        </span>
+                                                                                        <div className="mo-popup-title">
+                                                                                                {poi.title || "Check-in spot"}
+                                                                                        </div>
+                                                                                        {poi.description ? (
+                                                                                                <div className="mo-popup-desc">{poi.description}</div>
+                                                                                        ) : null}
+                                                                                        {poi.bonus_points > 0 ? (
+                                                                                                <div className="mo-popup-meta">
+                                                                                                        {poi.bonus_points} bonus points on check-in
+                                                                                                </div>
+                                                                                        ) : null}
+                                                                                        <div className="mo-popup-meta">
+                                                                                                Radius: {Math.round(poi.radius_meters * 3.281)} ft
+                                                                                        </div>
+                                                                                        <button
+                                                                                                className="mo-popup-nav-btn mo-popup-nav-btn--poi"
+                                                                                                onClick={() => setSelectedPoi(poi)}>
+                                                                                                View Details →
+                                                                                        </button>
+                                                                                </div>
+                                                                        </Popup>
+                                                                </Marker>
+                                                        </Fragment>
+                                                ))}
 
-					{showPacks &&
-						packsWithLocation.map((pack) => (
-							<Marker
-								key={pack.pack_uuid}
-								position={[pack.location!.lat, pack.location!.lng]}
-								icon={juisePackIcon}>
-								<Tooltip sticky direction="top">
-									<strong>{pack.name || "Juise Pack"}</strong>
-									<br />
-									🅿 {pack.spot_count} spot{pack.spot_count !== 1 ? "s" : ""}
-								</Tooltip>
-								<Popup minWidth={200} maxWidth={260}>
-									<div className="mo-popup">
-										<span className="mo-popup-badge mo-popup-badge--pack">
-											🅿 Juise Pack
-										</span>
-										<div className="mo-popup-title">
-											{pack.name || "Juise Pack"}
-										</div>
-										{pack.description ? (
-											<div className="mo-popup-desc">{pack.description}</div>
-										) : null}
-										<div className="mo-popup-meta">
-											{pack.spot_count} parking spot
-											{pack.spot_count !== 1 ? "s" : ""}
-										</div>
-										<div
-											className={`mo-popup-meta ${pack.active ? "mo-popup-meta--active" : "mo-popup-meta--inactive"}`}>
-											{pack.active ? "✅ Active" : "⏸ Inactive"}
-										</div>
-										<button
-											className="mo-popup-nav-btn mo-popup-nav-btn--pack"
-											onClick={() => navigate("/packs")}>
-											Open Juise Packs →
-										</button>
-									</div>
-								</Popup>
-							</Marker>
-						))}
+                                        {showPacks &&
+                                                packsWithLocation.map((pack) => (
+                                                        <Marker
+                                                                key={pack.pack_uuid}
+                                                                position={[pack.location!.lat, pack.location!.lng]}
+                                                                icon={juisePackIcon}>
+                                                                <Tooltip sticky direction="top">
+                                                                        <strong>{pack.name || "Juise Pack"}</strong>
+                                                                        <br />
+                                                                        🅿 {pack.spot_count} spot{pack.spot_count !== 1 ? "s" : ""}
+                                                                </Tooltip>
+                                                                <Popup minWidth={200} maxWidth={260}>
+                                                                        <div className="mo-popup">
+                                                                                <span className="mo-popup-badge mo-popup-badge--pack">
+                                                                                        🅿 Juise Pack
+                                                                                </span>
+                                                                                <div className="mo-popup-title">
+                                                                                        {pack.name || "Juise Pack"}
+                                                                                </div>
+                                                                                {pack.description ? (
+                                                                                        <div className="mo-popup-desc">{pack.description}</div>
+                                                                                ) : null}
+                                                                                <div className="mo-popup-meta">
+                                                                                        {pack.spot_count} parking spot
+                                                                                        {pack.spot_count !== 1 ? "s" : ""}
+                                                                                </div>
+                                                                                <div
+                                                                                        className={`mo-popup-meta ${pack.active ? "mo-popup-meta--active" : "mo-popup-meta--inactive"}`}>
+                                                                                        {pack.active ? "✅ Active" : "⏸ Inactive"}
+                                                                                </div>
+                                                                                <button
+                                                                                        className="mo-popup-nav-btn mo-popup-nav-btn--pack"
+                                                                                        onClick={() => setSelectedPack(pack)}>
+                                                                                        View Details →
+                                                                                </button>
+                                                                        </div>
+                                                                </Popup>
+                                                        </Marker>
+                                                ))}
 
 					{showBeacons &&
 						beaconLocationsWithLocation.map((location) => {
@@ -697,19 +712,261 @@ export function MapOverviewScreen({
 						})}
 				</MapContainer>
 
-				{!loading && !beaconLoading && mappedItemCount === 0 && (
-					<div className="mo-empty-overlay">
-						<div className="mo-empty-card">
-							<span className="mo-empty-icon">🗺</span>
-							<strong>Nothing mapped yet</strong>
-							<span>
-								Add zones, Points of Interest, Juise Pack locations, or
-								registered beacon sightings to see them here.
-							</span>
-						</div>
-					</div>
-				)}
-			</div>
-		</div>
-	);
+                                {!loading && !beaconLoading && mappedItemCount === 0 && (
+                                        <div className="mo-empty-overlay">
+                                                <div className="mo-empty-card">
+                                                        <span className="mo-empty-icon">🗺</span>
+                                                        <strong>Nothing mapped yet</strong>
+                                                        <span>
+                                                                Add zones, check-in spots, Juise Pack locations, or registered
+                                                                beacon sightings to see them here.
+                                                        </span>
+                                                </div>
+                                        </div>
+                                )}
+                        </div>
+
+                        {selectedPoi && (
+                                <div
+                                        className="mo-detail-modal-backdrop"
+                                        onClick={() => setSelectedPoi(null)}>
+                                        <div
+                                                className="mo-detail-modal-sheet"
+                                                onClick={(e) => e.stopPropagation()}>
+                                                <div className="mo-detail-modal-header">
+                                                        <div className="mo-detail-modal-header-copy">
+                                                                <span className="mo-popup-badge mo-popup-badge--poi">
+                                                                        ⭐ Check-in spot
+                                                                </span>
+                                                                <h3>{selectedPoi.title || "Check-in spot"}</h3>
+                                                        </div>
+                                                        <button
+                                                                type="button"
+                                                                className="secondary-button mo-detail-modal-close"
+                                                                onClick={() => setSelectedPoi(null)}>
+                                                                Close
+                                                        </button>
+                                                </div>
+
+                                                {selectedPoi.description && (
+                                                        <p className="mo-detail-modal-desc">{selectedPoi.description}</p>
+                                                )}
+
+                                                <div className="mo-detail-modal-grid">
+                                                        <div className="mo-detail-modal-cell">
+                                                                <span className="mo-detail-modal-label">Status</span>
+                                                                <span className="mo-detail-modal-value">
+                                                                        {selectedPoi.active ? "✅ Active" : "⏸ Inactive"}
+                                                                </span>
+                                                        </div>
+                                                        <div className="mo-detail-modal-cell">
+                                                                <span className="mo-detail-modal-label">Bonus points</span>
+                                                                <span className="mo-detail-modal-value">
+                                                                        {selectedPoi.bonus_points > 0
+                                                                                ? `⭐ ${selectedPoi.bonus_points}`
+                                                                                : "None"}
+                                                                </span>
+                                                        </div>
+                                                        <div className="mo-detail-modal-cell">
+                                                                <span className="mo-detail-modal-label">Radius</span>
+                                                                <span className="mo-detail-modal-value">
+                                                                        {Math.round(selectedPoi.radius_meters * 3.281)} ft
+                                                                </span>
+                                                        </div>
+                                                        <div className="mo-detail-modal-cell">
+                                                                <span className="mo-detail-modal-label">Coordinates</span>
+                                                                <span className="mo-detail-modal-value">
+                                                                        {selectedPoi.lat.toFixed(5)}, {selectedPoi.lng.toFixed(5)}
+                                                                </span>
+                                                        </div>
+                                                </div>
+
+                                                <button
+                                                        type="button"
+                                                        className="mo-detail-modal-manage-link"
+                                                        onClick={() => {
+                                                                setSelectedPoi(null);
+                                                                navigate("/pois");
+                                                        }}>
+                                                        Manage in POI Setup →
+                                                </button>
+                                        </div>
+                                </div>
+                        )}
+
+                        {selectedPack && (
+                                <div
+                                        className="mo-detail-modal-backdrop"
+                                        onClick={() => setSelectedPack(null)}>
+                                        <div
+                                                className="mo-detail-modal-sheet"
+                                                onClick={(e) => e.stopPropagation()}>
+                                                <div className="mo-detail-modal-header">
+                                                        <div className="mo-detail-modal-header-copy">
+                                                                <span className="mo-popup-badge mo-popup-badge--pack">
+                                                                        🅿 Juise Pack
+                                                                </span>
+                                                                <h3>{selectedPack.name || "Juise Pack"}</h3>
+                                                        </div>
+                                                        <button
+                                                                type="button"
+                                                                className="secondary-button mo-detail-modal-close"
+                                                                onClick={() => setSelectedPack(null)}>
+                                                                Close
+                                                        </button>
+                                                </div>
+
+                                                {getPackPhotoUrl(selectedPack) ? (
+                                                        <img
+                                                                className="mo-detail-modal-pack-photo"
+                                                                src={getPackPhotoUrl(selectedPack)}
+                                                                alt={selectedPack.name || "Juise Pack"}
+                                                        />
+                                                ) : null}
+
+                                                {selectedPack.description && (
+                                                        <p className="mo-detail-modal-desc">{selectedPack.description}</p>
+                                                )}
+
+                                                <div className="mo-detail-modal-grid">
+                                                        <div className="mo-detail-modal-cell">
+                                                                <span className="mo-detail-modal-label">Status</span>
+                                                                <span className="mo-detail-modal-value">
+                                                                        {selectedPack.active ? "✅ Active" : "⏸ Inactive"}
+                                                                </span>
+                                                        </div>
+                                                        <div className="mo-detail-modal-cell">
+                                                                <span className="mo-detail-modal-label">Spots</span>
+                                                                <span className="mo-detail-modal-value">
+                                                                        {selectedPack.spot_count} spot
+                                                                        {selectedPack.spot_count !== 1 ? "s" : ""}
+                                                                </span>
+                                                        </div>
+                                                        {selectedPack.school_owner?.campus_id && (
+                                                                <div className="mo-detail-modal-cell">
+                                                                        <span className="mo-detail-modal-label">Campus</span>
+                                                                        <span className="mo-detail-modal-value">
+                                                                                {selectedPack.school_owner.campus_id}
+                                                                        </span>
+                                                                </div>
+                                                        )}
+                                                </div>
+
+                                                {selectedPackSpotStatuses.length > 0 && (
+                                                        <div className="mo-detail-modal-spots">
+                                                                <span className="mo-detail-modal-label">Spot status</span>
+                                                                <div className="mo-detail-modal-spot-chips">
+                                                                        {selectedPackSpotStatuses.map((spot) => (
+                                                                                <span
+                                                                                        key={spot.spot_uuid}
+                                                                                        className={`mo-detail-modal-spot-chip${
+                                                                                                !spot.active
+                                                                                                        ? " mo-detail-modal-spot-chip--inactive"
+                                                                                                        : spot.reserved
+                                                                                                                ? " mo-detail-modal-spot-chip--reserved"
+                                                                                                                : " mo-detail-modal-spot-chip--open"
+                                                                                        }`}>
+                                                                                        #{spot.spot_number} ·{" "}
+                                                                                        {!spot.active
+                                                                                                ? "Inactive"
+                                                                                                : spot.reserved
+                                                                                                        ? "Reserved"
+                                                                                                        : "Open"}
+                                                                                </span>
+                                                                        ))}
+                                                                </div>
+                                                        </div>
+                                                )}
+
+                                                <button
+                                                        type="button"
+                                                        className="mo-detail-modal-manage-link"
+                                                        onClick={() => {
+                                                                setSelectedPack(null);
+                                                                navigate("/packs");
+                                                        }}>
+                                                        Manage in Juise Packs →
+                                                </button>
+                                        </div>
+                                </div>
+                        )}
+
+                        {selectedZone && (
+                                <div
+                                        className="mo-detail-modal-backdrop"
+                                        onClick={() => setSelectedZone(null)}>
+                                        <div
+                                                className="mo-detail-modal-sheet"
+                                                onClick={(e) => e.stopPropagation()}>
+                                                <div className="mo-detail-modal-header">
+                                                        <div className="mo-detail-modal-header-copy">
+                                                                <span
+                                                                        className={`mo-popup-badge ${
+                                                                                selectedZone.zone_type === "no_go"
+                                                                                        ? "mo-popup-badge--nogo"
+                                                                                        : "mo-popup-badge--speed"
+                                                                        }`}>
+                                                                        {selectedZone.zone_type === "no_go"
+                                                                                ? "⛔ No-go zone"
+                                                                                : "🚦 Speed limit zone"}
+                                                                </span>
+                                                                <h3>
+                                                                        {selectedZone.title ||
+                                                                                (selectedZone.zone_type === "no_go"
+                                                                                        ? "No-go zone"
+                                                                                        : "Speed limit zone")}
+                                                                </h3>
+                                                        </div>
+                                                        <button
+                                                                type="button"
+                                                                className="secondary-button mo-detail-modal-close"
+                                                                onClick={() => setSelectedZone(null)}>
+                                                                Close
+                                                        </button>
+                                                </div>
+
+                                                {selectedZone.description && (
+                                                        <p className="mo-detail-modal-desc">{selectedZone.description}</p>
+                                                )}
+
+                                                <div className="mo-detail-modal-grid">
+                                                        <div className="mo-detail-modal-cell">
+                                                                <span className="mo-detail-modal-label">Status</span>
+                                                                <span className="mo-detail-modal-value">
+                                                                        {selectedZone.active ? "✅ Active" : "⏸ Inactive"}
+                                                                </span>
+                                                        </div>
+                                                        {selectedZone.zone_type === "speed_limit" &&
+                                                        selectedZone.speed_limit_mph != null ? (
+                                                                <div className="mo-detail-modal-cell">
+                                                                        <span className="mo-detail-modal-label">Speed limit</span>
+                                                                        <span className="mo-detail-modal-value">
+                                                                                {selectedZone.speed_limit_mph} mph
+                                                                        </span>
+                                                                </div>
+                                                        ) : null}
+                                                        <div className="mo-detail-modal-cell">
+                                                                <span className="mo-detail-modal-label">Points lost</span>
+                                                                <span className="mo-detail-modal-value">
+                                                                        {selectedZonePointsLost != null
+                                                                                ? `-${selectedZonePointsLost} pts`
+                                                                                : "Not set"}
+                                                                </span>
+                                                        </div>
+                                                </div>
+
+                                                <button
+                                                        type="button"
+                                                        className="mo-detail-modal-manage-link"
+                                                        onClick={() => {
+                                                                setSelectedZone(null);
+                                                                navigate("/zones");
+                                                        }}>
+                                                        Open Penalty Zones →
+                                                </button>
+                                        </div>
+                                </div>
+                        )}
+                </div>
+        );
 }
