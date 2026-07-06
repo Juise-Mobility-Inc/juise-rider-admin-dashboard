@@ -53,7 +53,7 @@ type LeaderboardEntry = {
 	userUUID: string;
 	name: string;
 	detail: string;
-	netPoints: number;
+	earnedPoints: number;
 	bonusPoints: number;
 	rideCount: number;
 	distanceMeters: number;
@@ -126,7 +126,7 @@ type DashboardVisuals = {
 	ridesToday: number;
 	ridesYesterday: number;
 	ridesThisWeek: number;
-	netPoints: number;
+	earnedPoints: number;
 	bonusPoints: number;
 	poiVisits: number;
 	distanceMetersThisWeek: number;
@@ -348,7 +348,13 @@ function FitText({
 		<strong
 			ref={ref}
 			className={className}
-			style={{ whiteSpace: "nowrap", display: "block", overflow: "visible" }}>
+			style={{
+				whiteSpace: "nowrap",
+				display: "block",
+				overflow: "hidden",
+				minWidth: 0,
+				width: "100%",
+			}}>
 			{children}
 		</strong>
 	);
@@ -472,8 +478,8 @@ function buildLeaderboard(
 	return students
 		.map((bundle) => {
 			const sessions = filterSessions(bundle, from, to);
-			const netPoints = sessions.reduce(
-				(sum, session) => sum + getRouteHistoryNetPoints(session),
+			const earnedPoints = sessions.reduce(
+				(sum, session) => sum + getRouteHistoryEarnedPoints(session),
 				0,
 			);
 			const bonusPoints = sessions.reduce(
@@ -488,16 +494,15 @@ function buildLeaderboard(
 				userUUID: resolveStudentUserUUID(bundle.entry),
 				name: formatStudentName(bundle.entry),
 				detail: formatStudentDetail(bundle.entry),
-				netPoints,
+				earnedPoints,
 				bonusPoints,
 				rideCount: sessions.length,
 				distanceMeters,
 			};
 		})
-		.filter((entry) => entry.netPoints !== 0 || entry.rideCount > 0)
 		.sort((left, right) => {
-			if (left.netPoints !== right.netPoints) {
-				return right.netPoints - left.netPoints;
+			if (left.earnedPoints !== right.earnedPoints) {
+				return right.earnedPoints - left.earnedPoints;
 			}
 			if (left.distanceMeters !== right.distanceMeters) {
 				return right.distanceMeters - left.distanceMeters;
@@ -797,8 +802,8 @@ function buildDashboardVisuals(dataset: DashboardDataset): DashboardVisuals {
 	const weekSessions = allSessions.filter((session) =>
 		isInRange(session.started_at, weekStart),
 	);
-	const netPoints = allSessions.reduce(
-		(sum, session) => sum + getRouteHistoryNetPoints(session),
+	const earnedPoints = allSessions.reduce(
+		(sum, session) => sum + getRouteHistoryEarnedPoints(session),
 		0,
 	);
 	const ridePenaltyRecords = getRidePenaltyRecords(dataset.students);
@@ -822,7 +827,7 @@ function buildDashboardVisuals(dataset: DashboardDataset): DashboardVisuals {
 		ridesToday: todaySessions.length,
 		ridesYesterday: yesterdaySessions.length,
 		ridesThisWeek: weekSessions.length,
-		netPoints,
+		earnedPoints,
 		bonusPoints: allSessions.reduce(
 			(sum, session) => sum + session.bonus_points,
 			0,
@@ -1300,6 +1305,9 @@ function ActivePenaltyReportsSection({
 	);
 }
 
+const LEADERBOARD_COLLAPSED_COUNT = 5;
+const LEADERBOARD_EXPANDED_COUNT = 10;
+
 function Leaderboard({
 	entries,
 	windowLabel,
@@ -1307,33 +1315,52 @@ function Leaderboard({
 	entries: LeaderboardEntry[];
 	windowLabel: string;
 }) {
+	const [expanded, setExpanded] = useState(false);
+	const visibleEntries = expanded
+		? entries.slice(0, LEADERBOARD_EXPANDED_COUNT)
+		: entries.slice(0, LEADERBOARD_COLLAPSED_COUNT);
+	const canExpand = entries.length > LEADERBOARD_COLLAPSED_COUNT;
+
 	return (
 		<div className="dashboard-leaderboard-list">
 			{entries.length === 0 ? (
 				<p className="reports-visual-empty">No points in this window yet.</p>
 			) : (
-				entries.map((entry, index) => (
-					<Link
-						className="dashboard-leaderboard-row dashboard-leaderboard-row-link"
-						key={entry.userUUID}
-						to={`/student-ride-violations?student=${encodeURIComponent(entry.userUUID)}`}>
-						<span className="dashboard-rank">{index + 1}</span>
-						<span className="dashboard-avatar">
-							{getInitials(entry.name) || "S"}
-						</span>
-						<div className="dashboard-leaderboard-copy">
-							<strong>{entry.name}</strong>
-							<span>
-								{entry.detail || "Student"} · {entry.rideCount.toLocaleString()}{" "}
-								rides · {formatMiles(entry.distanceMeters)} mi
+				<>
+					{visibleEntries.map((entry, index) => (
+						<Link
+							className="dashboard-leaderboard-row dashboard-leaderboard-row-link"
+							key={entry.userUUID}
+							to={`/student-ride-violations?student=${encodeURIComponent(entry.userUUID)}`}>
+							<span className="dashboard-rank">{index + 1}</span>
+							<span className="dashboard-avatar">
+								{getInitials(entry.name) || "S"}
 							</span>
-						</div>
-						<div className="dashboard-leaderboard-score">
-							<strong>{entry.netPoints.toLocaleString()}</strong>
-							<span>{windowLabel} net pts</span>
-						</div>
-					</Link>
-				))
+							<div className="dashboard-leaderboard-copy">
+								<strong>{entry.name}</strong>
+								<span>
+									{entry.detail || "Student"} ·{" "}
+									{entry.rideCount.toLocaleString()} rides ·{" "}
+									{formatMiles(entry.distanceMeters)} mi
+								</span>
+							</div>
+							<div className="dashboard-leaderboard-score">
+								<strong>{entry.earnedPoints.toLocaleString()}</strong>
+								<span>{windowLabel} pts</span>
+							</div>
+						</Link>
+					))}
+					{canExpand && (
+						<button
+							type="button"
+							className="dashboard-leaderboard-toggle"
+							onClick={() => setExpanded((prev) => !prev)}>
+							{expanded
+								? "Show top 5"
+								: `View top ${Math.min(LEADERBOARD_EXPANDED_COUNT, entries.length)}`}
+						</button>
+					)}
+				</>
 			)}
 		</div>
 	);
@@ -1684,12 +1711,12 @@ export function DashboardScreen({
 
 					<div className="dashboard-hero-grid">
 						<article className="dashboard-hero-card">
-							<span>All-time student net points</span>
+							<span>All-time student points</span>
 							<div className="dashboard-hero-points-balance">
 								<div className="dashboard-hero-points-earned">
-									<small>Net</small>
-									<FitText className="stat-value">
-										{formatCompactNumber(visuals.netPoints)}
+									<small>Earned</small>
+									<FitText className="stat-value" maxFontSize={40}>
+										+{formatCompactNumber(visuals.earnedPoints)}
 									</FitText>
 								</div>
 								<div className="dashboard-hero-points-lost">
@@ -1762,8 +1789,8 @@ export function DashboardScreen({
 										))}
 									</div>
 									<DashboardSectionArrow
-										to="/student-ride-violations"
-										label="View rides"
+										to="/student-leaderboard"
+										label="View full leaderboard"
 									/>
 								</div>
 							</div>

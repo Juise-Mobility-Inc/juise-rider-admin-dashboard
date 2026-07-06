@@ -5836,6 +5836,23 @@
         justify-content: space-between;
         gap: 16px;
         min-width: 0;
+        width: 100%;
+}
+
+.dashboard-hero-points-earned,
+.dashboard-hero-points-lost {
+        min-width: 0;
+}
+
+.dashboard-hero-points-earned small,
+.dashboard-hero-points-lost small {
+        flex: 0 0 auto;
+}
+
+.dashboard-hero-points-earned .stat-value {
+        flex: 1 1 auto;
+        min-width: 0;
+        text-align: right;
 }
 
 .dashboard-hero-points-lost {
@@ -6156,6 +6173,25 @@
 .dashboard-leaderboard-score strong {
         color: var(--text-strong);
         font-size: 1rem;
+}
+
+.dashboard-leaderboard-toggle {
+        justify-self: center;
+        margin-top: 4px;
+        padding: 8px 18px;
+        border-radius: 999px;
+        border: 1px solid var(--panel-border);
+        background: rgba(17, 45, 78, 0.04);
+        color: var(--text-strong);
+        font-size: 0.8rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.dashboard-leaderboard-toggle:hover {
+        background: rgba(17, 45, 78, 0.09);
+        border-color: var(--panel-border-accent, rgba(22, 66, 91, 0.3));
 }
 
 .dashboard-leaderboard-score span {
