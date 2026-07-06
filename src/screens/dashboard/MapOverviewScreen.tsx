@@ -165,6 +165,7 @@ export function MapOverviewScreen({
 
         const [selectedPoi, setSelectedPoi] = useState<SchoolPOI | null>(null);
         const [selectedPack, setSelectedPack] = useState<Pack | null>(null);
+        const [selectedZone, setSelectedZone] = useState<SchoolZone | null>(null);
 
         useEffect(() => {
                 if (!activeSchoolId || !managedAppId) return;
@@ -263,6 +264,15 @@ export function MapOverviewScreen({
                         packs.filter((p) => p.location?.lat != null && p.location?.lng != null),
                 [packs],
         );
+        const selectedZonePointsLost = useMemo(() => {
+                if (!selectedZone) return null;
+                const rules = selectedZone.punishment_policy?.rules ?? [];
+                if (rules.length === 0) return null;
+                return rules.reduce(
+                        (max, rule) => (rule.points_lost > max ? rule.points_lost : max),
+                        rules[0].points_lost,
+                );
+        }, [selectedZone]);
         const selectedPackSpotStatuses = useMemo(() => {
                 if (!selectedPack) return [];
                 const nowSeconds = Math.floor(Date.now() / 1000);
@@ -487,32 +497,14 @@ export function MapOverviewScreen({
                                                                         fillColor: "#ef4444",
                                                                         fillOpacity: 0.35,
                                                                         weight: 3.5,
+                                                                }}
+                                                                eventHandlers={{
+                                                                        click: () => setSelectedZone(z),
                                                                 }}>
                                                                 <Tooltip sticky direction="top">
                                                                         <strong>{z.title || "No-go zone"}</strong>
                                                                         <br />⛔ Students must not enter
                                                                 </Tooltip>
-                                                                <Popup minWidth={200} maxWidth={260}>
-                                                                        <div className="mo-popup">
-                                                                                <span className="mo-popup-badge mo-popup-badge--nogo">
-                                                                                        ⛔ No-go zone
-                                                                                </span>
-                                                                                <div className="mo-popup-title">
-                                                                                        {z.title || "No-go zone"}
-                                                                                </div>
-                                                                                {z.description ? (
-                                                                                        <div className="mo-popup-desc">{z.description}</div>
-                                                                                ) : null}
-                                                                                <div className="mo-popup-meta">
-                                                                                        Students must not enter this area
-                                                                                </div>
-                                                                                <button
-                                                                                        className="mo-popup-nav-btn mo-popup-nav-btn--nogo"
-                                                                                        onClick={() => navigate("/zones")}>
-                                                                                        Open Penalty Zones →
-                                                                                </button>
-                                                                        </div>
-                                                                </Popup>
                                                         </Polygon>
                                                 ))}
 
@@ -529,6 +521,9 @@ export function MapOverviewScreen({
                                                                         fillColor: "#f59e0b",
                                                                         fillOpacity: 0.25,
                                                                         weight: 3,
+                                                                }}
+                                                                eventHandlers={{
+                                                                        click: () => setSelectedZone(z),
                                                                 }}>
                                                                 <Tooltip sticky direction="top">
                                                                         <strong>{z.title || "Speed limit zone"}</strong>
@@ -536,29 +531,6 @@ export function MapOverviewScreen({
                                                                                 <> — {z.speed_limit_mph} mph</>
                                                                         ) : null}
                                                                 </Tooltip>
-                                                                <Popup minWidth={200} maxWidth={260}>
-                                                                        <div className="mo-popup">
-                                                                                <span className="mo-popup-badge mo-popup-badge--speed">
-                                                                                        🚦 Speed limit zone
-                                                                                </span>
-                                                                                <div className="mo-popup-title">
-                                                                                        {z.title || "Speed limit zone"}
-                                                                                </div>
-                                                                                {z.description ? (
-                                                                                        <div className="mo-popup-desc">{z.description}</div>
-                                                                                ) : null}
-                                                                                {z.speed_limit_mph != null ? (
-                                                                                        <div className="mo-popup-meta mo-popup-meta--speed">
-                                                                                                {z.speed_limit_mph} mph limit
-                                                                                        </div>
-                                                                                ) : null}
-                                                                                <button
-                                                                                        className="mo-popup-nav-btn mo-popup-nav-btn--speed"
-                                                                                        onClick={() => navigate("/zones")}>
-                                                                                        Open Penalty Zones →
-                                                                                </button>
-                                                                        </div>
-                                                                </Popup>
                                                         </Polygon>
                                                 ))}
 
@@ -911,6 +883,83 @@ export function MapOverviewScreen({
                                                                 navigate("/packs");
                                                         }}>
                                                         Manage in Juise Packs →
+                                                </button>
+                                        </div>
+                                </div>
+                        )}
+
+                        {selectedZone && (
+                                <div
+                                        className="mo-detail-modal-backdrop"
+                                        onClick={() => setSelectedZone(null)}>
+                                        <div
+                                                className="mo-detail-modal-sheet"
+                                                onClick={(e) => e.stopPropagation()}>
+                                                <div className="mo-detail-modal-header">
+                                                        <div className="mo-detail-modal-header-copy">
+                                                                <span
+                                                                        className={`mo-popup-badge ${
+                                                                                selectedZone.zone_type === "no_go"
+                                                                                        ? "mo-popup-badge--nogo"
+                                                                                        : "mo-popup-badge--speed"
+                                                                        }`}>
+                                                                        {selectedZone.zone_type === "no_go"
+                                                                                ? "⛔ No-go zone"
+                                                                                : "🚦 Speed limit zone"}
+                                                                </span>
+                                                                <h3>
+                                                                        {selectedZone.title ||
+                                                                                (selectedZone.zone_type === "no_go"
+                                                                                        ? "No-go zone"
+                                                                                        : "Speed limit zone")}
+                                                                </h3>
+                                                        </div>
+                                                        <button
+                                                                type="button"
+                                                                className="secondary-button mo-detail-modal-close"
+                                                                onClick={() => setSelectedZone(null)}>
+                                                                Close
+                                                        </button>
+                                                </div>
+
+                                                {selectedZone.description && (
+                                                        <p className="mo-detail-modal-desc">{selectedZone.description}</p>
+                                                )}
+
+                                                <div className="mo-detail-modal-grid">
+                                                        <div className="mo-detail-modal-cell">
+                                                                <span className="mo-detail-modal-label">Status</span>
+                                                                <span className="mo-detail-modal-value">
+                                                                        {selectedZone.active ? "✅ Active" : "⏸ Inactive"}
+                                                                </span>
+                                                        </div>
+                                                        {selectedZone.zone_type === "speed_limit" &&
+                                                        selectedZone.speed_limit_mph != null ? (
+                                                                <div className="mo-detail-modal-cell">
+                                                                        <span className="mo-detail-modal-label">Speed limit</span>
+                                                                        <span className="mo-detail-modal-value">
+                                                                                {selectedZone.speed_limit_mph} mph
+                                                                        </span>
+                                                                </div>
+                                                        ) : null}
+                                                        <div className="mo-detail-modal-cell">
+                                                                <span className="mo-detail-modal-label">Points lost</span>
+                                                                <span className="mo-detail-modal-value">
+                                                                        {selectedZonePointsLost != null
+                                                                                ? `-${selectedZonePointsLost} pts`
+                                                                                : "Not set"}
+                                                                </span>
+                                                        </div>
+                                                </div>
+
+                                                <button
+                                                        type="button"
+                                                        className="mo-detail-modal-manage-link"
+                                                        onClick={() => {
+                                                                setSelectedZone(null);
+                                                                navigate("/zones");
+                                                        }}>
+                                                        Open Penalty Zones →
                                                 </button>
                                         </div>
                                 </div>
