@@ -548,449 +548,442 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
       );
 
     return (
-      <div className="cd-root">
-        <div className="cd-detail-view">
-          <div className="cd-detail-back-bar">
-            <button
-              type="button"
-              className="cd-detail-back-btn"
-              onClick={backToTable}
-            >
-              \u2190 All Devices
-            </button>
-            <span className="cd-detail-back-label">
-              {filteredEntries.length.toLocaleString()} device
-              {filteredEntries.length !== 1 ? "s" : ""}
-            </span>
-          </div>
+			<div className="cd-root">
+				<div className="cd-detail-view">
+					<div className="cd-detail-back-bar">
+						<button
+							type="button"
+							className="cd-detail-back-btn"
+							onClick={backToTable}>
+							← All Devices
+						</button>
+						<span className="cd-detail-back-label">
+							{filteredEntries.length.toLocaleString()} device
+							{filteredEntries.length !== 1 ? "s" : ""}
+						</span>
+					</div>
 
-          <div className="cd-detail-body">
-            {hasMap && (
-              <div className="cd-device-map-wrap">
-                <DeviceMap
-                  beaconPos={beaconPos}
-                  violations={selectedViolations}
-                  beaconLabel={beaconMapLabel}
-                />
-                <div className="cd-device-map-legend">
-                  {beaconPos && (
-                    <span className="cd-map-legend-item cd-map-legend-beacon">
-                      <span
-                        className="cd-map-legend-dot"
-                        style={{ background: "#27CC5E" }}
-                      />
-                      {liveLocation
-                        ? liveLocation.stale
-                          ? "Beacon (stale)"
-                          : "Beacon (live)"
-                        : "Beacon location"}
-                    </span>
-                  )}
-                  {selectedViolations.some(
-                    (v) =>
-                      Number.isFinite(v.violation_latitude) &&
-                      v.violation_latitude !== 0,
-                  ) && (
-                    <span className="cd-map-legend-item">
-                      <span
-                        className="cd-map-legend-dot"
-                        style={{ background: "#dc3545" }}
-                      />
-                      Violations
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
+					<div className="cd-detail-body">
+						{hasMap && (
+							<div className="cd-device-map-wrap">
+								<DeviceMap
+									beaconPos={beaconPos}
+									violations={selectedViolations}
+									beaconLabel={beaconMapLabel}
+								/>
+								<div className="cd-device-map-legend">
+									{beaconPos && (
+										<span className="cd-map-legend-item cd-map-legend-beacon">
+											<span
+												className="cd-map-legend-dot"
+												style={{ background: "#27CC5E" }}
+											/>
+											{liveLocation
+												? liveLocation.stale
+													? "Beacon (stale)"
+													: "Beacon (live)"
+												: "Beacon location"}
+										</span>
+									)}
+									{selectedViolations.some(
+										(v) =>
+											Number.isFinite(v.violation_latitude) &&
+											v.violation_latitude !== 0,
+									) && (
+										<span className="cd-map-legend-item">
+											<span
+												className="cd-map-legend-dot"
+												style={{ background: "#dc3545" }}
+											/>
+											Violations
+										</span>
+									)}
+								</div>
+							</div>
+						)}
 
-            <div className="cd-detail-header">
-              <div className="cd-detail-device-thumb">
-                {devicePhoto ? (
-                  <img
-                    src={devicePhoto}
-                    alt={formatDevice(selectedEntry)}
-                    className="cd-device-photo"
-                  />
-                ) : (
-                  <div className="cd-device-photo-placeholder">🚲</div>
-                )}
-              </div>
-              <div className="cd-detail-header-info">
-                <h3 className="cd-detail-device-name">
-                  {formatDevice(selectedEntry)}
-                </h3>
-                <p className="cd-detail-student-name">
-                  {formatName(selectedEntry)}
-                </p>
-                <div className="cd-detail-badges">
-                  <span className={getDeviceStatusClass(statusLabel)}>
-                    {statusLabel}
-                  </span>
-                  {selectedEntry.device.powertrain_type && (
-                    <span className="cd-tag">
-                      {capitalize(selectedEntry.device.powertrain_type)}
-                    </span>
-                  )}
-                  {selectedEntry.device.device_type && (
-                    <span className="cd-tag">
-                      {capitalize(selectedEntry.device.device_type)}
-                    </span>
-                  )}
-                  {beaconInfo && (
-                    <span className="cd-tag cd-tag-beacon">
-                      📡 {beaconInfo.beacon_mac}
-                    </span>
-                  )}
-                  {!beaconInfo && beaconMeta && (
-                    <span className="cd-tag cd-tag-beacon">📡 Beacon</span>
-                  )}
-                </div>
-              </div>
-            </div>
+						<div className="cd-detail-header">
+							<div className="cd-detail-device-thumb">
+								{devicePhoto ? (
+									<img
+										src={devicePhoto}
+										alt={formatDevice(selectedEntry)}
+										className="cd-device-photo"
+									/>
+								) : (
+									<div className="cd-device-photo-placeholder">🚲</div>
+								)}
+							</div>
+							<div className="cd-detail-header-info">
+								<h3 className="cd-detail-device-name">
+									{formatDevice(selectedEntry)}
+								</h3>
+								<p className="cd-detail-student-name">
+									{formatName(selectedEntry)}
+								</p>
+								<div className="cd-detail-badges">
+									<span className={getDeviceStatusClass(statusLabel)}>
+										{statusLabel}
+									</span>
+									{selectedEntry.device.powertrain_type && (
+										<span className="cd-tag">
+											{capitalize(selectedEntry.device.powertrain_type)}
+										</span>
+									)}
+									{selectedEntry.device.device_type && (
+										<span className="cd-tag">
+											{capitalize(selectedEntry.device.device_type)}
+										</span>
+									)}
+									{beaconInfo && (
+										<span className="cd-tag cd-tag-beacon">
+											📡 {beaconInfo.beacon_mac}
+										</span>
+									)}
+									{!beaconInfo && beaconMeta && (
+										<span className="cd-tag cd-tag-beacon">📡 Beacon</span>
+									)}
+								</div>
+							</div>
+						</div>
 
-            <div className="cd-stats-row">
-              <div className="cd-stat">
-                <span>Total violations</span>
-                <strong>{selectedViolations.length.toLocaleString()}</strong>
-              </div>
-              <div className="cd-stat">
-                <span>Active</span>
-                <strong
-                  className={
-                    selectedViolations.filter((v) => v.active).length > 0
-                      ? "cd-stat-danger"
-                      : ""
-                  }
-                >
-                  {selectedViolations
-                    .filter((v) => v.active)
-                    .length.toLocaleString()}
-                </strong>
-              </div>
-              <div className="cd-stat">
-                <span>Last violation</span>
-                <strong>
-                  {selectedViolations.length > 0
-                    ? formatTimestamp(selectedViolations[0].created_at)
-                    : "\u2014"}
-                </strong>
-              </div>
-              <div className="cd-stat">
-                <span>Registered</span>
-                <strong>
-                  {formatTimestamp(selectedEntry.device.created_at)}
-                </strong>
-              </div>
-            </div>
+						<div className="cd-stats-row">
+							<div className="cd-stat">
+								<span>Total violations</span>
+								<strong>{selectedViolations.length.toLocaleString()}</strong>
+							</div>
+							<div className="cd-stat">
+								<span>Active</span>
+								<strong
+									className={
+										selectedViolations.filter((v) => v.active).length > 0
+											? "cd-stat-danger"
+											: ""
+									}>
+									{selectedViolations
+										.filter((v) => v.active)
+										.length.toLocaleString()}
+								</strong>
+							</div>
+							<div className="cd-stat">
+								<span>Last violation</span>
+								<strong>
+									{selectedViolations.length > 0
+										? formatTimestamp(selectedViolations[0].created_at)
+										: "\u2014"}
+								</strong>
+							</div>
+							<div className="cd-stat">
+								<span>Registered</span>
+								<strong>
+									{formatTimestamp(selectedEntry.device.created_at)}
+								</strong>
+							</div>
+						</div>
 
-            <div className="cd-detail-columns">
-              <div className="cd-detail-col">
-                <section className="cd-section">
-                  <h4 className="cd-section-title">Device Details</h4>
-                  <div className="cd-info-grid">
-                    {selectedEntry.device.device_type && (
-                      <div className="cd-info-row">
-                        <span>Type</span>
-                        <strong>
-                          {capitalize(selectedEntry.device.device_type)}
-                        </strong>
-                      </div>
-                    )}
-                    {(selectedEntry.device.make || selectedEntry.device.model) && (
-                      <div className="cd-info-row">
-                        <span>Make / Model</span>
-                        <strong>
-                          {[
-                            selectedEntry.device.make,
-                            selectedEntry.device.model,
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
-                        </strong>
-                      </div>
-                    )}
-                    {selectedEntry.device.color && (
-                      <div className="cd-info-row">
-                        <span>Color</span>
-                        <strong>
-                          {capitalize(selectedEntry.device.color)}
-                        </strong>
-                      </div>
-                    )}
-                    {selectedEntry.device.serial_number && (
-                      <div className="cd-info-row">
-                        <span>Serial number</span>
-                        <strong className="cd-mono">
-                          {selectedEntry.device.serial_number}
-                        </strong>
-                      </div>
-                    )}
-                    {selectedEntry.device.powertrain_type && (
-                      <div className="cd-info-row">
-                        <span>Powertrain</span>
-                        <strong>
-                          {capitalize(selectedEntry.device.powertrain_type)}
-                        </strong>
-                      </div>
-                    )}
-                    {selectedEntry.device.registration_status && (
-                      <div className="cd-info-row">
-                        <span>Registration</span>
-                        <strong>
-                          {capitalize(
-                            selectedEntry.device.registration_status,
-                          )}
-                        </strong>
-                      </div>
-                    )}
-                  </div>
-                </section>
+						<div className="cd-detail-columns">
+							<div className="cd-detail-col">
+								<section className="cd-section">
+									<h4 className="cd-section-title">Device Details</h4>
+									<div className="cd-info-grid">
+										{selectedEntry.device.device_type && (
+											<div className="cd-info-row">
+												<span>Type</span>
+												<strong>
+													{capitalize(selectedEntry.device.device_type)}
+												</strong>
+											</div>
+										)}
+										{(selectedEntry.device.make ||
+											selectedEntry.device.model) && (
+											<div className="cd-info-row">
+												<span>Make / Model</span>
+												<strong>
+													{[
+														selectedEntry.device.make,
+														selectedEntry.device.model,
+													]
+														.filter(Boolean)
+														.join(" ")}
+												</strong>
+											</div>
+										)}
+										{selectedEntry.device.color && (
+											<div className="cd-info-row">
+												<span>Color</span>
+												<strong>
+													{capitalize(selectedEntry.device.color)}
+												</strong>
+											</div>
+										)}
+										{selectedEntry.device.serial_number && (
+											<div className="cd-info-row">
+												<span>Serial number</span>
+												<strong className="cd-mono">
+													{selectedEntry.device.serial_number}
+												</strong>
+											</div>
+										)}
+										{selectedEntry.device.powertrain_type && (
+											<div className="cd-info-row">
+												<span>Powertrain</span>
+												<strong>
+													{capitalize(selectedEntry.device.powertrain_type)}
+												</strong>
+											</div>
+										)}
+										{selectedEntry.device.registration_status && (
+											<div className="cd-info-row">
+												<span>Registration</span>
+												<strong>
+													{capitalize(selectedEntry.device.registration_status)}
+												</strong>
+											</div>
+										)}
+									</div>
+								</section>
 
-                {(beaconInfo || beaconMeta || liveLocation) && (
-                  <section className="cd-section">
-                    <h4 className="cd-section-title">📡 Beacon</h4>
-                    <div className="cd-info-grid">
-                      {beaconInfo && (
-                        <div className="cd-info-row">
-                          <span>MAC address</span>
-                          <strong className="cd-mono">
-                            {beaconInfo.beacon_mac}
-                          </strong>
-                        </div>
-                      )}
-                      {liveLocation && (
-                        <>
-                          <div className="cd-info-row">
-                            <span>Status</span>
-                            <strong>
-                              {liveLocation.stale ? "Stale" : "Live"}
-                            </strong>
-                          </div>
-                          {liveLocation.observed_at != null && (
-                            <div className="cd-info-row">
-                              <span>Last observed</span>
-                              <strong>
-                                {formatTimestampFull(liveLocation.observed_at)}
-                              </strong>
-                            </div>
-                          )}
-                          {liveLocation.sighting_count > 0 && (
-                            <div className="cd-info-row">
-                              <span>Sightings</span>
-                              <strong>
-                                {liveLocation.sighting_count.toLocaleString()}
-                              </strong>
-                            </div>
-                          )}
-                          {liveLocation.rssi != null && (
-                            <div className="cd-info-row">
-                              <span>Signal (RSSI)</span>
-                              <strong>{liveLocation.rssi} dBm</strong>
-                            </div>
-                          )}
-                          {liveLocation.radius_meters != null && (
-                            <div className="cd-info-row">
-                              <span>Accuracy</span>
-                              <strong>
-                                \u00b1{liveLocation.radius_meters.toFixed(0)} m
-                              </strong>
-                            </div>
-                          )}
-                          {liveLocation.estimate_method && (
-                            <div className="cd-info-row">
-                              <span>Method</span>
-                              <strong>
-                                {capitalize(liveLocation.estimate_method)}
-                              </strong>
-                            </div>
-                          )}
-                          {beaconPos && (
-                            <div className="cd-info-row">
-                              <span>Coordinates</span>
-                              <strong className="cd-mono cd-mono-sm">
-                                {beaconPos[0].toFixed(5)},{" "}
-                                {beaconPos[1].toFixed(5)}
-                              </strong>
-                            </div>
-                          )}
-                        </>
-                      )}
-                      {!liveLocation && beaconMeta && (
-                        <>
-                          {beaconMeta.uuid && (
-                            <div className="cd-info-row">
-                              <span>Beacon UUID</span>
-                              <strong className="cd-mono cd-mono-sm">
-                                {beaconMeta.uuid}
-                              </strong>
-                            </div>
-                          )}
-                          {beaconMeta.hubUUID && (
-                            <div className="cd-info-row">
-                              <span>Hub UUID</span>
-                              <strong className="cd-mono cd-mono-sm">
-                                {beaconMeta.hubUUID}
-                              </strong>
-                            </div>
-                          )}
-                          {beaconMeta.major != null && (
-                            <div className="cd-info-row">
-                              <span>Major</span>
-                              <strong>{beaconMeta.major}</strong>
-                            </div>
-                          )}
-                          {beaconMeta.minor != null && (
-                            <div className="cd-info-row">
-                              <span>Minor</span>
-                              <strong>{beaconMeta.minor}</strong>
-                            </div>
-                          )}
-                          {beaconMeta.rssi != null && (
-                            <div className="cd-info-row">
-                              <span>Signal (RSSI)</span>
-                              <strong>{beaconMeta.rssi} dBm</strong>
-                            </div>
-                          )}
-                          {beaconMeta.lastSeen != null && (
-                            <div className="cd-info-row">
-                              <span>Last seen</span>
-                              <strong>
-                                {formatTimestampFull(beaconMeta.lastSeen)}
-                              </strong>
-                            </div>
-                          )}
-                          {beaconMeta.position && (
-                            <div className="cd-info-row">
-                              <span>Coordinates</span>
-                              <strong className="cd-mono cd-mono-sm">
-                                {beaconMeta.position[0].toFixed(5)},{" "}
-                                {beaconMeta.position[1].toFixed(5)}
-                              </strong>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </section>
-                )}
+								{(beaconInfo || beaconMeta || liveLocation) && (
+									<section className="cd-section">
+										<h4 className="cd-section-title">📡 Beacon</h4>
+										<div className="cd-info-grid">
+											{beaconInfo && (
+												<div className="cd-info-row">
+													<span>MAC address</span>
+													<strong className="cd-mono">
+														{beaconInfo.beacon_mac}
+													</strong>
+												</div>
+											)}
+											{liveLocation && (
+												<>
+													<div className="cd-info-row">
+														<span>Status</span>
+														<strong>
+															{liveLocation.stale ? "Stale" : "Live"}
+														</strong>
+													</div>
+													{liveLocation.observed_at != null && (
+														<div className="cd-info-row">
+															<span>Last observed</span>
+															<strong>
+																{formatTimestampFull(liveLocation.observed_at)}
+															</strong>
+														</div>
+													)}
+													{liveLocation.sighting_count > 0 && (
+														<div className="cd-info-row">
+															<span>Sightings</span>
+															<strong>
+																{liveLocation.sighting_count.toLocaleString()}
+															</strong>
+														</div>
+													)}
+													{liveLocation.rssi != null && (
+														<div className="cd-info-row">
+															<span>Signal (RSSI)</span>
+															<strong>{liveLocation.rssi} dBm</strong>
+														</div>
+													)}
+													{liveLocation.radius_meters != null && (
+														<div className="cd-info-row">
+															<span>Accuracy</span>
+															<strong>
+																\u00b1{liveLocation.radius_meters.toFixed(0)} m
+															</strong>
+														</div>
+													)}
+													{liveLocation.estimate_method && (
+														<div className="cd-info-row">
+															<span>Method</span>
+															<strong>
+																{capitalize(liveLocation.estimate_method)}
+															</strong>
+														</div>
+													)}
+													{beaconPos && (
+														<div className="cd-info-row">
+															<span>Coordinates</span>
+															<strong className="cd-mono cd-mono-sm">
+																{beaconPos[0].toFixed(5)},{" "}
+																{beaconPos[1].toFixed(5)}
+															</strong>
+														</div>
+													)}
+												</>
+											)}
+											{!liveLocation && beaconMeta && (
+												<>
+													{beaconMeta.uuid && (
+														<div className="cd-info-row">
+															<span>Beacon UUID</span>
+															<strong className="cd-mono cd-mono-sm">
+																{beaconMeta.uuid}
+															</strong>
+														</div>
+													)}
+													{beaconMeta.hubUUID && (
+														<div className="cd-info-row">
+															<span>Hub UUID</span>
+															<strong className="cd-mono cd-mono-sm">
+																{beaconMeta.hubUUID}
+															</strong>
+														</div>
+													)}
+													{beaconMeta.major != null && (
+														<div className="cd-info-row">
+															<span>Major</span>
+															<strong>{beaconMeta.major}</strong>
+														</div>
+													)}
+													{beaconMeta.minor != null && (
+														<div className="cd-info-row">
+															<span>Minor</span>
+															<strong>{beaconMeta.minor}</strong>
+														</div>
+													)}
+													{beaconMeta.rssi != null && (
+														<div className="cd-info-row">
+															<span>Signal (RSSI)</span>
+															<strong>{beaconMeta.rssi} dBm</strong>
+														</div>
+													)}
+													{beaconMeta.lastSeen != null && (
+														<div className="cd-info-row">
+															<span>Last seen</span>
+															<strong>
+																{formatTimestampFull(beaconMeta.lastSeen)}
+															</strong>
+														</div>
+													)}
+													{beaconMeta.position && (
+														<div className="cd-info-row">
+															<span>Coordinates</span>
+															<strong className="cd-mono cd-mono-sm">
+																{beaconMeta.position[0].toFixed(5)},{" "}
+																{beaconMeta.position[1].toFixed(5)}
+															</strong>
+														</div>
+													)}
+												</>
+											)}
+										</div>
+									</section>
+								)}
 
-                <section className="cd-section">
-                  <h4 className="cd-section-title">Student</h4>
-                  <div className="cd-student-card">
-                    <div className="cd-student-card-avatar">
-                      {studentPhoto ? (
-                        <img
-                          src={studentPhoto}
-                          alt={formatName(selectedEntry)}
-                          className="cd-avatar-img cd-avatar-img-lg"
-                        />
-                      ) : (
-                        <div className="cd-avatar-initials cd-avatar-initials-lg">
-                          {getInitials(formatName(selectedEntry))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="cd-student-card-info">
-                      <strong>{formatName(selectedEntry)}</strong>
-                      {formatStudentId(selectedEntry) && (
-                        <p className="cd-student-sub">
-                          ID: {formatStudentId(selectedEntry)}
-                        </p>
-                      )}
-                      {(selectedEntry.student.user.email ||
-                        selectedEntry.student.user.username) && (
-                        <p className="cd-student-sub">
-                          {selectedEntry.student.user.email ||
-                            selectedEntry.student.user.username}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </section>
-              </div>
+								<section className="cd-section">
+									<h4 className="cd-section-title">Student</h4>
+									<div className="cd-student-card">
+										<div className="cd-student-card-avatar">
+											{studentPhoto ? (
+												<img
+													src={studentPhoto}
+													alt={formatName(selectedEntry)}
+													className="cd-avatar-img cd-avatar-img-lg"
+												/>
+											) : (
+												<div className="cd-avatar-initials cd-avatar-initials-lg">
+													{getInitials(formatName(selectedEntry))}
+												</div>
+											)}
+										</div>
+										<div className="cd-student-card-info">
+											<strong>{formatName(selectedEntry)}</strong>
+											{formatStudentId(selectedEntry) && (
+												<p className="cd-student-sub">
+													ID: {formatStudentId(selectedEntry)}
+												</p>
+											)}
+											{(selectedEntry.student.user.email ||
+												selectedEntry.student.user.username) && (
+												<p className="cd-student-sub">
+													{selectedEntry.student.user.email ||
+														selectedEntry.student.user.username}
+												</p>
+											)}
+										</div>
+									</div>
+								</section>
+							</div>
 
-              <div className="cd-detail-col">
-                <section className="cd-section">
-                  <h4 className="cd-section-title">
-                    Enforcement Violations
-                    {selectedViolations.length > 0 && (
-                      <span className="cd-section-count">
-                        {selectedViolations.length}
-                      </span>
-                    )}
-                  </h4>
-                  {selectedViolations.length === 0 ? (
-                    <p className="cd-empty-inline">
-                      No violations reported for this device.
-                    </p>
-                  ) : (
-                    <div className="cd-violation-list">
-                      {selectedViolations.map((v) => {
-                        const vStatus = formatViolationStatus(v);
-                        const fee = formatCurrency(v.payment_amount_cents);
-                        const feePaid = !!v.payment_collected_at;
-                        const hasCoords =
-                          Number.isFinite(v.violation_latitude) &&
-                          Number.isFinite(v.violation_longitude) &&
-                          v.violation_latitude !== 0;
-                        return (
-                          <div
-                            key={v.violation_uuid}
-                            className={`cd-violation-card${v.active ? " cd-violation-card-active" : ""}`}
-                          >
-                            <div className="cd-violation-card-header">
-                              <strong className="cd-violation-type">
-                                {capitalize(v.violation_type) || "Violation"}
-                              </strong>
-                              <div className="cd-violation-badges">
-                                <span
-                                  className={`cd-violation-status cd-violation-status-${vStatus.toLowerCase()}`}
-                                >
-                                  {vStatus}
-                                </span>
-                                {fee && (
-                                  <span
-                                    className={`cd-violation-fee${feePaid ? " cd-violation-fee-paid" : ""}`}
-                                  >
-                                    {fee}
-                                    {feePaid ? " paid" : ""}
-                                  </span>
-                                )}
-                                {hasCoords && (
-                                  <span
-                                    className="cd-violation-has-location"
-                                    title="Location on map"
-                                  >
-                                    📍
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            {v.description && (
-                              <p className="cd-violation-desc">
-                                {v.description}
-                              </p>
-                            )}
-                            {v.admin_notes && (
-                              <p className="cd-violation-notes">
-                                <em>Note:</em> {v.admin_notes}
-                              </p>
-                            )}
-                            <p className="cd-violation-date">
-                              {formatTimestamp(v.created_at)}
-                            </p>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </section>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+							<div className="cd-detail-col">
+								<section className="cd-section">
+									<h4 className="cd-section-title">
+										Enforcement Violations
+										{selectedViolations.length > 0 && (
+											<span className="cd-section-count">
+												{selectedViolations.length}
+											</span>
+										)}
+									</h4>
+									{selectedViolations.length === 0 ? (
+										<p className="cd-empty-inline">
+											No violations reported for this device.
+										</p>
+									) : (
+										<div className="cd-violation-list">
+											{selectedViolations.map((v) => {
+												const vStatus = formatViolationStatus(v);
+												const fee = formatCurrency(v.payment_amount_cents);
+												const feePaid = !!v.payment_collected_at;
+												const hasCoords =
+													Number.isFinite(v.violation_latitude) &&
+													Number.isFinite(v.violation_longitude) &&
+													v.violation_latitude !== 0;
+												return (
+													<div
+														key={v.violation_uuid}
+														className={`cd-violation-card${v.active ? " cd-violation-card-active" : ""}`}>
+														<div className="cd-violation-card-header">
+															<strong className="cd-violation-type">
+																{capitalize(v.violation_type) || "Violation"}
+															</strong>
+															<div className="cd-violation-badges">
+																<span
+																	className={`cd-violation-status cd-violation-status-${vStatus.toLowerCase()}`}>
+																	{vStatus}
+																</span>
+																{fee && (
+																	<span
+																		className={`cd-violation-fee${feePaid ? " cd-violation-fee-paid" : ""}`}>
+																		{fee}
+																		{feePaid ? " paid" : ""}
+																	</span>
+																)}
+																{hasCoords && (
+																	<span
+																		className="cd-violation-has-location"
+																		title="Location on map">
+																		📍
+																	</span>
+																)}
+															</div>
+														</div>
+														{v.description && (
+															<p className="cd-violation-desc">
+																{v.description}
+															</p>
+														)}
+														{v.admin_notes && (
+															<p className="cd-violation-notes">
+																<em>Note:</em> {v.admin_notes}
+															</p>
+														)}
+														<p className="cd-violation-date">
+															{formatTimestamp(v.created_at)}
+														</p>
+													</div>
+												);
+											})}
+										</div>
+									)}
+								</section>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		);
   }
 
   // ── Table view (default) ───────────────────────────────────────────────────
