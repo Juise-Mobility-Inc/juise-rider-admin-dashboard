@@ -13194,6 +13194,11 @@
         color: #b91c1c;
 }
 
+.reg-status-inactive {
+        background: rgba(148, 163, 184, 0.18);
+        color: #475569;
+}
+
 /* chips (shared, used by other screens) */
 .reg-chip {
         font-size: 0.72rem;

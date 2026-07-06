@@ -225,7 +225,7 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
   const [entries, setEntries] = useState<RegisteredDeviceReviewEntry[]>([]);
   const [rules, setRules] = useState<RegisteredDeviceFeeRule[]>([]);
   const [devicePhotoUrls, setDevicePhotoUrls] = useState<Record<string, string>>({});
-  const [filter, setFilter] = useState("");
+  const [filter, setFilter] = useState("pending");
   const [search, setSearch] = useState("");
   const [selectedUUID, setSelectedUUID] = useState("");
   const [manualAmounts, setManualAmounts] = useState<Record<string, string>>({});
