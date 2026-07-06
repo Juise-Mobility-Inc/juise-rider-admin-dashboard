@@ -106,6 +106,7 @@ import { VehicleRegistrationsScreen } from "./screens/dashboard/VehicleRegistrat
 import { ViolationFeesScreen } from "./screens/dashboard/ViolationFeesScreen";
 import { ZonesScreen } from "./screens/dashboard/ZonesScreen";
 import { MapOverviewScreen } from "./screens/dashboard/MapOverviewScreen";
+import { SightingsMapScreen } from "./screens/dashboard/SightingsMapScreen";
 import {
         loadSelectedStudentDetail,
         loadStudentRoster,
@@ -135,7 +136,8 @@ type Section =
         | "reports"
         | "packs"
         | "reservations"
-        | "mapOverview";
+        | "mapOverview"
+        | "sightingsMap";
 type PackTab = "create" | "existing";
 type BannerTone = "success" | "error" | "info";
 type AuthMode = "login" | "signup";
@@ -188,6 +190,7 @@ const dashboardSections: Array<{
         { section: "reports", label: "Reports", path: "/reports" },
         { section: "packs", label: "Juise Packs", path: "/packs" },
         { section: "mapOverview", label: "Map Overview", path: "/map-overview" },
+        { section: "sightingsMap", label: "Sightings Map", path: "/sightings-map" },
         {
                 section: "reservations",
                 label: "Pending Reservations",
@@ -4849,6 +4852,8 @@ function App() {
                                                 adminUserUUID={session?.claims.user_uuid ?? ""}
                                         />
                                 );
+                        case "sightingsMap":
+                                return <SightingsMapScreen />;
                         case "packs":
                                 return (
                                         <PacksScreen
@@ -4989,6 +4994,15 @@ function App() {
                                                 }>
                                                 Map Overview
                                         </NavLink>
+                                        {import.meta.env.DEV && (
+                                                <NavLink
+                                                        to="/sightings-map"
+                                                        className={({ isActive }) =>
+                                                                isActive ? "nav-button nav-button-active" : "nav-button"
+                                                        }>
+                                                        Sightings Map
+                                                </NavLink>
+                                        )}
                                         <NavLink
                                                 to="/reports"
                                                 className={({ isActive }) =>
@@ -5074,14 +5088,14 @@ function App() {
                                         {/* Juise Packs section */}
                                         <div className="nav-group">
                                                 <button
-                                                        className="nav-group-header"
+                                                        className={`nav-group-header${openNavGroups.juisePacks ? " nav-group-header-open" : ""}`}
                                                         type="button"
                                                         onClick={() =>
                                                                 setOpenNavGroups((p) => ({ ...p, juisePacks: !p.juisePacks }))
                                                         }>
                                                         <span className="nav-group-header-label">
                                                                 Juise Packs
-                                                                {reservations.length > 0 && (
+                                                                {!openNavGroups.juisePacks && reservations.length > 0 && (
                                                                         <span className="nav-badge">{reservations.length}</span>
                                                                 )}
                                                         </span>
@@ -5109,6 +5123,9 @@ function App() {
                                                                                         : "nav-sub-item"
                                                                         }>
                                                                         View Parking Reservations
+                                                                        {reservations.length > 0 && (
+                                                                                <span className="nav-badge">{reservations.length}</span>
+                                                                        )}
                                                                 </NavLink>
                                                         </div>
                                                 )}
@@ -5146,14 +5163,14 @@ function App() {
                                         {/* Vehicles section */}
                                         <div className="nav-group">
                                                 <button
-                                                        className="nav-group-header"
+                                                        className={`nav-group-header${openNavGroups.vehicles ? " nav-group-header-open" : ""}`}
                                                         type="button"
                                                         onClick={() =>
                                                                 setOpenNavGroups((p) => ({ ...p, vehicles: !p.vehicles }))
                                                         }>
                                                         <span className="nav-group-header-label">
                                                                 Vehicles
-                                                                {pendingVehicleCount !== null && pendingVehicleCount > 0 && (
+                                                                {!openNavGroups.vehicles && pendingVehicleCount !== null && pendingVehicleCount > 0 && (
                                                                         <span className="nav-badge">{pendingVehicleCount}</span>
                                                                 )}
                                                         </span>
@@ -5181,6 +5198,9 @@ function App() {
                                                                                         : "nav-sub-item"
                                                                         }>
                                                                         Vehicle Registrations
+                                                                        {pendingVehicleCount !== null && pendingVehicleCount > 0 && (
+                                                                                <span className="nav-badge">{pendingVehicleCount}</span>
+                                                                        )}
                                                                 </NavLink>
                                                                 <NavLink
                                                                         to="/registration-fees"
@@ -5198,7 +5218,7 @@ function App() {
                                         {/* Parking and Ride Enforcement group */}
                                         <div className="nav-group">
                                                 <button
-                                                        className="nav-group-header"
+                                                        className={`nav-group-header${openNavGroups.parkingEnforcement ? " nav-group-header-open" : ""}`}
                                                         type="button"
                                                         onClick={() =>
                                                                 setOpenNavGroups((p) => ({
@@ -5208,7 +5228,7 @@ function App() {
                                                         }>
                                                         <span className="nav-group-header-label">
                                                                 Compliance Enforcement
-                                                                {openEnforcementCount !== null && openEnforcementCount > 0 && (
+                                                                {!openNavGroups.parkingEnforcement && openEnforcementCount !== null && openEnforcementCount > 0 && (
                                                                         <span className="nav-badge">{openEnforcementCount}</span>
                                                                 )}
                                                         </span>
@@ -5227,6 +5247,9 @@ function App() {
                                                                                         : "nav-sub-item"
                                                                         }>
                                                                         Parking Enforcement Reports
+                                                                        {openEnforcementCount !== null && openEnforcementCount > 0 && (
+                                                                                <span className="nav-badge">{openEnforcementCount}</span>
+                                                                        )}
                                                                 </NavLink>
                                                                 <NavLink
                                                                         to="/student-ride-violations"
