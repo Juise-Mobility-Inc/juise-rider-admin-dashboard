@@ -2181,9 +2181,14 @@ function App() {
                         return;
                 }
 
-                setActivePoiDraftId((current) =>
-                        poiDrafts.some((poi) => poi.id === current) ? current : poiDrafts[0].id,
-                );
+                setActivePoiDraftId((current) => {
+                        if (!current) {
+                                return current;
+                        }
+                        return poiDrafts.some((poi) => poi.id === current)
+                                ? current
+                                : poiDrafts[0].id;
+                });
         }, [poiDrafts]);
 
         useEffect(() => {
@@ -2192,11 +2197,14 @@ function App() {
                         return;
                 }
 
-                setActiveZoneDraftId((current) =>
-                        zoneDrafts.some((zone) => zone.id === current)
+                setActiveZoneDraftId((current) => {
+                        if (!current) {
+                                return current;
+                        }
+                        return zoneDrafts.some((zone) => zone.id === current)
                                 ? current
-                                : zoneDrafts[0].id,
-                );
+                                : zoneDrafts[0].id;
+                });
         }, [zoneDrafts]);
 
         useEffect(() => {
