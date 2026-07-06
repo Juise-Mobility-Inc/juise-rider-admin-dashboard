@@ -12292,6 +12292,14 @@
         color: #9ca3af;
 }
 
+.mo-popup-pack-photo {
+        width: 100%;
+        max-height: 120px;
+        object-fit: cover;
+        border-radius: 10px;
+        margin-bottom: 2px;
+}
+
 .mo-popup-age {
         color: #9ca3af;
         font-size: 0.85em;
