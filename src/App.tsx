@@ -3208,7 +3208,7 @@ function App() {
                 );
         }
 
-        function handleOpenStudentFromPenaltyReport(membershipId: string) {
+        function handleOpenStudentFromDashboard(membershipId: string) {
                 const normalizedMembershipId = membershipId.trim();
                 if (!normalizedMembershipId) {
                         return;
@@ -3218,7 +3218,7 @@ function App() {
                 void handleSelectStudentInRoster(normalizedMembershipId);
         }
 
-        async function handleOpenStudentDeviceFromPenaltyReport(
+        async function handleOpenStudentDeviceFromDashboard(
                 membershipId: string,
                 deviceUUID: string,
         ) {
@@ -4802,6 +4802,7 @@ function App() {
                                         <CampusDevicesScreen
                                                 activeSchoolId={activeSchoolId}
                                                 managedAppId={context.managedAppId}
+                                                onOpenStudent={handleOpenStudentFromDashboard}
                                         />
                                 );
                         case "registrationFees":
@@ -4818,8 +4819,8 @@ function App() {
                                                 managedAppId={context.managedAppId}
                                                 studentRoster={sortedSchoolStudentRoster}
                                                 studentProfilePhotoUrls={schoolStudentProfilePhotoUrls}
-                                                onOpenStudent={handleOpenStudentFromPenaltyReport}
-                                                onOpenStudentDevice={handleOpenStudentDeviceFromPenaltyReport}
+                                                onOpenStudent={handleOpenStudentFromDashboard}
+                                                onOpenStudentDevice={handleOpenStudentDeviceFromDashboard}
                                         />
                                 );
                         case "studentRideViolations":

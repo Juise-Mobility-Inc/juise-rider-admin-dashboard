@@ -13997,6 +13997,26 @@
   margin: 0 0 8px;
 }
 
+.cd-detail-student-link {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: #0d6efd;
+  cursor: pointer;
+  display: inline-block;
+  font: inherit;
+  font-size: 0.9rem;
+  margin: 0 0 8px;
+  padding: 0;
+  text-align: left;
+}
+
+.cd-detail-student-link:hover,
+.cd-detail-student-link:focus-visible {
+  color: #0a58ca;
+  text-decoration: underline;
+}
+
 .cd-detail-badges {
   display: flex;
   flex-wrap: wrap;
@@ -14104,6 +14124,37 @@
   text-align: right;
 }
 
+.cd-coordinate-value {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.cd-coordinate-text {
+  color: #112d4e;
+  font-family: monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+}
+
+.cd-google-maps-link {
+  border: 1px solid rgba(39, 204, 94, 0.42);
+  border-radius: 999px;
+  color: #1b5e20;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 6px 10px;
+  text-decoration: none;
+}
+
+.cd-google-maps-link:hover,
+.cd-google-maps-link:focus-visible {
+  background: rgba(39, 204, 94, 0.12);
+  border-color: rgba(39, 204, 94, 0.75);
+}
+
 .cd-mono {
   font-family: monospace;
   font-size: 0.8rem !important;
@@ -14180,11 +14231,45 @@
   padding: 14px 16px;
 }
 
+.cd-student-card-button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.cd-student-card-button:not(:disabled):hover,
+.cd-student-card-button:not(:disabled):focus-visible {
+  background: #f8f9fa;
+  outline: none;
+}
+
+.cd-student-card-button:disabled {
+  cursor: default;
+}
+
 .cd-student-card-avatar { flex-shrink: 0; }
+
+.cd-student-card-info {
+  flex: 1;
+  min-width: 0;
+}
 
 .cd-student-card-info strong {
   font-size: 0.9rem;
   color: #112d4e;
+}
+
+.cd-student-card-open {
+  color: #0d6efd;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .cd-student-sub {
@@ -14720,6 +14805,30 @@
 .cd-device-map {
   width: 100%;
   height: 280px;
+}
+
+.cd-map-center-btn {
+  position: absolute;
+  top: 10px;
+  left: 52px;
+  z-index: 650;
+  border: 1px solid rgba(17, 45, 78, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #112d4e;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 9px 11px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.14);
+}
+
+.cd-map-center-btn:hover,
+.cd-map-center-btn:focus-visible {
+  background: #ffffff;
+  border-color: rgba(39, 204, 94, 0.55);
+  color: #1b5e20;
 }
 
 .cd-device-map-legend {

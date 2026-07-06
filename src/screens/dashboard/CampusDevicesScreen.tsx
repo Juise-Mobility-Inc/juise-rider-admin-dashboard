@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { LatLngBounds } from "leaflet";
 import {
+	Circle,
 	CircleMarker,
 	MapContainer,
 	Marker,
@@ -29,6 +30,7 @@ const TILE_ATTR =
 type Props = {
 	activeSchoolId: string;
 	managedAppId: string;
+	onOpenStudent?: (membershipUUID: string) => void;
 };
 
 type LoadState = "idle" | "loading" | "error" | "ready";
@@ -70,6 +72,10 @@ function formatDevice(entry: RegisteredDeviceReviewEntry) {
 
 function formatStudentId(entry: RegisteredDeviceReviewEntry) {
 	return entry.student.membership?.student_id ?? "";
+}
+
+function getStudentMembershipUUID(entry: RegisteredDeviceReviewEntry) {
+	return entry.student.membership?.membership_uuid?.trim() ?? "";
 }
 
 function getDeviceStatusLabel(entry: RegisteredDeviceReviewEntry) {
@@ -138,6 +144,44 @@ function timeAgo(unix: number): string {
 	const diffHr = Math.floor(diffMin / 60);
 	if (diffHr < 24) return `${diffHr}h ago`;
 	return `${Math.floor(diffHr / 24)}d ago`;
+}
+
+function formatBeaconAccuracy(meters?: number | null): string {
+	if (typeof meters !== "number" || !Number.isFinite(meters) || meters < 0) {
+		return "Accuracy unavailable";
+	}
+	const feet = meters * 3.28084;
+	if (feet < 5280) {
+		return `+/- ${Math.round(feet).toLocaleString()} ft`;
+	}
+	const miles = feet / 5280;
+	return `+/- ${miles < 10 ? miles.toFixed(1) : Math.round(miles).toLocaleString()} mi`;
+}
+
+function isValidBeaconAccuracy(meters?: number | null): meters is number {
+	return typeof meters === "number" && Number.isFinite(meters) && meters > 0;
+}
+
+function beaconAccuracyBounds(
+	position: [number, number],
+	radiusMeters?: number | null,
+): LatLngBounds | null {
+	if (!isValidBeaconAccuracy(radiusMeters)) return null;
+	const [lat, lng] = position;
+	const latDelta = radiusMeters / 111_320;
+	const lngDelta =
+		radiusMeters / (111_320 * Math.max(0.1, Math.cos((lat * Math.PI) / 180)));
+	return new LatLngBounds(
+		[
+			[lat - latDelta, lng - lngDelta],
+			[lat + latDelta, lng + lngDelta],
+		],
+	);
+}
+
+function googleMapsUrl(position: [number, number]): string {
+	const [lat, lng] = position;
+	return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lng}`)}`;
 }
 
 function capitalize(str: string) {
@@ -240,20 +284,32 @@ function violationPositions(
 
 function DeviceMapFitter({
 	beaconPos,
+	beaconAccuracyMeters,
 	vPositions,
 }: {
 	beaconPos: [number, number] | null;
+	beaconAccuracyMeters?: number | null;
 	vPositions: { pos: [number, number] }[];
 }) {
 	const map = useMap();
 
 	useEffect(() => {
+		const accuracyBounds = beaconPos
+			? beaconAccuracyBounds(beaconPos, beaconAccuracyMeters)
+			: null;
 		const all: [number, number][] = [
 			...(beaconPos ? [beaconPos] : []),
 			...vPositions.map((v) => v.pos),
 		];
 		if (all.length === 0) return;
-		if (all.length === 1) {
+		if (accuracyBounds) {
+			const bounds = new LatLngBounds(all);
+			bounds.extend(accuracyBounds.getSouthWest());
+			bounds.extend(accuracyBounds.getNorthEast());
+			if (bounds.isValid()) {
+				map.fitBounds(bounds.pad(0.25), { padding: [28, 28], animate: false });
+			}
+		} else if (all.length === 1) {
 			map.setView(all[0], 16, { animate: false });
 		} else {
 			const bounds = new LatLngBounds(all);
@@ -261,17 +317,43 @@ function DeviceMapFitter({
 				map.fitBounds(bounds.pad(0.25), { padding: [28, 28], animate: false });
 			}
 		}
-	}, [map, beaconPos, vPositions]);
+	}, [map, beaconPos, beaconAccuracyMeters, vPositions]);
 
 	return null;
 }
 
+function DeviceMapCenterButton({
+	beaconPos,
+}: {
+	beaconPos: [number, number] | null;
+}) {
+	const map = useMap();
+	if (!beaconPos) return null;
+
+	return (
+		<button
+			type="button"
+			className="cd-map-center-btn"
+			onClick={(event) => {
+				event.preventDefault();
+				event.stopPropagation();
+				map.setView(beaconPos, Math.max(map.getZoom(), 16), { animate: true });
+			}}
+			aria-label="Center on beacon location"
+			title="Center on beacon">
+			Center on beacon
+		</button>
+	);
+}
+
 function DeviceMap({
 	beaconPos,
+	beaconAccuracyMeters,
 	violations,
 	beaconLabel,
 }: {
 	beaconPos: [number, number] | null;
+	beaconAccuracyMeters?: number | null;
 	violations: StudentParkingViolation[];
 	beaconLabel?: string;
 }) {
@@ -287,11 +369,32 @@ function DeviceMap({
 		<MapContainer
 			center={allPoints[0]}
 			zoom={15}
-			scrollWheelZoom={false}
+			scrollWheelZoom={true}
+			zoomControl={true}
+			doubleClickZoom={true}
 			className="cd-device-map"
 			attributionControl={false}>
 			<TileLayer url={TILE_URL} attribution={TILE_ATTR} />
-			<DeviceMapFitter beaconPos={beaconPos} vPositions={vPos} />
+			<DeviceMapFitter
+				beaconPos={beaconPos}
+				beaconAccuracyMeters={beaconAccuracyMeters}
+				vPositions={vPos}
+			/>
+			<DeviceMapCenterButton beaconPos={beaconPos} />
+			{beaconPos && isValidBeaconAccuracy(beaconAccuracyMeters) && (
+				<Circle
+					center={beaconPos}
+					radius={beaconAccuracyMeters}
+					color="#27CC5E"
+					fillColor="#27CC5E"
+					fillOpacity={0.12}
+					opacity={0.8}
+					weight={2}>
+					<Tooltip sticky>
+						Accuracy radius: {formatBeaconAccuracy(beaconAccuracyMeters)}
+					</Tooltip>
+				</Circle>
+			)}
 			{beaconPos && (
 				<Marker position={beaconPos} icon={juisePackIcon}>
 					<Tooltip permanent direction="top" offset={[0, -22]}>
@@ -327,7 +430,11 @@ const STATUS_TABS = [
 
 // ── Main screen ────────────────────────────────────────────────────────────────
 
-export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
+export function CampusDevicesScreen({
+	activeSchoolId,
+	managedAppId,
+	onOpenStudent,
+}: Props) {
 	const [searchParams, setSearchParams] = useSearchParams();
 
 	const [view, setView] = useState<View>(() => {
@@ -557,6 +664,15 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
 		const statusLabel = getDeviceStatusLabel(selectedEntry);
 		const devicePhoto = devicePhotoUrls[devUUID];
 		const studentPhoto = studentPhotoUrls[selectedEntry.device.user_uuid];
+		const studentMembershipUUID = getStudentMembershipUUID(selectedEntry);
+		const canOpenStudent = Boolean(onOpenStudent && studentMembershipUUID);
+
+		function openSelectedStudent() {
+			if (!onOpenStudent || !studentMembershipUUID) {
+				return;
+			}
+			onOpenStudent(studentMembershipUUID);
+		}
 
 		const hasMap =
 			beaconPos !== null ||
@@ -588,6 +704,7 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
 							<div className="cd-device-map-wrap">
 								<DeviceMap
 									beaconPos={beaconPos}
+									beaconAccuracyMeters={liveLocation?.radius_meters ?? null}
 									violations={selectedViolations}
 									beaconLabel={beaconMapLabel}
 								/>
@@ -638,9 +755,18 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
 								<h3 className="cd-detail-device-name">
 									{formatDevice(selectedEntry)}
 								</h3>
-								<p className="cd-detail-student-name">
-									{formatName(selectedEntry)}
-								</p>
+								{canOpenStudent ? (
+									<button
+										type="button"
+										className="cd-detail-student-link"
+										onClick={openSelectedStudent}>
+										{formatName(selectedEntry)}
+									</button>
+								) : (
+									<p className="cd-detail-student-name">
+										{formatName(selectedEntry)}
+									</p>
+								)}
 								<div className="cd-detail-badges">
 									<span className={getDeviceStatusClass(statusLabel)}>
 										{statusLabel}
@@ -815,7 +941,9 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
 														<div className="cd-info-row">
 															<span>Accuracy</span>
 															<strong>
-																+/-{liveLocation.radius_meters.toFixed(0)} m
+																{formatBeaconAccuracy(
+																	liveLocation.radius_meters,
+																)}
 															</strong>
 														</div>
 													)}
@@ -830,9 +958,18 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
 													{beaconPos && (
 														<div className="cd-info-row">
 															<span>Coordinates</span>
-															<strong className="cd-mono cd-mono-sm">
-																{beaconPos[0].toFixed(5)},{" "}
-																{beaconPos[1].toFixed(5)}
+															<strong className="cd-coordinate-value">
+																<code className="cd-coordinate-text">
+																	{beaconPos[0].toFixed(5)},{" "}
+																	{beaconPos[1].toFixed(5)}
+																</code>
+																<a
+																	className="cd-google-maps-link"
+																	href={googleMapsUrl(beaconPos)}
+																	target="_blank"
+																	rel="noreferrer">
+																	Open in Google Maps
+																</a>
 															</strong>
 														</div>
 													)}
@@ -903,7 +1040,12 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
 
 								<section className="cd-section">
 									<h4 className="cd-section-title">Student</h4>
-									<div className="cd-student-card">
+									<button
+										type="button"
+										className="cd-student-card cd-student-card-button"
+										onClick={openSelectedStudent}
+										disabled={!canOpenStudent}
+										aria-label={`Open ${formatName(selectedEntry)} student profile`}>
 										<div className="cd-student-card-avatar">
 											{studentPhoto ? (
 												<img
@@ -932,7 +1074,10 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
 												</p>
 											)}
 										</div>
-									</div>
+										{canOpenStudent && (
+											<span className="cd-student-card-open">Open student</span>
+										)}
+									</button>
 								</section>
 							</div>
 

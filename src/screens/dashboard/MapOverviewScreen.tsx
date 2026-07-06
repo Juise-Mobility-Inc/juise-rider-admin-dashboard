@@ -102,9 +102,15 @@ function timeAgo(unix: number): string {
 }
 
 function formatBeaconRadius(value?: number | null) {
-        return isValidCoordinate(value)
-                ? `${Math.round(value)} m radius`
-                : "Radius unknown";
+        if (!isValidCoordinate(value)) {
+                return "Accuracy unknown";
+        }
+        const feet = value * 3.28084;
+        if (feet < 5280) {
+                return `Accuracy: +/- ${Math.round(feet).toLocaleString()} ft`;
+        }
+        const miles = feet / 5280;
+        return `Accuracy: +/- ${miles < 10 ? miles.toFixed(1) : Math.round(miles).toLocaleString()} mi`;
 }
 
 function formatBeaconRssi(value?: number | null) {
