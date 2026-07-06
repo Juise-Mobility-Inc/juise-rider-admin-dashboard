@@ -1670,16 +1670,7 @@ function App() {
                         zoneDrafts.map((zone) => ({
                                 id: zone.zone_uuid || zone.id,
                                 label: zone.title.trim() || "Untitled zone",
-                                description: [
-                                        zone.description.trim(),
-                                        zone.zone_type === "no_go"
-                                                ? "No-go zone"
-                                                : zone.speed_limit_mph.trim()
-                                                        ? `${zone.speed_limit_mph.trim()} mph limit`
-                                                        : "Speed limit zone",
-                                ]
-                                        .filter(Boolean)
-                                        .join(" · "),
+                                description: zone.description.trim(),
                                 zoneType: zone.zone_type,
                                 speedLimitMph: (() => {
                                         const parsed = Number(zone.speed_limit_mph.trim());
