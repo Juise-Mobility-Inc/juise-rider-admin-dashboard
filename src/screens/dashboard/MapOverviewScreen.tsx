@@ -145,6 +145,9 @@ export function MapOverviewScreen({
         const [showPacks, setShowPacks] = useState(true);
         const [showBeacons, setShowBeacons] = useState(true);
 
+        const [selectedPoi, setSelectedPoi] = useState<SchoolPOI | null>(null);
+        const [selectedPack, setSelectedPack] = useState<Pack | null>(null);
+
         useEffect(() => {
                 if (!activeSchoolId || !managedAppId) return;
                 let dead = false;
@@ -562,8 +565,8 @@ export function MapOverviewScreen({
                                                                                         </div>
                                                                                         <button
                                                                                                 className="mo-popup-nav-btn mo-popup-nav-btn--poi"
-                                                                                                onClick={() => navigate("/pois")}>
-                                                                                                Open POI Setup →
+                                                                                                onClick={() => setSelectedPoi(poi)}>
+                                                                                                View Details →
                                                                                         </button>
                                                                                 </div>
                                                                         </Popup>
@@ -603,8 +606,8 @@ export function MapOverviewScreen({
                                                                                 </div>
                                                                                 <button
                                                                                         className="mo-popup-nav-btn mo-popup-nav-btn--pack"
-                                                                                        onClick={() => navigate("/packs")}>
-                                                                                        Open Juise Packs →
+                                                                                        onClick={() => setSelectedPack(pack)}>
+                                                                                        View Details →
                                                                                 </button>
                                                                         </div>
                                                                 </Popup>
@@ -707,6 +710,163 @@ export function MapOverviewScreen({
                                         </div>
                                 )}
                         </div>
+
+                        {selectedPoi && (
+                                <div
+                                        className="mo-detail-modal-backdrop"
+                                        onClick={() => setSelectedPoi(null)}>
+                                        <div
+                                                className="mo-detail-modal-sheet"
+                                                onClick={(e) => e.stopPropagation()}>
+                                                <div className="mo-detail-modal-header">
+                                                        <div className="mo-detail-modal-header-copy">
+                                                                <span className="mo-popup-badge mo-popup-badge--poi">
+                                                                        ⭐ Check-in spot
+                                                                </span>
+                                                                <h3>{selectedPoi.title || "Check-in spot"}</h3>
+                                                        </div>
+                                                        <button
+                                                                type="button"
+                                                                className="secondary-button mo-detail-modal-close"
+                                                                onClick={() => setSelectedPoi(null)}>
+                                                                Close
+                                                        </button>
+                                                </div>
+
+                                                {selectedPoi.description && (
+                                                        <p className="mo-detail-modal-desc">{selectedPoi.description}</p>
+                                                )}
+
+                                                <div className="mo-detail-modal-grid">
+                                                        <div className="mo-detail-modal-cell">
+                                                                <span className="mo-detail-modal-label">Status</span>
+                                                                <span className="mo-detail-modal-value">
+                                                                        {selectedPoi.active ? "✅ Active" : "⏸ Inactive"}
+                                                                </span>
+                                                        </div>
+                                                        <div className="mo-detail-modal-cell">
+                                                                <span className="mo-detail-modal-label">Bonus points</span>
+                                                                <span className="mo-detail-modal-value">
+                                                                        {selectedPoi.bonus_points > 0
+                                                                                ? `⭐ ${selectedPoi.bonus_points}`
+                                                                                : "None"}
+                                                                </span>
+                                                        </div>
+                                                        <div className="mo-detail-modal-cell">
+                                                                <span className="mo-detail-modal-label">Radius</span>
+                                                                <span className="mo-detail-modal-value">
+                                                                        {Math.round(selectedPoi.radius_meters * 3.281)} ft
+                                                                </span>
+                                                        </div>
+                                                        <div className="mo-detail-modal-cell">
+                                                                <span className="mo-detail-modal-label">Coordinates</span>
+                                                                <span className="mo-detail-modal-value">
+                                                                        {selectedPoi.lat.toFixed(5)}, {selectedPoi.lng.toFixed(5)}
+                                                                </span>
+                                                        </div>
+                                                </div>
+
+                                                <button
+                                                        type="button"
+                                                        className="mo-detail-modal-manage-link"
+                                                        onClick={() => {
+                                                                setSelectedPoi(null);
+                                                                navigate("/pois");
+                                                        }}>
+                                                        Manage in POI Setup →
+                                                </button>
+                                        </div>
+                                </div>
+                        )}
+
+                        {selectedPack && (
+                                <div
+                                        className="mo-detail-modal-backdrop"
+                                        onClick={() => setSelectedPack(null)}>
+                                        <div
+                                                className="mo-detail-modal-sheet"
+                                                onClick={(e) => e.stopPropagation()}>
+                                                <div className="mo-detail-modal-header">
+                                                        <div className="mo-detail-modal-header-copy">
+                                                                <span className="mo-popup-badge mo-popup-badge--pack">
+                                                                        🅿 Juise Pack
+                                                                </span>
+                                                                <h3>{selectedPack.name || "Juise Pack"}</h3>
+                                                        </div>
+                                                        <button
+                                                                type="button"
+                                                                className="secondary-button mo-detail-modal-close"
+                                                                onClick={() => setSelectedPack(null)}>
+                                                                Close
+                                                        </button>
+                                                </div>
+
+                                                {selectedPack.description && (
+                                                        <p className="mo-detail-modal-desc">{selectedPack.description}</p>
+                                                )}
+
+                                                <div className="mo-detail-modal-grid">
+                                                        <div className="mo-detail-modal-cell">
+                                                                <span className="mo-detail-modal-label">Status</span>
+                                                                <span className="mo-detail-modal-value">
+                                                                        {selectedPack.active ? "✅ Active" : "⏸ Inactive"}
+                                                                </span>
+                                                        </div>
+                                                        <div className="mo-detail-modal-cell">
+                                                                <span className="mo-detail-modal-label">Spots</span>
+                                                                <span className="mo-detail-modal-value">
+                                                                        {selectedPack.spot_count} spot
+                                                                        {selectedPack.spot_count !== 1 ? "s" : ""}
+                                                                </span>
+                                                        </div>
+                                                        {selectedPack.location && (
+                                                                <div className="mo-detail-modal-cell">
+                                                                        <span className="mo-detail-modal-label">Coordinates</span>
+                                                                        <span className="mo-detail-modal-value">
+                                                                                {selectedPack.location.lat.toFixed(5)},{" "}
+                                                                                {selectedPack.location.lng.toFixed(5)}
+                                                                        </span>
+                                                                </div>
+                                                        )}
+                                                        {selectedPack.school_owner?.campus_id && (
+                                                                <div className="mo-detail-modal-cell">
+                                                                        <span className="mo-detail-modal-label">Campus</span>
+                                                                        <span className="mo-detail-modal-value">
+                                                                                {selectedPack.school_owner.campus_id}
+                                                                        </span>
+                                                                </div>
+                                                        )}
+                                                </div>
+
+                                                {selectedPack.spots.length > 0 && (
+                                                        <div className="mo-detail-modal-spots">
+                                                                <span className="mo-detail-modal-label">Spot list</span>
+                                                                <div className="mo-detail-modal-spot-chips">
+                                                                        {selectedPack.spots.map((spot) => (
+                                                                                <span
+                                                                                        key={spot.spot_uuid}
+                                                                                        className={`mo-detail-modal-spot-chip${
+                                                                                                spot.active ? "" : " mo-detail-modal-spot-chip--inactive"
+                                                                                        }`}>
+                                                                                        #{spot.spot_number}
+                                                                                </span>
+                                                                        ))}
+                                                                </div>
+                                                        </div>
+                                                )}
+
+                                                <button
+                                                        type="button"
+                                                        className="mo-detail-modal-manage-link"
+                                                        onClick={() => {
+                                                                setSelectedPack(null);
+                                                                navigate("/packs");
+                                                        }}>
+                                                        Manage in Juise Packs →
+                                                </button>
+                                        </div>
+                                </div>
+                        )}
                 </div>
         );
 }
