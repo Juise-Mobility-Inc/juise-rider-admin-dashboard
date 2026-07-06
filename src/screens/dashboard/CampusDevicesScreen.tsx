@@ -549,7 +549,7 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
 				: (beaconMeta?.position ?? null);
 
 		const beaconMapLabel = liveLocation
-			? `${beaconInfo?.beacon_mac ?? "Beacon"} \u00b7 ${liveLocation.stale ? "stale" : "live"}${liveLocation.observed_at != null ? ` \u00b7 ${timeAgo(liveLocation.observed_at)}` : ""}`
+			? `${beaconInfo?.beacon_mac ?? "Beacon"} - ${liveLocation.stale ? "stale" : "live"}${liveLocation.observed_at != null ? ` - ${timeAgo(liveLocation.observed_at)}` : ""}`
 			: beaconInfo?.beacon_mac
 				? `${beaconInfo.beacon_mac} (metadata)`
 				: "Last known location";
@@ -690,7 +690,7 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
 								<strong>
 									{selectedViolations.length > 0
 										? formatTimestamp(selectedViolations[0].created_at)
-										: "\u2014"}
+										: "-"}
 								</strong>
 							</div>
 							<div className="cd-stat">
@@ -815,7 +815,7 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
 														<div className="cd-info-row">
 															<span>Accuracy</span>
 															<strong>
-																\u00b1{liveLocation.radius_meters.toFixed(0)} m
+																+/-{liveLocation.radius_meters.toFixed(0)} m
 															</strong>
 														</div>
 													)}
@@ -1028,14 +1028,14 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
 								{loadState === "ready"
 									? `${filteredEntries.length.toLocaleString()} of ${entries.length.toLocaleString()} devices`
 									: loadState === "loading"
-										? "Loading\u2026"
+										? "Loading..."
 										: ""}
 							</span>
 						</div>
 						<input
 							type="search"
 							className="cd-table-search"
-							placeholder="Search by student, device, serial\u2026"
+							placeholder="Search by student, device, serial..."
 							value={search}
 							onChange={(e) => setSearch(e.target.value)}
 						/>
@@ -1056,7 +1056,7 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
 				{loadState === "error" ? (
 					<p className="cd-empty">{errorMsg}</p>
 				) : loadState === "loading" ? (
-					<p className="cd-empty">Loading devices\u2026</p>
+					<p className="cd-empty">Loading devices...</p>
 				) : filteredEntries.length === 0 ? (
 					<p className="cd-empty">No devices match this filter.</p>
 				) : (
@@ -1160,9 +1160,9 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
 												</div>
 											</td>
 											<td>
-												{capitalize(entry.device.device_type) || "\u2014"}
+												{capitalize(entry.device.device_type) || "-"}
 											</td>
-											<td>{capitalize(entry.device.color) || "\u2014"}</td>
+											<td>{capitalize(entry.device.color) || "-"}</td>
 											<td>
 												<span className={getDeviceStatusClass(statusLabel)}>
 													{statusLabel}
@@ -1185,7 +1185,7 @@ export function CampusDevicesScreen({ activeSchoolId, managedAppId }: Props) {
 											<td className="cd-table-date">
 												{lastViolation
 													? formatTimestamp(lastViolation.created_at)
-													: "\u2014"}
+													: "-"}
 											</td>
 											<td className="cd-table-date">
 												{formatTimestamp(entry.device.created_at)}
