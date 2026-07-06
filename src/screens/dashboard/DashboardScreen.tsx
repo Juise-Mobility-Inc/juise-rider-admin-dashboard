@@ -57,6 +57,7 @@ type LeaderboardEntry = {
         name: string;
         detail: string;
         earnedPoints: number;
+        netPoints: number;
         bonusPoints: number;
         rideCount: number;
         distanceMeters: number;
@@ -485,6 +486,10 @@ function buildLeaderboard(
                                 (sum, session) => sum + getRouteHistoryEarnedPoints(session),
                                 0,
                         );
+                        const netPoints = sessions.reduce(
+                                (sum, session) => sum + getRouteHistoryNetPoints(session),
+                                0,
+                        );
                         const bonusPoints = sessions.reduce(
                                 (sum, session) => sum + session.bonus_points,
                                 0,
@@ -498,14 +503,15 @@ function buildLeaderboard(
                                 name: formatStudentName(bundle.entry),
                                 detail: formatStudentDetail(bundle.entry),
                                 earnedPoints,
+                                netPoints,
                                 bonusPoints,
                                 rideCount: sessions.length,
                                 distanceMeters,
                         };
                 })
                 .sort((left, right) => {
-                        if (left.earnedPoints !== right.earnedPoints) {
-                                return right.earnedPoints - left.earnedPoints;
+                        if (left.netPoints !== right.netPoints) {
+                                return right.netPoints - left.netPoints;
                         }
                         if (left.distanceMeters !== right.distanceMeters) {
                                 return right.distanceMeters - left.distanceMeters;
@@ -1348,7 +1354,7 @@ function Leaderboard({
                                                                 </span>
                                                         </div>
                                                         <div className="dashboard-leaderboard-score">
-                                                                <strong>{entry.earnedPoints.toLocaleString()}</strong>
+                                                                <strong>{entry.netPoints.toLocaleString()}</strong>
                                                                 <span>{windowLabel} pts</span>
                                                         </div>
                                                 </Link>
