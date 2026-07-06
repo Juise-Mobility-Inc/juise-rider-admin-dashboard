@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
   fetchSchoolStudentRoster,
@@ -150,7 +151,6 @@ function buildLeaderboard(
         distanceMeters,
       };
     })
-    .filter((entry) => entry.earnedPoints > 0 || entry.rideCount > 0)
     .sort((left, right) => {
       if (left.earnedPoints !== right.earnedPoints) {
         return right.earnedPoints - left.earnedPoints;
@@ -196,6 +196,7 @@ async function mapWithConcurrency<T, R>(
 }
 
 export function StudentLeaderboardScreen({ activeSchoolId, managedAppId }: Props) {
+  const navigate = useNavigate();
   const [students, setStudents] = useState<StudentActivityBundle[]>([]);
   const [loadState, setLoadState] = useState<LoadState>({ status: "idle" });
   const [leaderboardWindow, setLeaderboardWindow] =
@@ -306,6 +307,14 @@ export function StudentLeaderboardScreen({ activeSchoolId, managedAppId }: Props
 
   return (
     <section className="dashboard-section">
+      <button
+        type="button"
+        className="secondary-button res-back-button"
+        onClick={() => navigate("/dashboard")}
+      >
+        ← Back to dashboard
+      </button>
+
       <div className="section-header">
         <div>
           <p className="eyebrow">Student activity</p>
