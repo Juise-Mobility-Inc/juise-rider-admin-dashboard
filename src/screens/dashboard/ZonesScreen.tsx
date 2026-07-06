@@ -1,4 +1,11 @@
-import { useState, type ChangeEvent, type Dispatch, type SetStateAction } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 
 import {
   SchoolZoneMapEditor,
@@ -208,6 +215,7 @@ export function ZonesScreen(props: Props) {
     zoneBusy,
     zoneDrafts,
     setZoneDrafts,
+    activeZoneDraftId,
     setActiveZoneDraftId,
     selectedZoneDraft,
     zoneMapPolygons,
@@ -220,6 +228,18 @@ export function ZonesScreen(props: Props) {
     handleZonePointMove,
   } = props;
   const [isZoneModalOpen, setIsZoneModalOpen] = useState(false);
+  const autoOpenedZoneIdRef = useRef("");
+
+  useEffect(() => {
+    if (
+      activeZoneDraftId &&
+      activeZoneDraftId !== autoOpenedZoneIdRef.current &&
+      zoneDrafts.some((zone) => zone.id === activeZoneDraftId)
+    ) {
+      autoOpenedZoneIdRef.current = activeZoneDraftId;
+      setIsZoneModalOpen(true);
+    }
+  }, [activeZoneDraftId, zoneDrafts]);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [pendingImportedZones, setPendingImportedZones] = useState<ZoneDraft[]>([]);
   const [importMessage, setImportMessage] = useState("");

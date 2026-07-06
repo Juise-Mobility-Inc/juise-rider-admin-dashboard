@@ -86,6 +86,9 @@ interface Props {
         activeSchoolId: string;
         managedAppId: string;
         adminUserUUID: string;
+        onSelectZoneForEdit?: (zoneUuid: string) => void;
+        onSelectPoiForEdit?: (poiUuid: string) => void;
+        onSelectPackForEdit?: (pack: Pack) => void;
 }
 
 const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
@@ -140,6 +143,9 @@ export function MapOverviewScreen({
         activeSchoolId,
         managedAppId,
         adminUserUUID,
+        onSelectZoneForEdit,
+        onSelectPoiForEdit,
+        onSelectPackForEdit,
 }: Props) {
         const navigate = useNavigate();
         const [zones, setZones] = useState<SchoolZone[]>([]);
@@ -788,6 +794,7 @@ export function MapOverviewScreen({
                                                         type="button"
                                                         className="mo-detail-modal-manage-link"
                                                         onClick={() => {
+                                                                onSelectPoiForEdit?.(selectedPoi.poi_uuid);
                                                                 setSelectedPoi(null);
                                                                 navigate("/pois");
                                                         }}>
@@ -885,6 +892,7 @@ export function MapOverviewScreen({
                                                         type="button"
                                                         className="mo-detail-modal-manage-link"
                                                         onClick={() => {
+                                                                onSelectPackForEdit?.(selectedPack);
                                                                 setSelectedPack(null);
                                                                 navigate("/packs");
                                                         }}>
@@ -962,6 +970,7 @@ export function MapOverviewScreen({
                                                         type="button"
                                                         className="mo-detail-modal-manage-link"
                                                         onClick={() => {
+                                                                onSelectZoneForEdit?.(selectedZone.zone_uuid);
                                                                 setSelectedZone(null);
                                                                 navigate("/zones");
                                                         }}>
