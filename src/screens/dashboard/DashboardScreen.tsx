@@ -23,7 +23,7 @@ import {
 	type StudentParkingViolation,
 	type StudentRouteHistorySession,
 } from "../../lib/api";
-import { getRouteHistoryEarnedPoints } from "../../lib/routeHistoryPoints";
+import { getRouteHistoryNetPoints } from "../../lib/routeHistoryPoints";
 
 type DashboardLoadStatus = "idle" | "loading" | "ready" | "error";
 type LeaderboardWindow = "today" | "week" | "all";
@@ -53,7 +53,7 @@ type LeaderboardEntry = {
 	userUUID: string;
 	name: string;
 	detail: string;
-	earnedPoints: number;
+	netPoints: number;
 	bonusPoints: number;
 	rideCount: number;
 	distanceMeters: number;
@@ -126,7 +126,7 @@ type DashboardVisuals = {
 	ridesToday: number;
 	ridesYesterday: number;
 	ridesThisWeek: number;
-	earnedPoints: number;
+	netPoints: number;
 	bonusPoints: number;
 	poiVisits: number;
 	distanceMetersThisWeek: number;
@@ -472,8 +472,8 @@ function buildLeaderboard(
 	return students
 		.map((bundle) => {
 			const sessions = filterSessions(bundle, from, to);
-			const earnedPoints = sessions.reduce(
-				(sum, session) => sum + getRouteHistoryEarnedPoints(session),
+			const netPoints = sessions.reduce(
+				(sum, session) => sum + getRouteHistoryNetPoints(session),
 				0,
 			);
 			const bonusPoints = sessions.reduce(
@@ -488,16 +488,16 @@ function buildLeaderboard(
 				userUUID: resolveStudentUserUUID(bundle.entry),
 				name: formatStudentName(bundle.entry),
 				detail: formatStudentDetail(bundle.entry),
-				earnedPoints,
+				netPoints,
 				bonusPoints,
 				rideCount: sessions.length,
 				distanceMeters,
 			};
 		})
-		.filter((entry) => entry.earnedPoints > 0 || entry.rideCount > 0)
+		.filter((entry) => entry.netPoints !== 0 || entry.rideCount > 0)
 		.sort((left, right) => {
-			if (left.earnedPoints !== right.earnedPoints) {
-				return right.earnedPoints - left.earnedPoints;
+			if (left.netPoints !== right.netPoints) {
+				return right.netPoints - left.netPoints;
 			}
 			if (left.distanceMeters !== right.distanceMeters) {
 				return right.distanceMeters - left.distanceMeters;
@@ -797,8 +797,8 @@ function buildDashboardVisuals(dataset: DashboardDataset): DashboardVisuals {
 	const weekSessions = allSessions.filter((session) =>
 		isInRange(session.started_at, weekStart),
 	);
-	const earnedPoints = allSessions.reduce(
-		(sum, session) => sum + getRouteHistoryEarnedPoints(session),
+	const netPoints = allSessions.reduce(
+		(sum, session) => sum + getRouteHistoryNetPoints(session),
 		0,
 	);
 	const ridePenaltyRecords = getRidePenaltyRecords(dataset.students);
@@ -822,7 +822,7 @@ function buildDashboardVisuals(dataset: DashboardDataset): DashboardVisuals {
 		ridesToday: todaySessions.length,
 		ridesYesterday: yesterdaySessions.length,
 		ridesThisWeek: weekSessions.length,
-		earnedPoints,
+		netPoints,
 		bonusPoints: allSessions.reduce(
 			(sum, session) => sum + session.bonus_points,
 			0,
@@ -1329,8 +1329,8 @@ function Leaderboard({
 							</span>
 						</div>
 						<div className="dashboard-leaderboard-score">
-							<strong>{entry.earnedPoints.toLocaleString()}</strong>
-							<span>{windowLabel} pts</span>
+							<strong>{entry.netPoints.toLocaleString()}</strong>
+							<span>{windowLabel} net pts</span>
 						</div>
 					</Link>
 				))
@@ -1684,12 +1684,12 @@ export function DashboardScreen({
 
 					<div className="dashboard-hero-grid">
 						<article className="dashboard-hero-card">
-							<span>All-time student points</span>
+							<span>All-time student net points</span>
 							<div className="dashboard-hero-points-balance">
 								<div className="dashboard-hero-points-earned">
-									<small>Earned</small>
+									<small>Net</small>
 									<FitText className="stat-value">
-										+{formatCompactNumber(visuals.earnedPoints)}
+										{formatCompactNumber(visuals.netPoints)}
 									</FitText>
 								</div>
 								<div className="dashboard-hero-points-lost">
