@@ -216,7 +216,6 @@ export function ZonesScreen(props: Props) {
     zoneBusy,
     zoneDrafts,
     setZoneDrafts,
-    activeZoneDraftId,
     setActiveZoneDraftId,
     selectedZoneDraft,
     zoneMapPolygons,

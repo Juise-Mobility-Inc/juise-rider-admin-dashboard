@@ -92,7 +92,6 @@ export function PoisScreen(props: Props) {
     poiBusy,
     poiDrafts,
     setPoiDrafts,
-    activePoiDraftId,
     setActivePoiDraftId,
     selectedPoiDraft,
     selectedPoiLocation,
