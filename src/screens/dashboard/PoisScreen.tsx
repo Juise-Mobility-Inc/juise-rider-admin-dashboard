@@ -103,6 +103,7 @@ export function PoisScreen(props: Props) {
     handlePoiLocationSelect,
   } = props;
   const [isPoiModalOpen, setIsPoiModalOpen] = useState(false);
+  const [poiSnapshot, setPoiSnapshot] = useState<POIDraft | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [pendingImportedPois, setPendingImportedPois] = useState<POIDraft[]>([]);
   const [importMessage, setImportMessage] = useState("");
@@ -116,18 +117,30 @@ export function PoisScreen(props: Props) {
     ) {
       autoOpenedPoiIdRef.current = activePoiDraftId;
       setIsPoiModalOpen(true);
+      setPoiSnapshot(poiDrafts.find((poi) => poi.id === activePoiDraftId) ?? null);
     }
   }, [activePoiDraftId, poiDrafts]);
 
-  function openPoiModal(poiId: string) {
+  function openPoiModal(poiId: string, snapshot?: POIDraft) {
     setActivePoiDraftId(poiId);
     setIsPoiModalOpen(true);
+    setPoiSnapshot(snapshot ?? poiDrafts.find((poi) => poi.id === poiId) ?? null);
   }
 
   function addPoi() {
     const draft = createEmptyPOIDraft();
     setPoiDrafts((current) => [...current, draft]);
-    openPoiModal(draft.id);
+    openPoiModal(draft.id, draft);
+  }
+
+  function closePoiModal() {
+    setIsPoiModalOpen(false);
+  }
+
+  function discardPoiChanges() {
+    if (poiSnapshot) {
+      patchPoi(poiSnapshot.id, poiSnapshot);
+    }
   }
 
   function patchPoi(id: string, patch: Partial<POIDraft>) {
@@ -229,6 +242,10 @@ export function PoisScreen(props: Props) {
     }
   }
 
+  const isPoiDirty =
+    !!selectedPoiDraft &&
+    !!poiSnapshot &&
+    JSON.stringify(selectedPoiDraft) !== JSON.stringify(poiSnapshot);
   const mappedCount = poiMapMarkers.length;
   const otherMarkers: PackMapMarker[] = selectedPoiDraft
     ? poiMapMarkers.filter(
@@ -502,7 +519,7 @@ export function PoisScreen(props: Props) {
           role="dialog"
           aria-modal="true"
           aria-label="Edit POI"
-          onClick={() => setIsPoiModalOpen(false)}
+          onClick={closePoiModal}
         >
           <div
             className="management-modal-sheet poi-editor-modal"
@@ -516,7 +533,7 @@ export function PoisScreen(props: Props) {
               <button
                 className="text-button management-modal-close"
                 type="button"
-                onClick={() => setIsPoiModalOpen(false)}
+                onClick={closePoiModal}
               >
                 Close
               </button>
@@ -661,10 +678,19 @@ export function PoisScreen(props: Props) {
                     Remove
                   </button>
                   <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={discardPoiChanges}
+                    disabled={poiBusy || !isPoiDirty}
+                    title="Discard unsaved changes"
+                  >
+                    ✕ Discard changes
+                  </button>
+                  <button
                     className="primary-button"
                     type="button"
                     onClick={() => void saveModalPoi()}
-                    disabled={poiBusy || !activeSchoolId}
+                    disabled={poiBusy || !activeSchoolId || !isPoiDirty}
                   >
                     {poiBusy ? "Saving..." : "Save"}
                   </button>

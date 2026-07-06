@@ -228,7 +228,9 @@ export function ZonesScreen(props: Props) {
     handleZonePointMove,
   } = props;
   const [isZoneModalOpen, setIsZoneModalOpen] = useState(false);
+  const [zoneSnapshot, setZoneSnapshot] = useState<ZoneDraft | null>(null);
   const autoOpenedZoneIdRef = useRef("");
+  const suppressZoneAutoOpenRef = useRef(false);
 
   useEffect(() => {
     if (
@@ -237,22 +239,42 @@ export function ZonesScreen(props: Props) {
       zoneDrafts.some((zone) => zone.id === activeZoneDraftId)
     ) {
       autoOpenedZoneIdRef.current = activeZoneDraftId;
-      setIsZoneModalOpen(true);
+      if (suppressZoneAutoOpenRef.current) {
+        suppressZoneAutoOpenRef.current = false;
+      } else {
+        setIsZoneModalOpen(true);
+        setZoneSnapshot(
+          zoneDrafts.find((zone) => zone.id === activeZoneDraftId) ?? null,
+        );
+      }
     }
   }, [activeZoneDraftId, zoneDrafts]);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [pendingImportedZones, setPendingImportedZones] = useState<ZoneDraft[]>([]);
   const [importMessage, setImportMessage] = useState("");
 
-  function openZoneModal(zoneId: string) {
+  function openZoneModal(zoneId: string, snapshot?: ZoneDraft) {
     setActiveZoneDraftId(zoneId);
     setIsZoneModalOpen(true);
+    setZoneSnapshot(
+      snapshot ?? zoneDrafts.find((zone) => zone.id === zoneId) ?? null,
+    );
   }
 
   function addZone() {
     const draft = createEmptyZoneDraft("no_go");
     setZoneDrafts((current) => [...current, draft]);
-    openZoneModal(draft.id);
+    openZoneModal(draft.id, draft);
+  }
+
+  function closeZoneModal() {
+    setIsZoneModalOpen(false);
+  }
+
+  function discardZoneChanges() {
+    if (zoneSnapshot) {
+      patchZone(zoneSnapshot.id, zoneSnapshot);
+    }
   }
 
   function patchZone(id: string, patch: Partial<ZoneDraft>) {
@@ -315,6 +337,7 @@ export function ZonesScreen(props: Props) {
   async function saveModalZone() {
     const didSave = await handleSaveZones(zoneDrafts);
     if (didSave) {
+      suppressZoneAutoOpenRef.current = true;
       setIsZoneModalOpen(false);
     }
   }
@@ -323,6 +346,7 @@ export function ZonesScreen(props: Props) {
     const nextZoneDrafts = zoneDrafts.filter((zone) => zone.id !== targetZone.id);
     const didSave = await handleSaveZones(nextZoneDrafts);
     if (didSave) {
+      suppressZoneAutoOpenRef.current = true;
       setIsZoneModalOpen(false);
     }
   }
@@ -427,6 +451,10 @@ export function ZonesScreen(props: Props) {
   const selectedPunishmentRules = selectedZoneDraft
     ? normalizePunishmentPolicy(selectedZoneDraft.punishment_policy).rules
     : [];
+  const isZoneDirty =
+    !!selectedZoneDraft &&
+    !!zoneSnapshot &&
+    JSON.stringify(selectedZoneDraft) !== JSON.stringify(zoneSnapshot);
 
   return (
     <section className="panel management-page">
@@ -701,7 +729,7 @@ export function ZonesScreen(props: Props) {
           role="dialog"
           aria-modal="true"
           aria-label="Edit zone"
-          onClick={() => setIsZoneModalOpen(false)}
+          onClick={closeZoneModal}
         >
           <div
             className="management-modal-sheet zone-editor-modal"
@@ -715,7 +743,7 @@ export function ZonesScreen(props: Props) {
               <button
                 className="text-button management-modal-close"
                 type="button"
-                onClick={() => setIsZoneModalOpen(false)}
+                onClick={closeZoneModal}
               >
                 Close
               </button>
@@ -1079,10 +1107,19 @@ export function ZonesScreen(props: Props) {
                     Remove
                   </button>
                   <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={discardZoneChanges}
+                    disabled={zoneBusy || !isZoneDirty}
+                    title="Discard unsaved changes"
+                  >
+                    ✕ Discard changes
+                  </button>
+                  <button
                     className="primary-button"
                     type="button"
                     onClick={() => void saveModalZone()}
-                    disabled={zoneBusy || !activeSchoolId}
+                    disabled={zoneBusy || !activeSchoolId || !isZoneDirty}
                   >
                     {zoneBusy ? "Saving..." : "Save"}
                   </button>

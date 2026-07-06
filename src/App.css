@@ -1180,6 +1180,14 @@
         color: var(--button-danger-text, #8a1f1f);
 }
 
+.primary-button:disabled,
+.secondary-button:disabled,
+.danger-button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        filter: grayscale(0.4);
+}
+
 .text-button {
         background: transparent;
         color: inherit;
