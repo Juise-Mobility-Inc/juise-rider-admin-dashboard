@@ -4797,6 +4797,22 @@
         color: var(--muted-strong);
 }
 
+.pack-map-popup-edit-btn {
+        margin-top: 8px;
+        padding: 6px 14px;
+        border: none;
+        border-radius: 999px;
+        background: #27cc5e;
+        color: #ffffff;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+}
+
+.pack-map-popup-edit-btn:hover {
+        background: #21b552;
+}
+
 .coordinate-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));

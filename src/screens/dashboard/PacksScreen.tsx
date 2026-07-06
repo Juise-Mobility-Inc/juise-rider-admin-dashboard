@@ -357,7 +357,17 @@ export function PacksScreen(props: Props) {
                                                         </div>
                                                         <span>{existingPackMapMarkers.length} pins</span>
                                                 </div>
-                                                <PackLocationsMap markers={existingPackMapMarkers} />
+                                                <PackLocationsMap
+                                                        markers={existingPackMapMarkers}
+                                                        onEditMarker={(packId) => {
+                                                                const pack = (schoolPacks as any[]).find(
+                                                                        (candidate) => candidate.pack_uuid === packId,
+                                                                );
+                                                                if (pack) {
+                                                                        handleStartEditingPack(pack);
+                                                                }
+                                                        }}
+                                                />
                                                 {packsWithoutLocationsCount > 0 ? (
                                                         <p className="muted-text">
                                                                 {packsWithoutLocationsCount} pack

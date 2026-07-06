@@ -336,7 +336,11 @@ export function PoisScreen(props: Props) {
               </div>
               <span>{mappedCount} markers</span>
             </div>
-            <PackLocationsMap markers={poiMapMarkers} markerIcon={visitedPoiIcon} />
+            <PackLocationsMap
+              markers={poiMapMarkers}
+              markerIcon={visitedPoiIcon}
+              onEditMarker={(poiId) => openPoiModal(poiId)}
+            />
           </div>
 
           <div className="management-table-card">

@@ -534,7 +534,10 @@ export function ZonesScreen(props: Props) {
               </div>
               <span>{mappedZoneCount} mapped</span>
             </div>
-            <SchoolZonesMap polygons={zoneMapPolygons} />
+            <SchoolZonesMap
+              onEditZone={(zoneId) => openZoneModal(zoneId)}
+              polygons={zoneMapPolygons}
+            />
           </div>
 
           <div className="management-table-card">

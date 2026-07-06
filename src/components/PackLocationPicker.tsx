@@ -45,6 +45,7 @@ interface PackLocationPickerProps {
 interface PackLocationsMapProps {
   markers: PackMapMarker[]
   markerIcon?: Icon
+  onEditMarker?: (markerId: string) => void
 }
 
 const DEFAULT_CENTER: LatLngLiteral = {
@@ -727,9 +728,15 @@ export function PackLocationsMap(props: PackLocationsMapProps) {
                 {typeof marker.spotCount === 'number' ? (
                   <div>{marker.spotCount} spots</div>
                 ) : null}
-                <div>
-                  {marker.lat.toFixed(6)}, {marker.lng.toFixed(6)}
-                </div>
+                {props.onEditMarker ? (
+                  <button
+                    className="pack-map-popup-edit-btn"
+                    type="button"
+                    onClick={() => props.onEditMarker?.(marker.id)}
+                  >
+                    Edit
+                  </button>
+                ) : null}
               </Popup>
             </Marker>
           </Fragment>

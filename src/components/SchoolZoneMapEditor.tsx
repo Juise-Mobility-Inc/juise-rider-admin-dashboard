@@ -38,6 +38,7 @@ interface SchoolZoneMapEditorProps {
 
 interface SchoolZonesMapProps {
   polygons: SchoolZoneMapPolygon[]
+  onEditZone?: (zoneId: string) => void
 }
 
 const DEFAULT_CENTER: LatLngLiteral = {
@@ -677,6 +678,7 @@ interface PolygonGroupProps {
   editable?: boolean
   onMovePoint?: (pointIndex: number, point: SchoolZoneMapPoint) => void
   onInsertPoint?: (pointIndex: number, point: SchoolZoneMapPoint) => void
+  onEditZone?: (zoneId: string) => void
 }
 
 function renderZonePolygon(zone: SchoolZoneMapPolygon, props?: PolygonGroupProps) {
@@ -719,7 +721,15 @@ function renderZonePolygon(zone: SchoolZoneMapPolygon, props?: PolygonGroupProps
             {typeof zone.speedLimitMph === 'number' ? (
               <div>{zone.speedLimitMph} mph limit</div>
             ) : null}
-            <div>{zone.points.length} vertices</div>
+            {props?.onEditZone ? (
+              <button
+                className="pack-map-popup-edit-btn"
+                type="button"
+                onClick={() => props.onEditZone?.(zone.id)}
+              >
+                Edit
+              </button>
+            ) : null}
           </Popup>
         </Polygon>
       ) : null}
@@ -839,7 +849,7 @@ export function SchoolZonesMap(props: SchoolZonesMapProps) {
         <TileLayer attribution={TILE_LAYER_ATTRIBUTION} url={TILE_LAYER_URL} />
         <FitSchoolZones polygons={props.polygons} />
         {props.polygons.map((polygon) => (
-          <PolygonGroup key={polygon.id} polygon={polygon} />
+          <PolygonGroup key={polygon.id} onEditZone={props.onEditZone} polygon={polygon} />
         ))}
       </MapContainer>
       <div className="pack-map-caption">
