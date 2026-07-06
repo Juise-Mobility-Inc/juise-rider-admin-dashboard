@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 import {
   approveSchoolRegisteredDevice,
@@ -17,12 +23,14 @@ type Props = {
   managedAppId: string;
 };
 
+type ApprovalMode = "matched" | "manual" | "waive";
+
 const filters = [
+  { label: "All", value: "" },
   { label: "Pending", value: "pending" },
   { label: "Payment Due", value: "payment_due" },
-  { label: "Approved", value: "approved" },
+  { label: "Accepted", value: "approved" },
   { label: "Declined", value: "declined" },
-  { label: "All", value: "" },
 ];
 
 function formatCurrency(cents?: number | null) {
@@ -58,8 +66,8 @@ function getStatusLabel(device: RegisteredDevice) {
   if (device.registration_status === "declined") return "Declined";
   if (device.registration_status === "pending") return "Pending";
   if (device.payment_status === "awaiting_payment") return "Payment due";
-  if (device.qr_unlocked_at) return "QR ready";
-  return "Approved";
+  if (device.registration_fee_source === "waived") return "Accepted - fee waived";
+  return "Accepted";
 }
 
 function getStatusClass(device: RegisteredDevice) {
@@ -90,6 +98,46 @@ function findMatchedRule(device: RegisteredDevice, rules: RegisteredDeviceFeeRul
     })[0];
 }
 
+function getApprovalActionCopy(
+  mode: ApprovalMode,
+  matchedRule?: RegisteredDeviceFeeRule,
+) {
+  switch (mode) {
+    case "manual":
+      return {
+        title: "Approve + request manual fee",
+        subtitle: "Uses the manual fee entered above.",
+      };
+    case "waive":
+      return {
+        title: "Waive fee + approve",
+        subtitle: "Accepts registration with no payment due.",
+      };
+    case "matched":
+    default:
+      if (matchedRule && matchedRule.amount_cents > 0) {
+        return {
+          title: "Approve + request matched fee",
+          subtitle: `${formatCurrency(matchedRule.amount_cents)} due before QR unlock.`,
+        };
+      }
+      return {
+        title: "Approve - no fee due",
+        subtitle: "No matching fee rule was found.",
+      };
+  }
+}
+
+function getApprovalSuccessMessage(mode: ApprovalMode, device: RegisteredDevice) {
+  if (mode === "waive") {
+    return "Registration approved. The fee was waived and no payment is due.";
+  }
+  if (device.payment_status === "awaiting_payment") {
+    return "Registration approved. The student must pay before QR access unlocks.";
+  }
+  return "Registration approved. No payment is due.";
+}
+
 function getInitials(name: string) {
   return name
     .split(" ")
@@ -100,11 +148,69 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
+function formatTimestamp(timestamp?: number | null) {
+  if (!timestamp) return "-";
+  const millis = timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(millis));
+}
+
+function capitalize(value?: string | null) {
+  const normalized = value?.trim() ?? "";
+  if (!normalized) return "-";
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1).replace(/_/g, " ");
+}
+
+function getRegistrationFeeSummary(
+  device: RegisteredDevice,
+  matchedRule?: RegisteredDeviceFeeRule,
+) {
+  if (device.payment_status === "awaiting_payment") {
+    return formatCurrency(device.registration_fee_amount_cents);
+  }
+  if (device.registration_fee_source === "waived") {
+    return "Waived";
+  }
+  if (device.registration_fee_amount_cents && device.registration_fee_amount_cents > 0) {
+    return `Paid ${formatCurrency(device.registration_fee_amount_cents)}`;
+  }
+  if (
+    device.registration_status === "pending" &&
+    matchedRule &&
+    matchedRule.amount_cents > 0
+  ) {
+    return `Matched ${formatCurrency(matchedRule.amount_cents)}`;
+  }
+  return "No fee";
+}
+
+function RegistrationDetailRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="reg-detail-row">
+      <span>{label}</span>
+      <strong>{children}</strong>
+    </div>
+  );
+}
+
 export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Props) {
   const [entries, setEntries] = useState<RegisteredDeviceReviewEntry[]>([]);
   const [rules, setRules] = useState<RegisteredDeviceFeeRule[]>([]);
   const [devicePhotoUrls, setDevicePhotoUrls] = useState<Record<string, string>>({});
-  const [filter, setFilter] = useState("pending");
+  const [filter, setFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [selectedUUID, setSelectedUUID] = useState("");
   const [manualAmounts, setManualAmounts] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState("");
@@ -120,7 +226,42 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
     [entries],
   );
 
-  async function refresh() {
+  const visibleEntries = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return sortedEntries;
+    return sortedEntries.filter((entry) => {
+      const device = entry.device;
+      const fields = [
+        formatName(entry),
+        formatDevice(device),
+        device.registered_device_uuid,
+        device.device_type,
+        device.powertrain_type,
+        device.make,
+        device.model,
+        device.nickname,
+        device.serial_number,
+        device.color,
+        entry.student.user.email,
+        entry.student.user.username,
+        entry.student.membership?.student_id,
+        entry.student.membership?.membership_uuid,
+      ];
+      return fields.some((field) => (field ?? "").toLowerCase().includes(query));
+    });
+  }, [search, sortedEntries]);
+
+  const selectedEntry = useMemo(
+    () =>
+      selectedUUID
+        ? (sortedEntries.find(
+            (entry) => entry.device.registered_device_uuid === selectedUUID,
+          ) ?? null)
+        : null,
+    [selectedUUID, sortedEntries],
+  );
+
+  const refresh = useCallback(async () => {
     if (!activeSchoolId || !managedAppId) {
       setEntries([]);
       setRules([]);
@@ -163,13 +304,24 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
     } finally {
       setBusy(false);
     }
-  }
+  }, [activeSchoolId, filter, managedAppId]);
 
   useEffect(() => {
     void refresh();
-  }, [activeSchoolId, managedAppId, filter]);
+  }, [refresh]);
 
-  async function approve(entry: RegisteredDeviceReviewEntry, mode: "matched" | "manual" | "waive") {
+  useEffect(() => {
+    if (!selectedUUID) return;
+    if (
+      !sortedEntries.some(
+        (entry) => entry.device.registered_device_uuid === selectedUUID,
+      )
+    ) {
+      setSelectedUUID("");
+    }
+  }, [selectedUUID, sortedEntries]);
+
+  async function approve(entry: RegisteredDeviceReviewEntry, mode: ApprovalMode) {
     const deviceUUID = entry.device.registered_device_uuid;
     let amount_cents: number | null | undefined;
     if (mode === "manual") {
@@ -184,12 +336,12 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
     setError("");
     setSuccess("");
     try {
-      await approveSchoolRegisteredDevice(managedAppId, activeSchoolId, deviceUUID, {
+      const updatedDevice = await approveSchoolRegisteredDevice(managedAppId, activeSchoolId, deviceUUID, {
         fee_mode: mode,
         amount_cents,
         note: notes[deviceUUID] ?? "",
       });
-      setSuccess("Vehicle registration updated.");
+      setSuccess(getApprovalSuccessMessage(mode, updatedDevice));
       await refresh();
     } catch (nextError) {
       setError(getErrorMessage(nextError));
@@ -219,6 +371,200 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
     }
   }
 
+  function renderReviewControls(
+    entry: RegisteredDeviceReviewEntry,
+    matchedRule?: RegisteredDeviceFeeRule,
+  ) {
+    const deviceUUID = entry.device.registered_device_uuid;
+    const isBusy = busyId.startsWith(deviceUUID);
+
+    return (
+      <div className="reg-card-actions reg-detail-actions">
+        <div className="reg-card-fields">
+          <label className="field">
+            <span>Review note</span>
+            <input
+              value={notes[deviceUUID] ?? ""}
+              onChange={(event) =>
+                setNotes((current) => ({
+                  ...current,
+                  [deviceUUID]: event.target.value,
+                }))
+              }
+              placeholder="Optional approval note, required to decline"
+            />
+          </label>
+          <label className="field">
+            <span>Manual fee</span>
+            <input
+              value={manualAmounts[deviceUUID] ?? ""}
+              onChange={(event) =>
+                setManualAmounts((current) => ({
+                  ...current,
+                  [deviceUUID]: event.target.value,
+                }))
+              }
+              placeholder="$25.00"
+            />
+          </label>
+        </div>
+        <div className="inline-actions">
+          {(["matched", "manual", "waive"] as const).map((mode) => {
+            const copy = getApprovalActionCopy(mode, matchedRule);
+            return (
+              <button
+                key={mode}
+                className={
+                  mode === "matched"
+                    ? "primary-button reg-action-button"
+                    : "secondary-button reg-action-button"
+                }
+                type="button"
+                disabled={isBusy}
+                onClick={() => void approve(entry, mode)}
+              >
+                <span className="reg-action-title">
+                  {busyId === `${deviceUUID}:${mode}` ? "Working..." : copy.title}
+                </span>
+                <span className="reg-action-subtitle">{copy.subtitle}</span>
+              </button>
+            );
+          })}
+          <button
+            className="danger-button reg-action-button"
+            type="button"
+            disabled={isBusy}
+            onClick={() => void decline(entry)}
+          >
+            <span className="reg-action-title">
+              {busyId === `${deviceUUID}:decline` ? "Working..." : "Decline registration"}
+            </span>
+            <span className="reg-action-subtitle">
+              Requires a student-facing review note.
+            </span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (selectedEntry) {
+    const device = selectedEntry.device;
+    const deviceUUID = device.registered_device_uuid;
+    const matchedRule = findMatchedRule(device, rules);
+    const studentName = formatName(selectedEntry);
+    const deviceLabel = formatDevice(device);
+    const photoUrl = devicePhotoUrls[deviceUUID];
+    const beaconInfo = getRegisteredDeviceBeaconInfo(device);
+    const statusLabel = getStatusLabel(device);
+    const statusClass = getStatusClass(device);
+    const membership = selectedEntry.student.membership;
+
+    return (
+      <section className="dashboard-panel">
+        <div className="reg-detail-toolbar">
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => setSelectedUUID("")}
+          >
+            Back to registrations
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => void refresh()}
+          >
+            Refresh
+          </button>
+        </div>
+
+        {error ? <p className="error-text">{error}</p> : null}
+        {success ? <p className="success-text">{success}</p> : null}
+
+        <div className="reg-detail-panel">
+          <header className="reg-detail-header">
+            {photoUrl ? (
+              <img className="reg-detail-photo" src={photoUrl} alt={deviceLabel} />
+            ) : (
+              <div className="reg-detail-avatar">{getInitials(studentName) || "?"}</div>
+            )}
+            <div className="reg-detail-heading">
+              <p className="eyebrow">Vehicle registration</p>
+              <h2>{deviceLabel}</h2>
+              <div className="reg-detail-meta">
+                <span className={statusClass}>{statusLabel}</span>
+                <span>{studentName}</span>
+                <span>{formatTimestamp(device.updated_at)}</span>
+              </div>
+            </div>
+          </header>
+
+          <div className="reg-detail-grid">
+            <section className="reg-detail-section">
+              <h3>Student</h3>
+              <RegistrationDetailRow label="Name">{studentName}</RegistrationDetailRow>
+              <RegistrationDetailRow label="Student ID">
+                {membership?.student_id || "-"}
+              </RegistrationDetailRow>
+              <RegistrationDetailRow label="Email">
+                {selectedEntry.student.user.email || "-"}
+              </RegistrationDetailRow>
+              <RegistrationDetailRow label="Membership">
+                {membership?.membership_uuid || "-"}
+              </RegistrationDetailRow>
+            </section>
+
+            <section className="reg-detail-section">
+              <h3>Device</h3>
+              <RegistrationDetailRow label="Type">
+                {capitalize(device.device_type)}
+              </RegistrationDetailRow>
+              <RegistrationDetailRow label="Powertrain">
+                {capitalize(device.powertrain_type)}
+              </RegistrationDetailRow>
+              <RegistrationDetailRow label="Make / model">
+                {[device.make, device.model].filter(Boolean).join(" ") || "-"}
+              </RegistrationDetailRow>
+              <RegistrationDetailRow label="Serial number">
+                {device.serial_number || "-"}
+              </RegistrationDetailRow>
+              <RegistrationDetailRow label="Color">
+                {capitalize(device.color)}
+              </RegistrationDetailRow>
+              <RegistrationDetailRow label="Device UUID">{deviceUUID}</RegistrationDetailRow>
+            </section>
+
+            <section className="reg-detail-section">
+              <h3>Review</h3>
+              <RegistrationDetailRow label="Status">{statusLabel}</RegistrationDetailRow>
+              <RegistrationDetailRow label="Fee">
+                {getRegistrationFeeSummary(device, matchedRule)}
+              </RegistrationDetailRow>
+              <RegistrationDetailRow label="Payment">
+                {capitalize(device.payment_status)}
+              </RegistrationDetailRow>
+              <RegistrationDetailRow label="Reviewed">
+                {formatTimestamp(device.reviewed_at)}
+              </RegistrationDetailRow>
+              <RegistrationDetailRow label="QR access">
+                {device.qr_unlocked_at ? formatTimestamp(device.qr_unlocked_at) : "Locked"}
+              </RegistrationDetailRow>
+              <RegistrationDetailRow label="Beacon">
+                {beaconInfo?.beacon_mac || "-"}
+              </RegistrationDetailRow>
+              {device.review_note ? (
+                <p className="reg-detail-note">{device.review_note}</p>
+              ) : null}
+            </section>
+          </div>
+
+          {renderReviewControls(selectedEntry, matchedRule)}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="dashboard-panel">
       <div className="section-header">
@@ -226,8 +572,8 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
           <p className="eyebrow">Vehicle registration</p>
           <h2>Review Queue</h2>
           <p className="muted-text">
-            Approve pending devices, decline with a student-facing note, or
-            approve with a matched, manual, or waived registration fee.
+            Review every submitted device in a table, then open one registration
+            to accept it, waive fees, request payment, or decline it.
           </p>
         </div>
         <button className="secondary-button" type="button" onClick={() => void refresh()}>
@@ -235,162 +581,132 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
         </button>
       </div>
 
-      <div className="segmented-control">
-        {filters.map((option) => (
-          <button
-            key={option.value || "all"}
-            className={filter === option.value ? "segment-active" : ""}
-            type="button"
-            onClick={() => setFilter(option.value)}
-          >
-            {option.label}
-          </button>
-        ))}
+      <div className="reg-table-tools">
+        <div className="segmented-control">
+          {filters.map((option) => (
+            <button
+              key={option.value || "all"}
+              className={filter === option.value ? "segment-active" : ""}
+              type="button"
+              onClick={() => {
+                setFilter(option.value);
+                setSelectedUUID("");
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <input
+          className="reg-table-search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search student, device, serial, UUID..."
+        />
       </div>
 
       {error ? <p className="error-text">{error}</p> : null}
       {success ? <p className="success-text">{success}</p> : null}
-      {busy ? <p className="muted-text">Loading registrations…</p> : null}
+      {busy ? <p className="muted-text">Loading registrations...</p> : null}
 
-      <div className="reg-card-list">
-        {sortedEntries.map((entry) => {
-          const device = entry.device;
-          const deviceUUID = device.registered_device_uuid;
-          const matchedRule = findMatchedRule(device, rules);
-          const isBusy = busyId.startsWith(deviceUUID);
-          const studentName = formatName(entry);
-          const initials = getInitials(studentName);
-          const deviceLabel = formatDevice(device);
-          const statusLabel = getStatusLabel(device);
-          const statusClass = getStatusClass(device);
-          const photoUrl = devicePhotoUrls[deviceUUID];
-          const beaconInfo = getRegisteredDeviceBeaconInfo(device);
+      <div className="management-table-card reg-table-card">
+        <div className="reg-table-summary">
+          <strong>{visibleEntries.length.toLocaleString()} registrations</strong>
+          <span>
+            {filter
+              ? `${filters.find((option) => option.value === filter)?.label ?? "Filtered"} filter`
+              : "All statuses"}
+          </span>
+        </div>
+        <div className="management-table-scroll">
+          <table className="management-table reg-review-table">
+            <thead>
+              <tr>
+                <th>Device</th>
+                <th>Student</th>
+                <th>Status</th>
+                <th>Fee</th>
+                <th>Beacon</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleEntries.map((entry) => {
+                const device = entry.device;
+                const deviceUUID = device.registered_device_uuid;
+                const matchedRule = findMatchedRule(device, rules);
+                const studentName = formatName(entry);
+                const deviceLabel = formatDevice(device);
+                const photoUrl = devicePhotoUrls[deviceUUID];
+                const beaconInfo = getRegisteredDeviceBeaconInfo(device);
+                const statusLabel = getStatusLabel(device);
+                const statusClass = getStatusClass(device);
+                const studentId = entry.student.membership?.student_id ?? "";
 
-          return (
-            <article className="reg-card" key={deviceUUID}>
-              <div className="reg-card-top">
-                {photoUrl ? (
-                  <img
-                    className="reg-card-photo"
-                    src={photoUrl}
-                    alt={deviceLabel}
-                  />
-                ) : (
-                  <div className="reg-card-avatar">{initials || "?"}</div>
-                )}
-                <div className="reg-card-info">
-                  <div className="reg-card-title-row">
-                    <strong className="reg-card-device">{deviceLabel}</strong>
-                    <span className={statusClass}>{statusLabel}</span>
-                  </div>
-                  <span className="reg-card-student">{studentName}</span>
-                  <div className="reg-card-chips">
-                    {device.device_type ? (
-                      <span className="reg-chip">{device.device_type}</span>
-                    ) : null}
-                    {device.powertrain_type ? (
-                      <span className="reg-chip">{device.powertrain_type}</span>
-                    ) : null}
-                    {device.color ? (
-                      <span className="reg-chip">{device.color}</span>
-                    ) : null}
-                    {device.serial_number ? (
-                      <span className="reg-chip reg-chip-muted">
-                        SN: {device.serial_number}
-                      </span>
-                    ) : null}
-                    {beaconInfo ? (
-                      <span className="reg-chip reg-chip-beacon">
-                        Beacon · {beaconInfo.beacon_mac}
-                      </span>
-                    ) : null}
-                    {matchedRule ? (
-                      <span className="reg-chip reg-chip-fee">
-                        {matchedRule.label || "Fee"} · {formatCurrency(matchedRule.amount_cents)}
-                      </span>
-                    ) : null}
-                    {device.registration_fee_amount_cents ? (
-                      <span className="reg-chip reg-chip-fee">
-                        Snapshot: {formatCurrency(device.registration_fee_amount_cents)}
-                      </span>
-                    ) : null}
-                  </div>
-                  {device.review_note ? (
-                    <p className="reg-card-note">{device.review_note}</p>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="reg-card-actions">
-                <div className="reg-card-fields">
-                  <label className="field">
-                    <span>Review note</span>
-                    <input
-                      value={notes[deviceUUID] ?? ""}
-                      onChange={(event) =>
-                        setNotes((current) => ({
-                          ...current,
-                          [deviceUUID]: event.target.value,
-                        }))
+                return (
+                  <tr
+                    key={deviceUUID}
+                    className="reg-review-row"
+                    tabIndex={0}
+                    onClick={() => setSelectedUUID(deviceUUID)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedUUID(deviceUUID);
                       }
-                      placeholder="Optional approval note, required to decline"
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Manual fee</span>
-                    <input
-                      value={manualAmounts[deviceUUID] ?? ""}
-                      onChange={(event) =>
-                        setManualAmounts((current) => ({
-                          ...current,
-                          [deviceUUID]: event.target.value,
-                        }))
-                      }
-                      placeholder="$25.00"
-                    />
-                  </label>
-                </div>
-                <div className="inline-actions">
-                  <button
-                    className="primary-button"
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => void approve(entry, "matched")}
+                    }}
                   >
-                    Matched fee
-                  </button>
-                  <button
-                    className="secondary-button"
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => void approve(entry, "manual")}
-                  >
-                    Manual fee
-                  </button>
-                  <button
-                    className="secondary-button"
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => void approve(entry, "waive")}
-                  >
-                    Waive
-                  </button>
-                  <button
-                    className="danger-button"
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => void decline(entry)}
-                  >
-                    Decline
-                  </button>
-                </div>
-              </div>
-            </article>
-          );
-        })}
-        {sortedEntries.length === 0 && !busy ? (
-          <p className="muted-text">No vehicle registrations match this filter.</p>
-        ) : null}
+                    <td>
+                      <div className="reg-table-identity">
+                        {photoUrl ? (
+                          <img
+                            className="reg-table-photo"
+                            src={photoUrl}
+                            alt={deviceLabel}
+                          />
+                        ) : (
+                          <div className="reg-table-avatar">
+                            {getInitials(studentName) || "?"}
+                          </div>
+                        )}
+                        <div>
+                          <strong>{deviceLabel}</strong>
+                          <span>{deviceUUID}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <strong>{studentName}</strong>
+                      <span>{studentId || entry.student.user.email || "-"}</span>
+                    </td>
+                    <td>
+                      <span className={statusClass}>{statusLabel}</span>
+                    </td>
+                    <td>
+                      <strong>{getRegistrationFeeSummary(device, matchedRule)}</strong>
+                      <span>{capitalize(device.registration_fee_source)}</span>
+                    </td>
+                    <td>
+                      <strong>{beaconInfo ? "Registered" : "None"}</strong>
+                      <span>{beaconInfo?.beacon_mac ?? "-"}</span>
+                    </td>
+                    <td>
+                      <strong>{formatTimestamp(device.updated_at)}</strong>
+                      <span>Open details</span>
+                    </td>
+                  </tr>
+                );
+              })}
+              {visibleEntries.length === 0 && !busy ? (
+                <tr>
+                  <td colSpan={6}>
+                    <span>No vehicle registrations match this filter.</span>
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   );
