@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useRef,
   useState,
   type ChangeEvent,
   type Dispatch,
@@ -48,6 +47,8 @@ type Props = {
   refreshSchoolPOIs: () => Promise<void>;
   handleSavePOIs: (nextPoiDrafts?: POIDraft[]) => Promise<boolean>;
   handlePoiLocationSelect: (point: PackMapPoint) => void;
+  poiEditRequestId?: string;
+  onPoiEditRequestHandled?: () => void;
   DetailRow?: React.ComponentType<{ label: string; value: string }>;
 };
 
@@ -101,25 +102,26 @@ export function PoisScreen(props: Props) {
     refreshSchoolPOIs,
     handleSavePOIs,
     handlePoiLocationSelect,
+    poiEditRequestId,
+    onPoiEditRequestHandled,
   } = props;
   const [isPoiModalOpen, setIsPoiModalOpen] = useState(false);
   const [poiSnapshot, setPoiSnapshot] = useState<POIDraft | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [pendingImportedPois, setPendingImportedPois] = useState<POIDraft[]>([]);
   const [importMessage, setImportMessage] = useState("");
-  const autoOpenedPoiIdRef = useRef("");
 
   useEffect(() => {
-    if (
-      activePoiDraftId &&
-      activePoiDraftId !== autoOpenedPoiIdRef.current &&
-      poiDrafts.some((poi) => poi.id === activePoiDraftId)
-    ) {
-      autoOpenedPoiIdRef.current = activePoiDraftId;
-      setIsPoiModalOpen(true);
-      setPoiSnapshot(poiDrafts.find((poi) => poi.id === activePoiDraftId) ?? null);
+    if (!poiEditRequestId) {
+      return;
     }
-  }, [activePoiDraftId, poiDrafts]);
+    const requestedPoi = poiDrafts.find((poi) => poi.id === poiEditRequestId);
+    if (requestedPoi) {
+      setIsPoiModalOpen(true);
+      setPoiSnapshot(requestedPoi);
+    }
+    onPoiEditRequestHandled?.();
+  }, [poiEditRequestId, poiDrafts, onPoiEditRequestHandled]);
 
   function openPoiModal(poiId: string, snapshot?: POIDraft) {
     setActivePoiDraftId(poiId);

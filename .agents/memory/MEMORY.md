@@ -1,4 +1,4 @@
 - [Routes screen dual-mode pattern](routes-dual-mode.md) — By-Time mode loads all students via concurrency helper; adding new wrapping div to JSX return requires matching closing div or Vite/Oxc parse error at last `}`.
 - [Dashboard screen layout convention](dashboard-screen-layout-convention.md) — approval/queue screens should default to a searchable table, opening a full detail view (with back button) on row click, not an always-visible sidebar+detail split.
-- [Deep-linking to a screen's edit modal](deep-link-to-edit-modal.md) — Packs modal derives from editingPack directly; Zones/POIs need setActiveId + navigate + a useEffect to actually open their local modal.
+- [Deep-linking to a screen's edit modal](deep-link-to-edit-modal.md) — Packs derives from editingPack directly; Zones/POIs need a dedicated one-shot request-id prop (not a ref-guarded watch on the active-id) to avoid auto-opening on plain screen entry.
 - [New dashboard screen wiring checklist](new-dashboard-screen-wiring.md) — adding a screen needs 5 coordinated edits across App.tsx + the source screen; missing one leaves a dead route or broken nav.

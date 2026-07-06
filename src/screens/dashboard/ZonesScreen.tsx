@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useRef,
   useState,
   type ChangeEvent,
   type Dispatch,
@@ -52,6 +51,8 @@ type Props = {
   handleZonePointAdd: (point: PackMapPoint) => void;
   handleZonePointInsert: (index: number, point: PackMapPoint) => void;
   handleZonePointMove: (index: number, point: PackMapPoint) => void;
+  zoneEditRequestId?: string;
+  onZoneEditRequestHandled?: () => void;
   DetailRow?: React.ComponentType<{ label: string; value: string }>;
 };
 
@@ -226,29 +227,25 @@ export function ZonesScreen(props: Props) {
     handleZonePointAdd,
     handleZonePointInsert,
     handleZonePointMove,
+    zoneEditRequestId,
+    onZoneEditRequestHandled,
   } = props;
   const [isZoneModalOpen, setIsZoneModalOpen] = useState(false);
   const [zoneSnapshot, setZoneSnapshot] = useState<ZoneDraft | null>(null);
-  const autoOpenedZoneIdRef = useRef("");
-  const suppressZoneAutoOpenRef = useRef(false);
 
   useEffect(() => {
-    if (
-      activeZoneDraftId &&
-      activeZoneDraftId !== autoOpenedZoneIdRef.current &&
-      zoneDrafts.some((zone) => zone.id === activeZoneDraftId)
-    ) {
-      autoOpenedZoneIdRef.current = activeZoneDraftId;
-      if (suppressZoneAutoOpenRef.current) {
-        suppressZoneAutoOpenRef.current = false;
-      } else {
-        setIsZoneModalOpen(true);
-        setZoneSnapshot(
-          zoneDrafts.find((zone) => zone.id === activeZoneDraftId) ?? null,
-        );
-      }
+    if (!zoneEditRequestId) {
+      return;
     }
-  }, [activeZoneDraftId, zoneDrafts]);
+    const requestedZone = zoneDrafts.find(
+      (zone) => zone.id === zoneEditRequestId,
+    );
+    if (requestedZone) {
+      setIsZoneModalOpen(true);
+      setZoneSnapshot(requestedZone);
+    }
+    onZoneEditRequestHandled?.();
+  }, [zoneEditRequestId, zoneDrafts, onZoneEditRequestHandled]);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [pendingImportedZones, setPendingImportedZones] = useState<ZoneDraft[]>([]);
   const [importMessage, setImportMessage] = useState("");
@@ -337,7 +334,6 @@ export function ZonesScreen(props: Props) {
   async function saveModalZone() {
     const didSave = await handleSaveZones(zoneDrafts);
     if (didSave) {
-      suppressZoneAutoOpenRef.current = true;
       setIsZoneModalOpen(false);
     }
   }
@@ -346,7 +342,6 @@ export function ZonesScreen(props: Props) {
     const nextZoneDrafts = zoneDrafts.filter((zone) => zone.id !== targetZone.id);
     const didSave = await handleSaveZones(nextZoneDrafts);
     if (didSave) {
-      suppressZoneAutoOpenRef.current = true;
       setIsZoneModalOpen(false);
     }
   }

@@ -1438,9 +1438,11 @@ function App() {
         const [poiDrafts, setPoiDrafts] = useState<POIDraft[]>([]);
         const [poiBusy, setPoiBusy] = useState(false);
         const [activePoiDraftId, setActivePoiDraftId] = useState("");
+        const [poiEditRequestId, setPoiEditRequestId] = useState("");
         const [zoneDrafts, setZoneDrafts] = useState<ZoneDraft[]>([]);
         const [zoneBusy, setZoneBusy] = useState(false);
         const [activeZoneDraftId, setActiveZoneDraftId] = useState("");
+        const [zoneEditRequestId, setZoneEditRequestId] = useState("");
         const [schoolChallenges, setSchoolChallenges] = useState<SchoolChallenge[]>(
                 [],
         );
@@ -4631,6 +4633,8 @@ function App() {
                                                 refreshSchoolPOIs={refreshSchoolPOIs}
                                                 handleSavePOIs={handleSavePOIs}
                                                 handlePoiLocationSelect={handlePoiLocationSelect}
+                                                poiEditRequestId={poiEditRequestId}
+                                                onPoiEditRequestHandled={() => setPoiEditRequestId("")}
                                                 DetailRow={DetailRow}
                                         />
                                 );
@@ -4652,6 +4656,8 @@ function App() {
                                                 handleZonePointAdd={handleZonePointAdd}
                                                 handleZonePointInsert={handleZonePointInsert}
                                                 handleZonePointMove={handleZonePointMove}
+                                                zoneEditRequestId={zoneEditRequestId}
+                                                onZoneEditRequestHandled={() => setZoneEditRequestId("")}
                                                 DetailRow={DetailRow}
                                         />
                                 );
@@ -4873,8 +4879,14 @@ function App() {
                                                 activeSchoolId={activeSchoolId}
                                                 managedAppId={context.managedAppId}
                                                 adminUserUUID={session?.claims.user_uuid ?? ""}
-                                                onSelectZoneForEdit={setActiveZoneDraftId}
-                                                onSelectPoiForEdit={setActivePoiDraftId}
+                                                onSelectZoneForEdit={(zoneId) => {
+                                                        setActiveZoneDraftId(zoneId);
+                                                        setZoneEditRequestId(zoneId);
+                                                }}
+                                                onSelectPoiForEdit={(poiId) => {
+                                                        setActivePoiDraftId(poiId);
+                                                        setPoiEditRequestId(poiId);
+                                                }}
                                                 onSelectPackForEdit={handleStartEditingPack}
                                         />
                                 );
