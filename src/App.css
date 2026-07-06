@@ -3934,11 +3934,132 @@
         margin-bottom: 4px;
 }
 
+.res-empty-text {
+        padding: 32px 20px;
+        text-align: center;
+        color: var(--muted);
+}
+
+/* ── Root wrapper for table/detail toggle ── */
+.res-root {
+        display: flex;
+        flex-direction: column;
+}
+
+/* ── Table view (default landing) ── */
+.res-table-view {
+        background: var(--panel-bg, #fff);
+        border: 1px solid var(--panel-border);
+        border-radius: 16px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+}
+
+.res-table-view-header {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 20px 24px;
+        border-bottom: 1px solid var(--panel-border);
+}
+
+.res-table-view-header-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+}
+
+.res-table-view-title-group h2.res-sidebar-title {
+        margin: 2px 0 0;
+        display: flex;
+        align-items: center;
+}
+
+.res-table-view-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+}
+
+.res-table-search {
+        min-width: 260px;
+        padding: 9px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--panel-border);
+        font-size: 13px;
+        background: #fff;
+}
+
+.res-table-search:focus {
+        outline: none;
+        border-color: rgba(246, 174, 45, 0.7);
+}
+
+.res-table-scroll {
+        overflow-x: auto;
+}
+
+.res-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+}
+
+.res-table thead th {
+        text-align: left;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--muted);
+        font-weight: 700;
+        padding: 10px 20px;
+        border-bottom: 1px solid var(--panel-border);
+        white-space: nowrap;
+}
+
+.res-table-row {
+        cursor: pointer;
+        transition: background 120ms ease;
+}
+
+.res-table-row:hover {
+        background: rgba(246, 174, 45, 0.08);
+}
+
+.res-table-row td {
+        padding: 12px 20px;
+        border-bottom: 1px solid var(--panel-border);
+        vertical-align: middle;
+        white-space: nowrap;
+}
+
+.res-table-pack {
+        font-weight: 700;
+        color: var(--navy);
+}
+
+.res-table-date {
+        color: var(--muted);
+        font-size: 12px;
+}
+
 /* ── Detail panel ── */
 .res-detail-panel {
         display: flex;
         flex-direction: column;
         gap: 0;
+}
+
+.res-detail-panel-full {
+        max-width: none;
+}
+
+.res-back-button {
+        align-self: flex-start;
+        margin: 20px 24px 0;
 }
 
 .res-detail-empty {
