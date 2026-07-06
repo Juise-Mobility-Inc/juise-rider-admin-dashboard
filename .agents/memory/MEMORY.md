@@ -1,2 +1,3 @@
 - [Routes screen dual-mode pattern](routes-dual-mode.md) — By-Time mode loads all students via concurrency helper; adding new wrapping div to JSX return requires matching closing div or Vite/Oxc parse error at last `}`.
 - [Dashboard screen layout convention](dashboard-screen-layout-convention.md) — approval/queue screens should default to a searchable table, opening a full detail view (with back button) on row click, not an always-visible sidebar+detail split.
+- [Deep-linking to a screen's edit modal](deep-link-to-edit-modal.md) — Packs modal derives from editingPack directly; Zones/POIs need setActiveId + navigate + a useEffect to actually open their local modal.

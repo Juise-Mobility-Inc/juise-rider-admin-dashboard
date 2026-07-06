@@ -4851,6 +4851,9 @@ function App() {
                                                 activeSchoolId={activeSchoolId}
                                                 managedAppId={context.managedAppId}
                                                 adminUserUUID={session?.claims.user_uuid ?? ""}
+                                                onSelectZoneForEdit={setActiveZoneDraftId}
+                                                onSelectPoiForEdit={setActivePoiDraftId}
+                                                onSelectPackForEdit={handleStartEditingPack}
                                         />
                                 );
                         case "sightingsMap":

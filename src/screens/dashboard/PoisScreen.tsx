@@ -1,4 +1,11 @@
-import { useState, type ChangeEvent, type Dispatch, type SetStateAction } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 
 import {
   PackLocationPicker,
@@ -84,6 +91,7 @@ export function PoisScreen(props: Props) {
     poiBusy,
     poiDrafts,
     setPoiDrafts,
+    activePoiDraftId,
     setActivePoiDraftId,
     selectedPoiDraft,
     selectedPoiLocation,
@@ -98,6 +106,18 @@ export function PoisScreen(props: Props) {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [pendingImportedPois, setPendingImportedPois] = useState<POIDraft[]>([]);
   const [importMessage, setImportMessage] = useState("");
+  const autoOpenedPoiIdRef = useRef("");
+
+  useEffect(() => {
+    if (
+      activePoiDraftId &&
+      activePoiDraftId !== autoOpenedPoiIdRef.current &&
+      poiDrafts.some((poi) => poi.id === activePoiDraftId)
+    ) {
+      autoOpenedPoiIdRef.current = activePoiDraftId;
+      setIsPoiModalOpen(true);
+    }
+  }, [activePoiDraftId, poiDrafts]);
 
   function openPoiModal(poiId: string) {
     setActivePoiDraftId(poiId);
