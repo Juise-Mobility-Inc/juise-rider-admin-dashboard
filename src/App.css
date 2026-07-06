@@ -12465,6 +12465,24 @@
         color: #4b5563;
 }
 
+.mo-detail-modal-spot-chip--open {
+        background: rgba(34, 197, 94, 0.15);
+        color: #15803d;
+}
+
+.mo-detail-modal-spot-chip--reserved {
+        background: rgba(245, 158, 11, 0.18);
+        color: #92400e;
+}
+
+.mo-detail-modal-pack-photo {
+        width: 100%;
+        max-height: 220px;
+        object-fit: cover;
+        border-radius: 16px;
+        border: 1px solid var(--panel-border);
+}
+
 .mo-detail-modal-manage-link {
         appearance: none;
         border: none;

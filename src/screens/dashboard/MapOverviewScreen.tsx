@@ -28,11 +28,28 @@ import {
         fetchSchoolZones,
         fetchSchoolPOIs,
         fetchAdminSchoolPacks,
+        fetchSchoolTermReservations,
         type SchoolZone,
         type SchoolPOI,
         type Pack,
         type SchoolRegisteredDeviceBeaconLocation,
+        type PackSpotReservation,
 } from "../../lib/api";
+
+function getPackPhotoUrl(pack: Pick<Pack, "photo"> | null | undefined): string {
+        return pack?.photo?.path_do_spaces?.trim() ?? "";
+}
+
+function isReservationCurrentlyActive(
+        reservation: PackSpotReservation,
+        nowSeconds: number,
+): boolean {
+        if (!reservation.active) return false;
+        if (reservation.status.toLowerCase() !== "approved") return false;
+        if (reservation.start_time && reservation.start_time > nowSeconds) return false;
+        if (reservation.end_time && reservation.end_time < nowSeconds) return false;
+        return true;
+}
 
 function MapInvalidator() {
         const map = useMap();
@@ -128,6 +145,7 @@ export function MapOverviewScreen({
         const [zones, setZones] = useState<SchoolZone[]>([]);
         const [pois, setPois] = useState<SchoolPOI[]>([]);
         const [packs, setPacks] = useState<Pack[]>([]);
+        const [reservations, setReservations] = useState<PackSpotReservation[]>([]);
         const [beaconLocations, setBeaconLocations] = useState<
                 SchoolRegisteredDeviceBeaconLocation[]
         >([]);
@@ -157,12 +175,14 @@ export function MapOverviewScreen({
                         fetchSchoolZones(managedAppId, activeSchoolId),
                         fetchSchoolPOIs(managedAppId, activeSchoolId),
                         fetchAdminSchoolPacks(adminUserUUID, managedAppId, activeSchoolId),
+                        fetchSchoolTermReservations(adminUserUUID, managedAppId, activeSchoolId),
                 ])
-                        .then(([z, p, pk]) => {
+                        .then(([z, p, pk, res]) => {
                                 if (dead) return;
                                 setZones(z);
                                 setPois(p);
                                 setPacks(pk);
+                                setReservations(res);
                         })
                         .catch((e) => {
                                 if (!dead)
@@ -243,6 +263,26 @@ export function MapOverviewScreen({
                         packs.filter((p) => p.location?.lat != null && p.location?.lng != null),
                 [packs],
         );
+        const selectedPackSpotStatuses = useMemo(() => {
+                if (!selectedPack) return [];
+                const nowSeconds = Math.floor(Date.now() / 1000);
+                return selectedPack.spots
+                        .slice()
+                        .sort((a, b) => a.spot_number - b.spot_number)
+                        .map((spot) => {
+                                const isReserved = reservations.some(
+                                        (r) =>
+                                                r.spot_uuid === spot.spot_uuid &&
+                                                isReservationCurrentlyActive(r, nowSeconds),
+                                );
+                                return {
+                                        spot_uuid: spot.spot_uuid,
+                                        spot_number: spot.spot_number,
+                                        active: spot.active,
+                                        reserved: isReserved,
+                                };
+                        });
+        }, [selectedPack, reservations]);
         const beaconLocationsWithLocation = useMemo(
                 () =>
                         beaconLocations.filter(
@@ -801,6 +841,14 @@ export function MapOverviewScreen({
                                                         </button>
                                                 </div>
 
+                                                {getPackPhotoUrl(selectedPack) ? (
+                                                        <img
+                                                                className="mo-detail-modal-pack-photo"
+                                                                src={getPackPhotoUrl(selectedPack)}
+                                                                alt={selectedPack.name || "Juise Pack"}
+                                                        />
+                                                ) : null}
+
                                                 {selectedPack.description && (
                                                         <p className="mo-detail-modal-desc">{selectedPack.description}</p>
                                                 )}
@@ -819,15 +867,6 @@ export function MapOverviewScreen({
                                                                         {selectedPack.spot_count !== 1 ? "s" : ""}
                                                                 </span>
                                                         </div>
-                                                        {selectedPack.location && (
-                                                                <div className="mo-detail-modal-cell">
-                                                                        <span className="mo-detail-modal-label">Coordinates</span>
-                                                                        <span className="mo-detail-modal-value">
-                                                                                {selectedPack.location.lat.toFixed(5)},{" "}
-                                                                                {selectedPack.location.lng.toFixed(5)}
-                                                                        </span>
-                                                                </div>
-                                                        )}
                                                         {selectedPack.school_owner?.campus_id && (
                                                                 <div className="mo-detail-modal-cell">
                                                                         <span className="mo-detail-modal-label">Campus</span>
@@ -838,17 +877,26 @@ export function MapOverviewScreen({
                                                         )}
                                                 </div>
 
-                                                {selectedPack.spots.length > 0 && (
+                                                {selectedPackSpotStatuses.length > 0 && (
                                                         <div className="mo-detail-modal-spots">
-                                                                <span className="mo-detail-modal-label">Spot list</span>
+                                                                <span className="mo-detail-modal-label">Spot status</span>
                                                                 <div className="mo-detail-modal-spot-chips">
-                                                                        {selectedPack.spots.map((spot) => (
+                                                                        {selectedPackSpotStatuses.map((spot) => (
                                                                                 <span
                                                                                         key={spot.spot_uuid}
                                                                                         className={`mo-detail-modal-spot-chip${
-                                                                                                spot.active ? "" : " mo-detail-modal-spot-chip--inactive"
+                                                                                                !spot.active
+                                                                                                        ? " mo-detail-modal-spot-chip--inactive"
+                                                                                                        : spot.reserved
+                                                                                                                ? " mo-detail-modal-spot-chip--reserved"
+                                                                                                                : " mo-detail-modal-spot-chip--open"
                                                                                         }`}>
-                                                                                        #{spot.spot_number}
+                                                                                        #{spot.spot_number} ·{" "}
+                                                                                        {!spot.active
+                                                                                                ? "Inactive"
+                                                                                                : spot.reserved
+                                                                                                        ? "Reserved"
+                                                                                                        : "Open"}
                                                                                 </span>
                                                                         ))}
                                                                 </div>
