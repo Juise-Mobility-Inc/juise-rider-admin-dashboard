@@ -189,7 +189,16 @@ function getRegistrationFeeSummary(
   return "No fee";
 }
 
-function RegistrationDetailRow({
+function RegStat({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="reg-stat-card">
+      <strong>{children}</strong>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function RegInlineField({
   label,
   children,
 }: {
@@ -197,11 +206,19 @@ function RegistrationDetailRow({
   children: ReactNode;
 }) {
   return (
-    <div className="reg-detail-row">
+    <div className="reg-inline-field">
       <span>{label}</span>
       <strong>{children}</strong>
     </div>
   );
+}
+
+async function copyToClipboard(value: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch {
+    // Clipboard access may be unavailable; ignore silently.
+  }
 }
 
 export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Props) {
@@ -420,28 +437,22 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
                     : "secondary-button reg-action-button"
                 }
                 type="button"
+                title={copy.subtitle}
                 disabled={isBusy}
                 onClick={() => void approve(entry, mode)}
               >
-                <span className="reg-action-title">
-                  {busyId === `${deviceUUID}:${mode}` ? "Working..." : copy.title}
-                </span>
-                <span className="reg-action-subtitle">{copy.subtitle}</span>
+                {busyId === `${deviceUUID}:${mode}` ? "Working..." : copy.title}
               </button>
             );
           })}
           <button
             className="danger-button reg-action-button"
             type="button"
+            title="Requires a student-facing review note."
             disabled={isBusy}
             onClick={() => void decline(entry)}
           >
-            <span className="reg-action-title">
-              {busyId === `${deviceUUID}:decline` ? "Working..." : "Decline registration"}
-            </span>
-            <span className="reg-action-subtitle">
-              Requires a student-facing review note.
-            </span>
+            {busyId === `${deviceUUID}:decline` ? "Working..." : "Decline"}
           </button>
         </div>
       </div>
@@ -490,7 +501,6 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
               <div className="reg-detail-avatar">{getInitials(studentName) || "?"}</div>
             )}
             <div className="reg-detail-heading">
-              <p className="eyebrow">Vehicle registration</p>
               <h2>{deviceLabel}</h2>
               <div className="reg-detail-meta">
                 <span className={statusClass}>{statusLabel}</span>
@@ -500,63 +510,71 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
             </div>
           </header>
 
-          <div className="reg-detail-grid">
-            <section className="reg-detail-section">
+          <div className="reg-stat-strip">
+            <RegStat label="Fee">{getRegistrationFeeSummary(device, matchedRule)}</RegStat>
+            <RegStat label="Payment">{capitalize(device.payment_status)}</RegStat>
+            <RegStat label="QR access">
+              {device.qr_unlocked_at ? "Unlocked" : "Locked"}
+            </RegStat>
+            <RegStat label="Reviewed">{formatTimestamp(device.reviewed_at)}</RegStat>
+          </div>
+
+          <div className="reg-detail-columns">
+            <section className="reg-detail-card">
               <h3>Student</h3>
-              <RegistrationDetailRow label="Name">{studentName}</RegistrationDetailRow>
-              <RegistrationDetailRow label="Student ID">
+              <RegInlineField label="Name">{studentName}</RegInlineField>
+              <RegInlineField label="Student ID">
                 {membership?.student_id || "-"}
-              </RegistrationDetailRow>
-              <RegistrationDetailRow label="Email">
+              </RegInlineField>
+              <RegInlineField label="Email">
                 {selectedEntry.student.user.email || "-"}
-              </RegistrationDetailRow>
-              <RegistrationDetailRow label="Membership">
-                {membership?.membership_uuid || "-"}
-              </RegistrationDetailRow>
+              </RegInlineField>
             </section>
 
-            <section className="reg-detail-section">
+            <section className="reg-detail-card">
               <h3>Device</h3>
-              <RegistrationDetailRow label="Type">
-                {capitalize(device.device_type)}
-              </RegistrationDetailRow>
-              <RegistrationDetailRow label="Powertrain">
-                {capitalize(device.powertrain_type)}
-              </RegistrationDetailRow>
-              <RegistrationDetailRow label="Make / model">
+              <RegInlineField label="Type">
+                {[capitalize(device.device_type), capitalize(device.powertrain_type)]
+                  .filter((part) => part && part !== "-")
+                  .join(" · ") || "-"}
+              </RegInlineField>
+              <RegInlineField label="Make / model">
                 {[device.make, device.model].filter(Boolean).join(" ") || "-"}
-              </RegistrationDetailRow>
-              <RegistrationDetailRow label="Serial number">
-                {device.serial_number || "-"}
-              </RegistrationDetailRow>
-              <RegistrationDetailRow label="Color">
-                {capitalize(device.color)}
-              </RegistrationDetailRow>
-              <RegistrationDetailRow label="Device UUID">{deviceUUID}</RegistrationDetailRow>
-            </section>
-
-            <section className="reg-detail-section">
-              <h3>Review</h3>
-              <RegistrationDetailRow label="Status">{statusLabel}</RegistrationDetailRow>
-              <RegistrationDetailRow label="Fee">
-                {getRegistrationFeeSummary(device, matchedRule)}
-              </RegistrationDetailRow>
-              <RegistrationDetailRow label="Payment">
-                {capitalize(device.payment_status)}
-              </RegistrationDetailRow>
-              <RegistrationDetailRow label="Reviewed">
-                {formatTimestamp(device.reviewed_at)}
-              </RegistrationDetailRow>
-              <RegistrationDetailRow label="QR access">
-                {device.qr_unlocked_at ? formatTimestamp(device.qr_unlocked_at) : "Locked"}
-              </RegistrationDetailRow>
-              <RegistrationDetailRow label="Beacon">
-                {beaconInfo?.beacon_mac || "-"}
-              </RegistrationDetailRow>
-              {device.review_note ? (
-                <p className="reg-detail-note">{device.review_note}</p>
+              </RegInlineField>
+              <RegInlineField label="Serial / color">
+                {[device.serial_number, capitalize(device.color)]
+                  .filter((part) => part && part !== "-")
+                  .join(" · ") || "-"}
+              </RegInlineField>
+              {beaconInfo?.beacon_mac ? (
+                <RegInlineField label="Beacon">{beaconInfo.beacon_mac}</RegInlineField>
               ) : null}
             </section>
+          </div>
+
+          {device.review_note ? (
+            <p className="reg-detail-note">{device.review_note}</p>
+          ) : null}
+
+          <div className="reg-detail-ids">
+            <button
+              type="button"
+              className="reg-id-chip"
+              title={`Device UUID: ${deviceUUID}`}
+              onClick={() => void copyToClipboard(deviceUUID)}
+            >
+              Device ID · Copy
+            </button>
+            {membership?.membership_uuid ? (
+              <button
+                type="button"
+                className="reg-id-chip"
+                title={`Membership UUID: ${membership.membership_uuid}`}
+                onClick={() => void copyToClipboard(membership.membership_uuid ?? "")}
+              >
+                Membership ID · Copy
+              </button>
+            ) : null}
           </div>
 
           {renderReviewControls(selectedEntry, matchedRule)}
