@@ -1783,8 +1783,8 @@ export function DashboardScreen({
                                                                                 ))}
                                                                         </div>
                                                                         <DashboardSectionArrow
-                                                                                to="/student-ride-violations"
-                                                                                label="View rides"
+                                                                                to="/student-leaderboard"
+                                                                                label="View full leaderboard"
                                                                         />
                                                                 </div>
                                                         </div>

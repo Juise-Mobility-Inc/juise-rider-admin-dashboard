@@ -91,6 +91,7 @@ import {
 import { CampusDevicesScreen } from "./screens/dashboard/CampusDevicesScreen";
 import { ChallengesScreen } from "./screens/dashboard/ChallengesScreen";
 import { DashboardScreen } from "./screens/dashboard/DashboardScreen";
+import { StudentLeaderboardScreen } from "./screens/dashboard/StudentLeaderboardScreen";
 import { NotificationsScreen } from "./screens/dashboard/NotificationsScreen";
 import { PacksScreen } from "./screens/dashboard/PacksScreen";
 import { PenaltyReportsScreen } from "./screens/dashboard/PenaltyReportsScreen";
@@ -126,6 +127,7 @@ type Section =
         | "challenges"
         | "challengeGames"
         | "students"
+        | "studentLeaderboard"
         | "notifications"
         | "vehicleRegistrations"
         | "campusDevices"
@@ -156,6 +158,11 @@ const dashboardSections: Array<{
         { section: "challenges", label: "Ride Challenges", path: "/challenges" },
         { section: "challengeGames", label: "Challenge Games", path: "/challenge-games" },
         { section: "students", label: "Students", path: "/students" },
+        {
+                section: "studentLeaderboard",
+                label: "Student Leaderboard",
+                path: "/student-leaderboard",
+        },
         { section: "notifications", label: "Notifications", path: "/notifications" },
         {
                 section: "vehicleRegistrations",
@@ -4778,6 +4785,13 @@ function App() {
                                                 handleImagePreview={handleOpenImagePreview}
                                         />
                                 );
+                        case "studentLeaderboard":
+                                return (
+                                        <StudentLeaderboardScreen
+                                                activeSchoolId={activeSchoolId}
+                                                managedAppId={context.managedAppId}
+                                        />
+                                );
                         case "notifications":
                                 return (
                                         <NotificationsScreen
@@ -5159,6 +5173,15 @@ function App() {
                                                                                         : "nav-sub-item"
                                                                         }>
                                                                         Student Information
+                                                                </NavLink>
+                                                                <NavLink
+                                                                        to="/student-leaderboard"
+                                                                        className={({ isActive }) =>
+                                                                                isActive
+                                                                                        ? "nav-sub-item nav-sub-item-active"
+                                                                                        : "nav-sub-item"
+                                                                        }>
+                                                                        Student Leaderboard
                                                                 </NavLink>
                                                         </div>
                                                 )}
