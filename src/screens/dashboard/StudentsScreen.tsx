@@ -921,12 +921,30 @@ export function StudentsScreen(props: Props) {
         const [allStudentExportProgress, setAllStudentExportProgress] =
                 useState<StudentExportProgress>({ completed: 0, total: 0 });
         const [allStudentExportError, setAllStudentExportError] = useState("");
+        const [failedProfilePhotoUrls, setFailedProfilePhotoUrls] = useState<
+                Record<string, true>
+        >({});
         const allStudentExportDisabled =
                 allStudentExportBusy ||
                 schoolStudentRosterBusy ||
                 !activeSchoolId ||
                 !managedAppId ||
                 allStudentRoster.length === 0;
+
+        function shouldRenderProfilePhoto(url: string) {
+                return url.trim() !== "" && !failedProfilePhotoUrls[url];
+        }
+
+        function markProfilePhotoFailed(url: string) {
+                const normalizedUrl = url.trim();
+                if (!normalizedUrl) {
+                        return;
+                }
+                setFailedProfilePhotoUrls((current) => ({
+                        ...current,
+                        [normalizedUrl]: true,
+                }));
+        }
 
         async function handleDownloadAllStudentInformation() {
                 if (allStudentExportDisabled) {
@@ -1145,8 +1163,17 @@ export function StudentsScreen(props: Props) {
                                                                         const membership = entry.membership;
                                                                         const isSelected =
                                                                                 selectedStudentMembershipId === membership.membership_uuid;
+                                                                        const rosterUserUUID = entry.user.k_guid?.trim() ?? "";
+                                                                        const membershipUserUUID =
+                                                                                membership.user_uuid?.trim() ?? "";
                                                                         const rosterProfilePhotoUrl =
-                                                                                schoolStudentProfilePhotoUrls[entry.user.k_guid] ?? "";
+                                                                                (rosterUserUUID
+                                                                                        ? schoolStudentProfilePhotoUrls[rosterUserUUID]
+                                                                                        : "") ||
+                                                                                (membershipUserUUID
+                                                                                        ? schoolStudentProfilePhotoUrls[membershipUserUUID]
+                                                                                        : "") ||
+                                                                                "";
                                                                         const initials = formatNebulaUserName(entry.user)
                                                                                 .split(" ")
                                                                                 .filter(Boolean)
@@ -1167,11 +1194,18 @@ export function StudentsScreen(props: Props) {
                                                                                                 )
                                                                                         }>
                                                                                         <div className="student-list-avatar">
-                                                                                                {rosterProfilePhotoUrl ? (
+                                                                                                {shouldRenderProfilePhoto(
+                                                                                                        rosterProfilePhotoUrl,
+                                                                                                ) ? (
                                                                                                         <img
                                                                                                                 className="student-list-avatar-image"
                                                                                                                 src={rosterProfilePhotoUrl}
                                                                                                                 alt={`${formatNebulaUserName(entry.user)} profile`}
+                                                                                                                onError={() =>
+                                                                                                                        markProfilePhotoFailed(
+                                                                                                                                rosterProfilePhotoUrl,
+                                                                                                                        )
+                                                                                                                }
                                                                                                                 onClick={(event) => {
                                                                                                                         event.stopPropagation();
                                                                                                                         handleImagePreview(
@@ -1300,11 +1334,16 @@ export function StudentsScreen(props: Props) {
                                                                         <>
                                                                                 <div className="student-detail-header">
                                                                                         <div className="student-detail-avatar">
-                                                                                                {profileImageUrl ? (
+                                                                                                {shouldRenderProfilePhoto(profileImageUrl) ? (
                                                                                                         <img
                                                                                                                 className="student-detail-avatar-image"
                                                                                                                 src={profileImageUrl}
                                                                                                                 alt={`${fullName} profile`}
+                                                                                                                onError={() =>
+                                                                                                                        markProfilePhotoFailed(
+                                                                                                                                profileImageUrl,
+                                                                                                                        )
+                                                                                                                }
                                                                                                                 onClick={() =>
                                                                                                                         handleImagePreview(
                                                                                                                                 profileImageUrl,

@@ -274,7 +274,7 @@ async function resolveStudentDeviceMediaState(
   };
 }
 
-async function resolveSchoolStudentProfilePhotoUrls(
+async function resolveSchoolStudentAvatarMediaUrls(
   managedAppId: string,
   schoolId: string,
   roster: SchoolStudentRosterEntry[],
@@ -342,6 +342,51 @@ async function resolveSchoolStudentProfilePhotoUrls(
     }),
   );
 
+  return fanOutStudentProfilePhotoUrls(roster, resolvedUrls);
+}
+
+function fanOutStudentProfilePhotoUrls(
+  roster: SchoolStudentRosterEntry[],
+  urls: Record<string, string>,
+): Record<string, string> {
+  const resolvedUrls = { ...urls };
+  for (const entry of roster) {
+    const rosterUserUUID = entry.user.k_guid?.trim() ?? "";
+    const membershipUserUUID = entry.membership.user_uuid?.trim() ?? "";
+    const sharedUrl =
+      (rosterUserUUID ? resolvedUrls[rosterUserUUID] : "") ||
+      (membershipUserUUID ? resolvedUrls[membershipUserUUID] : "");
+    if (!sharedUrl) {
+      continue;
+    }
+    if (rosterUserUUID) {
+      resolvedUrls[rosterUserUUID] = sharedUrl;
+    }
+    if (membershipUserUUID) {
+      resolvedUrls[membershipUserUUID] = sharedUrl;
+    }
+  }
+  return resolvedUrls;
+}
+
+async function resolveSchoolStudentPublicProfilePhotoUrls(
+  managedAppId: string,
+  schoolId: string,
+  roster: SchoolStudentRosterEntry[],
+  initialUrls: Record<string, string> = {},
+): Promise<Record<string, string>> {
+  const uniqueUserUUIDs = Array.from(
+    new Set(
+      roster
+        .flatMap((entry) => [
+          entry.user.k_guid?.trim() ?? "",
+          entry.membership.user_uuid?.trim() ?? "",
+        ])
+        .filter(Boolean),
+    ),
+  );
+
+  const resolvedUrls = fanOutStudentProfilePhotoUrls(roster, initialUrls);
   const missingUserUUIDs = uniqueUserUUIDs.filter(
     (userUUID) => !resolvedUrls[userUUID],
   );
@@ -376,24 +421,7 @@ async function resolveSchoolStudentProfilePhotoUrls(
     resolvedUrls[result.value.userUUID] = result.value.profileImageUrl;
   }
 
-  for (const entry of roster) {
-    const rosterUserUUID = entry.user.k_guid?.trim() ?? "";
-    const membershipUserUUID = entry.membership.user_uuid?.trim() ?? "";
-    const sharedUrl =
-      (rosterUserUUID ? resolvedUrls[rosterUserUUID] : "") ||
-      (membershipUserUUID ? resolvedUrls[membershipUserUUID] : "");
-    if (!sharedUrl) {
-      continue;
-    }
-    if (rosterUserUUID) {
-      resolvedUrls[rosterUserUUID] = sharedUrl;
-    }
-    if (membershipUserUUID) {
-      resolvedUrls[membershipUserUUID] = sharedUrl;
-    }
-  }
-
-  return resolvedUrls;
+  return fanOutStudentProfilePhotoUrls(roster, resolvedUrls);
 }
 
 async function resolveSchoolStudentPhotoState(
@@ -599,7 +627,10 @@ const studentsSlice = createSlice({
       state,
       action: PayloadAction<Record<string, string>>,
     ) {
-      state.schoolStudentProfilePhotoUrls = action.payload;
+      state.schoolStudentProfilePhotoUrls = {
+        ...state.schoolStudentProfilePhotoUrls,
+        ...action.payload,
+      };
     },
     setSelectedStudentMembershipId(state, action: PayloadAction<string | null>) {
       state.selectedStudentMembershipId = action.payload;
@@ -784,17 +815,32 @@ async function hydrateStudentRosterMedia(
   roster: SchoolStudentRosterEntry[],
 ) {
   try {
-    const [photoState, profilePhotoUrls] = await Promise.all([
+    const profilePhotoUrls = await resolveSchoolStudentAvatarMediaUrls(
+      args.managedAppId,
+      args.schoolId,
+      roster,
+    ).catch(() => ({} as Record<string, string>));
+
+    if (!isCurrentScope(getState(), args.scopeKey)) {
+      return;
+    }
+
+    if (Object.keys(profilePhotoUrls).length > 0) {
+      dispatch(rosterProfilePhotosResolved(profilePhotoUrls));
+    }
+
+    const [photoState, nextProfilePhotoUrls] = await Promise.all([
       resolveSchoolStudentPhotoState(
         args.managedAppId,
         args.schoolId,
         roster,
       ),
-      resolveSchoolStudentProfilePhotoUrls(
+      resolveSchoolStudentPublicProfilePhotoUrls(
         args.managedAppId,
         args.schoolId,
         roster,
-      ).catch(() => ({} as Record<string, string>)),
+        profilePhotoUrls,
+      ).catch(() => profilePhotoUrls),
     ]);
 
     if (!isCurrentScope(getState(), args.scopeKey)) {
@@ -802,7 +848,7 @@ async function hydrateStudentRosterMedia(
     }
 
     dispatch(rosterPhotoStateResolved(photoState));
-    dispatch(rosterProfilePhotosResolved(profilePhotoUrls));
+    dispatch(rosterProfilePhotosResolved(nextProfilePhotoUrls));
   } catch {
     if (!isCurrentScope(getState(), args.scopeKey)) {
       return;
@@ -814,7 +860,6 @@ async function hydrateStudentRosterMedia(
         signedUrls: {},
       }),
     );
-    dispatch(rosterProfilePhotosResolved({}));
   } finally {
     if (isCurrentScope(getState(), args.scopeKey)) {
       dispatch(rosterHydrationFinished());
