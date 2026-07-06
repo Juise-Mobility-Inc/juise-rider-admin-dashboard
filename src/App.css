@@ -6707,13 +6707,11 @@
         min-width: 0;
 }
 
-.zone-editor-modal .management-modal-grid,
 .poi-editor-modal .management-modal-grid {
         grid-template-columns: minmax(520px, 1.35fr) minmax(360px, 0.85fr);
         align-items: center;
 }
 
-.zone-editor-modal .pack-map,
 .poi-editor-modal .pack-map {
         height: clamp(440px, 62vh, 720px);
 }
@@ -6721,6 +6719,19 @@
 .zone-editor-modal .management-modal-grid > .data-section,
 .poi-editor-modal .management-modal-grid > .data-section {
         width: 100%;
+}
+
+.zone-editor-modal .management-modal-grid {
+        grid-template-columns: 1fr;
+        align-items: start;
+}
+
+.zone-editor-modal .management-modal-map {
+        width: 100%;
+}
+
+.zone-editor-modal .pack-map {
+        height: clamp(500px, 68vh, 780px);
 }
 
 .management-import-modal {
