@@ -348,7 +348,13 @@ function FitText({
                 <strong
                         ref={ref}
                         className={className}
-                        style={{ whiteSpace: "nowrap", display: "block", overflow: "visible" }}>
+                        style={{
+                                whiteSpace: "nowrap",
+                                display: "block",
+                                overflow: "hidden",
+                                minWidth: 0,
+                                width: "100%",
+                        }}>
                         {children}
                 </strong>
         );
@@ -1709,7 +1715,7 @@ export function DashboardScreen({
                                                         <div className="dashboard-hero-points-balance">
                                                                 <div className="dashboard-hero-points-earned">
                                                                         <small>Earned</small>
-                                                                        <FitText className="stat-value">
+                                                                        <FitText className="stat-value" maxFontSize={40}>
                                                                                 +{formatCompactNumber(visuals.earnedPoints)}
                                                                         </FitText>
                                                                 </div>
