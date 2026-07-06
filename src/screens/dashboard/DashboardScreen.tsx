@@ -500,7 +500,6 @@ function buildLeaderboard(
                                 distanceMeters,
                         };
                 })
-                .filter((entry) => entry.earnedPoints > 0 || entry.rideCount > 0)
                 .sort((left, right) => {
                         if (left.earnedPoints !== right.earnedPoints) {
                                 return right.earnedPoints - left.earnedPoints;
