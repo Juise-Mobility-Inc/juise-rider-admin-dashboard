@@ -1,6 +1,7 @@
 import type {
 	ChangeEvent,
 	ComponentType,
+	CSSProperties,
 	Dispatch,
 	FormEvent,
 	SetStateAction,
@@ -30,6 +31,8 @@ type SchoolDraft = {
 	metadata: string;
 	active: boolean;
 };
+
+type SchoolPreviewStyle = CSSProperties & Record<string, string>;
 
 type TermDraft = {
 	id: string;
@@ -82,6 +85,7 @@ export function SchoolProfileScreen(props: Props) {
 		handleSchoolColorChange,
 		handleSchoolLogoFileChange,
 		getColorPickerValue,
+		defaultSchoolColorScheme,
 		resolvedSchoolColors,
 		resolvedSchoolLogoUrl,
 		termDrafts,
@@ -102,6 +106,27 @@ export function SchoolProfileScreen(props: Props) {
 			? "Saving changes…"
 			: "";
 	const previewLogoUrl = resolvedSchoolLogoUrl || schoolDraft.logo_url;
+	const previewColors: Required<SchoolColorScheme> = {
+		primary:
+			resolvedSchoolColors.primary || defaultSchoolColorScheme.primary,
+		secondary:
+			resolvedSchoolColors.secondary || defaultSchoolColorScheme.secondary,
+		accent: resolvedSchoolColors.accent || defaultSchoolColorScheme.accent,
+		background:
+			resolvedSchoolColors.background || defaultSchoolColorScheme.background,
+		text: resolvedSchoolColors.text || defaultSchoolColorScheme.text,
+	};
+	const appPreviewStyle: SchoolPreviewStyle = {
+		"--school-preview-primary": previewColors.primary,
+		"--school-preview-secondary": previewColors.secondary,
+		"--school-preview-accent": previewColors.accent,
+		"--school-preview-background": previewColors.background,
+		"--school-preview-text": previewColors.text,
+	};
+	const palettePreviewItems = schoolColorFields.map((field) => ({
+		...field,
+		color: previewColors[field.key],
+	}));
 	const profileStats = [
 		{
 			label: "School ID",
@@ -179,30 +204,40 @@ export function SchoolProfileScreen(props: Props) {
 
 							<div className="school-profile-brand-layout">
 								<div
-									className="school-profile-brand-preview"
-									style={{
-										background: `radial-gradient(circle at top right, ${resolvedSchoolColors.primary} 0%, transparent 34%), linear-gradient(155deg, ${resolvedSchoolColors.secondary}, ${resolvedSchoolColors.background})`,
-										color: resolvedSchoolColors.text,
-										borderColor: resolvedSchoolColors.secondary,
-									}}>
-									<SchoolLogoPreview
-										key={`field-${previewLogoUrl || "fallback"}`}
-										logoUrl={previewLogoUrl}
-										label={schoolLabel}
-										size="header"
-									/>
-									<div className="school-profile-brand-copy">
-										<strong>{schoolLabel}</strong>
-										<p>
-											{schoolDraft.name.trim()
-												? "This preview reflects the profile card and workspace branding."
-												: "Add the school name, title, and logo to finish the identity setup."}
-										</p>
-									</div>
-									<div className="school-profile-badge-row">
-										<span className="school-profile-badge school-profile-badge-contrast">
-											{schoolDraft.active ? "Active" : "Inactive"}
-										</span>
+									className="school-profile-brand-preview school-simple-preview"
+									style={appPreviewStyle}>
+									<div className="school-simple-preview-shell">
+										<div className="school-simple-preview-header">
+											<SchoolLogoPreview
+												key={`field-${previewLogoUrl || "fallback"}`}
+												logoUrl={previewLogoUrl}
+												label={schoolLabel}
+												size="tiny"
+											/>
+											<div>
+												<span>{schoolDraft.name.trim() || "School"}</span>
+												<strong>{schoolLabel}</strong>
+											</div>
+										</div>
+										<div className="school-simple-preview-body">
+											<span>Welcome</span>
+											<strong>{schoolDraft.title.trim() || schoolLabel}</strong>
+											<span className="school-simple-preview-accent-pill">
+												Accent
+											</span>
+											<p>
+												Track rides, join challenges, and stay connected on
+												campus.
+											</p>
+										</div>
+										<div className="school-simple-preview-actions" aria-hidden="true">
+											<span className="school-simple-preview-button-primary">
+												Get started
+											</span>
+											<span className="school-simple-preview-button-secondary">
+												View challenges
+											</span>
+										</div>
 									</div>
 								</div>
 
@@ -400,37 +435,32 @@ export function SchoolProfileScreen(props: Props) {
 							</div>
 
 							<div
-								className="color-preview-card"
-								style={{
-									background: resolvedSchoolColors.background,
-									color: resolvedSchoolColors.text,
-									borderColor: resolvedSchoolColors.secondary,
-								}}>
-								<div className="color-preview-swatches" aria-hidden="true">
-									<span style={{ background: resolvedSchoolColors.primary }} />
-									<span
-										style={{ background: resolvedSchoolColors.secondary }}
-									/>
-									<span style={{ background: resolvedSchoolColors.accent }} />
-									<span
-										style={{ background: resolvedSchoolColors.background }}
-									/>
-									<span style={{ background: resolvedSchoolColors.text }} />
+								className="color-preview-card school-palette-preview"
+								style={appPreviewStyle}>
+								<div className="school-palette-preview-grid">
+									{palettePreviewItems.map((item) => (
+										<div className="school-palette-preview-item" key={item.key}>
+											<span
+												className="school-palette-preview-swatch"
+												style={{ background: item.color }}
+												aria-hidden="true"
+											/>
+											<div>
+												<strong>{item.label}</strong>
+												<code>{item.color}</code>
+											</div>
+										</div>
+									))}
 								</div>
-								<strong>Live dashboard preview</strong>
-								<p>
-									Preview the configured school palette before saving the
-									profile.
-								</p>
-								<button
-									className="color-preview-button"
-									type="button"
-									style={{
-										background: resolvedSchoolColors.primary,
-										color: resolvedSchoolColors.text,
-									}}>
-									Primary action
-								</button>
+								<div className="school-palette-sample-row" aria-hidden="true">
+									<span className="school-palette-sample-chip">Primary</span>
+									<span className="school-palette-sample-chip school-palette-sample-chip-muted">
+										Secondary
+									</span>
+									<span className="school-palette-sample-chip school-palette-sample-chip-accent">
+										Accent
+									</span>
+								</div>
 							</div>
 						</section>
 					</form>
