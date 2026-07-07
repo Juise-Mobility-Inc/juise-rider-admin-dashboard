@@ -4785,22 +4785,21 @@ function App() {
 			<aside
 				className={`sidebar${sidebarOpen ? "" : " sidebar--collapsed"}`}
 				style={sidebarThemeStyle}>
-				<div className="sidebar-top-bar">
-					<button
-						type="button"
-						className="sidebar-toggle-btn"
-						onClick={toggleSidebar}
-						title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}>
-						<span className="sidebar-hamburger">
-							<span />
-							<span />
-							<span />
-						</span>
-					</button>
-				</div>
-
 				<div className="sidebar-content">
 					<div className="brand-card sidebar-brand-card">
+						<div className="sidebar-top-bar">
+							<button
+								type="button"
+								className="sidebar-toggle-btn"
+								onClick={toggleSidebar}
+								title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}>
+								<span className="sidebar-hamburger">
+									<span />
+									<span />
+									<span />
+								</span>
+							</button>
+						</div>
 						<div className="sidebar-brand-top">
 							<div>
 								<p className="eyebrow">Juise Rider Admin</p>
