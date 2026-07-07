@@ -4789,7 +4789,11 @@ function App() {
                                         <div className="brand-card sidebar-brand-card">
                                                 <div className="sidebar-brand-header">
                                                         <div className="sidebar-brand-mark">
-                                                                <span className="sidebar-brand-icon">⚡</span>
+                                                                <img
+                                                                        src="/favicon.svg"
+                                                                        alt="Juise"
+                                                                        className="sidebar-brand-icon"
+                                                                />
                                                         </div>
                                                         <button
                                                                 type="button"

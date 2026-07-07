@@ -482,9 +482,10 @@
 }
 
 .sidebar-brand-icon {
-        font-size: 1.1rem;
-        line-height: 1;
-        filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2));
+        width: 22px;
+        height: 22px;
+        object-fit: contain;
+        filter: brightness(0) invert(1) drop-shadow(0 1px 2px rgba(0,0,0,0.3));
 }
 
 /* ── Product name block ── */
