@@ -291,9 +291,9 @@
 /* ── Sidebar collapsed state ── */
 .sidebar--collapsed {
         overflow: hidden;
-        padding: 0;
+        padding: 14px 0 0;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-start;
 }
 
 .sidebar--collapsed .sidebar-content {
