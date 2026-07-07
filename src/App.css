@@ -352,6 +352,44 @@
                 visibility 0.15s ease;
 }
 
+/* ── Backdrop (mobile only, hidden on desktop) ── */
+.sidebar-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.48);
+        z-index: 1099;
+        cursor: pointer;
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
+        animation: backdropFadeIn 0.18s ease;
+}
+
+@keyframes backdropFadeIn {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+}
+
+/* ── Mobile hamburger in workspace header (hidden on desktop) ── */
+.workspace-mobile-hamburger {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        flex-shrink: 0;
+        border-radius: 8px;
+        border: 1px solid var(--border, #e2e8f0);
+        background: var(--panel-bg, #fff);
+        color: var(--text, #111827);
+        cursor: pointer;
+        transition: background 0.12s;
+}
+
+.workspace-mobile-hamburger:hover {
+        background: var(--panel-bg-elevated, #f3f4f6);
+}
+
 /* ── Drag handle ── */
 .sidebar-drag-handle {
         position: absolute;
@@ -9703,6 +9741,42 @@
         .pack-inventory-layout,
         .pack-form-layout {
                 grid-template-columns: 1fr;
+        }
+
+        /* ── Mobile sidebar: fixed overlay drawer ── */
+        .sidebar {
+                position: fixed !important;
+                top: 0;
+                left: 0;
+                height: 100dvh !important;
+                max-height: 100dvh !important;
+                width: min(85vw, 340px) !important;
+                z-index: 1100;
+                transform: translateX(0);
+                transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                overflow-y: auto !important;
+                border-right: 1px solid var(--sidebar-border) !important;
+                box-shadow: 4px 0 32px rgba(0, 0, 0, 0.35);
+        }
+
+        .sidebar--collapsed {
+                transform: translateX(-100%) !important;
+                overflow: hidden !important;
+        }
+
+        /* drag handle off on mobile */
+        .sidebar-drag-handle {
+                display: none;
+        }
+
+        /* ── Backdrop ── */
+        .sidebar-backdrop {
+                display: block;
+        }
+
+        /* ── Mobile hamburger in workspace header ── */
+        .workspace-mobile-hamburger {
+                display: flex;
         }
 
         .res-queue-panel {
