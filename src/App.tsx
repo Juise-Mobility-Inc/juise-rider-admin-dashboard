@@ -4787,7 +4787,10 @@ function App() {
                                 style={sidebarThemeStyle}>
                                 <div className="sidebar-content">
                                         <div className="brand-card sidebar-brand-card">
-                                                <div className="sidebar-top-bar">
+                                                <div className="sidebar-brand-header">
+                                                        <div className="sidebar-brand-mark">
+                                                                <span className="sidebar-brand-icon">⚡</span>
+                                                        </div>
                                                         <button
                                                                 type="button"
                                                                 className="sidebar-toggle-btn"
@@ -4800,17 +4803,33 @@ function App() {
                                                                 </span>
                                                         </button>
                                                 </div>
-                                                <div className="sidebar-brand-top">
-                                                        <div>
-                                                                <p className="eyebrow">Juise Rider Admin</p>
-                                                                <h2>School operations</h2>
-                                                        </div>
-                                                        <span className="sidebar-theme-chip">
-                                                                {activeSchoolId || schoolDraft.school_id || "Juise default"}
-                                                        </span>
+                                                <div className="sidebar-brand-name">
+                                                        <p className="sidebar-brand-eyebrow">Juise Rider</p>
+                                                        <h2 className="sidebar-brand-title">Dashboard</h2>
                                                 </div>
-                                                <p>Signed in as {formatAdminIdentity(session)}</p>
-                                                {session.user && <p>@{session.user.username}</p>}
+                                                {(activeSchoolId || schoolDraft.school_id) && (
+                                                        <div className="sidebar-brand-school">
+                                                                <span className="sidebar-brand-school-dot" />
+                                                                <span className="sidebar-brand-school-id">
+                                                                        {activeSchoolId || schoolDraft.school_id}
+                                                                </span>
+                                                        </div>
+                                                )}
+                                                <div className="sidebar-brand-user">
+                                                        <div className="sidebar-user-avatar">
+                                                                {formatAdminIdentity(session).charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <div className="sidebar-user-info">
+                                                                <span className="sidebar-user-name">
+                                                                        {formatAdminIdentity(session)}
+                                                                </span>
+                                                                {session.user && (
+                                                                        <span className="sidebar-user-handle">
+                                                                                @{session.user.username}
+                                                                        </span>
+                                                                )}
+                                                        </div>
+                                                </div>
                                         </div>
 
                                         <nav className="section-nav">

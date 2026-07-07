@@ -451,23 +451,147 @@
 }
 
 .sidebar-brand-card {
-        padding: 18px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
         background: linear-gradient(
-                180deg,
-                var(--sidebar-surface-strong),
-                var(--sidebar-surface)
+                160deg,
+                var(--sidebar-surface-strong) 0%,
+                var(--sidebar-surface) 100%
         );
 }
 
-.sidebar-brand-top {
+/* ── Brand header: icon + collapse button ── */
+.sidebar-brand-header {
         display: flex;
-        flex-wrap: wrap;
+        align-items: center;
         justify-content: space-between;
-        gap: 12px;
-        align-items: flex-start;
-        margin-bottom: 12px;
 }
 
+.sidebar-brand-mark {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, var(--sidebar-primary, #27cc5e), var(--sidebar-accent, #eec253));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.sidebar-brand-icon {
+        font-size: 1.1rem;
+        line-height: 1;
+        filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2));
+}
+
+/* ── Product name block ── */
+.sidebar-brand-name {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+}
+
+.sidebar-brand-eyebrow {
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--sidebar-muted) !important;
+        margin: 0;
+}
+
+.sidebar-brand-title {
+        font-size: 1.25rem !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.02em;
+        color: var(--sidebar-text) !important;
+        margin: 0;
+        line-height: 1.2;
+}
+
+/* ── School ID row ── */
+.sidebar-brand-school {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--sidebar-border);
+}
+
+.sidebar-brand-school-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--sidebar-primary, #27cc5e);
+        flex-shrink: 0;
+        box-shadow: 0 0 6px var(--sidebar-primary, #27cc5e);
+}
+
+.sidebar-brand-school-id {
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--sidebar-muted);
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+}
+
+/* ── User row ── */
+.sidebar-brand-user {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-top: 2px;
+        border-top: 1px solid var(--sidebar-border);
+}
+
+.sidebar-user-avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        background: linear-gradient(135deg, var(--sidebar-primary, #27cc5e), var(--sidebar-accent, #eec253));
+        color: #010c05;
+        font-size: 0.8rem;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+}
+
+.sidebar-user-info {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        min-width: 0;
+}
+
+.sidebar-user-name {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--sidebar-text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+}
+
+.sidebar-user-handle {
+        font-size: 0.68rem;
+        color: var(--sidebar-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+}
+
+/* Keep old theme chip in case it's referenced elsewhere */
 .sidebar-theme-chip {
         display: inline-flex;
         align-items: center;
