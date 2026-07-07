@@ -271,10 +271,37 @@
                 min-width 0.18s ease;
 }
 
+/* ── Strip toggle: only visible in collapsed 48px strip ── */
+.sidebar-strip-toggle {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        flex-shrink: 0;
+        align-self: flex-start;
+        border-radius: 8px;
+        border: 1px solid var(--sidebar-border, rgba(255, 255, 255, 0.12));
+        background: var(--sidebar-surface, rgba(255, 255, 255, 0.06));
+        color: var(--sidebar-muted, rgba(255, 255, 255, 0.72));
+        cursor: pointer;
+        transition: background 0.12s, color 0.12s;
+}
+
+.sidebar-strip-toggle:hover {
+        background: var(--sidebar-item-hover-bg, rgba(255, 255, 255, 0.14));
+        color: var(--sidebar-text, #fff);
+}
+
+.sidebar--collapsed .sidebar-strip-toggle {
+        display: flex;
+}
+
 /* ── Sidebar collapsed state ── */
 .sidebar--collapsed {
         overflow: hidden;
         padding: clamp(8px, 1vw, 12px) 0;
+        align-items: center;
 }
 
 .sidebar--collapsed .sidebar-content {
@@ -370,9 +397,9 @@
 }
 
 /* ── Mobile hamburger in workspace header ── */
-/* Always visible when sidebar is closed (desktop + mobile) */
+/* Hidden on desktop — sidebar strip toggle handles collapse/expand */
 .app-shell--sidebar-closed .workspace-mobile-hamburger {
-        display: flex;
+        display: none;
 }
 
 .workspace-mobile-hamburger {

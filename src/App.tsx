@@ -4785,6 +4785,19 @@ function App() {
                         <aside
                                 className={`sidebar${sidebarOpen ? "" : " sidebar--collapsed"}`}
                                 style={sidebarThemeStyle}>
+                                {/* Visible only when sidebar is collapsed — sits in the 48px strip */}
+                                <button
+                                        type="button"
+                                        className="sidebar-strip-toggle"
+                                        onClick={toggleSidebar}
+                                        title="Expand sidebar">
+                                        <span className="sidebar-hamburger">
+                                                <span />
+                                                <span />
+                                                <span />
+                                        </span>
+                                </button>
+
                                 <div className="sidebar-content">
                                         <div className="brand-card sidebar-brand-card">
                                                 <div className="sidebar-brand-header">
@@ -4799,7 +4812,7 @@ function App() {
                                                                 type="button"
                                                                 className="sidebar-toggle-btn"
                                                                 onClick={toggleSidebar}
-                                                                title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}>
+                                                                title="Collapse sidebar">
                                                                 <span className="sidebar-hamburger">
                                                                         <span />
                                                                         <span />
