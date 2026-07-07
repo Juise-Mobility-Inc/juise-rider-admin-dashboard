@@ -269,7 +269,6 @@
         transition:
                 width 0.18s ease,
                 min-width 0.18s ease;
-        position: relative;
 }
 
 /* ── Sidebar collapsed state ── */
@@ -370,7 +369,12 @@
         to   { opacity: 1; }
 }
 
-/* ── Mobile hamburger in workspace header (hidden on desktop) ── */
+/* ── Mobile hamburger in workspace header ── */
+/* Always visible when sidebar is closed (desktop + mobile) */
+.app-shell--sidebar-closed .workspace-mobile-hamburger {
+        display: flex;
+}
+
 .workspace-mobile-hamburger {
         display: none;
         align-items: center;

@@ -4775,7 +4775,7 @@ function App() {
 
         return (
                 <div
-                        className={`app-shell${sidebarDragging ? " sidebar-is-dragging" : ""}`}
+                        className={`app-shell${sidebarDragging ? " sidebar-is-dragging" : ""}${!sidebarOpen ? " app-shell--sidebar-closed" : ""}`}
                         style={
                                 {
                                         ...appThemeStyle,
