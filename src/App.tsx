@@ -5,6 +5,7 @@ import {
         useEffect,
         useDeferredValue,
         useMemo,
+        useRef,
         useState,
 } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
@@ -1399,6 +1400,15 @@ function App() {
                 penaltyReports: true,
                 vehicles: true,
         });
+        const [sidebarOpen, setSidebarOpen] = useState(
+                () => localStorage.getItem("sidebarOpen") !== "false",
+        );
+        const [sidebarWidth, setSidebarWidth] = useState(() => {
+                const saved = localStorage.getItem("sidebarWidth");
+                return saved ? Math.max(180, Math.min(480, Number(saved))) : 260;
+        });
+        const sidebarWidthRef = useRef(sidebarWidth);
+        const [sidebarDragging, setSidebarDragging] = useState(false);
         const [initialSession] = useState<AdminSession | null>(() =>
                 readDashboardSession(),
         );
@@ -4963,9 +4973,61 @@ function App() {
                 }
         })();
 
+        const startSidebarDrag = (e: React.MouseEvent) => {
+                e.preventDefault();
+                const startX = e.clientX;
+                const startWidth = sidebarWidthRef.current;
+                setSidebarDragging(true);
+
+                const onMove = (ev: MouseEvent) => {
+                        const next = Math.max(180, Math.min(480, startWidth + ev.clientX - startX));
+                        sidebarWidthRef.current = next;
+                        setSidebarWidth(next);
+                };
+                const onUp = () => {
+                        setSidebarDragging(false);
+                        localStorage.setItem("sidebarWidth", String(sidebarWidthRef.current));
+                        document.removeEventListener("mousemove", onMove);
+                        document.removeEventListener("mouseup", onUp);
+                };
+                document.addEventListener("mousemove", onMove);
+                document.addEventListener("mouseup", onUp);
+        };
+
+        const toggleSidebar = () => {
+                const next = !sidebarOpen;
+                setSidebarOpen(next);
+                localStorage.setItem("sidebarOpen", String(next));
+        };
+
         return (
-                <div className="app-shell" style={appThemeStyle}>
-                        <aside className="sidebar" style={sidebarThemeStyle}>
+                <div
+                        className={`app-shell${sidebarDragging ? " sidebar-is-dragging" : ""}`}
+                        style={
+                                {
+                                        ...appThemeStyle,
+                                        "--sidebar-w": sidebarOpen ? `${sidebarWidth}px` : "48px",
+                                } as CSSProperties
+                        }>
+                        <aside
+                                className={`sidebar${sidebarOpen ? "" : " sidebar--collapsed"}`}
+                                style={sidebarThemeStyle}>
+
+                                <div className="sidebar-top-bar">
+                                        <button
+                                                type="button"
+                                                className="sidebar-toggle-btn"
+                                                onClick={toggleSidebar}
+                                                title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}>
+                                                <span className="sidebar-hamburger">
+                                                        <span />
+                                                        <span />
+                                                        <span />
+                                                </span>
+                                        </button>
+                                </div>
+
+                                <div className="sidebar-content">
                                 <div className="brand-card sidebar-brand-card">
                                         <div className="sidebar-brand-top">
                                                 <div>
@@ -5316,6 +5378,14 @@ function App() {
                                                 Sign Out
                                         </button>
                                 </div>
+                                </div>{/* end sidebar-content */}
+
+                                {sidebarOpen && (
+                                        <div
+                                                className="sidebar-drag-handle"
+                                                onMouseDown={startSidebarDrag}
+                                        />
+                                )}
                         </aside>
 
                         <main className="workspace">

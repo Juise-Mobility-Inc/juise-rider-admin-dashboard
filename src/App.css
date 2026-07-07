@@ -193,7 +193,7 @@
 .app-shell {
         min-height: 100svh;
         display: grid;
-        grid-template-columns: clamp(220px, 24vw, 320px) minmax(0, 1fr);
+        grid-template-columns: var(--sidebar-w, 260px) minmax(0, 1fr);
         align-items: start;
         background:
                 radial-gradient(
@@ -208,6 +208,15 @@
                 ),
                 linear-gradient(180deg, var(--bg), var(--bg-accent));
         color: var(--text);
+}
+
+.sidebar-is-dragging {
+        user-select: none;
+        cursor: col-resize;
+}
+
+.sidebar-is-dragging * {
+        pointer-events: none;
 }
 
 .sidebar {
@@ -257,6 +266,110 @@
         overflow-y: auto;
         overflow-x: hidden;
         scrollbar-gutter: stable;
+        transition:
+                width 0.18s ease,
+                min-width 0.18s ease;
+        position: relative;
+}
+
+/* ── Sidebar collapsed state ── */
+.sidebar--collapsed {
+        overflow: hidden;
+        padding: clamp(8px, 1vw, 12px) 0;
+}
+
+.sidebar--collapsed .sidebar-content {
+        opacity: 0;
+        pointer-events: none;
+        visibility: hidden;
+}
+
+/* ── Sidebar top bar (hamburger row) ── */
+.sidebar-top-bar {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding: 0 4px 4px;
+        flex-shrink: 0;
+}
+
+.sidebar--collapsed .sidebar-top-bar {
+        justify-content: center;
+        padding: 0;
+}
+
+/* ── Hamburger toggle button ── */
+.sidebar-toggle-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        border: 1px solid var(--sidebar-border, rgba(255, 255, 255, 0.12));
+        background: var(--sidebar-surface, rgba(255, 255, 255, 0.06));
+        color: var(--sidebar-muted, rgba(255, 255, 255, 0.72));
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background 0.12s, color 0.12s;
+}
+
+.sidebar-toggle-btn:hover {
+        background: var(--sidebar-item-hover-bg, rgba(255, 255, 255, 0.14));
+        color: var(--sidebar-text, #fff);
+}
+
+.sidebar-hamburger {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        width: 16px;
+}
+
+.sidebar-hamburger span {
+        display: block;
+        height: 2px;
+        border-radius: 2px;
+        background: currentColor;
+}
+
+.sidebar-hamburger span:nth-child(2) {
+        width: 75%;
+}
+
+/* ── Sidebar content wrapper ── */
+.sidebar-content {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        scrollbar-gutter: stable;
+        transition:
+                opacity 0.15s ease,
+                visibility 0.15s ease;
+}
+
+/* ── Drag handle ── */
+.sidebar-drag-handle {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 5px;
+        height: 100%;
+        cursor: col-resize;
+        z-index: 10;
+        transition: background 0.15s;
+}
+
+.sidebar-drag-handle:hover {
+        background: var(--sidebar-accent-border, rgba(238, 194, 83, 0.4));
+}
+
+.sidebar-is-dragging .sidebar-drag-handle {
+        background: var(--sidebar-accent-border, rgba(238, 194, 83, 0.5));
 }
 
 .brand-card {
