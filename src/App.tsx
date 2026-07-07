@@ -4807,18 +4807,7 @@ function App() {
                                                                 </span>
                                                         </button>
                                                 </div>
-                                                <div className="sidebar-brand-name">
-                                                        <p className="sidebar-brand-eyebrow">Juise Rider</p>
-                                                        <h2 className="sidebar-brand-title">Dashboard</h2>
-                                                </div>
-                                                {(activeSchoolId || schoolDraft.school_id) && (
-                                                        <div className="sidebar-brand-school">
-                                                                <span className="sidebar-brand-school-dot" />
-                                                                <span className="sidebar-brand-school-id">
-                                                                        {activeSchoolId || schoolDraft.school_id}
-                                                                </span>
-                                                        </div>
-                                                )}
+                                                <h2 className="sidebar-brand-title">Juise Rider Dashboard</h2>
                                                 <div className="sidebar-brand-user">
                                                         <div className="sidebar-user-avatar">
                                                                 {formatAdminIdentity(session).charAt(0).toUpperCase()}
