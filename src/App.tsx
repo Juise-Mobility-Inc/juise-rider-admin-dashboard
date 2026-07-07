@@ -694,8 +694,10 @@ function checkpointDraftToWriteInput(
 }
 
 function createEmptyChallengeDraft(): ChallengeDraft {
-        const now = new Date();
-        const end = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
+        end.setHours(23, 59, 0, 0);
 
         return {
                 challenge_uuid: "",
@@ -710,7 +712,7 @@ function createEmptyChallengeDraft(): ChallengeDraft {
                 required_dwell_seconds: "30",
                 grand_prize_points: "0",
                 checkpoints: [],
-                start_time: formatDateTimeLocalValue(Math.floor(now.getTime() / 1000)),
+                start_time: formatDateTimeLocalValue(Math.floor(start.getTime() / 1000)),
                 end_time: formatDateTimeLocalValue(Math.floor(end.getTime() / 1000)),
                 active: true,
                 repeat_enabled: false,
