@@ -2699,9 +2699,7 @@ function App() {
                                         const hasCurrentSelection = nextReservations.some(
                                                 (reservation) => reservation.reservation_uuid === current,
                                         );
-                                        return hasCurrentSelection
-                                                ? current
-                                                : (nextReservations[0]?.reservation_uuid ?? "");
+                                        return hasCurrentSelection ? current : "";
                                 });
                         } catch (error) {
                                 if (!cancelled) {
@@ -3168,9 +3166,7 @@ function App() {
                                 const hasCurrent = nextReservations.some(
                                         (reservation) => reservation.reservation_uuid === current,
                                 );
-                                return hasCurrent
-                                        ? current
-                                        : (nextReservations[0]?.reservation_uuid ?? "");
+                                return hasCurrent ? current : "";
                         });
                 } catch (error) {
                         setBanner({

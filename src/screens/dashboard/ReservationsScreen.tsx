@@ -548,52 +548,85 @@ export function ReservationsScreen(props: Props) {
         ) : filteredReservations.length === 0 ? (
           <p className="res-empty-text">No requests match this search.</p>
         ) : (
-          <div className="res-table-scroll">
-            <table className="res-table">
-              <thead>
-                <tr>
-                  <th>Pack</th>
-                  <th>Spot</th>
-                  <th>Term</th>
-                  <th>Type</th>
-                  <th>Status</th>
-                  <th>Requested</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredReservations.map((r) => {
-                  const packLabel = r.pack_name || "Juise Pack";
-                  const spotLabel =
-                    r.spot_number != null ? `Spot ${r.spot_number}` : "TBD";
-                  return (
-                    <tr
-                      key={r.reservation_uuid}
-                      className="res-table-row"
-                      onClick={() => openReservation(r.reservation_uuid)}
-                    >
-                      <td className="res-table-pack">{packLabel}</td>
-                      <td>
-                        <span className="res-spot-badge" style={spotBadgeStyle}>
-                          {spotLabel}
-                        </span>
-                      </td>
-                      <td>{r.term_name || "No term"}</td>
-                      <td>{r.reservation_kind || "—"}</td>
-                      <td>
-                        <StatusBadge
-                          status={r.status}
-                          backgroundColor={backgroundColor}
-                          preferredTextColor={preferredTextColor}
-                        />
-                      </td>
-                      <td className="res-table-date">
-                        {formatUnixTimestamp(r.updated)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="management-table-card reg-table-card">
+            <div className="reg-table-summary">
+              <strong>
+                {filteredReservations.length.toLocaleString()} reservation
+                {filteredReservations.length !== 1 ? "s" : ""}
+              </strong>
+              <span>
+                {search.trim()
+                  ? `Filtered from ${reservations.length.toLocaleString()} total`
+                  : `${reservations.filter((r) => r.status?.toLowerCase() === "pending").length} pending`}
+              </span>
+            </div>
+            <div className="management-table-scroll">
+              <table className="management-table reg-review-table">
+                <thead>
+                  <tr>
+                    <th>Pack / Spot</th>
+                    <th>Term</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Requested</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredReservations.map((r) => {
+                    const packLabel = r.pack_name || "Juise Pack";
+                    const spotLabel =
+                      r.spot_number != null ? `Spot ${r.spot_number}` : "TBD";
+                    return (
+                      <tr
+                        key={r.reservation_uuid}
+                        className="reg-review-row"
+                        tabIndex={0}
+                        onClick={() => openReservation(r.reservation_uuid)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            openReservation(r.reservation_uuid);
+                          }
+                        }}
+                      >
+                        <td>
+                          <div className="reg-table-identity">
+                            <div className="reg-table-avatar">🅿️</div>
+                            <div>
+                              <strong>{packLabel}</strong>
+                              <span>
+                                <span
+                                  className="res-spot-badge"
+                                  style={spotBadgeStyle}
+                                >
+                                  {spotLabel}
+                                </span>
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <strong>{r.term_name || "No term"}</strong>
+                        </td>
+                        <td>
+                          <strong>{r.reservation_kind || "—"}</strong>
+                        </td>
+                        <td>
+                          <StatusBadge
+                            status={r.status}
+                            backgroundColor={backgroundColor}
+                            preferredTextColor={preferredTextColor}
+                          />
+                        </td>
+                        <td>
+                          <strong>{formatUnixTimestamp(r.updated)}</strong>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
