@@ -5171,6 +5171,7 @@ function App() {
 
                         <main className="workspace">
                                 <header className="workspace-header">
+                                        <div className="workspace-header-start">
                                         <button
                                                 type="button"
                                                 className="workspace-mobile-hamburger"
@@ -5202,6 +5203,7 @@ function App() {
                                                         </h1>
                                                 </div>
                                         </div>
+                                        </div>{/* workspace-header-start */}
                                 </header>
 
                                 {banner ? (

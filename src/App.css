@@ -1004,6 +1004,13 @@
         width: 100%;
 }
 
+.workspace-header-start {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+}
+
 .workspace-title-block {
         display: grid;
         grid-template-columns: auto minmax(0, 1fr);
