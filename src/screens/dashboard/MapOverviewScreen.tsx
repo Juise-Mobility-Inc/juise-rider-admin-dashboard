@@ -419,22 +419,6 @@ export function MapOverviewScreen({
                         <div className="mo-header">
                                 <div className="mo-header-left">
                                         <h2 className="mo-title">Map Overview</h2>
-                                        <div className="mo-stat-chips">
-                                                <span className="mo-stat-chip mo-stat-chip--zones">
-                                                        {totalZones} zone{totalZones !== 1 ? "s" : ""}
-                                                </span>
-                                                <span className="mo-stat-chip mo-stat-chip--pois">
-                                                        {validPOIs.length} spot{validPOIs.length !== 1 ? "s" : ""}
-                                                </span>
-                                                <span className="mo-stat-chip mo-stat-chip--packs">
-                                                        {packsWithLocation.length} pack
-                                                        {packsWithLocation.length !== 1 ? "s" : ""}
-                                                </span>
-                                                <span className="mo-stat-chip mo-stat-chip--beacons">
-                                                        {beaconLocationsWithLocation.length} beacon
-                                                        {beaconLocationsWithLocation.length !== 1 ? "s" : ""}
-                                                </span>
-                                        </div>
                                         {loading && <span className="mo-loading-tag">Loading…</span>}
                                         {error && <span className="mo-error-tag">{error}</span>}
                                         {beaconLoading && (
@@ -447,25 +431,6 @@ export function MapOverviewScreen({
                                                         {new Date(beaconLastRefreshAt).toLocaleTimeString()}
                                                 </span>
                                         ) : null}
-                                </div>
-                                <div className="mo-layer-bar">
-                                        <button
-                                                className="mo-layer-btn"
-                                                type="button"
-                                                onClick={() => void refreshBeaconLocations()}
-                                                disabled={beaconLoading}>
-                                                ⟳
-                                        </button>
-                                        {layers.map((l) => (
-                                                <button
-                                                        key={l.key}
-                                                        className={`mo-layer-btn${l.active ? " mo-layer-btn--on" : ""}`}
-                                                        onClick={l.toggle}>
-                                                        <span className="mo-layer-dot" style={{ background: l.color }} />
-                                                        {l.label}
-                                                        <span className="mo-layer-count">{l.count}</span>
-                                                </button>
-                                        ))}
                                 </div>
                         </div>
 
@@ -733,6 +698,29 @@ export function MapOverviewScreen({
                                                 </div>
                                         </div>
                                 )}
+
+                                <div className="mo-map-legend">
+                                        {layers.map((l) => (
+                                                <button
+                                                        key={l.key}
+                                                        type="button"
+                                                        className={`mo-legend-btn${l.active ? " mo-legend-btn--on" : ""}`}
+                                                        onClick={l.toggle}>
+                                                        <span className="mo-layer-dot" style={{ background: l.color }} />
+                                                        <span className="mo-legend-label">{l.label}</span>
+                                                        <span className="mo-layer-count">{l.count}</span>
+                                                </button>
+                                        ))}
+                                        <div className="mo-legend-divider" />
+                                        <button
+                                                className="mo-legend-refresh"
+                                                type="button"
+                                                title="Refresh beacon locations"
+                                                onClick={() => void refreshBeaconLocations()}
+                                                disabled={beaconLoading}>
+                                                {beaconLoading ? "…" : "⟳"} Refresh beacons
+                                        </button>
+                                </div>
                         </div>
 
                         {selectedPoi && (
