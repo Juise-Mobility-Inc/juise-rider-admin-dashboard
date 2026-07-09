@@ -2,6 +2,7 @@ import {
 	type ChangeEvent,
 	type FocusEvent,
 	type FormEvent,
+	useCallback,
 	useEffect,
 	useMemo,
 	useRef,
@@ -9,9 +10,11 @@ import {
 } from "react";
 
 import {
+	fetchSchoolDashboardNotificationHistory,
 	sendSchoolCustomNotification,
 	signSchoolMedia,
 	type CustomNotificationAudience,
+	type SchoolDashboardNotificationHistoryEntry,
 	type SchoolStudentRosterEntry,
 	uploadSchoolNotificationImage,
 } from "../../lib/api";
@@ -392,6 +395,52 @@ function formatHistoryTime(value: number) {
 	}).format(new Date(value));
 }
 
+function normalizeHistoryTimestamp(value: number) {
+	if (!Number.isFinite(value) || value <= 0) {
+		return Date.now();
+	}
+	return value < 10_000_000_000 ? value * 1000 : value;
+}
+
+function resolveHistoryIconChoice(value: string): NotificationImageChoice {
+	const normalized = value.trim();
+	if (!normalized) {
+		return "default";
+	}
+	const largeMatch = largeIconOptions.find((option) => option.providerValue === normalized);
+	const smallMatch = smallIconOptions.find((option) => option.providerValue === normalized);
+	return largeMatch?.value ?? smallMatch?.value ?? "custom";
+}
+
+function mapRemoteNotificationHistoryEntry(
+	entry: SchoolDashboardNotificationHistoryEntry,
+): NotificationHistoryEntry {
+	const largeIconChoice = resolveHistoryIconChoice(entry.large_icon ?? "");
+	const smallIconChoice = resolveHistoryIconChoice(entry.small_icon ?? "");
+	return {
+		id: entry.notification_uuid,
+		createdAt: normalizeHistoryTimestamp(entry.created_at),
+		audience: entry.audience as CustomNotificationAudience,
+		targetLabel: entry.target_label || entry.audience || "Notification",
+		selectedUserUUIDs: entry.target_user_uuids ?? [],
+		oneSignalId: (entry.target_onesignal_ids ?? []).join("\n"),
+		subscriptionId: (entry.target_subscription_ids ?? []).join("\n"),
+		title: entry.title,
+		message: entry.message,
+		url: entry.url ?? "",
+		imageUrl: entry.image_url ?? "",
+		largeIconChoice,
+		customLargeIcon: largeIconChoice === "custom" ? entry.large_icon ?? "" : "",
+		smallIconChoice,
+		customSmallIcon: smallIconChoice === "custom" ? entry.small_icon ?? "" : "",
+		status: entry.status === "failed" ? "failed" : "sent",
+		errorMessage: entry.error_message,
+		providerMessageId: entry.provider_message_id,
+		recipientCount:
+			typeof entry.recipient_count === "number" ? entry.recipient_count : null,
+	};
+}
+
 function isRemoteImageUrl(value: string) {
 	return /^https?:\/\//i.test(value.trim());
 }
@@ -454,10 +503,40 @@ export function NotificationsScreen({
 	const [history, setHistory] = useState<NotificationHistoryEntry[]>(() =>
 		loadNotificationHistory(managedAppId, activeSchoolId),
 	);
+	const [historyBusy, setHistoryBusy] = useState(false);
+	const [historyError, setHistoryError] = useState("");
+
+	const refreshNotificationHistory = useCallback(async () => {
+		if (!activeSchoolId || !managedAppId) {
+			setHistory([]);
+			return;
+		}
+		setHistoryBusy(true);
+		setHistoryError("");
+		try {
+			const remoteHistory = await fetchSchoolDashboardNotificationHistory(
+				managedAppId,
+				activeSchoolId,
+				notificationHistoryLimit,
+			);
+			const mappedHistory = remoteHistory.map(mapRemoteNotificationHistoryEntry);
+			setHistory(mappedHistory);
+			saveNotificationHistory(managedAppId, activeSchoolId, mappedHistory);
+		} catch (error) {
+			setHistory(loadNotificationHistory(managedAppId, activeSchoolId));
+			setHistoryError(
+				error instanceof Error
+					? error.message
+					: "Unable to load notification history.",
+			);
+		} finally {
+			setHistoryBusy(false);
+		}
+	}, [activeSchoolId, managedAppId]);
 
 	useEffect(() => {
-		setHistory(loadNotificationHistory(managedAppId, activeSchoolId));
-	}, [activeSchoolId, managedAppId]);
+		void refreshNotificationHistory();
+	}, [refreshNotificationHistory]);
 
 	useEffect(() => {
 		setLocallySignedStudentMediaUrls({});
@@ -618,7 +697,10 @@ export function NotificationsScreen({
 
 	const addHistoryEntry = (entry: NotificationHistoryEntry) => {
 		setHistory((current) => {
-			const next = [entry, ...current].slice(0, notificationHistoryLimit);
+			const next = [
+				entry,
+				...current.filter((historyEntry) => historyEntry.id !== entry.id),
+			].slice(0, notificationHistoryLimit);
 			saveNotificationHistory(managedAppId, activeSchoolId, next);
 			return next;
 		});
@@ -674,11 +756,6 @@ export function NotificationsScreen({
 		setStatusMessage("Copied notification into the composer.");
 		setErrorMessage("");
 		setDeliveryDetails(null);
-	};
-
-	const handleClearHistory = () => {
-		setHistory([]);
-		saveNotificationHistory(managedAppId, activeSchoolId, []);
 	};
 
 	const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -804,6 +881,7 @@ export function NotificationsScreen({
 
 			const response = await sendSchoolCustomNotification(managedAppId, activeSchoolId, {
 				audience: deliveryAudience,
+				target_label: targetLabel,
 				title: trimmedTitle,
 				message: trimmedMessage,
 				url: trimmedUrl || undefined,
@@ -864,6 +942,7 @@ export function NotificationsScreen({
 					providerMessageId: response.provider_message_id,
 					recipientCount,
 				});
+				void refreshNotificationHistory();
 				throw new Error(providerErrorMessage);
 			}
 			if (recipientCount === 0) {
@@ -889,6 +968,7 @@ export function NotificationsScreen({
 					providerMessageId: response.provider_message_id,
 					recipientCount,
 				});
+				void refreshNotificationHistory();
 				throw new Error(
 					"No subscribed OneSignal recipients matched this notification target.",
 				);
@@ -920,6 +1000,7 @@ export function NotificationsScreen({
 				providerMessageId: response.provider_message_id,
 				recipientCount,
 			});
+			void refreshNotificationHistory();
 			setTitle("");
 			setMessage("");
 			setUrl("");
@@ -934,6 +1015,7 @@ export function NotificationsScreen({
 			setErrorMessage(
 				error instanceof Error ? error.message : "Unable to send notification.",
 			);
+			void refreshNotificationHistory();
 		} finally {
 			setBusy(false);
 		}
@@ -1430,21 +1512,28 @@ export function NotificationsScreen({
 			<section className="panel notification-history-panel">
 				<div className="panel-header">
 					<div>
-						<h3>Notification list</h3>
+						<h3>Notification history</h3>
+						<p>Manual dashboard notifications sent to students and campus-wide audiences.</p>
 					</div>
-					{history.length > 0 ? (
-						<button
-							className="secondary-button"
-							type="button"
-							onClick={handleClearHistory}>
-							Clear List
-						</button>
-					) : null}
+					<button
+						className="secondary-button"
+						type="button"
+						onClick={() => void refreshNotificationHistory()}
+						disabled={historyBusy}>
+						{historyBusy ? "Refreshing..." : "Refresh"}
+					</button>
 				</div>
 
+				{historyError ? (
+					<p className="notification-history-error">
+						Showing cached notification history. {historyError}
+					</p>
+				) : null}
 				{history.length === 0 ? (
 					<p className="empty-state notification-send-status">
-						No dashboard notifications have been sent for this school yet.
+						{historyBusy
+							? "Loading notification history..."
+							: "No dashboard notifications have been sent for this school yet."}
 					</p>
 				) : (
 					<div className="notification-history-list">
@@ -1480,18 +1569,50 @@ export function NotificationsScreen({
 									{entry.largeIconChoice !== "default" ? (
 										<span>Large icon</span>
 									) : null}
+									{entry.providerMessageId ? (
+										<span>Provider {entry.providerMessageId}</span>
+									) : null}
 								</div>
 								{entry.errorMessage ? (
 									<p className="notification-history-error">
 										{entry.errorMessage}
 									</p>
 								) : null}
+								<details className="notification-history-details">
+									<summary>View notification</summary>
+									<div className="notification-history-detail-grid">
+										<div>
+											<span>Title</span>
+											<strong>{entry.title}</strong>
+										</div>
+										<div>
+											<span>Audience</span>
+											<strong>{entry.targetLabel}</strong>
+										</div>
+										<div className="notification-history-detail-wide">
+											<span>Message</span>
+											<p>{entry.message}</p>
+										</div>
+										{entry.url ? (
+											<div className="notification-history-detail-wide">
+												<span>URL</span>
+												<p>{entry.url}</p>
+											</div>
+										) : null}
+										{entry.imageUrl ? (
+											<div className="notification-history-detail-wide">
+												<span>Image</span>
+												<p>{entry.imageUrl}</p>
+											</div>
+										) : null}
+									</div>
+								</details>
 								<div className="form-actions notification-history-actions">
 									<button
 										className="secondary-button"
 										type="button"
 										onClick={() => handleCopyNotification(entry)}>
-										Push Again as Copy
+										Reuse / resend
 									</button>
 								</div>
 							</article>

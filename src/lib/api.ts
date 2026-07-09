@@ -2455,6 +2455,7 @@ export type CustomNotificationAudience =
 
 export interface SchoolCustomNotificationInput {
   audience: CustomNotificationAudience;
+  target_label?: string;
   title: string;
   message: string;
   url?: string;
@@ -2484,6 +2485,39 @@ export interface SchoolCustomNotificationResponse {
   provider_targeting?: Record<string, unknown>;
 }
 
+export interface SchoolDashboardNotificationHistoryEntry {
+  notification_uuid: string;
+  app_id: string;
+  school_id: string;
+  actor_user_uuid?: string;
+  audience: CustomNotificationAudience | string;
+  target_label: string;
+  target_user_uuids: string[];
+  target_external_ids: string[];
+  target_tags: Array<{
+    key: "user_uuid" | "membership_uuid" | "student_id";
+    value: string;
+  }>;
+  target_onesignal_ids: string[];
+  target_subscription_ids: string[];
+  title: string;
+  message: string;
+  url: string;
+  image_url: string;
+  large_icon: string;
+  small_icon: string;
+  status: "sent" | "failed" | string;
+  error_message?: string;
+  provider?: string;
+  provider_message_id?: string;
+  provider_recipients?: unknown;
+  provider_response?: Record<string, unknown>;
+  provider_targeting?: Record<string, unknown>;
+  recipient_count?: number | null;
+  data: Record<string, unknown>;
+  created_at: number;
+}
+
 export async function sendSchoolCustomNotification(
   managedAppId: string,
   schoolId: string,
@@ -2497,6 +2531,7 @@ export async function sendSchoolCustomNotification(
       body: {
         managed_app_id: managedAppId,
         audience: input.audience,
+        target_label: input.target_label ?? "",
         title: input.title,
         message: input.message,
         url: input.url ?? "",
@@ -2510,6 +2545,24 @@ export async function sendSchoolCustomNotification(
         subscription_ids: input.subscription_ids ?? [],
         data: input.data ?? {},
       },
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function fetchSchoolDashboardNotificationHistory(
+  managedAppId: string,
+  schoolId: string,
+  limit = 50,
+): Promise<SchoolDashboardNotificationHistoryEntry[]> {
+  const query = new URLSearchParams({
+    managed_app_id: managedAppId,
+    limit: String(limit),
+  });
+  return request<SchoolDashboardNotificationHistoryEntry[]>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/notifications/history?${query.toString()}`,
+    {
       appIdHeader: currentSession?.authAppId ?? managedAppId,
     },
   );
