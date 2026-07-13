@@ -15658,6 +15658,91 @@
         text-align: right;
 }
 
+.cd-section-heading-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        border-bottom: 1px solid #e2e6ea;
+        background: #f8f9fa;
+        padding-right: 12px;
+}
+
+.cd-section-heading-row .cd-section-title {
+        border-bottom: none;
+        background: transparent;
+        padding-right: 8px;
+}
+
+.cd-device-qr-layout {
+        display: grid;
+        grid-template-columns: 150px minmax(0, 1fr);
+        gap: 14px;
+        padding: 16px;
+        align-items: start;
+}
+
+.cd-device-qr-image,
+.cd-device-qr-placeholder {
+        width: 150px;
+        aspect-ratio: 1;
+        border-radius: 8px;
+        border: 1px solid #e2e6ea;
+        background: #fff;
+}
+
+.cd-device-qr-image {
+        display: block;
+        object-fit: contain;
+        padding: 8px;
+}
+
+.cd-device-qr-placeholder {
+        display: grid;
+        place-items: center;
+        color: #6c757d;
+        font-size: 0.82rem;
+        text-align: center;
+        padding: 12px;
+}
+
+.cd-device-qr-copy {
+        display: grid;
+        gap: 10px;
+        min-width: 0;
+}
+
+.cd-device-qr-copy p {
+        margin: 0;
+        color: #6c757d;
+        font-size: 0.85rem;
+        line-height: 1.45;
+}
+
+.cd-device-qr-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+}
+
+.cd-device-qr-status {
+        color: #217e52;
+        font-size: 0.8rem;
+        font-weight: 700;
+}
+
+.cd-device-qr-value {
+        padding: 8px 0 0;
+        border-bottom: none;
+        align-items: flex-start;
+}
+
+.cd-device-qr-value strong {
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        text-align: left;
+}
+
 .cd-coordinate-value {
         display: inline-flex;
         flex-direction: column;
@@ -16376,6 +16461,15 @@
 
         .cd-table-search {
                 max-width: 100%;
+        }
+
+        .cd-device-qr-layout {
+                grid-template-columns: 1fr;
+        }
+
+        .cd-device-qr-image,
+        .cd-device-qr-placeholder {
+                justify-self: center;
         }
 }
 
@@ -17451,7 +17545,255 @@
         max-width: 240px;
 }
 
+.media-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+}
+
+.detail-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+        margin: 18px 0;
+}
+
+.evidence-image {
+        width: 100%;
+        max-height: 280px;
+        object-fit: cover;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
+        background: #f9fafb;
+}
+
+.thumbnail-placeholder {
+        width: 72px;
+        height: 72px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f3f4f6;
+        color: #6b7280;
+        font-size: 0.78rem;
+        font-weight: 700;
+        flex-shrink: 0;
+}
+
+.list-card.selected {
+        border-color: #27CC5E;
+        box-shadow: 0 0 0 2px rgba(39, 204, 94, 0.12);
+}
+
+.profile-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 14px 0;
+        padding: 12px;
+        border-radius: 12px;
+        background: #f9fafb;
+}
+
+.profile-row .avatar {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        object-fit: cover;
+}
+
+.parking-reports-root {
+        min-height: calc(100vh - 96px);
+}
+
+.parking-reports-header-row {
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+}
+
+.parking-reports-title-group {
+        align-items: center;
+}
+
+.parking-reports-scope {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 4px;
+}
+
+.parking-reports-scope span {
+        padding: 2px 7px;
+        border: 1px solid #d7dde3;
+        border-radius: 999px;
+        color: #6c757d;
+        background: #fff;
+        font-size: 0.68rem;
+        font-weight: 700;
+}
+
+.parking-reports-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+        flex: 1;
+        min-width: 320px;
+}
+
+.parking-reports-actions .cd-table-search {
+        min-width: 220px;
+}
+
+.parking-reports-actions .cd-table-btn {
+        width: auto;
+        margin-bottom: 0;
+        white-space: nowrap;
+}
+
+.parking-report-filter-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: #27CC5E;
+        color: #fff;
+        font-size: 0.68rem;
+        font-weight: 800;
+}
+
+.parking-reports-actions .cd-table-btn:hover .parking-report-filter-count {
+        background: #fff;
+        color: #27CC5E;
+}
+
+.parking-reports-body {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 18px 20px 32px;
+}
+
+.parking-reports-table-card {
+        overflow: hidden;
+        border: 1px solid #e2e6ea;
+        border-radius: 10px;
+        background: #fff;
+}
+
+.parking-reports-table-card .cd-table-scroll {
+        max-height: 430px;
+}
+
+.parking-report-table-thumb {
+        width: 54px;
+        height: 42px;
+        border-radius: 8px;
+        object-fit: cover;
+        border: 1px solid #e2e6ea;
+        background: #f8f9fa;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #6c757d;
+        font-size: 0.7rem;
+        font-weight: 700;
+}
+
+.parking-report-table-thumb-empty {
+        border-style: dashed;
+}
+
+.parking-report-context-stack {
+        display: grid;
+        gap: 3px;
+}
+
+.parking-report-context-stack span {
+        max-width: 220px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #6c757d;
+        font-size: 0.72rem;
+}
+
+.parking-report-detail-section {
+        margin: 18px 0 0;
+}
+
+.parking-report-detail-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 18px;
+        border-bottom: 1px solid #e2e6ea;
+        background: #fff;
+}
+
+.parking-report-detail-header h3 {
+        margin: 4px 0 3px;
+        color: #112d4e;
+}
+
+.parking-report-detail-title {
+        padding: 0;
+        border-bottom: 0;
+        background: transparent;
+}
+
+.parking-report-detail-content {
+        padding: 18px;
+}
+
+.parking-report-filter-modal {
+        width: min(560px, calc(100vw - 32px));
+}
+
+.parking-report-filter-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+}
+
+.parking-report-filter-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+}
+
 @media (max-width: 680px) {
+        .media-grid,
+        .detail-grid {
+                grid-template-columns: 1fr;
+        }
+
+        .parking-reports-actions,
+        .parking-report-filter-grid {
+                grid-template-columns: 1fr;
+        }
+
+        .parking-reports-actions {
+                width: 100%;
+                min-width: 0;
+                justify-content: stretch;
+                flex-wrap: wrap;
+        }
+
+        .parking-reports-actions .cd-table-search,
+        .parking-reports-actions .cd-table-btn,
+        .parking-reports-actions .secondary-button {
+                width: 100%;
+                max-width: none;
+        }
+
         .stop-modal-body {
                 grid-template-columns: 1fr;
         }

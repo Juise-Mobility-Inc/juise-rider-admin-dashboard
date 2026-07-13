@@ -2408,6 +2408,78 @@ export interface StudentParkingViolationUpdateInput {
   active?: boolean;
 }
 
+export type ParkingIncidentReportType =
+  | "reserved_spot_occupied"
+  | "improper_parking"
+  | "blocking_access"
+  | "other";
+
+export type ParkingIncidentReportStatus =
+  | "submitted"
+  | "under_review"
+  | "resolved"
+  | "dismissed";
+
+export interface StudentParkingIncidentReport {
+  report_uuid: string;
+  app_id: string;
+  school_id: string;
+  reporter_user_uuid: string;
+  reporter_membership_uuid?: string | null;
+  report_type: ParkingIncidentReportType;
+  pack_uuid?: string | null;
+  spot_uuid?: string | null;
+  reservation_uuid?: string | null;
+  description: string;
+  violation_latitude?: number | null;
+  violation_longitude?: number | null;
+  location_accuracy_meters?: number | null;
+  location_captured_at?: number | null;
+  status: ParkingIncidentReportStatus;
+  student_visible_note?: string;
+  admin_notes?: string;
+  reviewed_by_user_uuid?: string | null;
+  reviewed_at?: number | null;
+  active: boolean;
+  created_at: number;
+  updated_at: number;
+  media_assets?: UserMediaAsset[];
+}
+
+export interface StudentParkingIncidentReportUpdateInput {
+  status?: ParkingIncidentReportStatus;
+  admin_notes?: string;
+  student_visible_note?: string;
+  active?: boolean;
+}
+
+function mergeParkingIncidentReportResults(
+  results: PromiseSettledResult<StudentParkingIncidentReport[]>[],
+  appPriority: Map<string, number>,
+): StudentParkingIncidentReport[] {
+  const mergedReports = results.flatMap((result) =>
+    result.status === "fulfilled" ? result.value : [],
+  );
+  if (mergedReports.length === 0) {
+    return [];
+  }
+  return Array.from(
+    new Map(
+      mergedReports
+        .sort((left, right) => {
+          const appDelta =
+            (appPriority.get(left.app_id) ?? appPriority.size) -
+            (appPriority.get(right.app_id) ?? appPriority.size);
+          if (appDelta !== 0) {
+            return appDelta;
+          }
+          return (right.created_at ?? 0) - (left.created_at ?? 0);
+        })
+        .map((report) => [report.report_uuid, report]),
+    ).values(),
+  ).sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0));
+}
+
 export interface ParkingViolationFeeRule {
   fee_rule_uuid: string;
   app_id: string;
@@ -2613,6 +2685,165 @@ export async function fetchSchoolParkingViolations(
     "kcaProxy",
     `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violations?${search.toString()}`,
     {
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function fetchSchoolParkingIncidentReports(
+  managedAppId: string,
+  schoolId: string,
+  options: {
+    status?: string;
+    reportType?: string;
+    includeInactive?: boolean;
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<StudentParkingIncidentReport[]> {
+  const appCandidates = buildManagedAppCandidates(managedAppId);
+  const appPriority = new Map(
+    appCandidates.map((value, index) => [value, index] as const),
+  );
+
+  const buildSearch = (appId: string) => {
+    const search = new URLSearchParams({
+      managed_app_id: appId,
+    });
+    if (options.status?.trim()) {
+      search.set("status", options.status.trim());
+    }
+    if (options.reportType?.trim()) {
+      search.set("report_type", options.reportType.trim());
+    }
+    if (options.includeInactive) {
+      search.set("include_inactive", "true");
+    }
+    if (options.limit) {
+      search.set("limit", String(options.limit));
+    }
+    if (options.offset) {
+      search.set("offset", String(options.offset));
+    }
+    return search;
+  };
+
+  const appScopedResults = await Promise.allSettled(
+    appCandidates.map((appId) =>
+      request<StudentParkingIncidentReport[]>(
+        "kcaProxy",
+        `/api/v1/admin/parking-incident-reports?${buildSearch(appId).toString()}`,
+        {
+          appIdHeader: currentSession?.authAppId ?? appId,
+        },
+      ),
+    ),
+  );
+
+  const appScopedReports = mergeParkingIncidentReportResults(
+    appScopedResults,
+    appPriority,
+  );
+  if (appScopedReports.length > 0) {
+    return appScopedReports;
+  }
+  if (appScopedResults.every((result) => result.status === "fulfilled")) {
+    return [];
+  }
+
+  const fetchForSchoolIds = async (schoolIds: string[]) =>
+    Promise.allSettled(
+      appCandidates.flatMap((appId) =>
+        schoolIds.map((candidateSchoolId) =>
+          request<StudentParkingIncidentReport[]>(
+            "kcaProxy",
+            `/api/v1/admin/school/${encodeURIComponent(candidateSchoolId)}/parking-incident-reports?${buildSearch(appId).toString()}`,
+            {
+              appIdHeader: currentSession?.authAppId ?? appId,
+            },
+          ),
+        ),
+      ),
+    );
+
+  const primaryResults = await fetchForSchoolIds([schoolId]);
+  const primaryReports = mergeParkingIncidentReportResults(
+    primaryResults,
+    appPriority,
+  );
+  if (primaryReports.length > 0) {
+    return primaryReports;
+  }
+
+  const relatedSchoolResults = await Promise.allSettled(
+    appCandidates.map((appId) =>
+      fetchSchools(appId).catch(() => [] as School[]),
+    ),
+  );
+  const relatedSchoolIds = Array.from(
+    new Set(
+      relatedSchoolResults
+        .flatMap((result) =>
+          result.status === "fulfilled" ? result.value : [],
+        )
+        .map((school) => school.school_id?.trim() ?? "")
+        .filter((value) => value !== "" && value !== schoolId),
+    ),
+  );
+  if (relatedSchoolIds.length > 0) {
+    const relatedReports = mergeParkingIncidentReportResults(
+      await fetchForSchoolIds(relatedSchoolIds),
+      appPriority,
+    );
+    if (relatedReports.length > 0) {
+      return relatedReports;
+    }
+  }
+
+  const firstRejected = primaryResults.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  if (firstRejected) {
+    throw firstRejected.reason;
+  }
+
+  return [];
+}
+
+export async function fetchSchoolParkingIncidentReport(
+  managedAppId: string,
+  schoolId: string,
+  reportUUID: string,
+): Promise<StudentParkingIncidentReport> {
+  const search = new URLSearchParams({
+    managed_app_id: managedAppId,
+  });
+
+  return request<StudentParkingIncidentReport>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/parking-incident-reports/${encodeURIComponent(reportUUID)}?${search.toString()}`,
+    {
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function updateSchoolParkingIncidentReport(
+  managedAppId: string,
+  schoolId: string,
+  reportUUID: string,
+  input: StudentParkingIncidentReportUpdateInput,
+): Promise<StudentParkingIncidentReport> {
+  const search = new URLSearchParams({
+    managed_app_id: managedAppId,
+  });
+
+  return request<StudentParkingIncidentReport>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/parking-incident-reports/${encodeURIComponent(reportUUID)}?${search.toString()}`,
+    {
+      method: "PATCH",
+      body: input,
       appIdHeader: currentSession?.authAppId ?? managedAppId,
     },
   );

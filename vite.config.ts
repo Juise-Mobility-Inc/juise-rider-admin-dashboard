@@ -3,31 +3,36 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+  const envTarget = (key: string, fallback: string) =>
+    env[key]?.trim() || fallback;
 
   const proxyConfig = {
     "/auth-api": {
-      target:
-        env.VITE_AUTH_PROXY_TARGET ||
+      target: envTarget(
+        "VITE_AUTH_PROXY_TARGET",
         "https://global-auth-service.kuhmute.net",
+      ),
       changeOrigin: true,
       rewrite: (path: string) => path.replace(/^\/auth-api/, ""),
     },
     "/nebula-api": {
-      target:
-        env.VITE_NEBULA_PROXY_TARGET ||
+      target: envTarget(
+        "VITE_NEBULA_PROXY_TARGET",
         "https://nebula-user-server.kuhmute.net",
+      ),
       changeOrigin: true,
       rewrite: (path: string) => path.replace(/^\/nebula-api/, ""),
     },
     "/hub-store-api": {
-      target:
-        env.VITE_HUB_STORE_PROXY_TARGET ||
+      target: envTarget(
+        "VITE_HUB_STORE_PROXY_TARGET",
         "https://hub-store-service.kuhmute.net",
+      ),
       changeOrigin: true,
       rewrite: (path: string) => path.replace(/^\/hub-store-api/, ""),
     },
     "/kca-api": {
-      target: env.VITE_KCA_PROXY_TARGET || "https://kca-proxy.kuhmute.net",
+      target: envTarget("VITE_KCA_PROXY_TARGET", "https://kca-proxy.kuhmute.net"),
       changeOrigin: true,
       rewrite: (path: string) => path.replace(/^\/kca-api/, ""),
     },

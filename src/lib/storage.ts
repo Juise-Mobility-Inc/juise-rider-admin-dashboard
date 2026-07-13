@@ -6,6 +6,11 @@ export interface DashboardContext {
 
 const sessionStorageKey = 'juise-rider-admin-dashboard.session'
 const contextStorageKey = 'juise-rider-admin-dashboard.context'
+const managedAppFallbackIds = new Set([
+  '',
+  'juise_rider_admin_dashboard',
+  'juise-admin-app',
+])
 
 function readJson<T>(key: string): T | null {
   try {
@@ -33,8 +38,12 @@ export function clearDashboardSession() {
 
 export function readDashboardContext(defaultManagedAppId: string): DashboardContext {
   const stored = readJson<DashboardContext>(contextStorageKey)
+  const fallbackManagedAppId = defaultManagedAppId.trim() || 'juise-customer-app'
+  const storedManagedAppId = stored?.managedAppId?.trim() ?? ''
   return {
-    managedAppId: stored?.managedAppId || defaultManagedAppId,
+    managedAppId: managedAppFallbackIds.has(storedManagedAppId)
+      ? fallbackManagedAppId
+      : storedManagedAppId,
   }
 }
 

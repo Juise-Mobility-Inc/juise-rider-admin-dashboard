@@ -92,6 +92,7 @@ import { DashboardScreen } from "./screens/dashboard/DashboardScreen";
 import { StudentLeaderboardScreen } from "./screens/dashboard/StudentLeaderboardScreen";
 import { NotificationsScreen } from "./screens/dashboard/NotificationsScreen";
 import { PacksScreen } from "./screens/dashboard/PacksScreen";
+import { ParkingReportsScreen } from "./screens/dashboard/ParkingReportsScreen";
 import { PenaltyReportsScreen } from "./screens/dashboard/PenaltyReportsScreen";
 import { PoisScreen } from "./screens/dashboard/PoisScreen";
 import { RegistrationFeesScreen } from "./screens/dashboard/RegistrationFeesScreen";
@@ -131,6 +132,7 @@ type Section =
         | "campusDevices"
         | "registrationFees"
         | "penaltyReports"
+        | "parkingReports"
         | "studentRideViolations"
         | "violationFees"
         | "reports"
@@ -185,6 +187,11 @@ const dashboardSections: Array<{
                 section: "penaltyReports",
                 label: "Penalty Reports",
                 path: "/penalty-reports",
+        },
+        {
+                section: "parkingReports",
+                label: "Parking Reports",
+                path: "/parking-reports",
         },
         {
                 section: "studentRideViolations",
@@ -4626,6 +4633,16 @@ function App() {
                                                 onOpenStudentDevice={handleOpenStudentDeviceFromDashboard}
                                         />
                                 );
+                        case "parkingReports":
+                                return (
+                                        <ParkingReportsScreen
+                                                activeSchoolId={activeSchoolId}
+                                                managedAppId={context.managedAppId}
+                                                studentRoster={sortedSchoolStudentRoster}
+                                                studentProfilePhotoUrls={schoolStudentProfilePhotoUrls}
+                                                onOpenStudent={handleOpenStudentFromDashboard}
+                                        />
+                                );
                         case "studentRideViolations":
                                 return (
                                         <StudentRideViolationsScreen
@@ -5132,13 +5149,22 @@ function App() {
                                                                                         openEnforcementCount > 0 && (
                                                                                                 <span className="nav-badge">
                                                                                                         {openEnforcementCount}
-                                                                                                </span>
-                                                                                        )}
-                                                                        </NavLink>
-                                                                        <NavLink
-                                                                                to="/student-ride-violations"
-                                                                                className={({ isActive }) =>
-                                                                                        isActive
+																		</span>
+																				)}
+																		</NavLink>
+																		<NavLink
+																				to="/parking-reports"
+																				className={({ isActive }) =>
+																						isActive
+																								? "nav-sub-item nav-sub-item-active"
+																								: "nav-sub-item"
+																				}>
+																				Parking Reports
+																		</NavLink>
+																		<NavLink
+																				to="/student-ride-violations"
+																				className={({ isActive }) =>
+																						isActive
                                                                                                 ? "nav-sub-item nav-sub-item-active"
                                                                                                 : "nav-sub-item"
                                                                                 }>
