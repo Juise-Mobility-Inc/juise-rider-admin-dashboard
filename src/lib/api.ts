@@ -2728,11 +2728,11 @@ export async function fetchSchoolParkingIncidentReports(
     return search;
   };
 
-  const appScopedResults = await Promise.allSettled(
+  const results = await Promise.allSettled(
     appCandidates.map((appId) =>
       request<StudentParkingIncidentReport[]>(
         "kcaProxy",
-        `/api/v1/admin/parking-incident-reports?${buildSearch(appId).toString()}`,
+        `/api/v1/admin/school/${encodeURIComponent(schoolId)}/parking-incident-reports?${buildSearch(appId).toString()}`,
         {
           appIdHeader: currentSession?.authAppId ?? appId,
         },
@@ -2740,67 +2740,12 @@ export async function fetchSchoolParkingIncidentReports(
     ),
   );
 
-  const appScopedReports = mergeParkingIncidentReportResults(
-    appScopedResults,
-    appPriority,
-  );
-  if (appScopedReports.length > 0) {
-    return appScopedReports;
-  }
-  if (appScopedResults.every((result) => result.status === "fulfilled")) {
-    return [];
+  const reports = mergeParkingIncidentReportResults(results, appPriority);
+  if (reports.length > 0) {
+    return reports;
   }
 
-  const fetchForSchoolIds = async (schoolIds: string[]) =>
-    Promise.allSettled(
-      appCandidates.flatMap((appId) =>
-        schoolIds.map((candidateSchoolId) =>
-          request<StudentParkingIncidentReport[]>(
-            "kcaProxy",
-            `/api/v1/admin/school/${encodeURIComponent(candidateSchoolId)}/parking-incident-reports?${buildSearch(appId).toString()}`,
-            {
-              appIdHeader: currentSession?.authAppId ?? appId,
-            },
-          ),
-        ),
-      ),
-    );
-
-  const primaryResults = await fetchForSchoolIds([schoolId]);
-  const primaryReports = mergeParkingIncidentReportResults(
-    primaryResults,
-    appPriority,
-  );
-  if (primaryReports.length > 0) {
-    return primaryReports;
-  }
-
-  const relatedSchoolResults = await Promise.allSettled(
-    appCandidates.map((appId) =>
-      fetchSchools(appId).catch(() => [] as School[]),
-    ),
-  );
-  const relatedSchoolIds = Array.from(
-    new Set(
-      relatedSchoolResults
-        .flatMap((result) =>
-          result.status === "fulfilled" ? result.value : [],
-        )
-        .map((school) => school.school_id?.trim() ?? "")
-        .filter((value) => value !== "" && value !== schoolId),
-    ),
-  );
-  if (relatedSchoolIds.length > 0) {
-    const relatedReports = mergeParkingIncidentReportResults(
-      await fetchForSchoolIds(relatedSchoolIds),
-      appPriority,
-    );
-    if (relatedReports.length > 0) {
-      return relatedReports;
-    }
-  }
-
-  const firstRejected = primaryResults.find(
+  const firstRejected = results.find(
     (result): result is PromiseRejectedResult => result.status === "rejected",
   );
   if (firstRejected) {

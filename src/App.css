@@ -17727,6 +17727,82 @@
         margin: 18px 0 0;
 }
 
+.parking-report-detail-screen {
+        margin-top: 0;
+}
+
+.parking-report-detail-back-bar {
+        margin: -18px -20px 18px;
+}
+
+.parking-report-detail-section .penalty-report-location-card a {
+        color: var(--accent, #0b6f8f);
+        font-size: 0.84rem;
+        font-weight: 800;
+        text-decoration: none;
+}
+
+.parking-report-evidence-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+}
+
+.parking-report-evidence-card {
+        display: grid;
+        gap: 12px;
+        min-width: 0;
+        border: 1px solid var(--panel-border);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.44);
+        padding: 12px;
+}
+
+.parking-report-evidence-card h4 {
+        margin: 2px 0 0;
+        color: var(--text-strong);
+        font-size: 0.95rem;
+}
+
+.parking-report-evidence-card img {
+        display: block;
+        width: 100%;
+        max-height: 360px;
+        border-radius: 8px;
+        object-fit: cover;
+        background: #f4f6f8;
+}
+
+.parking-report-evidence-empty {
+        display: grid;
+        place-items: center;
+        min-height: 180px;
+        border: 1px dashed var(--panel-border);
+        border-radius: 8px;
+        color: var(--muted);
+        font-size: 0.9rem;
+        font-weight: 800;
+        text-align: center;
+        padding: 16px;
+}
+
+.parking-report-info-grid .parking-report-full-card {
+        grid-column: 1 / -1;
+}
+
+.parking-report-info-grid p {
+        margin: 0;
+        color: var(--text-strong);
+        font-size: 0.92rem;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+}
+
+.parking-report-review-panel {
+        display: grid;
+        gap: 16px;
+}
+
 .parking-report-detail-header {
         display: flex;
         align-items: flex-start;
@@ -17771,7 +17847,8 @@
 
 @media (max-width: 680px) {
         .media-grid,
-        .detail-grid {
+        .detail-grid,
+        .parking-report-evidence-grid {
                 grid-template-columns: 1fr;
         }
 
