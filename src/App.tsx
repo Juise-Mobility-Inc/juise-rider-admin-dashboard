@@ -9,9 +9,12 @@ import {
         useState,
 } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import QRCode from "qrcode";
 import "./App.css";
 import {
         approveReservation,
+        beginMFAEnrollment,
+        confirmMFAEnrollment,
         createSchoolChallenge,
         createSchoolPack,
         createSchoolAdminAccount,
@@ -36,6 +39,7 @@ import {
         getAdminPackQrCodeDownloadUrl,
         getAdminPackSpotQrCodeDownloadUrl,
         loginWithIdentifier,
+        verifyMFA,
         refreshDashboardSession,
         saveSchool,
         saveSchoolPOIs,
@@ -45,6 +49,8 @@ import {
         setSessionObserver,
         signSchoolMedia,
         type AdminSession,
+        type MFAChallenge,
+        type MFAEnrollment,
         type Pack,
         type PackSpot,
         type PackSpotReservation,
@@ -1400,6 +1406,10 @@ function App() {
         const [password, setPassword] = useState("");
         const [authBusy, setAuthBusy] = useState(false);
         const [authError, setAuthError] = useState("");
+        const [mfaChallenge, setMfaChallenge] = useState<MFAChallenge | null>(null);
+        const [mfaEnrollment, setMfaEnrollment] = useState<MFAEnrollment | null>(null);
+        const [mfaQrCode, setMfaQrCode] = useState("");
+        const [mfaCode, setMfaCode] = useState("");
         const [isSignupSchoolModalOpen, setIsSignupSchoolModalOpen] = useState(false);
         const [signupSchoolName, setSignupSchoolName] = useState("");
         const [signupForm, setSignupForm] = useState<SignupFormState>({
@@ -3174,19 +3184,63 @@ function App() {
                 setAuthError("");
 
                 try {
-                        const nextSession = await loginWithIdentifier(identifier.trim(), password, authAppId);
-                        setSession(nextSession);
+                        const result = await loginWithIdentifier(identifier.trim(), password, authAppId);
                         setPassword("");
-                        setAuthMode("login");
-                        setBanner({
-                                tone: "success",
-                                message: `Signed in as ${formatAdminIdentity(nextSession)}.`,
-                        });
+                        if ("mfa_required" in result) {
+                                await prepareMFAChallenge(result);
+                        } else {
+                                setSession(result);
+                                setAuthMode("login");
+                                setBanner({ tone: "success", message: `Signed in as ${formatAdminIdentity(result)}.` });
+                        }
                 } catch (error) {
                         setAuthError(getErrorMessage(error));
                 } finally {
                         setAuthBusy(false);
                 }
+        }
+
+        async function prepareMFAChallenge(challenge: MFAChallenge) {
+                setMfaChallenge(challenge);
+                setMfaCode("");
+                setMfaEnrollment(null);
+                setMfaQrCode("");
+                if (challenge.enrollment_required) {
+                        const enrollment = await beginMFAEnrollment(authAppId, challenge.mfa_token);
+                        setMfaEnrollment(enrollment);
+                        setMfaQrCode(await QRCode.toDataURL(enrollment.otpauth_uri, { width: 240, margin: 1 }));
+                }
+        }
+
+        async function handleMFA(event: FormEvent<HTMLFormElement>) {
+                event.preventDefault();
+                if (!mfaChallenge) return;
+                setAuthBusy(true);
+                setAuthError("");
+                try {
+                        const nextSession = mfaChallenge.enrollment_required
+                                ? await confirmMFAEnrollment(authAppId, mfaChallenge.mfa_token, mfaCode)
+                                : await verifyMFA(authAppId, mfaChallenge.mfa_token, mfaCode);
+                        setSession(nextSession);
+                        setMfaChallenge(null);
+                        setMfaEnrollment(null);
+                        setMfaQrCode("");
+                        setMfaCode("");
+                        setAuthMode("login");
+                        setBanner({ tone: "success", message: `Signed in as ${formatAdminIdentity(nextSession)}.` });
+                } catch (error) {
+                        setAuthError(getErrorMessage(error));
+                } finally {
+                        setAuthBusy(false);
+                }
+        }
+
+        function cancelMFA() {
+                setMfaChallenge(null);
+                setMfaEnrollment(null);
+                setMfaQrCode("");
+                setMfaCode("");
+                setAuthError("");
         }
 
         async function handleCreateSchoolAdmin(event: FormEvent<HTMLFormElement>) {
@@ -3195,18 +3249,14 @@ function App() {
                 setAuthError("");
 
                 try {
-                        const nextSession = await createSchoolAdminAccount(authAppId, signupForm);
-                        setSession(nextSession);
+                        const challenge = await createSchoolAdminAccount(authAppId, signupForm);
                         setSignupForm((current) => ({
                                 ...current,
                                 password: "",
                         }));
                         setSignupSchoolName("");
                         setIsSignupSchoolModalOpen(false);
-                        setBanner({
-                                tone: "success",
-                                message: `Created school admin account for ${signupForm.school_id} as ${formatAdminIdentity(nextSession)}.`,
-                        });
+                        await prepareMFAChallenge(challenge);
                 } catch (error) {
                         const message = getErrorMessage(error);
                         if (message.toLowerCase().includes("school_name")) {
@@ -3227,21 +3277,17 @@ function App() {
                 setAuthError("");
 
                 try {
-                        const nextSession = await createSchoolAdminAccount(authAppId, {
+                        const challenge = await createSchoolAdminAccount(authAppId, {
                                 ...signupForm,
                                 school_name: signupSchoolName,
                         });
-                        setSession(nextSession);
                         setSignupForm((current) => ({
                                 ...current,
                                 password: "",
                         }));
                         setSignupSchoolName("");
                         setIsSignupSchoolModalOpen(false);
-                        setBanner({
-                                tone: "success",
-                                message: `Created ${signupSchoolName.trim()} and school admin account for ${signupForm.school_id} as ${formatAdminIdentity(nextSession)}.`,
-                        });
+                        await prepareMFAChallenge(challenge);
                 } catch (error) {
                         setAuthError(getErrorMessage(error));
                 } finally {
@@ -4157,6 +4203,56 @@ function App() {
                                                 <img src="/Juise_Icon_Bolt.png" className="login-brand-icon" alt="Juise" />
                                                 <p className="login-brand-title">Juise Rider Admin Dashboard</p>
 
+                                                {mfaChallenge ? (
+                                                        <form className="login-form mfa-form" onSubmit={handleMFA}>
+                                                                <div className="login-form-header">
+                                                                        <p className="eyebrow">Two-step verification</p>
+                                                                        <h2>{mfaChallenge.enrollment_required ? "Set up Google Authenticator" : "Enter your security code"}</h2>
+                                                                        <p className="mfa-help">
+                                                                                {mfaChallenge.enrollment_required
+                                                                                        ? "Scan this QR code with Google Authenticator, then enter the current 6-digit code."
+                                                                                        : "Enter the 6-digit code from Google Authenticator or one of your recovery codes."}
+                                                                        </p>
+                                                                </div>
+                                                                {mfaChallenge.enrollment_required && !mfaEnrollment ? (
+                                                                        <button className="secondary-button" type="button" disabled={authBusy}
+                                                                                onClick={() => void prepareMFAChallenge(mfaChallenge)}>
+                                                                                Retry authenticator setup
+                                                                        </button>
+                                                                ) : null}
+                                                                {mfaQrCode ? <img className="mfa-qr-code" src={mfaQrCode} alt="Google Authenticator setup QR code" /> : null}
+                                                                {mfaEnrollment ? (
+                                                                        <>
+                                                                                <div className="mfa-secret">
+                                                                                        <span>Manual setup key</span>
+                                                                                        <code>{mfaEnrollment.secret}</code>
+                                                                                </div>
+                                                                                <div className="mfa-recovery-codes">
+                                                                                        <strong>Save these one-time recovery codes now</strong>
+                                                                                        <p>They will not be shown again.</p>
+                                                                                        <code>{mfaEnrollment.recovery_codes.join("\n")}</code>
+                                                                                </div>
+                                                                        </>
+                                                                ) : null}
+                                                                {!mfaChallenge.enrollment_required || mfaEnrollment ? (
+                                                                        <label className="field">
+                                                                                <span>Authenticator or recovery code</span>
+                                                                                <input autoComplete="one-time-code" value={mfaCode}
+                                                                                        onChange={(event) => setMfaCode(event.target.value)}
+                                                                                        placeholder={mfaChallenge.enrollment_required ? "123456" : "123456 or recovery code"}
+                                                                                        minLength={6} required autoFocus />
+                                                                        </label>
+                                                                ) : null}
+                                                                {authError ? <p className="error-text">{authError}</p> : null}
+                                                                {!mfaChallenge.enrollment_required || mfaEnrollment ? (
+                                                                        <button className="primary-button" type="submit" disabled={authBusy || mfaCode.trim().length < 6}>
+                                                                                {authBusy ? "Verifying…" : mfaChallenge.enrollment_required ? "Enable MFA and Continue" : "Verify and Sign In"}
+                                                                        </button>
+                                                                ) : null}
+                                                                <button className="text-button" type="button" onClick={cancelMFA} disabled={authBusy}>Back to sign in</button>
+                                                        </form>
+                                                ) : (
+                                                <>
                                                 <div className="auth-switcher">
                                                         <button
                                                                 className={
@@ -4336,6 +4432,8 @@ function App() {
                                                                         {authBusy ? "Signing in…" : "Enter Dashboard"}
                                                                 </button>
                                                         </form>
+                                                )}
+                                                </>
                                                 )}
                                         </div>
                                 </div>

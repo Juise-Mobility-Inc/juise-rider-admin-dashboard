@@ -945,9 +945,48 @@ export interface SchoolStudentRosterEntry {
   membership: UserSchoolMembership;
 }
 
-interface AuthAccountResponse {
-  user: NebulaUser;
+export interface MFAChallenge {
+  mfa_required: true;
+  enrollment_required: boolean;
+  mfa_token: string;
+  exp: number;
+}
+
+export interface MFAEnrollment {
+  otpauth_uri: string;
+  secret: string;
+  recovery_codes: string[];
+}
+
+interface MFACompletedResponse {
   tokens: AuthTokenBundle;
+  trusted_device_token: string;
+  trusted_device_expires: number;
+}
+
+const trustedDeviceStorageKey = "juise-rider-admin-dashboard.mfa-trusted-device";
+
+function readTrustedDeviceToken(): string {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(trustedDeviceStorageKey) ?? "null") as
+      | { token?: string; expires?: number }
+      | null;
+    if (!stored?.token || !stored.expires || stored.expires * 1000 <= Date.now()) {
+      window.localStorage.removeItem(trustedDeviceStorageKey);
+      return "";
+    }
+    return stored.token;
+  } catch {
+    window.localStorage.removeItem(trustedDeviceStorageKey);
+    return "";
+  }
+}
+
+function saveTrustedDevice(response: MFACompletedResponse) {
+  window.localStorage.setItem(
+    trustedDeviceStorageKey,
+    JSON.stringify({ token: response.trusted_device_token, expires: response.trusted_device_expires }),
+  );
 }
 
 export interface SignedSchoolMediaItem {
@@ -1211,19 +1250,26 @@ export async function loginWithIdentifier(
   identifier: string,
   password: string,
   authAppId: string,
-): Promise<AdminSession> {
-  const tokens = await request<AuthTokenBundle>("auth", "/api/v1/auth/login", {
+): Promise<MFAChallenge | AdminSession> {
+  const response = await request<MFAChallenge | AuthTokenBundle>("auth", "/api/v1/auth/login", {
     method: "POST",
     body: {
       identifier,
       password,
       app_id: authAppId,
+      trusted_device_token: readTrustedDeviceToken(),
     },
     authRequired: false,
     appIdHeader: authAppId,
     retryOnUnauthorized: false,
   });
+  if ("mfa_required" in response) {
+    return response;
+  }
+  return createAdminSession(response, authAppId);
+}
 
+async function createAdminSession(tokens: AuthTokenBundle, authAppId: string): Promise<AdminSession> {
   const claims = await inspectAccessToken(tokens, authAppId);
   if (!claims.admin) {
     throw new Error("This account is not marked as an admin user.");
@@ -1252,6 +1298,30 @@ export async function loginWithIdentifier(
   }
 }
 
+export async function beginMFAEnrollment(authAppId: string, mfaToken: string): Promise<MFAEnrollment> {
+  return request<MFAEnrollment>("auth", "/api/v1/auth/mfa/enroll", {
+    method: "POST", body: { mfa_token: mfaToken }, authRequired: false,
+    appIdHeader: authAppId, retryOnUnauthorized: false,
+  });
+}
+
+async function completeMFA(path: string, authAppId: string, mfaToken: string, code: string): Promise<AdminSession> {
+  const response = await request<MFACompletedResponse>("auth", path, {
+    method: "POST", body: { mfa_token: mfaToken, code }, authRequired: false,
+    appIdHeader: authAppId, retryOnUnauthorized: false,
+  });
+  saveTrustedDevice(response);
+  return createAdminSession(response.tokens, authAppId);
+}
+
+export function confirmMFAEnrollment(authAppId: string, mfaToken: string, code: string) {
+  return completeMFA("/api/v1/auth/mfa/confirm", authAppId, mfaToken, code);
+}
+
+export function verifyMFA(authAppId: string, mfaToken: string, code: string) {
+  return completeMFA("/api/v1/auth/mfa/verify", authAppId, mfaToken, code);
+}
+
 export async function createSchoolAdminAccount(
   authAppId: string,
   input: {
@@ -1264,7 +1334,7 @@ export async function createSchoolAdminAccount(
     phone?: string;
     password: string;
   },
-): Promise<AdminSession> {
+): Promise<MFAChallenge> {
   const payload: Record<string, unknown> = {
     app_id: authAppId,
     school_id: input.school_id,
@@ -1291,7 +1361,7 @@ export async function createSchoolAdminAccount(
     payload.phone = trimmedPhone;
   }
 
-  const response = await request<AuthAccountResponse>(
+  return request<MFAChallenge>(
     "auth",
     "/api/v1/user/create-school-admin",
     {
@@ -1303,19 +1373,6 @@ export async function createSchoolAdminAccount(
     },
   );
 
-  const claims = await inspectAccessToken(response.tokens, authAppId);
-  if (!claims.admin) {
-    throw new Error("The created account is not marked as an admin user.");
-  }
-
-  const session: AdminSession = {
-    authAppId,
-    tokens: response.tokens,
-    claims,
-    user: response.user,
-  };
-  updateSession(session);
-  return session;
 }
 
 export async function fetchSchools(managedAppId: string): Promise<School[]> {
