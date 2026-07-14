@@ -21,6 +21,7 @@ import {
         fetchNebulaUser,
         fetchPendingReservations,
         fetchSchoolParkingViolations,
+        fetchSchoolParkingIncidentReports,
         fetchSchoolRegisteredDevices,
         fetchSchool,
         fetchSchoolChallengeParticipants,
@@ -60,6 +61,7 @@ import {
         type SchoolTerm,
         type RegisteredDevice,
         type StudentProfileBundle,
+        type StudentParkingIncidentReport,
         updateSchoolChallenge,
         uploadSchoolChallengeImage,
         uploadSchoolLogoImage,
@@ -217,6 +219,17 @@ const dashboardSections: Array<{
 const sectionPathByName: Record<Section, string> = Object.fromEntries(
         dashboardSections.map(({ section, path }) => [section, path]),
 ) as Record<Section, string>;
+
+const openParkingReportStatuses = new Set(["submitted", "under_review"]);
+
+function countOpenParkingIncidentReports(
+        reports: StudentParkingIncidentReport[],
+): number {
+        return reports.filter((report) =>
+                report.active !== false &&
+                openParkingReportStatuses.has((report.status ?? "submitted").trim().toLowerCase()),
+        ).length;
+}
 
 interface BannerState {
         tone: BannerTone;
@@ -1446,6 +1459,7 @@ function App() {
         const [reservations, setReservations] = useState<PackSpotReservation[]>([]);
         const [pendingVehicleCount, setPendingVehicleCount] = useState<number | null>(null);
         const [openEnforcementCount, setOpenEnforcementCount] = useState<number | null>(null);
+        const [openParkingReportCount, setOpenParkingReportCount] = useState<number | null>(null);
         const [, setDashboardHeaderCounts] = useState<HeaderDashboardCounts>({
                 studentCount: null,
                 pendingReservationCount: null,
@@ -1465,6 +1479,12 @@ function App() {
         const currentSection = resolveSectionFromPathname(location.pathname) ?? "dashboard";
         const isChallengeGamesSection = currentSection === "challengeGames";
         const deferredStudentRosterSearch = useDeferredValue(studentRosterSearch);
+        const complianceEnforcementCount = useMemo(() => {
+                const enforcementCount = openEnforcementCount ?? 0;
+                const parkingReportCount = openParkingReportCount ?? 0;
+                const total = enforcementCount + parkingReportCount;
+                return total > 0 ? total : null;
+        }, [openEnforcementCount, openParkingReportCount]);
         const studentsDispatch = useAppDispatch();
         const {
                 schoolStudentMediaUrls,
@@ -2308,6 +2328,7 @@ function App() {
                 });
                 setPendingVehicleCount(null);
                 setOpenEnforcementCount(null);
+                setOpenParkingReportCount(null);
         }, [activeSchoolId, context.managedAppId]);
 
         useEffect(() => {
@@ -2346,6 +2367,28 @@ function App() {
                         })
                         .catch(() => {
                                 if (!cancelled) setOpenEnforcementCount(null);
+                        });
+                return () => {
+                        cancelled = true;
+                };
+        }, [session, activeSchoolId, context.managedAppId]);
+
+        useEffect(() => {
+                if (!session || !activeSchoolId) {
+                        setOpenParkingReportCount(null);
+                        return;
+                }
+                let cancelled = false;
+                fetchSchoolParkingIncidentReports(context.managedAppId, activeSchoolId, {
+                        limit: 1000,
+                })
+                        .then((reports) => {
+                                if (!cancelled) {
+                                        setOpenParkingReportCount(countOpenParkingIncidentReports(reports));
+                                }
+                        })
+                        .catch(() => {
+                                if (!cancelled) setOpenParkingReportCount(null);
                         });
                 return () => {
                         cancelled = true;
@@ -4641,6 +4684,7 @@ function App() {
                                                 studentRoster={sortedSchoolStudentRoster}
                                                 studentProfilePhotoUrls={schoolStudentProfilePhotoUrls}
                                                 onOpenStudent={handleOpenStudentFromDashboard}
+                                                onOpenReportCountChange={setOpenParkingReportCount}
                                         />
                                 );
                         case "studentRideViolations":
@@ -5123,10 +5167,9 @@ function App() {
                                                                 <span className="nav-group-header-label">
                                                                         Compliance Enforcement
                                                                         {!openNavGroups.parkingEnforcement &&
-                                                                                openEnforcementCount !== null &&
-                                                                                openEnforcementCount > 0 && (
+                                                                                complianceEnforcementCount !== null && (
                                                                                         <span className="nav-badge">
-                                                                                                {openEnforcementCount}
+                                                                                                {complianceEnforcementCount}
                                                                                         </span>
                                                                                 )}
                                                                 </span>
@@ -5160,6 +5203,12 @@ function App() {
 																								: "nav-sub-item"
 																				}>
 																				Parking Reports
+                                                                                {openParkingReportCount !== null &&
+                                                                                        openParkingReportCount > 0 && (
+                                                                                                <span className="nav-badge">
+                                                                                                        {openParkingReportCount}
+                                                                                                </span>
+                                                                                        )}
 																		</NavLink>
 																		<NavLink
 																				to="/student-ride-violations"

@@ -16,6 +16,7 @@ type Props = {
   studentRoster: SchoolStudentRosterEntry[];
   studentProfilePhotoUrls: Record<string, string>;
   onOpenStudent: (membershipUUID: string) => void;
+  onOpenReportCountChange?: (count: number) => void;
 };
 
 const statusOptions: Array<"all" | ParkingIncidentReportStatus> = [
@@ -117,6 +118,16 @@ function getReportStatusClass(status: ParkingIncidentReportStatus): string {
   }
 }
 
+function countOpenReports(reports: StudentParkingIncidentReport[]): number {
+  return reports.filter((report) => {
+    if (report.active === false) {
+      return false;
+    }
+    const status = (report.status ?? "submitted").trim().toLowerCase();
+    return status === "submitted" || status === "under_review";
+  }).length;
+}
+
 function formatLocationValue(report: StudentParkingIncidentReport): string {
   if (
     typeof report.violation_latitude !== "number" ||
@@ -133,6 +144,7 @@ export function ParkingReportsScreen({
   studentRoster,
   studentProfilePhotoUrls,
   onOpenStudent,
+  onOpenReportCountChange,
 }: Props) {
   const [statusFilter, setStatusFilter] = useState<
     "all" | ParkingIncidentReportStatus
@@ -215,11 +227,14 @@ export function ParkingReportsScreen({
   }, [reports, searchQuery, studentByMembership, studentByUser]);
 
   const refreshReports = useCallback(async () => {
+    const isUnfilteredReportView =
+      statusFilter === "all" && typeFilter === "all";
     if (!activeSchoolId || !managedAppId) {
       setReports([]);
       setSelectedReportId("");
       setDetailOpen(false);
       setSignedUrls({});
+      onOpenReportCountChange?.(0);
       return;
     }
     setLoadBusy(true);
@@ -236,6 +251,9 @@ export function ParkingReportsScreen({
         },
       );
       setReports(nextReports);
+      if (isUnfilteredReportView) {
+        onOpenReportCountChange?.(countOpenReports(nextReports));
+      }
       setSelectedReportId((current) => {
         if (nextReports.some((report) => report.report_uuid === current)) {
           return current;
@@ -278,7 +296,13 @@ export function ParkingReportsScreen({
     } finally {
       setLoadBusy(false);
     }
-  }, [activeSchoolId, managedAppId, statusFilter, typeFilter]);
+  }, [
+    activeSchoolId,
+    managedAppId,
+    onOpenReportCountChange,
+    statusFilter,
+    typeFilter,
+  ]);
 
   useEffect(() => {
     void refreshReports();
@@ -320,11 +344,15 @@ export function ParkingReportsScreen({
           student_visible_note: studentNoteDraft,
         },
       );
-      setReports((current) =>
-        current.map((report) =>
+      setReports((current) => {
+        const nextReports = current.map((report) =>
           report.report_uuid === updated.report_uuid ? updated : report,
-        ),
-      );
+        );
+        if (statusFilter === "all" && typeFilter === "all") {
+          onOpenReportCountChange?.(countOpenReports(nextReports));
+        }
+        return nextReports;
+      });
     } catch (nextError) {
       setError(getErrorMessage(nextError));
     } finally {
