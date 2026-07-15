@@ -8,8 +8,8 @@ This help center is written for dashboard users. You do not need technical or so
 
 If this is your first time using the dashboard:
 
-1. Follow [Getting started](customer-help/get-started/getting-started.md) to sign in and learn the layout.
-2. Use [Set up your school](customer-help/school-configuration/school-setup.md) if your organization is new to Juise.
+1. Follow [Getting started](getting-started.md) to sign in and learn the layout.
+2. Use [Set up your school](school-setup.md) if your organization is new to Juise.
 3. Open the guide for the task you need to complete.
 
 ## What you can manage

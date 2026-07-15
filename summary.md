@@ -1,6 +1,7 @@
-# Table of contents
+# Guide index
 
-* [Juise Rider Admin Dashboard](README.md)
+Use these task guides for common dashboard workflows:
+
 * [Getting started](getting-started.md)
 * [Set up your school](school-setup.md)
 * [Manage students and vehicles](students-and-vehicles.md)
@@ -9,5 +10,3 @@
 * [Engage students](student-engagement.md)
 * [Download reports](reports.md)
 * [Troubleshooting and support](troubleshooting.md)
-* [Admin dashboard reference](dashboard-customer-guide.md)
-* [Guide index](summary.md)
