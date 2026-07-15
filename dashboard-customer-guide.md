@@ -436,9 +436,6 @@ Treat exports as sensitive school and student data. Store, transmit, and delete 
 | Term            | Meaning                                                                                    |
 | --------------- | ------------------------------------------------------------------------------------------ |
 | Active          | Eligible to be used for new customer activity or matching.                                 |
-| App ID          | Identifier for the Juise application whose records are being managed.                      |
-| Beacon          | Bluetooth identifier attached to or associated with a registered device.                   |
-| Campus ID       | Identifier for a campus within the school.                                                 |
 | Challenge       | Time-limited goal based on distance, points, or configured activity.                       |
 | Checkpoint/stop | GPS destination within a scavenger-hunt challenge game.                                    |
 | Device UUID     | Internal unique identifier for a registered device.                                        |
@@ -449,7 +446,6 @@ Treat exports as sensitive school and student data. Store, transmit, and delete 
 | Powertrain      | How a device is powered, commonly electric or non-electric.                                |
 | Recovery code   | One-time backup code used instead of an authenticator code.                                |
 | Reservation     | Student request or approval to use a pack/spot during a term.                              |
-| School ID       | Stable identifier used to scope data to a school.                                          |
 | Sighting        | A recorded observation of a beacon at a time and location.                                 |
 | Spot            | Individual parking space within a Juise Pack.                                              |
 | TOTP/2FA        | Rotating authenticator code used as a second sign-in factor.                               |
@@ -472,7 +468,6 @@ Before completing a customer-impacting action:
 
 When reporting a dashboard issue, provide:
 
-- the school ID;
 - the page and action being used;
 - the affected student, device, report, reservation, or challenge UUID;
 - the approximate time of the issue and your time zone; and

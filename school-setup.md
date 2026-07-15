@@ -16,8 +16,6 @@ Complete school configuration before opening parking or mobility programs to stu
 
 Use **School Profile** to manage the school name, campus defaults, logo, colors, and active status. Save the profile before uploading media or configuring other campus features.
 
-The School ID is a stable identifier. Do not change it after launch unless Juise support instructs you to do so. Metadata is an advanced structured setting and should also be changed only with guidance.
-
 ## School Terms
 
 A term is the date range used by term-based programs such as parking reservations.
@@ -44,4 +42,3 @@ Draw or import the boundary, select the appropriate zone type, and review enforc
 A point of interest (POI) is a mapped destination or check-in area. Enter its coordinates, check-in radius, bonus points, and active status. Confirm the physical location on the map before saving.
 
 When importing zones or POIs from CSV, inspect the preview and verify coordinates, distance units, and reward values before completing the import.
-
