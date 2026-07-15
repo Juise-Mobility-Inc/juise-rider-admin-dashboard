@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
+  assignSchoolParkingIncidentReport,
+  clearSchoolParkingIncidentReportFlag,
+  fetchParkingViolationFeeRules,
   fetchSchoolParkingIncidentReports,
+  fetchSchoolRegisteredDevices,
+  flagSchoolParkingIncidentReport,
+  issueSchoolParkingIncidentReportViolation,
   signSchoolMedia,
+  type ParkingViolationFeeRule,
   type ParkingIncidentReportStatus,
   type ParkingIncidentReportType,
+  type RegisteredDeviceReviewEntry,
   type SchoolStudentRosterEntry,
   type StudentParkingIncidentReport,
   updateSchoolParkingIncidentReport,
@@ -123,10 +131,14 @@ function countOpenReports(reports: StudentParkingIncidentReport[]): number {
     if (report.active === false) {
       return false;
     }
-    const status = (report.status ?? "submitted").trim().toLowerCase();
-    return status === "submitted" || status === "under_review";
-  }).length;
-}
+	    const status = (report.status ?? "submitted").trim().toLowerCase();
+	    return (
+	      status === "submitted" ||
+	      status === "under_review" ||
+	      (report.flagged_for_enforcement === true && !report.flag_resolved_at)
+	    );
+	  }).length;
+	}
 
 function formatLocationValue(report: StudentParkingIncidentReport): string {
   if (
@@ -136,6 +148,20 @@ function formatLocationValue(report: StudentParkingIncidentReport): string {
     return "Location unavailable";
   }
   return `${report.violation_latitude.toFixed(6)}, ${report.violation_longitude.toFixed(6)}`;
+}
+
+function getDeviceLabel(entry: RegisteredDeviceReviewEntry): string {
+  const device = entry.device;
+  return (
+    device.nickname?.trim() ||
+    [device.make, device.model].filter(Boolean).join(" ").trim() ||
+    device.serial_number?.trim() ||
+    device.registered_device_uuid
+  );
+}
+
+function centsToDollars(value: number): string {
+  return (value / 100).toFixed(2);
 }
 
 export function ParkingReportsScreen({
@@ -167,13 +193,31 @@ export function ParkingReportsScreen({
   const [reports, setReports] = useState<StudentParkingIncidentReport[]>([]);
   const [selectedReportId, setSelectedReportId] = useState("");
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  const [registeredDevices, setRegisteredDevices] = useState<
+    RegisteredDeviceReviewEntry[]
+  >([]);
+  const [feeRules, setFeeRules] = useState<ParkingViolationFeeRule[]>([]);
   const [loadBusy, setLoadBusy] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
+  const [actionBusy, setActionBusy] = useState("");
+  const [issueModalOpen, setIssueModalOpen] = useState(false);
   const [error, setError] = useState("");
   const [statusDraft, setStatusDraft] =
     useState<ParkingIncidentReportStatus>("submitted");
   const [adminNotesDraft, setAdminNotesDraft] = useState("");
   const [studentNoteDraft, setStudentNoteDraft] = useState("");
+  const [assignedUserDraft, setAssignedUserDraft] = useState("");
+  const [assignedDeviceDraft, setAssignedDeviceDraft] = useState("");
+  const [assignmentNoteDraft, setAssignmentNoteDraft] = useState("");
+  const [flagPriorityDraft, setFlagPriorityDraft] = useState<"normal" | "urgent">(
+    "normal",
+  );
+  const [flagNoteDraft, setFlagNoteDraft] = useState("");
+  const [issueViolationType, setIssueViolationType] = useState("other");
+  const [issueStatus, setIssueStatus] = useState("reported");
+  const [issueAmountDollars, setIssueAmountDollars] = useState("");
+  const [issueAdminNotes, setIssueAdminNotes] = useState("");
+  const [issueStudentNote, setIssueStudentNote] = useState("");
 
   const studentByMembership = useMemo(() => {
     const map = new Map<string, SchoolStudentRosterEntry>();
@@ -309,6 +353,32 @@ export function ParkingReportsScreen({
   }, [refreshReports]);
 
   useEffect(() => {
+    let cancelled = false;
+    if (!activeSchoolId || !managedAppId) {
+      setRegisteredDevices([]);
+      setFeeRules([]);
+      return;
+    }
+	    Promise.allSettled([
+	      fetchSchoolRegisteredDevices(managedAppId, activeSchoolId),
+	      fetchParkingViolationFeeRules(managedAppId, activeSchoolId, {
+	        includeInactive: true,
+	      }),
+	    ]).then(([deviceResult, feeRuleResult]) => {
+      if (cancelled) {
+        return;
+      }
+      setRegisteredDevices(
+        deviceResult.status === "fulfilled" ? deviceResult.value : [],
+      );
+      setFeeRules(feeRuleResult.status === "fulfilled" ? feeRuleResult.value : []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSchoolId, managedAppId]);
+
+  useEffect(() => {
     if (detailOpen && !selectedReport) {
       setDetailOpen(false);
     }
@@ -319,12 +389,30 @@ export function ParkingReportsScreen({
       setStatusDraft("submitted");
       setAdminNotesDraft("");
       setStudentNoteDraft("");
+      setAssignedUserDraft("");
+      setAssignedDeviceDraft("");
+      setAssignmentNoteDraft("");
+      setFlagPriorityDraft("normal");
+      setFlagNoteDraft("");
+      setIssueModalOpen(false);
       return;
     }
     setDetailTab("evidence");
     setStatusDraft(selectedReport.status);
     setAdminNotesDraft(selectedReport.admin_notes ?? "");
     setStudentNoteDraft(selectedReport.student_visible_note ?? "");
+    setAssignedUserDraft(selectedReport.assigned_user_uuid ?? "");
+    setAssignedDeviceDraft(selectedReport.assigned_registered_device_uuid ?? "");
+    setAssignmentNoteDraft(selectedReport.assignment_note ?? "");
+    setFlagPriorityDraft(
+      selectedReport.flag_priority === "urgent" ? "urgent" : "normal",
+    );
+    setFlagNoteDraft(selectedReport.flag_note ?? "");
+    setIssueViolationType("other");
+    setIssueStatus("reported");
+    setIssueAmountDollars("");
+    setIssueAdminNotes(selectedReport.admin_notes ?? "");
+    setIssueStudentNote(selectedReport.student_visible_note ?? "");
   }, [selectedReport]);
 
   async function saveSelectedReport() {
@@ -360,6 +448,154 @@ export function ParkingReportsScreen({
     }
   }
 
+  function replaceReport(updated: StudentParkingIncidentReport) {
+    setReports((current) => {
+      const nextReports = current.map((report) =>
+        report.report_uuid === updated.report_uuid ? updated : report,
+      );
+      if (statusFilter === "all" && typeFilter === "all") {
+        onOpenReportCountChange?.(countOpenReports(nextReports));
+      }
+      return nextReports;
+    });
+  }
+
+  async function saveAssignment() {
+    if (!selectedReport || !assignedUserDraft) {
+      setError("Choose a responsible student before saving assignment.");
+      return;
+    }
+    setActionBusy("assignment");
+    setError("");
+    try {
+      const membershipUUID =
+        assignmentDraftStudent?.membership.membership_uuid ??
+        selectedReport.assigned_membership_uuid ??
+        null;
+      const updated = await assignSchoolParkingIncidentReport(
+        selectedReport.app_id || managedAppId,
+        selectedReport.school_id || activeSchoolId,
+        selectedReport.report_uuid,
+        {
+          assigned_user_uuid: assignedUserDraft,
+          assigned_membership_uuid: membershipUUID,
+          assigned_registered_device_uuid: assignedDeviceDraft || null,
+          assignment_note: assignmentNoteDraft,
+        },
+      );
+      replaceReport(updated);
+    } catch (nextError) {
+      setError(getErrorMessage(nextError));
+    } finally {
+      setActionBusy("");
+    }
+  }
+
+  async function saveFlag() {
+    if (!selectedReport) {
+      return;
+    }
+    setActionBusy("flag");
+    setError("");
+    try {
+      const updated = await flagSchoolParkingIncidentReport(
+        selectedReport.app_id || managedAppId,
+        selectedReport.school_id || activeSchoolId,
+        selectedReport.report_uuid,
+        {
+          priority: flagPriorityDraft,
+          note: flagNoteDraft,
+        },
+      );
+      replaceReport(updated);
+    } catch (nextError) {
+      setError(getErrorMessage(nextError));
+    } finally {
+      setActionBusy("");
+    }
+  }
+
+  async function clearFlag() {
+    if (!selectedReport) {
+      return;
+    }
+    setActionBusy("clear-flag");
+    setError("");
+    try {
+      const updated = await clearSchoolParkingIncidentReportFlag(
+        selectedReport.app_id || managedAppId,
+        selectedReport.school_id || activeSchoolId,
+        selectedReport.report_uuid,
+      );
+      replaceReport(updated);
+    } catch (nextError) {
+      setError(getErrorMessage(nextError));
+    } finally {
+      setActionBusy("");
+    }
+  }
+
+  async function issueViolation() {
+    if (!selectedReport) {
+      return;
+    }
+    const responsibleUserUUID =
+      assignedUserDraft || selectedReport.assigned_user_uuid || "";
+    if (!responsibleUserUUID) {
+      setError("Choose a responsible student before issuing a violation.");
+      return;
+    }
+    const amountCents =
+      issueAmountDollars.trim() === ""
+        ? null
+        : Math.max(0, Math.round(Number(issueAmountDollars) * 100));
+    if (issueAmountDollars.trim() !== "" && !Number.isFinite(amountCents ?? NaN)) {
+      setError("Enter a valid dollar amount.");
+      return;
+    }
+    setActionBusy("issue");
+    setError("");
+    try {
+      const response = await issueSchoolParkingIncidentReportViolation(
+        selectedReport.app_id || managedAppId,
+        selectedReport.school_id || activeSchoolId,
+        selectedReport.report_uuid,
+        {
+          user_uuid: responsibleUserUUID,
+          membership_uuid:
+            assignmentDraftStudent?.membership.membership_uuid ??
+            selectedReport.assigned_membership_uuid ??
+            null,
+          registered_device_uuid:
+            assignedDeviceDraft ||
+            selectedReport.assigned_registered_device_uuid ||
+            null,
+          violation_type: issueViolationType,
+          description: selectedReport.description || "Parking incident report",
+          status: issueStatus,
+          admin_notes: issueAdminNotes,
+          student_visible_note: issueStudentNote,
+          payment_amount_cents: amountCents,
+          payment_requested_at:
+            issueStatus === "awaiting_payment"
+              ? Math.floor(Date.now() / 1000)
+              : null,
+          violation_latitude: selectedReport.violation_latitude ?? null,
+          violation_longitude: selectedReport.violation_longitude ?? null,
+          location_accuracy_meters:
+            selectedReport.location_accuracy_meters ?? null,
+          location_captured_at: selectedReport.location_captured_at ?? null,
+        },
+      );
+      replaceReport(response.report);
+      setIssueModalOpen(false);
+    } catch (nextError) {
+      setError(getErrorMessage(nextError));
+    } finally {
+      setActionBusy("");
+    }
+  }
+
   const incidentObjectKey = getMediaObjectKey(selectedReport, "incident_photo");
   const qrObjectKey = getMediaObjectKey(selectedReport, "device_qr_photo");
   const incidentPhotoUrl = incidentObjectKey
@@ -374,6 +610,32 @@ export function ParkingReportsScreen({
       studentByUser.get(selectedReport.reporter_user_uuid));
   const selectedReporterAvatar = selectedReporter?.user.k_guid
     ? studentProfilePhotoUrls[selectedReporter.user.k_guid]
+    : "";
+  const selectedAssignedStudent = selectedReport?.assigned_user_uuid
+    ? studentByUser.get(selectedReport.assigned_user_uuid)
+    : undefined;
+  const selectedAssignedStudentLabel =
+    selectedAssignedStudent && selectedReport
+      ? getReporterLabel(
+          {
+            ...selectedReport,
+            reporter_user_uuid: selectedAssignedStudent.user.k_guid,
+            reporter_membership_uuid:
+              selectedAssignedStudent.membership.membership_uuid,
+          },
+          studentByMembership,
+          studentByUser,
+        )
+      : selectedReport?.assigned_user_uuid || "";
+  const assignmentDraftStudent = assignedUserDraft
+    ? studentByUser.get(assignedUserDraft)
+    : undefined;
+  const assignmentDraftDevices = registeredDevices.filter(
+    (entry) => entry.device.user_uuid === assignedUserDraft,
+  );
+  const activeFeeRules = feeRules.filter((rule) => rule.active !== false);
+  const linkedViolationLabel = selectedReport?.linked_violation_uuid
+    ? `Official violation ${selectedReport.linked_violation_uuid}`
     : "";
   const hasLocation =
     typeof selectedReport?.violation_latitude === "number" &&
@@ -569,15 +831,27 @@ export function ParkingReportsScreen({
                               {report.description}
                             </div>
                           </td>
-                          <td>
-                            <span
-                              className={`cd-status ${getReportStatusClass(
-                                report.status,
-                              )}`}
-                            >
-                              {formatStatus(report.status)}
-                            </span>
-                          </td>
+	                          <td>
+	                            <div className="parking-report-status-stack">
+	                              <span
+	                                className={`cd-status ${getReportStatusClass(
+	                                  report.status,
+	                                )}`}
+	                              >
+	                                {formatStatus(report.status)}
+	                              </span>
+	                              {report.flagged_for_enforcement ? (
+	                                <span className="cd-status cd-status-declined">
+	                                  {report.flag_priority === "urgent"
+	                                    ? "Urgent flag"
+	                                    : "Flagged"}
+	                                </span>
+	                              ) : null}
+	                              {report.assigned_user_uuid ? (
+	                                <span className="cd-tag">Assigned</span>
+	                              ) : null}
+	                            </div>
+	                          </td>
                           <td className="cd-table-date">
                             {formatDateTime(report.created_at)}
                           </td>
@@ -639,14 +913,21 @@ export function ParkingReportsScreen({
                       Submitted {formatDateTime(selectedReport.created_at)}
                     </p>
                   </div>
-                  <span
-                    className={`cd-status ${getReportStatusClass(
-                      selectedReport.status,
-                    )}`}
-                  >
-                    {formatStatus(selectedReport.status)}
-                  </span>
-                </div>
+	                  <span
+	                    className={`cd-status ${getReportStatusClass(
+	                      selectedReport.status,
+	                    )}`}
+	                  >
+	                    {formatStatus(selectedReport.status)}
+	                  </span>
+	                  {selectedReport.flagged_for_enforcement ? (
+	                    <span className="cd-status cd-status-declined">
+	                      {selectedReport.flag_priority === "urgent"
+	                        ? "Urgent enforcement flag"
+	                        : "Flagged for enforcement"}
+	                    </span>
+	                  ) : null}
+	                </div>
 
                 <div className="penalty-report-detail-grid">
                   <div className="penalty-report-student-card">
@@ -705,11 +986,19 @@ export function ParkingReportsScreen({
                     <span>Updated</span>
                     <strong>{formatDateTime(selectedReport.updated_at)}</strong>
                   </div>
-                  <div>
-                    <span>Status</span>
-                    <strong>{formatStatus(selectedReport.status)}</strong>
-                  </div>
-                  <div className="penalty-report-location-card">
+	                  <div>
+	                    <span>Status</span>
+	                    <strong>{formatStatus(selectedReport.status)}</strong>
+	                  </div>
+	                  <div>
+	                    <span>Responsible student</span>
+	                    <strong>{selectedAssignedStudentLabel || "Unassigned"}</strong>
+	                  </div>
+	                  <div>
+	                    <span>Linked violation</span>
+	                    <strong>{linkedViolationLabel || "None"}</strong>
+	                  </div>
+	                  <div className="penalty-report-location-card">
                     <span>Report location</span>
                     <strong>{formatLocationValue(selectedReport)}</strong>
                     {selectedReport.location_accuracy_meters ? (
@@ -817,10 +1106,154 @@ export function ParkingReportsScreen({
                   </div>
                 ) : null}
 
-                {detailTab === "review" ? (
-                  <div className="parking-report-review-panel">
-                    <div className="vr-form-block">
-                      <p className="vr-block-label">Set status</p>
+	                {detailTab === "review" ? (
+	                  <div className="parking-report-review-panel">
+	                    <div className="vr-form-block">
+	                      <p className="vr-block-label">Responsible student</p>
+	                      <p className="muted">
+	                        Saving an assignment immediately notifies the selected
+	                        student.
+	                      </p>
+	                      <div className="penalty-report-form-grid">
+	                        <label className="field">
+	                          <span>Student</span>
+	                          <select
+	                            value={assignedUserDraft}
+	                            onChange={(event) => {
+	                              setAssignedUserDraft(event.target.value);
+	                              setAssignedDeviceDraft("");
+	                            }}
+	                          >
+	                            <option value="">Choose a student</option>
+	                            {studentRoster.map((entry) => {
+	                              const name = [
+	                                entry.user.first_name,
+	                                entry.user.last_name,
+	                              ]
+	                                .filter(Boolean)
+	                                .join(" ")
+	                                .trim();
+	                              return (
+	                                <option
+	                                  key={entry.membership.membership_uuid}
+	                                  value={entry.user.k_guid}
+	                                >
+	                                  {name ||
+	                                    entry.user.username ||
+	                                    entry.user.email ||
+	                                    entry.user.k_guid}
+	                                  {entry.membership.student_id
+	                                    ? ` · ${entry.membership.student_id}`
+	                                    : ""}
+	                                </option>
+	                              );
+	                            })}
+	                          </select>
+	                        </label>
+	                        <label className="field">
+	                          <span>Device</span>
+	                          <select
+	                            value={assignedDeviceDraft}
+	                            onChange={(event) =>
+	                              setAssignedDeviceDraft(event.target.value)
+	                            }
+	                            disabled={!assignedUserDraft}
+	                          >
+	                            <option value="">No device selected</option>
+	                            {assignmentDraftDevices.map((entry) => (
+	                              <option
+	                                key={entry.device.registered_device_uuid}
+	                                value={entry.device.registered_device_uuid}
+	                              >
+	                                {getDeviceLabel(entry)}
+	                              </option>
+	                            ))}
+	                          </select>
+	                        </label>
+	                      </div>
+	                      <label className="field">
+	                        <span>Assignment note</span>
+	                        <textarea
+	                          value={assignmentNoteDraft}
+	                          onChange={(event) =>
+	                            setAssignmentNoteDraft(event.target.value)
+	                          }
+	                          rows={3}
+	                        />
+	                      </label>
+	                      <div className="penalty-report-actions">
+	                        <button
+	                          type="button"
+	                          className="primary-button"
+	                          disabled={actionBusy === "assignment"}
+	                          onClick={() => void saveAssignment()}
+	                        >
+	                          {actionBusy === "assignment"
+	                            ? "Saving..."
+	                            : "Save assignment"}
+	                        </button>
+	                      </div>
+	                    </div>
+
+	                    <div className="vr-form-block">
+	                      <p className="vr-block-label">Enforcement flag</p>
+	                      <div className="penalty-report-form-grid">
+	                        <label className="field">
+	                          <span>Priority</span>
+	                          <select
+	                            value={flagPriorityDraft}
+	                            onChange={(event) =>
+	                              setFlagPriorityDraft(
+	                                event.target.value === "urgent"
+	                                  ? "urgent"
+	                                  : "normal",
+	                              )
+	                            }
+	                          >
+	                            <option value="normal">Normal</option>
+	                            <option value="urgent">Urgent</option>
+	                          </select>
+	                        </label>
+	                        <label className="field">
+	                          <span>Flag note</span>
+	                          <input
+	                            value={flagNoteDraft}
+	                            onChange={(event) =>
+	                              setFlagNoteDraft(event.target.value)
+	                            }
+	                            placeholder="What should enforcement know?"
+	                          />
+	                        </label>
+	                      </div>
+	                      <div className="penalty-report-actions">
+	                        <button
+	                          type="button"
+	                          className="primary-button"
+	                          disabled={actionBusy === "flag"}
+	                          onClick={() => void saveFlag()}
+	                        >
+	                          {actionBusy === "flag"
+	                            ? "Flagging..."
+	                            : "Flag for enforcement"}
+	                        </button>
+	                        <button
+	                          type="button"
+	                          className="secondary-button"
+	                          disabled={
+	                            actionBusy === "clear-flag" ||
+	                            !selectedReport.flagged_for_enforcement
+	                          }
+	                          onClick={() => void clearFlag()}
+	                        >
+	                          {actionBusy === "clear-flag"
+	                            ? "Clearing..."
+	                            : "Clear flag"}
+	                        </button>
+	                      </div>
+	                    </div>
+
+	                    <div className="vr-form-block">
+	                      <p className="vr-block-label">Set status</p>
                       <div className="vr-status-grid">
                         {statusOptions
                           .filter((status) => status !== "all")
@@ -872,17 +1305,27 @@ export function ParkingReportsScreen({
                       </label>
                     </div>
 
-                    <div className="penalty-report-actions">
-                      <button
+	                    <div className="penalty-report-actions">
+	                      <button
                         type="button"
                         className="primary-button"
                         disabled={saveBusy}
                         onClick={() => void saveSelectedReport()}
                       >
-                        {saveBusy ? "Saving..." : "Save review"}
-                      </button>
-                    </div>
-                  </div>
+	                        {saveBusy ? "Saving..." : "Save review"}
+	                      </button>
+	                      <button
+	                        type="button"
+	                        className="secondary-button"
+	                        disabled={!!selectedReport.linked_violation_uuid}
+	                        onClick={() => setIssueModalOpen(true)}
+	                      >
+	                        {selectedReport.linked_violation_uuid
+	                          ? "Violation already issued"
+	                          : "Issue official violation"}
+	                      </button>
+	                    </div>
+	                  </div>
                 ) : null}
               </article>
             </>
@@ -913,8 +1356,8 @@ export function ParkingReportsScreen({
         </div>
       </div>
 
-      {filterModalOpen ? (
-        <div
+	      {filterModalOpen ? (
+	        <div
           className="management-modal-backdrop"
           role="dialog"
           aria-modal="true"
@@ -994,8 +1437,131 @@ export function ParkingReportsScreen({
               </button>
             </div>
           </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
+	        </div>
+	      ) : null}
+
+	      {issueModalOpen && selectedReport ? (
+	        <div
+	          className="management-modal-backdrop"
+	          role="dialog"
+	          aria-modal="true"
+	          aria-labelledby="parking-report-issue-title"
+	          onClick={() => setIssueModalOpen(false)}
+	        >
+	          <div
+	            className="management-modal-sheet parking-report-filter-modal"
+	            onClick={(event) => event.stopPropagation()}
+	          >
+	            <div className="management-modal-header">
+	              <div>
+	                <p className="section-eyebrow">Official enforcement</p>
+	                <h3 id="parking-report-issue-title">
+	                  Issue parking violation
+	                </h3>
+	                <p className="muted">
+	                  This creates a formal parking violation and notifies the
+	                  responsible student through the normal ticket flow.
+	                </p>
+	              </div>
+	              <button
+	                className="management-modal-close"
+	                type="button"
+	                onClick={() => setIssueModalOpen(false)}
+	              >
+	                Close
+	              </button>
+	            </div>
+	            <div className="parking-report-filter-grid">
+	              <label>
+	                Violation type
+	                <select
+	                  value={issueViolationType}
+	                  onChange={(event) => {
+	                    const nextType = event.target.value;
+	                    setIssueViolationType(nextType);
+	                    const rule = activeFeeRules.find(
+	                      (item) => item.violation_type === nextType,
+	                    );
+	                    if (rule) {
+	                      setIssueAmountDollars(centsToDollars(rule.amount_cents));
+	                    }
+	                  }}
+	                >
+	                  <option value="other">Other</option>
+	                  {activeFeeRules.map((rule) => (
+	                    <option
+	                      key={rule.fee_rule_uuid}
+	                      value={rule.violation_type}
+	                    >
+	                      {rule.label || formatStatus(rule.violation_type)} · $
+	                      {centsToDollars(rule.amount_cents)}
+	                    </option>
+	                  ))}
+	                </select>
+	              </label>
+	              <label>
+	                Status
+	                <select
+	                  value={issueStatus}
+	                  onChange={(event) => setIssueStatus(event.target.value)}
+	                >
+	                  <option value="reported">Reported</option>
+	                  <option value="awaiting_payment">Awaiting payment</option>
+	                  <option value="under_review">Under review</option>
+	                </select>
+	              </label>
+	              <label>
+	                Fee / punishment amount
+	                <input
+	                  value={issueAmountDollars}
+	                  onChange={(event) =>
+	                    setIssueAmountDollars(event.target.value)
+	                  }
+	                  placeholder="0.00"
+	                  inputMode="decimal"
+	                />
+	              </label>
+	              <label>
+	                Student note
+	                <input
+	                  value={issueStudentNote}
+	                  onChange={(event) =>
+	                    setIssueStudentNote(event.target.value)
+	                  }
+	                  placeholder="Visible to the student"
+	                />
+	              </label>
+	            </div>
+	            <label className="field">
+	              <span>Internal admin notes</span>
+	              <textarea
+	                value={issueAdminNotes}
+	                onChange={(event) => setIssueAdminNotes(event.target.value)}
+	                rows={4}
+	              />
+	            </label>
+	            <div className="parking-report-filter-actions">
+	              <button
+	                className="secondary-button"
+	                type="button"
+	                onClick={() => setIssueModalOpen(false)}
+	              >
+	                Cancel
+	              </button>
+	              <button
+	                className="primary-button"
+	                type="button"
+	                disabled={actionBusy === "issue"}
+	                onClick={() => void issueViolation()}
+	              >
+	                {actionBusy === "issue"
+	                  ? "Issuing..."
+	                  : "Issue violation"}
+	              </button>
+	            </div>
+	          </div>
+	        </div>
+	      ) : null}
+	    </div>
+	  );
+	}

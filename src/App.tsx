@@ -235,13 +235,14 @@ function countOpenParkingIncidentReports(
   reports: StudentParkingIncidentReport[],
 ): number {
   return reports.filter(
-    (report) =>
-      report.active !== false &&
-      openParkingReportStatuses.has(
-        (report.status ?? "submitted").trim().toLowerCase(),
-      ),
-  ).length;
-}
+	    (report) =>
+	      report.active !== false &&
+	      (openParkingReportStatuses.has(
+	        (report.status ?? "submitted").trim().toLowerCase(),
+	      ) ||
+	        (report.flagged_for_enforcement === true && !report.flag_resolved_at)),
+	  ).length;
+	}
 
 interface BannerState {
   tone: BannerTone;

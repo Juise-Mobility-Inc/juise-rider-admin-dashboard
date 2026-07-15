@@ -2428,6 +2428,7 @@ export interface StudentParkingViolation {
   payment_requested_at?: number | null;
   payment_collected_at?: number | null;
   payment_transaction_id?: string | null;
+  source_incident_report_uuid?: string | null;
   payment_charge_error?: string | null;
   payment_charge_status?: number | null;
   violation_latitude?: number | null;
@@ -2497,6 +2498,20 @@ export interface StudentParkingIncidentReport {
   admin_notes?: string;
   reviewed_by_user_uuid?: string | null;
   reviewed_at?: number | null;
+  assigned_user_uuid?: string | null;
+  assigned_membership_uuid?: string | null;
+  assigned_registered_device_uuid?: string | null;
+  assigned_by_user_uuid?: string | null;
+  assigned_at?: number | null;
+  assignment_note?: string;
+  flagged_for_enforcement?: boolean;
+  flag_priority?: "normal" | "urgent" | string;
+  flag_note?: string;
+  flagged_by_user_uuid?: string | null;
+  flagged_at?: number | null;
+  flag_resolved_at?: number | null;
+  linked_violation_uuid?: string | null;
+  violation_issued_at?: number | null;
   active: boolean;
   created_at: number;
   updated_at: number;
@@ -2508,6 +2523,40 @@ export interface StudentParkingIncidentReportUpdateInput {
   admin_notes?: string;
   student_visible_note?: string;
   active?: boolean;
+}
+
+export interface StudentParkingIncidentReportAssignmentInput {
+  assigned_user_uuid: string;
+  assigned_membership_uuid?: string | null;
+  assigned_registered_device_uuid?: string | null;
+  assignment_note?: string;
+}
+
+export interface StudentParkingIncidentReportFlagInput {
+  priority?: "normal" | "urgent";
+  note?: string;
+}
+
+export interface StudentParkingIncidentReportIssueViolationInput {
+  user_uuid: string;
+  membership_uuid?: string | null;
+  registered_device_uuid?: string | null;
+  violation_type?: string;
+  description: string;
+  status?: string;
+  admin_notes?: string;
+  student_visible_note?: string;
+  payment_amount_cents?: number | null;
+  payment_requested_at?: number | null;
+  violation_latitude?: number | null;
+  violation_longitude?: number | null;
+  location_accuracy_meters?: number | null;
+  location_captured_at?: number | null;
+}
+
+export interface StudentParkingIncidentReportIssueViolationResponse {
+  report: StudentParkingIncidentReport;
+  violation: StudentParkingViolation;
 }
 
 function mergeParkingIncidentReportResults(
@@ -2845,6 +2894,76 @@ export async function updateSchoolParkingIncidentReport(
     `/api/v1/admin/school/${encodeURIComponent(schoolId)}/parking-incident-reports/${encodeURIComponent(reportUUID)}?${search.toString()}`,
     {
       method: "PATCH",
+      body: input,
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function assignSchoolParkingIncidentReport(
+  managedAppId: string,
+  schoolId: string,
+  reportUUID: string,
+  input: StudentParkingIncidentReportAssignmentInput,
+): Promise<StudentParkingIncidentReport> {
+  const search = new URLSearchParams({ managed_app_id: managedAppId });
+  return request<StudentParkingIncidentReport>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/parking-incident-reports/${encodeURIComponent(reportUUID)}/assignment?${search.toString()}`,
+    {
+      method: "PATCH",
+      body: input,
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function flagSchoolParkingIncidentReport(
+  managedAppId: string,
+  schoolId: string,
+  reportUUID: string,
+  input: StudentParkingIncidentReportFlagInput,
+): Promise<StudentParkingIncidentReport> {
+  const search = new URLSearchParams({ managed_app_id: managedAppId });
+  return request<StudentParkingIncidentReport>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/parking-incident-reports/${encodeURIComponent(reportUUID)}/flag?${search.toString()}`,
+    {
+      method: "POST",
+      body: input,
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function clearSchoolParkingIncidentReportFlag(
+  managedAppId: string,
+  schoolId: string,
+  reportUUID: string,
+): Promise<StudentParkingIncidentReport> {
+  const search = new URLSearchParams({ managed_app_id: managedAppId });
+  return request<StudentParkingIncidentReport>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/parking-incident-reports/${encodeURIComponent(reportUUID)}/clear-flag?${search.toString()}`,
+    {
+      method: "POST",
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
+export async function issueSchoolParkingIncidentReportViolation(
+  managedAppId: string,
+  schoolId: string,
+  reportUUID: string,
+  input: StudentParkingIncidentReportIssueViolationInput,
+): Promise<StudentParkingIncidentReportIssueViolationResponse> {
+  const search = new URLSearchParams({ managed_app_id: managedAppId });
+  return request<StudentParkingIncidentReportIssueViolationResponse>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/parking-incident-reports/${encodeURIComponent(reportUUID)}/issue-violation?${search.toString()}`,
+    {
+      method: "POST",
       body: input,
       appIdHeader: currentSession?.authAppId ?? managedAppId,
     },
