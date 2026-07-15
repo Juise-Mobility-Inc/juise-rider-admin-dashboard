@@ -2478,6 +2478,11 @@ export type ParkingIncidentReportStatus =
   | "resolved"
   | "dismissed";
 
+export type ParkingIncidentResponsibilityConsequence =
+  | "none"
+  | "points"
+  | "fine";
+
 export interface StudentParkingIncidentReport {
   report_uuid: string;
   app_id: string;
@@ -2512,6 +2517,12 @@ export interface StudentParkingIncidentReport {
   flag_resolved_at?: number | null;
   linked_violation_uuid?: string | null;
   violation_issued_at?: number | null;
+  responsibility_consequence?: ParkingIncidentResponsibilityConsequence | string;
+  responsibility_points_lost?: number;
+  responsibility_fine_cents?: number | null;
+  responsibility_note?: string;
+  responsibility_decided_by_user_uuid?: string | null;
+  responsibility_decided_at?: number | null;
   active: boolean;
   created_at: number;
   updated_at: number;
@@ -2530,6 +2541,10 @@ export interface StudentParkingIncidentReportAssignmentInput {
   assigned_membership_uuid?: string | null;
   assigned_registered_device_uuid?: string | null;
   assignment_note?: string;
+  responsibility_consequence?: ParkingIncidentResponsibilityConsequence;
+  responsibility_points_lost?: number | null;
+  responsibility_fine_cents?: number | null;
+  responsibility_note?: string;
 }
 
 export interface StudentParkingIncidentReportFlagInput {

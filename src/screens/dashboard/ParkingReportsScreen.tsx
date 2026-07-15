@@ -9,6 +9,7 @@ import {
   flagSchoolParkingIncidentReport,
   issueSchoolParkingIncidentReportViolation,
   signSchoolMedia,
+  type ParkingIncidentResponsibilityConsequence,
   type ParkingViolationFeeRule,
   type ParkingIncidentReportStatus,
   type ParkingIncidentReportType,
@@ -209,6 +210,13 @@ export function ParkingReportsScreen({
   const [assignedUserDraft, setAssignedUserDraft] = useState("");
   const [assignedDeviceDraft, setAssignedDeviceDraft] = useState("");
   const [assignmentNoteDraft, setAssignmentNoteDraft] = useState("");
+  const [responsibilityConsequenceDraft, setResponsibilityConsequenceDraft] =
+    useState<ParkingIncidentResponsibilityConsequence>("none");
+  const [responsibilityPointsDraft, setResponsibilityPointsDraft] =
+    useState("");
+  const [responsibilityFineDollarsDraft, setResponsibilityFineDollarsDraft] =
+    useState("");
+  const [responsibilityNoteDraft, setResponsibilityNoteDraft] = useState("");
   const [flagPriorityDraft, setFlagPriorityDraft] = useState<"normal" | "urgent">(
     "normal",
   );
@@ -404,13 +412,34 @@ export function ParkingReportsScreen({
     setAssignedUserDraft(selectedReport.assigned_user_uuid ?? "");
     setAssignedDeviceDraft(selectedReport.assigned_registered_device_uuid ?? "");
     setAssignmentNoteDraft(selectedReport.assignment_note ?? "");
+    const nextConsequence =
+      selectedReport.responsibility_consequence === "points" ||
+      selectedReport.responsibility_consequence === "fine"
+        ? selectedReport.responsibility_consequence
+        : "none";
+    setResponsibilityConsequenceDraft(nextConsequence);
+    setResponsibilityPointsDraft(
+      selectedReport.responsibility_points_lost
+        ? String(selectedReport.responsibility_points_lost)
+        : "",
+    );
+    setResponsibilityFineDollarsDraft(
+      selectedReport.responsibility_fine_cents
+        ? (selectedReport.responsibility_fine_cents / 100).toFixed(2)
+        : "",
+    );
+    setResponsibilityNoteDraft(selectedReport.responsibility_note ?? "");
     setFlagPriorityDraft(
       selectedReport.flag_priority === "urgent" ? "urgent" : "normal",
     );
     setFlagNoteDraft(selectedReport.flag_note ?? "");
     setIssueViolationType("other");
     setIssueStatus("reported");
-    setIssueAmountDollars("");
+    setIssueAmountDollars(
+      selectedReport.responsibility_fine_cents
+        ? (selectedReport.responsibility_fine_cents / 100).toFixed(2)
+        : "",
+    );
     setIssueAdminNotes(selectedReport.admin_notes ?? "");
     setIssueStudentNote(selectedReport.student_visible_note ?? "");
   }, [selectedReport]);
@@ -465,6 +494,28 @@ export function ParkingReportsScreen({
       setError("Choose a responsible student before saving assignment.");
       return;
     }
+    const pointLoss =
+      responsibilityPointsDraft.trim() === ""
+        ? 0
+        : Math.round(Number(responsibilityPointsDraft));
+    if (
+      responsibilityConsequenceDraft === "points" &&
+      (!Number.isFinite(pointLoss) || pointLoss <= 0)
+    ) {
+      setError("Enter the number of points this student should lose.");
+      return;
+    }
+    const fineCents =
+      responsibilityFineDollarsDraft.trim() === ""
+        ? 0
+        : Math.round(Number(responsibilityFineDollarsDraft) * 100);
+    if (
+      responsibilityConsequenceDraft === "fine" &&
+      (!Number.isFinite(fineCents) || fineCents <= 0)
+    ) {
+      setError("Enter the fine amount.");
+      return;
+    }
     setActionBusy("assignment");
     setError("");
     try {
@@ -481,6 +532,12 @@ export function ParkingReportsScreen({
           assigned_membership_uuid: membershipUUID,
           assigned_registered_device_uuid: assignedDeviceDraft || null,
           assignment_note: assignmentNoteDraft,
+          responsibility_consequence: responsibilityConsequenceDraft,
+          responsibility_points_lost:
+            responsibilityConsequenceDraft === "points" ? pointLoss : 0,
+          responsibility_fine_cents:
+            responsibilityConsequenceDraft === "fine" ? fineCents : null,
+          responsibility_note: responsibilityNoteDraft,
         },
       );
       replaceReport(updated);
@@ -636,6 +693,15 @@ export function ParkingReportsScreen({
   const activeFeeRules = feeRules.filter((rule) => rule.active !== false);
   const linkedViolationLabel = selectedReport?.linked_violation_uuid
     ? `Official violation ${selectedReport.linked_violation_uuid}`
+    : "";
+  const responsibilityConsequenceLabel = selectedReport
+    ? selectedReport.responsibility_consequence === "points"
+      ? `${selectedReport.responsibility_points_lost ?? 0} point loss`
+      : selectedReport.responsibility_consequence === "fine"
+        ? `$${((selectedReport.responsibility_fine_cents ?? 0) / 100).toFixed(
+            2,
+          )} fine`
+        : "No punishment"
     : "";
   const hasLocation =
     typeof selectedReport?.violation_latitude === "number" &&
@@ -995,9 +1061,19 @@ export function ParkingReportsScreen({
 	                    <strong>{selectedAssignedStudentLabel || "Unassigned"}</strong>
 	                  </div>
 	                  <div>
+	                    <span>Consequence</span>
+	                    <strong>{responsibilityConsequenceLabel || "No punishment"}</strong>
+	                  </div>
+	                  <div>
 	                    <span>Linked violation</span>
 	                    <strong>{linkedViolationLabel || "None"}</strong>
 	                  </div>
+	                  {selectedReport.responsibility_note ? (
+	                    <div>
+	                      <span>Consequence note</span>
+	                      <strong>{selectedReport.responsibility_note}</strong>
+	                    </div>
+	                  ) : null}
 	                  <div className="penalty-report-location-card">
                     <span>Report location</span>
                     <strong>{formatLocationValue(selectedReport)}</strong>
@@ -1111,8 +1187,8 @@ export function ParkingReportsScreen({
 	                    <div className="vr-form-block">
 	                      <p className="vr-block-label">Responsible student</p>
 	                      <p className="muted">
-	                        Saving an assignment immediately notifies the selected
-	                        student.
+	                        This identifies the student as responsible for the incident
+	                        and immediately notifies them in the customer app.
 	                      </p>
 	                      <div className="penalty-report-form-grid">
 	                        <label className="field">
@@ -1181,6 +1257,71 @@ export function ParkingReportsScreen({
 	                          rows={3}
 	                        />
 	                      </label>
+	                      <div className="penalty-report-form-grid">
+	                        <label className="field">
+	                          <span>Student consequence</span>
+	                          <select
+	                            value={responsibilityConsequenceDraft}
+	                            onChange={(event) =>
+	                              setResponsibilityConsequenceDraft(
+	                                event.target
+	                                  .value as ParkingIncidentResponsibilityConsequence,
+	                              )
+	                            }
+	                          >
+	                            <option value="none">No punishment yet</option>
+	                            <option value="points">Point loss</option>
+	                            <option value="fine">Fine</option>
+	                          </select>
+	                        </label>
+	                        {responsibilityConsequenceDraft === "points" ? (
+	                          <label className="field">
+	                            <span>Points lost</span>
+	                            <input
+	                              inputMode="numeric"
+	                              value={responsibilityPointsDraft}
+	                              onChange={(event) =>
+	                                setResponsibilityPointsDraft(
+	                                  event.target.value,
+	                                )
+	                              }
+	                              placeholder="10"
+	                            />
+	                          </label>
+	                        ) : null}
+	                        {responsibilityConsequenceDraft === "fine" ? (
+	                          <label className="field">
+	                            <span>Fine amount</span>
+	                            <input
+	                              inputMode="decimal"
+	                              value={responsibilityFineDollarsDraft}
+	                              onChange={(event) =>
+	                                setResponsibilityFineDollarsDraft(
+	                                  event.target.value,
+	                                )
+	                              }
+	                              placeholder="25.00"
+	                            />
+	                          </label>
+	                        ) : null}
+	                      </div>
+	                      <label className="field">
+	                        <span>Consequence note</span>
+	                        <textarea
+	                          value={responsibilityNoteDraft}
+	                          onChange={(event) =>
+	                            setResponsibilityNoteDraft(event.target.value)
+	                          }
+	                          rows={3}
+	                          placeholder="Explain why this student is responsible or why this punishment was chosen."
+	                        />
+	                      </label>
+	                      {responsibilityConsequenceDraft === "fine" ? (
+	                        <p className="muted">
+	                          Save responsibility first, then use “Issue official
+	                          violation” to create the payable ticket for this fine.
+	                        </p>
+	                      ) : null}
 	                      <div className="penalty-report-actions">
 	                        <button
 	                          type="button"
@@ -1190,7 +1331,7 @@ export function ParkingReportsScreen({
 	                        >
 	                          {actionBusy === "assignment"
 	                            ? "Saving..."
-	                            : "Save assignment"}
+	                            : "Save responsibility"}
 	                        </button>
 	                      </div>
 	                    </div>
