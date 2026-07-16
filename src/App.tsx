@@ -229,20 +229,15 @@ const sectionPathByName: Record<Section, string> = Object.fromEntries(
   dashboardSections.map(({ section, path }) => [section, path]),
 ) as Record<Section, string>;
 
-const openParkingReportStatuses = new Set(["submitted", "under_review"]);
-
 function countOpenParkingIncidentReports(
   reports: StudentParkingIncidentReport[],
 ): number {
   return reports.filter(
-            (report) =>
-              report.active !== false &&
-              (openParkingReportStatuses.has(
-                (report.status ?? "submitted").trim().toLowerCase(),
-              ) ||
-                (report.flagged_for_enforcement === true && !report.flag_resolved_at)),
-          ).length;
-        }
+    (report) =>
+      report.active !== false &&
+      (report.status ?? "submitted").trim().toLowerCase() === "submitted",
+  ).length;
+}
 
 interface BannerState {
   tone: BannerTone;

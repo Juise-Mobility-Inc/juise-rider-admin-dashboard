@@ -132,14 +132,14 @@ function countOpenReports(reports: StudentParkingIncidentReport[]): number {
     if (report.active === false) {
       return false;
     }
-	    const status = (report.status ?? "submitted").trim().toLowerCase();
-	    return (
-	      status === "submitted" ||
-	      status === "under_review" ||
-	      (report.flagged_for_enforcement === true && !report.flag_resolved_at)
-	    );
-	  }).length;
-	}
+    return (report.status ?? "submitted").trim().toLowerCase() === "submitted";
+  }).length;
+}
+
+function isClosedReport(report: StudentParkingIncidentReport): boolean {
+  const status = (report.status ?? "submitted").trim().toLowerCase();
+  return status === "resolved" || status === "dismissed";
+}
 
 function formatLocationValue(report: StudentParkingIncidentReport): string {
   if (
@@ -180,6 +180,7 @@ export function ParkingReportsScreen({
     "all" | ParkingIncidentReportType
   >("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [showClosed, setShowClosed] = useState(false);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [draftStatusFilter, setDraftStatusFilter] = useState<
     "all" | ParkingIncidentReportStatus
@@ -253,11 +254,19 @@ export function ParkingReportsScreen({
     [reports, selectedReportId],
   );
 
+  const closedReportCount = useMemo(
+    () => reports.filter(isClosedReport).length,
+    [reports],
+  );
+
   const filteredReports = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    const sortedReports = [...reports].sort(
+    let sortedReports = [...reports].sort(
       (left, right) => (right.created_at ?? 0) - (left.created_at ?? 0),
     );
+    if (statusFilter === "all" && !showClosed) {
+      sortedReports = sortedReports.filter((report) => !isClosedReport(report));
+    }
     if (!query) {
       return sortedReports;
     }
@@ -276,7 +285,7 @@ export function ParkingReportsScreen({
         .toLowerCase();
       return searchableText.includes(query);
     });
-  }, [reports, searchQuery, studentByMembership, studentByUser]);
+  }, [reports, searchQuery, showClosed, statusFilter, studentByMembership, studentByUser]);
 
   const refreshReports = useCallback(async () => {
     const isUnfilteredReportView =
@@ -299,7 +308,7 @@ export function ParkingReportsScreen({
           status: statusFilter === "all" ? undefined : statusFilter,
           reportType: typeFilter === "all" ? undefined : typeFilter,
           includeInactive: true,
-          limit: 100,
+          limit: 1000,
         },
       );
       setReports(nextReports);
@@ -367,12 +376,12 @@ export function ParkingReportsScreen({
       setFeeRules([]);
       return;
     }
-	    Promise.allSettled([
-	      fetchSchoolRegisteredDevices(managedAppId, activeSchoolId),
-	      fetchParkingViolationFeeRules(managedAppId, activeSchoolId, {
-	        includeInactive: true,
-	      }),
-	    ]).then(([deviceResult, feeRuleResult]) => {
+            Promise.allSettled([
+              fetchSchoolRegisteredDevices(managedAppId, activeSchoolId),
+              fetchParkingViolationFeeRules(managedAppId, activeSchoolId, {
+                includeInactive: true,
+              }),
+            ]).then(([deviceResult, feeRuleResult]) => {
       if (cancelled) {
         return;
       }
@@ -770,6 +779,17 @@ export function ParkingReportsScreen({
                       </span>
                     ) : null}
                   </button>
+                  {statusFilter === "all" && closedReportCount > 0 ? (
+                    <button
+                      className={`cd-table-btn${showClosed ? " cd-table-btn-active" : ""}`}
+                      type="button"
+                      onClick={() => setShowClosed((current) => !current)}
+                    >
+                      {showClosed
+                        ? "Hide closed"
+                        : `Show closed (${closedReportCount})`}
+                    </button>
+                  ) : null}
                 </>
               ) : null}
               <button
@@ -785,6 +805,20 @@ export function ParkingReportsScreen({
 
         <div className="parking-reports-body">
           {error ? <div className="form-error">{error}</div> : null}
+
+          {!detailOpen ? (
+            <div className="parking-reports-student-note">
+              <span className="parking-reports-student-note-icon" aria-hidden="true">
+                ℹ️
+              </span>
+              <div>
+                <strong>Student-submitted reports.</strong> These are unverified
+                reports from students — not confirmed violations. Review the
+                evidence before assigning responsibility or issuing an official
+                violation.
+              </div>
+            </div>
+          ) : null}
 
           {!detailOpen ? (
             <section className="parking-reports-table-card">
@@ -897,27 +931,27 @@ export function ParkingReportsScreen({
                               {report.description}
                             </div>
                           </td>
-	                          <td>
-	                            <div className="parking-report-status-stack">
-	                              <span
-	                                className={`cd-status ${getReportStatusClass(
-	                                  report.status,
-	                                )}`}
-	                              >
-	                                {formatStatus(report.status)}
-	                              </span>
-	                              {report.flagged_for_enforcement ? (
-	                                <span className="cd-status cd-status-declined">
-	                                  {report.flag_priority === "urgent"
-	                                    ? "Urgent flag"
-	                                    : "Flagged"}
-	                                </span>
-	                              ) : null}
-	                              {report.assigned_user_uuid ? (
-	                                <span className="cd-tag">Assigned</span>
-	                              ) : null}
-	                            </div>
-	                          </td>
+                                  <td>
+                                    <div className="parking-report-status-stack">
+                                      <span
+                                        className={`cd-status ${getReportStatusClass(
+                                          report.status,
+                                        )}`}
+                                      >
+                                        {formatStatus(report.status)}
+                                      </span>
+                                      {report.flagged_for_enforcement ? (
+                                        <span className="cd-status cd-status-declined">
+                                          {report.flag_priority === "urgent"
+                                            ? "Urgent flag"
+                                            : "Flagged"}
+                                        </span>
+                                      ) : null}
+                                      {report.assigned_user_uuid ? (
+                                        <span className="cd-tag">Assigned</span>
+                                      ) : null}
+                                    </div>
+                                  </td>
                           <td className="cd-table-date">
                             {formatDateTime(report.created_at)}
                           </td>
@@ -979,21 +1013,21 @@ export function ParkingReportsScreen({
                       Submitted {formatDateTime(selectedReport.created_at)}
                     </p>
                   </div>
-	                  <span
-	                    className={`cd-status ${getReportStatusClass(
-	                      selectedReport.status,
-	                    )}`}
-	                  >
-	                    {formatStatus(selectedReport.status)}
-	                  </span>
-	                  {selectedReport.flagged_for_enforcement ? (
-	                    <span className="cd-status cd-status-declined">
-	                      {selectedReport.flag_priority === "urgent"
-	                        ? "Urgent enforcement flag"
-	                        : "Flagged for enforcement"}
-	                    </span>
-	                  ) : null}
-	                </div>
+                          <span
+                            className={`cd-status ${getReportStatusClass(
+                              selectedReport.status,
+                            )}`}
+                          >
+                            {formatStatus(selectedReport.status)}
+                          </span>
+                          {selectedReport.flagged_for_enforcement ? (
+                            <span className="cd-status cd-status-declined">
+                              {selectedReport.flag_priority === "urgent"
+                                ? "Urgent enforcement flag"
+                                : "Flagged for enforcement"}
+                            </span>
+                          ) : null}
+                        </div>
 
                 <div className="penalty-report-detail-grid">
                   <div className="penalty-report-student-card">
@@ -1052,29 +1086,29 @@ export function ParkingReportsScreen({
                     <span>Updated</span>
                     <strong>{formatDateTime(selectedReport.updated_at)}</strong>
                   </div>
-	                  <div>
-	                    <span>Status</span>
-	                    <strong>{formatStatus(selectedReport.status)}</strong>
-	                  </div>
-	                  <div>
-	                    <span>Responsible student</span>
-	                    <strong>{selectedAssignedStudentLabel || "Unassigned"}</strong>
-	                  </div>
-	                  <div>
-	                    <span>Consequence</span>
-	                    <strong>{responsibilityConsequenceLabel || "No punishment"}</strong>
-	                  </div>
-	                  <div>
-	                    <span>Linked violation</span>
-	                    <strong>{linkedViolationLabel || "None"}</strong>
-	                  </div>
-	                  {selectedReport.responsibility_note ? (
-	                    <div>
-	                      <span>Consequence note</span>
-	                      <strong>{selectedReport.responsibility_note}</strong>
-	                    </div>
-	                  ) : null}
-	                  <div className="penalty-report-location-card">
+                          <div>
+                            <span>Status</span>
+                            <strong>{formatStatus(selectedReport.status)}</strong>
+                          </div>
+                          <div>
+                            <span>Responsible student</span>
+                            <strong>{selectedAssignedStudentLabel || "Unassigned"}</strong>
+                          </div>
+                          <div>
+                            <span>Consequence</span>
+                            <strong>{responsibilityConsequenceLabel || "No punishment"}</strong>
+                          </div>
+                          <div>
+                            <span>Linked violation</span>
+                            <strong>{linkedViolationLabel || "None"}</strong>
+                          </div>
+                          {selectedReport.responsibility_note ? (
+                            <div>
+                              <span>Consequence note</span>
+                              <strong>{selectedReport.responsibility_note}</strong>
+                            </div>
+                          ) : null}
+                          <div className="penalty-report-location-card">
                     <span>Report location</span>
                     <strong>{formatLocationValue(selectedReport)}</strong>
                     {selectedReport.location_accuracy_meters ? (
@@ -1182,219 +1216,219 @@ export function ParkingReportsScreen({
                   </div>
                 ) : null}
 
-	                {detailTab === "review" ? (
-	                  <div className="parking-report-review-panel">
-	                    <div className="vr-form-block">
-	                      <p className="vr-block-label">Responsible student</p>
-	                      <p className="muted">
-	                        This identifies the student as responsible for the incident
-	                        and immediately notifies them in the customer app.
-	                      </p>
-	                      <div className="penalty-report-form-grid">
-	                        <label className="field">
-	                          <span>Student</span>
-	                          <select
-	                            value={assignedUserDraft}
-	                            onChange={(event) => {
-	                              setAssignedUserDraft(event.target.value);
-	                              setAssignedDeviceDraft("");
-	                            }}
-	                          >
-	                            <option value="">Choose a student</option>
-	                            {studentRoster.map((entry) => {
-	                              const name = [
-	                                entry.user.first_name,
-	                                entry.user.last_name,
-	                              ]
-	                                .filter(Boolean)
-	                                .join(" ")
-	                                .trim();
-	                              return (
-	                                <option
-	                                  key={entry.membership.membership_uuid}
-	                                  value={entry.user.k_guid}
-	                                >
-	                                  {name ||
-	                                    entry.user.username ||
-	                                    entry.user.email ||
-	                                    entry.user.k_guid}
-	                                  {entry.membership.student_id
-	                                    ? ` · ${entry.membership.student_id}`
-	                                    : ""}
-	                                </option>
-	                              );
-	                            })}
-	                          </select>
-	                        </label>
-	                        <label className="field">
-	                          <span>Device</span>
-	                          <select
-	                            value={assignedDeviceDraft}
-	                            onChange={(event) =>
-	                              setAssignedDeviceDraft(event.target.value)
-	                            }
-	                            disabled={!assignedUserDraft}
-	                          >
-	                            <option value="">No device selected</option>
-	                            {assignmentDraftDevices.map((entry) => (
-	                              <option
-	                                key={entry.device.registered_device_uuid}
-	                                value={entry.device.registered_device_uuid}
-	                              >
-	                                {getDeviceLabel(entry)}
-	                              </option>
-	                            ))}
-	                          </select>
-	                        </label>
-	                      </div>
-	                      <label className="field">
-	                        <span>Assignment note</span>
-	                        <textarea
-	                          value={assignmentNoteDraft}
-	                          onChange={(event) =>
-	                            setAssignmentNoteDraft(event.target.value)
-	                          }
-	                          rows={3}
-	                        />
-	                      </label>
-	                      <div className="penalty-report-form-grid">
-	                        <label className="field">
-	                          <span>Student consequence</span>
-	                          <select
-	                            value={responsibilityConsequenceDraft}
-	                            onChange={(event) =>
-	                              setResponsibilityConsequenceDraft(
-	                                event.target
-	                                  .value as ParkingIncidentResponsibilityConsequence,
-	                              )
-	                            }
-	                          >
-	                            <option value="none">No punishment yet</option>
-	                            <option value="points">Point loss</option>
-	                            <option value="fine">Fine</option>
-	                          </select>
-	                        </label>
-	                        {responsibilityConsequenceDraft === "points" ? (
-	                          <label className="field">
-	                            <span>Points lost</span>
-	                            <input
-	                              inputMode="numeric"
-	                              value={responsibilityPointsDraft}
-	                              onChange={(event) =>
-	                                setResponsibilityPointsDraft(
-	                                  event.target.value,
-	                                )
-	                              }
-	                              placeholder="10"
-	                            />
-	                          </label>
-	                        ) : null}
-	                        {responsibilityConsequenceDraft === "fine" ? (
-	                          <label className="field">
-	                            <span>Fine amount</span>
-	                            <input
-	                              inputMode="decimal"
-	                              value={responsibilityFineDollarsDraft}
-	                              onChange={(event) =>
-	                                setResponsibilityFineDollarsDraft(
-	                                  event.target.value,
-	                                )
-	                              }
-	                              placeholder="25.00"
-	                            />
-	                          </label>
-	                        ) : null}
-	                      </div>
-	                      <label className="field">
-	                        <span>Consequence note</span>
-	                        <textarea
-	                          value={responsibilityNoteDraft}
-	                          onChange={(event) =>
-	                            setResponsibilityNoteDraft(event.target.value)
-	                          }
-	                          rows={3}
-	                          placeholder="Explain why this student is responsible or why this punishment was chosen."
-	                        />
-	                      </label>
-	                      {responsibilityConsequenceDraft === "fine" ? (
-	                        <p className="muted">
-	                          Save responsibility first, then use “Issue official
-	                          violation” to create the payable ticket for this fine.
-	                        </p>
-	                      ) : null}
-	                      <div className="penalty-report-actions">
-	                        <button
-	                          type="button"
-	                          className="primary-button"
-	                          disabled={actionBusy === "assignment"}
-	                          onClick={() => void saveAssignment()}
-	                        >
-	                          {actionBusy === "assignment"
-	                            ? "Saving..."
-	                            : "Save responsibility"}
-	                        </button>
-	                      </div>
-	                    </div>
+                        {detailTab === "review" ? (
+                          <div className="parking-report-review-panel">
+                            <div className="vr-form-block">
+                              <p className="vr-block-label">Responsible student</p>
+                              <p className="muted">
+                                This identifies the student as responsible for the incident
+                                and immediately notifies them in the customer app.
+                              </p>
+                              <div className="penalty-report-form-grid">
+                                <label className="field">
+                                  <span>Student</span>
+                                  <select
+                                    value={assignedUserDraft}
+                                    onChange={(event) => {
+                                      setAssignedUserDraft(event.target.value);
+                                      setAssignedDeviceDraft("");
+                                    }}
+                                  >
+                                    <option value="">Choose a student</option>
+                                    {studentRoster.map((entry) => {
+                                      const name = [
+                                        entry.user.first_name,
+                                        entry.user.last_name,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" ")
+                                        .trim();
+                                      return (
+                                        <option
+                                          key={entry.membership.membership_uuid}
+                                          value={entry.user.k_guid}
+                                        >
+                                          {name ||
+                                            entry.user.username ||
+                                            entry.user.email ||
+                                            entry.user.k_guid}
+                                          {entry.membership.student_id
+                                            ? ` · ${entry.membership.student_id}`
+                                            : ""}
+                                        </option>
+                                      );
+                                    })}
+                                  </select>
+                                </label>
+                                <label className="field">
+                                  <span>Device</span>
+                                  <select
+                                    value={assignedDeviceDraft}
+                                    onChange={(event) =>
+                                      setAssignedDeviceDraft(event.target.value)
+                                    }
+                                    disabled={!assignedUserDraft}
+                                  >
+                                    <option value="">No device selected</option>
+                                    {assignmentDraftDevices.map((entry) => (
+                                      <option
+                                        key={entry.device.registered_device_uuid}
+                                        value={entry.device.registered_device_uuid}
+                                      >
+                                        {getDeviceLabel(entry)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              </div>
+                              <label className="field">
+                                <span>Assignment note</span>
+                                <textarea
+                                  value={assignmentNoteDraft}
+                                  onChange={(event) =>
+                                    setAssignmentNoteDraft(event.target.value)
+                                  }
+                                  rows={3}
+                                />
+                              </label>
+                              <div className="penalty-report-form-grid">
+                                <label className="field">
+                                  <span>Student consequence</span>
+                                  <select
+                                    value={responsibilityConsequenceDraft}
+                                    onChange={(event) =>
+                                      setResponsibilityConsequenceDraft(
+                                        event.target
+                                          .value as ParkingIncidentResponsibilityConsequence,
+                                      )
+                                    }
+                                  >
+                                    <option value="none">No punishment yet</option>
+                                    <option value="points">Point loss</option>
+                                    <option value="fine">Fine</option>
+                                  </select>
+                                </label>
+                                {responsibilityConsequenceDraft === "points" ? (
+                                  <label className="field">
+                                    <span>Points lost</span>
+                                    <input
+                                      inputMode="numeric"
+                                      value={responsibilityPointsDraft}
+                                      onChange={(event) =>
+                                        setResponsibilityPointsDraft(
+                                          event.target.value,
+                                        )
+                                      }
+                                      placeholder="10"
+                                    />
+                                  </label>
+                                ) : null}
+                                {responsibilityConsequenceDraft === "fine" ? (
+                                  <label className="field">
+                                    <span>Fine amount</span>
+                                    <input
+                                      inputMode="decimal"
+                                      value={responsibilityFineDollarsDraft}
+                                      onChange={(event) =>
+                                        setResponsibilityFineDollarsDraft(
+                                          event.target.value,
+                                        )
+                                      }
+                                      placeholder="25.00"
+                                    />
+                                  </label>
+                                ) : null}
+                              </div>
+                              <label className="field">
+                                <span>Consequence note</span>
+                                <textarea
+                                  value={responsibilityNoteDraft}
+                                  onChange={(event) =>
+                                    setResponsibilityNoteDraft(event.target.value)
+                                  }
+                                  rows={3}
+                                  placeholder="Explain why this student is responsible or why this punishment was chosen."
+                                />
+                              </label>
+                              {responsibilityConsequenceDraft === "fine" ? (
+                                <p className="muted">
+                                  Save responsibility first, then use “Issue official
+                                  violation” to create the payable ticket for this fine.
+                                </p>
+                              ) : null}
+                              <div className="penalty-report-actions">
+                                <button
+                                  type="button"
+                                  className="primary-button"
+                                  disabled={actionBusy === "assignment"}
+                                  onClick={() => void saveAssignment()}
+                                >
+                                  {actionBusy === "assignment"
+                                    ? "Saving..."
+                                    : "Save responsibility"}
+                                </button>
+                              </div>
+                            </div>
 
-	                    <div className="vr-form-block">
-	                      <p className="vr-block-label">Enforcement flag</p>
-	                      <div className="penalty-report-form-grid">
-	                        <label className="field">
-	                          <span>Priority</span>
-	                          <select
-	                            value={flagPriorityDraft}
-	                            onChange={(event) =>
-	                              setFlagPriorityDraft(
-	                                event.target.value === "urgent"
-	                                  ? "urgent"
-	                                  : "normal",
-	                              )
-	                            }
-	                          >
-	                            <option value="normal">Normal</option>
-	                            <option value="urgent">Urgent</option>
-	                          </select>
-	                        </label>
-	                        <label className="field">
-	                          <span>Flag note</span>
-	                          <input
-	                            value={flagNoteDraft}
-	                            onChange={(event) =>
-	                              setFlagNoteDraft(event.target.value)
-	                            }
-	                            placeholder="What should enforcement know?"
-	                          />
-	                        </label>
-	                      </div>
-	                      <div className="penalty-report-actions">
-	                        <button
-	                          type="button"
-	                          className="primary-button"
-	                          disabled={actionBusy === "flag"}
-	                          onClick={() => void saveFlag()}
-	                        >
-	                          {actionBusy === "flag"
-	                            ? "Flagging..."
-	                            : "Flag for enforcement"}
-	                        </button>
-	                        <button
-	                          type="button"
-	                          className="secondary-button"
-	                          disabled={
-	                            actionBusy === "clear-flag" ||
-	                            !selectedReport.flagged_for_enforcement
-	                          }
-	                          onClick={() => void clearFlag()}
-	                        >
-	                          {actionBusy === "clear-flag"
-	                            ? "Clearing..."
-	                            : "Clear flag"}
-	                        </button>
-	                      </div>
-	                    </div>
+                            <div className="vr-form-block">
+                              <p className="vr-block-label">Enforcement flag</p>
+                              <div className="penalty-report-form-grid">
+                                <label className="field">
+                                  <span>Priority</span>
+                                  <select
+                                    value={flagPriorityDraft}
+                                    onChange={(event) =>
+                                      setFlagPriorityDraft(
+                                        event.target.value === "urgent"
+                                          ? "urgent"
+                                          : "normal",
+                                      )
+                                    }
+                                  >
+                                    <option value="normal">Normal</option>
+                                    <option value="urgent">Urgent</option>
+                                  </select>
+                                </label>
+                                <label className="field">
+                                  <span>Flag note</span>
+                                  <input
+                                    value={flagNoteDraft}
+                                    onChange={(event) =>
+                                      setFlagNoteDraft(event.target.value)
+                                    }
+                                    placeholder="What should enforcement know?"
+                                  />
+                                </label>
+                              </div>
+                              <div className="penalty-report-actions">
+                                <button
+                                  type="button"
+                                  className="primary-button"
+                                  disabled={actionBusy === "flag"}
+                                  onClick={() => void saveFlag()}
+                                >
+                                  {actionBusy === "flag"
+                                    ? "Flagging..."
+                                    : "Flag for enforcement"}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="secondary-button"
+                                  disabled={
+                                    actionBusy === "clear-flag" ||
+                                    !selectedReport.flagged_for_enforcement
+                                  }
+                                  onClick={() => void clearFlag()}
+                                >
+                                  {actionBusy === "clear-flag"
+                                    ? "Clearing..."
+                                    : "Clear flag"}
+                                </button>
+                              </div>
+                            </div>
 
-	                    <div className="vr-form-block">
-	                      <p className="vr-block-label">Set status</p>
+                            <div className="vr-form-block">
+                              <p className="vr-block-label">Set status</p>
                       <div className="vr-status-grid">
                         {statusOptions
                           .filter((status) => status !== "all")
@@ -1446,27 +1480,27 @@ export function ParkingReportsScreen({
                       </label>
                     </div>
 
-	                    <div className="penalty-report-actions">
-	                      <button
+                            <div className="penalty-report-actions">
+                              <button
                         type="button"
                         className="primary-button"
                         disabled={saveBusy}
                         onClick={() => void saveSelectedReport()}
                       >
-	                        {saveBusy ? "Saving..." : "Save review"}
-	                      </button>
-	                      <button
-	                        type="button"
-	                        className="secondary-button"
-	                        disabled={!!selectedReport.linked_violation_uuid}
-	                        onClick={() => setIssueModalOpen(true)}
-	                      >
-	                        {selectedReport.linked_violation_uuid
-	                          ? "Violation already issued"
-	                          : "Issue official violation"}
-	                      </button>
-	                    </div>
-	                  </div>
+                                {saveBusy ? "Saving..." : "Save review"}
+                              </button>
+                              <button
+                                type="button"
+                                className="secondary-button"
+                                disabled={!!selectedReport.linked_violation_uuid}
+                                onClick={() => setIssueModalOpen(true)}
+                              >
+                                {selectedReport.linked_violation_uuid
+                                  ? "Violation already issued"
+                                  : "Issue official violation"}
+                              </button>
+                            </div>
+                          </div>
                 ) : null}
               </article>
             </>
@@ -1497,8 +1531,8 @@ export function ParkingReportsScreen({
         </div>
       </div>
 
-	      {filterModalOpen ? (
-	        <div
+              {filterModalOpen ? (
+                <div
           className="management-modal-backdrop"
           role="dialog"
           aria-modal="true"
@@ -1578,131 +1612,131 @@ export function ParkingReportsScreen({
               </button>
             </div>
           </div>
-	        </div>
-	      ) : null}
+                </div>
+              ) : null}
 
-	      {issueModalOpen && selectedReport ? (
-	        <div
-	          className="management-modal-backdrop"
-	          role="dialog"
-	          aria-modal="true"
-	          aria-labelledby="parking-report-issue-title"
-	          onClick={() => setIssueModalOpen(false)}
-	        >
-	          <div
-	            className="management-modal-sheet parking-report-filter-modal"
-	            onClick={(event) => event.stopPropagation()}
-	          >
-	            <div className="management-modal-header">
-	              <div>
-	                <p className="section-eyebrow">Official enforcement</p>
-	                <h3 id="parking-report-issue-title">
-	                  Issue parking violation
-	                </h3>
-	                <p className="muted">
-	                  This creates a formal parking violation and notifies the
-	                  responsible student through the normal ticket flow.
-	                </p>
-	              </div>
-	              <button
-	                className="management-modal-close"
-	                type="button"
-	                onClick={() => setIssueModalOpen(false)}
-	              >
-	                Close
-	              </button>
-	            </div>
-	            <div className="parking-report-filter-grid">
-	              <label>
-	                Violation type
-	                <select
-	                  value={issueViolationType}
-	                  onChange={(event) => {
-	                    const nextType = event.target.value;
-	                    setIssueViolationType(nextType);
-	                    const rule = activeFeeRules.find(
-	                      (item) => item.violation_type === nextType,
-	                    );
-	                    if (rule) {
-	                      setIssueAmountDollars(centsToDollars(rule.amount_cents));
-	                    }
-	                  }}
-	                >
-	                  <option value="other">Other</option>
-	                  {activeFeeRules.map((rule) => (
-	                    <option
-	                      key={rule.fee_rule_uuid}
-	                      value={rule.violation_type}
-	                    >
-	                      {rule.label || formatStatus(rule.violation_type)} · $
-	                      {centsToDollars(rule.amount_cents)}
-	                    </option>
-	                  ))}
-	                </select>
-	              </label>
-	              <label>
-	                Status
-	                <select
-	                  value={issueStatus}
-	                  onChange={(event) => setIssueStatus(event.target.value)}
-	                >
-	                  <option value="reported">Reported</option>
-	                  <option value="awaiting_payment">Awaiting payment</option>
-	                  <option value="under_review">Under review</option>
-	                </select>
-	              </label>
-	              <label>
-	                Fee / punishment amount
-	                <input
-	                  value={issueAmountDollars}
-	                  onChange={(event) =>
-	                    setIssueAmountDollars(event.target.value)
-	                  }
-	                  placeholder="0.00"
-	                  inputMode="decimal"
-	                />
-	              </label>
-	              <label>
-	                Student note
-	                <input
-	                  value={issueStudentNote}
-	                  onChange={(event) =>
-	                    setIssueStudentNote(event.target.value)
-	                  }
-	                  placeholder="Visible to the student"
-	                />
-	              </label>
-	            </div>
-	            <label className="field">
-	              <span>Internal admin notes</span>
-	              <textarea
-	                value={issueAdminNotes}
-	                onChange={(event) => setIssueAdminNotes(event.target.value)}
-	                rows={4}
-	              />
-	            </label>
-	            <div className="parking-report-filter-actions">
-	              <button
-	                className="secondary-button"
-	                type="button"
-	                onClick={() => setIssueModalOpen(false)}
-	              >
-	                Cancel
-	              </button>
-	              <button
-	                className="primary-button"
-	                type="button"
-	                disabled={actionBusy === "issue"}
-	                onClick={() => void issueViolation()}
-	              >
-	                {actionBusy === "issue"
-	                  ? "Issuing..."
-	                  : "Issue violation"}
-	              </button>
-	            </div>
-	          </div>
-	        </div>
-	      ) : null}
-	    </div>
-	  );
-	}
+              {issueModalOpen && selectedReport ? (
+                <div
+                  className="management-modal-backdrop"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="parking-report-issue-title"
+                  onClick={() => setIssueModalOpen(false)}
+                >
+                  <div
+                    className="management-modal-sheet parking-report-filter-modal"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="management-modal-header">
+                      <div>
+                        <p className="section-eyebrow">Official enforcement</p>
+                        <h3 id="parking-report-issue-title">
+                          Issue parking violation
+                        </h3>
+                        <p className="muted">
+                          This creates a formal parking violation and notifies the
+                          responsible student through the normal ticket flow.
+                        </p>
+                      </div>
+                      <button
+                        className="management-modal-close"
+                        type="button"
+                        onClick={() => setIssueModalOpen(false)}
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <div className="parking-report-filter-grid">
+                      <label>
+                        Violation type
+                        <select
+                          value={issueViolationType}
+                          onChange={(event) => {
+                            const nextType = event.target.value;
+                            setIssueViolationType(nextType);
+                            const rule = activeFeeRules.find(
+                              (item) => item.violation_type === nextType,
+                            );
+                            if (rule) {
+                              setIssueAmountDollars(centsToDollars(rule.amount_cents));
+                            }
+                          }}
+                        >
+                          <option value="other">Other</option>
+                          {activeFeeRules.map((rule) => (
+                            <option
+                              key={rule.fee_rule_uuid}
+                              value={rule.violation_type}
+                            >
+                              {rule.label || formatStatus(rule.violation_type)} · $
+                              {centsToDollars(rule.amount_cents)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        Status
+                        <select
+                          value={issueStatus}
+                          onChange={(event) => setIssueStatus(event.target.value)}
+                        >
+                          <option value="reported">Reported</option>
+                          <option value="awaiting_payment">Awaiting payment</option>
+                          <option value="under_review">Under review</option>
+                        </select>
+                      </label>
+                      <label>
+                        Fee / punishment amount
+                        <input
+                          value={issueAmountDollars}
+                          onChange={(event) =>
+                            setIssueAmountDollars(event.target.value)
+                          }
+                          placeholder="0.00"
+                          inputMode="decimal"
+                        />
+                      </label>
+                      <label>
+                        Student note
+                        <input
+                          value={issueStudentNote}
+                          onChange={(event) =>
+                            setIssueStudentNote(event.target.value)
+                          }
+                          placeholder="Visible to the student"
+                        />
+                      </label>
+                    </div>
+                    <label className="field">
+                      <span>Internal admin notes</span>
+                      <textarea
+                        value={issueAdminNotes}
+                        onChange={(event) => setIssueAdminNotes(event.target.value)}
+                        rows={4}
+                      />
+                    </label>
+                    <div className="parking-report-filter-actions">
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={() => setIssueModalOpen(false)}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="primary-button"
+                        type="button"
+                        disabled={actionBusy === "issue"}
+                        onClick={() => void issueViolation()}
+                      >
+                        {actionBusy === "issue"
+                          ? "Issuing..."
+                          : "Issue violation"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          );
+        }
