@@ -441,28 +441,29 @@
         }
 }
 
-/* ── Mobile hamburger in workspace header ── */
+/* ── Floating hamburger (mobile only, shown when sidebar is closed) ── */
 /* Hidden on desktop — sidebar strip toggle handles collapse/expand */
-.app-shell--sidebar-closed .workspace-mobile-hamburger {
+.sidebar-floating-toggle {
         display: none;
-}
-
-.workspace-mobile-hamburger {
-        display: none;
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        z-index: 1090;
         align-items: center;
         justify-content: center;
-        width: 36px;
-        height: 36px;
+        width: 40px;
+        height: 40px;
         flex-shrink: 0;
-        border-radius: 8px;
+        border-radius: 10px;
         border: 1px solid var(--border, #e2e8f0);
         background: var(--panel-bg, #fff);
         color: var(--text, #111827);
         cursor: pointer;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
         transition: background 0.12s;
 }
 
-.workspace-mobile-hamburger:hover {
+.sidebar-floating-toggle:hover {
         background: var(--panel-bg-elevated, #f3f4f6);
 }
 
@@ -10012,8 +10013,8 @@
                 display: block;
         }
 
-        /* ── Mobile hamburger in workspace header ── */
-        .workspace-mobile-hamburger {
+        /* ── Floating hamburger to reopen the sidebar ── */
+        .sidebar-floating-toggle {
                 display: flex;
         }
 

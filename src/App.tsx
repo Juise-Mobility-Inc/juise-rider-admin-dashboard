@@ -235,14 +235,14 @@ function countOpenParkingIncidentReports(
   reports: StudentParkingIncidentReport[],
 ): number {
   return reports.filter(
-	    (report) =>
-	      report.active !== false &&
-	      (openParkingReportStatuses.has(
-	        (report.status ?? "submitted").trim().toLowerCase(),
-	      ) ||
-	        (report.flagged_for_enforcement === true && !report.flag_resolved_at)),
-	  ).length;
-	}
+            (report) =>
+              report.active !== false &&
+              (openParkingReportStatuses.has(
+                (report.status ?? "submitted").trim().toLowerCase(),
+              ) ||
+                (report.flagged_for_enforcement === true && !report.flag_resolved_at)),
+          ).length;
+        }
 
 interface BannerState {
   tone: BannerTone;
@@ -5693,21 +5693,24 @@ function App() {
         />
       )}
 
+      {!sidebarOpen && (
+        <button
+          type="button"
+          className="sidebar-floating-toggle"
+          onClick={toggleSidebar}
+          aria-label="Open navigation"
+        >
+          <span className="sidebar-hamburger">
+            <span />
+            <span />
+            <span />
+          </span>
+        </button>
+      )}
+
       <main className="workspace">
         <header className="workspace-header">
           <div className="workspace-header-start">
-            <button
-              type="button"
-              className="workspace-mobile-hamburger"
-              onClick={toggleSidebar}
-              aria-label="Open navigation"
-            >
-              <span className="sidebar-hamburger">
-                <span />
-                <span />
-                <span />
-              </span>
-            </button>
             <div className="workspace-title-block">
               <SchoolLogoPreview
                 key={`header-${resolvedSchoolLogoUrl || schoolDraft.logo_url || "fallback"}`}
