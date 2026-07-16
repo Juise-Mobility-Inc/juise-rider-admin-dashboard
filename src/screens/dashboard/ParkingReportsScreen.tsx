@@ -831,7 +831,6 @@ export function ParkingReportsScreen({
                       <th>Report</th>
                       <th>Status</th>
                       <th>Submitted</th>
-                      <th>Context</th>
                       <th>Location</th>
                     </tr>
                   </thead>
@@ -859,16 +858,6 @@ export function ParkingReportsScreen({
                       const reporterAvatar = reporterEntry?.user.k_guid
                         ? studentProfilePhotoUrls[reporterEntry.user.k_guid]
                         : "";
-                      const contextValues = [
-                        report.school_id && report.school_id !== activeSchoolId
-                          ? `School ${report.school_id}`
-                          : "",
-                        report.pack_uuid ? `Pack ${report.pack_uuid}` : "",
-                        report.spot_uuid ? `Spot ${report.spot_uuid}` : "",
-                        report.reservation_uuid
-                          ? `Reservation ${report.reservation_uuid}`
-                          : "",
-                      ].filter(Boolean);
                       const rowHasLocation =
                         typeof report.violation_latitude === "number" &&
                         typeof report.violation_longitude === "number";
@@ -954,17 +943,6 @@ export function ParkingReportsScreen({
                                   </td>
                           <td className="cd-table-date">
                             {formatDateTime(report.created_at)}
-                          </td>
-                          <td>
-                            {contextValues.length > 0 ? (
-                              <div className="parking-report-context-stack">
-                                {contextValues.map((value) => (
-                                  <span key={value}>{value}</span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="cd-table-zero">None</span>
-                            )}
                           </td>
                           <td>
                             <span className="cd-tag">
