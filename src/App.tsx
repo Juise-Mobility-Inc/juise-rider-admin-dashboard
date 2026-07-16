@@ -2511,7 +2511,7 @@ function App() {
     }
     let cancelled = false;
     fetchSchoolParkingIncidentReports(context.managedAppId, activeSchoolId, {
-      limit: 1000,
+      limit: 100,
     })
       .then((reports) => {
         if (!cancelled) {

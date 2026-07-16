@@ -308,7 +308,7 @@ export function ParkingReportsScreen({
           status: statusFilter === "all" ? undefined : statusFilter,
           reportType: typeFilter === "all" ? undefined : typeFilter,
           includeInactive: true,
-          limit: 1000,
+          limit: 100,
         },
       );
       setReports(nextReports);
@@ -1560,40 +1560,46 @@ export function ParkingReportsScreen({
               </button>
             </div>
             <div className="parking-report-filter-grid">
-              <label>
-                Status
-                <select
-                  value={draftStatusFilter}
-                  onChange={(event) =>
-                    setDraftStatusFilter(
-                      event.target.value as "all" | ParkingIncidentReportStatus,
-                    )
-                  }
-                >
+              <div className="parking-report-filter-group">
+                <span className="parking-report-filter-label">Status</span>
+                <div className="parking-report-filter-chips">
                   {statusOptions.map((status) => (
-                    <option key={status} value={status}>
+                    <button
+                      key={status}
+                      type="button"
+                      className={`parking-report-filter-chip${
+                        draftStatusFilter === status
+                          ? " parking-report-filter-chip-active"
+                          : ""
+                      }`}
+                      aria-pressed={draftStatusFilter === status}
+                      onClick={() => setDraftStatusFilter(status)}
+                    >
                       {status === "all" ? "All statuses" : formatStatus(status)}
-                    </option>
+                    </button>
                   ))}
-                </select>
-              </label>
-              <label>
-                Type
-                <select
-                  value={draftTypeFilter}
-                  onChange={(event) =>
-                    setDraftTypeFilter(
-                      event.target.value as "all" | ParkingIncidentReportType,
-                    )
-                  }
-                >
+                </div>
+              </div>
+              <div className="parking-report-filter-group">
+                <span className="parking-report-filter-label">Report type</span>
+                <div className="parking-report-filter-chips">
                   {reportTypeOptions.map((type) => (
-                    <option key={type} value={type}>
-                      {type === "all" ? "All report types" : formatStatus(type)}
-                    </option>
+                    <button
+                      key={type}
+                      type="button"
+                      className={`parking-report-filter-chip${
+                        draftTypeFilter === type
+                          ? " parking-report-filter-chip-active"
+                          : ""
+                      }`}
+                      aria-pressed={draftTypeFilter === type}
+                      onClick={() => setDraftTypeFilter(type)}
+                    >
+                      {type === "all" ? "All types" : formatStatus(type)}
+                    </button>
                   ))}
-                </select>
-              </label>
+                </div>
+              </div>
             </div>
             <div className="parking-report-filter-actions">
               <button

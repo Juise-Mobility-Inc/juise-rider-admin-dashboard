@@ -17908,8 +17908,54 @@
 
 .parking-report-filter-grid {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 16px;
+        grid-template-columns: 1fr;
+        gap: 18px;
+}
+
+.parking-report-filter-group {
+        display: grid;
+        gap: 8px;
+}
+
+.parking-report-filter-label {
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #5c6670;
+}
+
+.parking-report-filter-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+}
+
+.parking-report-filter-chip {
+        padding: 7px 14px;
+        border-radius: 999px;
+        border: 1px solid #d4dae0;
+        background: #fff;
+        color: #3c4650;
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.parking-report-filter-chip:hover {
+        border-color: #27cc5e;
+        color: #178a3e;
+}
+
+.parking-report-filter-chip-active {
+        background: #27cc5e;
+        border-color: #27cc5e;
+        color: #fff;
+}
+
+.parking-report-filter-chip-active:hover {
+        color: #fff;
 }
 
 .parking-report-filter-actions {
