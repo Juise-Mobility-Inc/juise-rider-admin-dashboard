@@ -11,6 +11,7 @@ import { Link, useNavigate } from "react-router-dom";
 import {
         fetchPendingReservations,
         fetchSchoolIncomeSummary,
+        fetchSchoolParkingIncidentReports,
         fetchSchoolPOIs,
         fetchSchoolRegisteredDevices,
         fetchSchoolStudentRoster,
@@ -20,6 +21,7 @@ import {
         type SchoolIncomeSummary,
         type SchoolIncomeWindow,
         type SchoolStudentRosterEntry,
+        type StudentParkingIncidentReport,
         type StudentParkingViolation,
         type StudentRouteHistorySession,
 } from "../../lib/api";
@@ -161,6 +163,7 @@ type Props = {
                 studentCount: number;
                 pendingReservationCount: number;
         }) => void;
+        onParkingReportCountLoaded?: (count: number) => void;
 };
 
 const DASHBOARD_CONCURRENCY = 5;
@@ -171,6 +174,16 @@ function getErrorMessage(error: unknown): string {
         }
 
         return "An unexpected error occurred.";
+}
+
+function countOpenParkingIncidentReports(
+        reports: StudentParkingIncidentReport[],
+): number {
+        return reports.filter(
+                (report) =>
+                        report.active !== false &&
+                        (report.status ?? "submitted").trim().toLowerCase() === "submitted",
+        ).length;
 }
 
 function formatStudentName(entry: SchoolStudentRosterEntry): string {
@@ -1380,6 +1393,7 @@ export function DashboardScreen({
         managedAppId,
         adminUserUUID,
         onHeaderCountsLoaded,
+        onParkingReportCountLoaded,
 }: Props) {
         const [dataset, setDataset] = useState<DashboardDataset | null>(null);
         const [leaderboardWindow, setLeaderboardWindow] =
@@ -1495,19 +1509,32 @@ export function DashboardScreen({
                 });
 
                 try {
-                        const [roster, pois, pendingReservations] = await Promise.all([
-                                fetchSchoolStudentRoster(managedAppId, activeSchoolId),
-                                fetchSchoolPOIs(managedAppId, activeSchoolId).catch(
-                                        () => [] as SchoolPOI[],
-                                ),
-                                adminUserUUID.trim()
-                                        ? fetchPendingReservations(
-                                                        adminUserUUID,
-                                                        managedAppId,
-                                                        activeSchoolId,
-                                                ).catch(() => [])
-                                        : Promise.resolve([]),
-                        ]);
+                        const [roster, pois, pendingReservations, parkingIncidentReports] =
+                                await Promise.all([
+                                        fetchSchoolStudentRoster(managedAppId, activeSchoolId),
+                                        fetchSchoolPOIs(managedAppId, activeSchoolId).catch(
+                                                () => [] as SchoolPOI[],
+                                        ),
+                                        adminUserUUID.trim()
+                                                ? fetchPendingReservations(
+                                                                adminUserUUID,
+                                                                managedAppId,
+                                                                activeSchoolId,
+                                                        ).catch(() => [])
+                                                : Promise.resolve([]),
+                                        fetchSchoolParkingIncidentReports(
+                                                managedAppId,
+                                                activeSchoolId,
+                                                {
+                                                        status: "submitted",
+                                                        limit: 500,
+                                                },
+                                        ).catch(() => [] as StudentParkingIncidentReport[]),
+                                ]);
+
+                        onParkingReportCountLoaded?.(
+                                countOpenParkingIncidentReports(parkingIncidentReports),
+                        );
 
                         setLoadState({
                                 status: "loading",
@@ -1593,7 +1620,13 @@ export function DashboardScreen({
                                 total: 0,
                         });
                 }
-        }, [activeSchoolId, adminUserUUID, managedAppId, onHeaderCountsLoaded]);
+        }, [
+                activeSchoolId,
+                adminUserUUID,
+                managedAppId,
+                onHeaderCountsLoaded,
+                onParkingReportCountLoaded,
+        ]);
 
         useEffect(() => {
                 const timer = window.setTimeout(() => {

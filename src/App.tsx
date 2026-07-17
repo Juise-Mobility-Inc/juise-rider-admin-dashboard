@@ -2509,9 +2509,13 @@ function App() {
       setOpenParkingReportCount(null);
       return;
     }
+    if (currentSection === "dashboard" || currentSection === "parkingReports") {
+      return;
+    }
     let cancelled = false;
     fetchSchoolParkingIncidentReports(context.managedAppId, activeSchoolId, {
-      limit: 100,
+      status: "submitted",
+      limit: 500,
     })
       .then((reports) => {
         if (!cancelled) {
@@ -2524,7 +2528,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [session, activeSchoolId, context.managedAppId]);
+  }, [session, activeSchoolId, context.managedAppId, currentSection]);
 
   useEffect(() => {
     if (!schoolStudentRosterReady) {
@@ -4816,6 +4820,7 @@ function App() {
             managedAppId={context.managedAppId}
             adminUserUUID={session?.claims.user_uuid ?? ""}
             onHeaderCountsLoaded={setDashboardHeaderCounts}
+            onParkingReportCountLoaded={setOpenParkingReportCount}
           />
         );
       case "school":
