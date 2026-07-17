@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   assignSchoolParkingIncidentReport,
   clearSchoolParkingIncidentReportFlag,
+  deleteSchoolParkingIncidentReport,
   fetchParkingViolationFeeRules,
   fetchSchoolParkingIncidentReports,
   fetchSchoolRegisteredDevices,
@@ -601,6 +602,51 @@ export function ParkingReportsScreen({
     }
   }
 
+  async function deleteSelectedReport() {
+    if (!selectedReport) {
+      return;
+    }
+    const confirmed = window.confirm(
+      `Delete this parking report permanently?\n\nThis removes the report from the dashboard and student history. This cannot be undone.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+    setActionBusy("delete");
+    setError("");
+    try {
+      await deleteSchoolParkingIncidentReport(
+        selectedReport.app_id || managedAppId,
+        selectedReport.school_id || activeSchoolId,
+        selectedReport.report_uuid,
+      );
+      setReports((current) => {
+        const nextReports = current.filter(
+          (report) => report.report_uuid !== selectedReport.report_uuid,
+        );
+        if (statusFilter === "all" && typeFilter === "all") {
+          onOpenReportCountChange?.(countOpenReports(nextReports));
+        }
+        setSelectedReportId(nextReports[0]?.report_uuid ?? "");
+        return nextReports;
+      });
+      setDetailOpen(false);
+      setSignedUrls((current) => {
+        const next = { ...current };
+        for (const asset of selectedReport.media_assets ?? []) {
+          if (asset.object_key) {
+            delete next[asset.object_key];
+          }
+        }
+        return next;
+      });
+    } catch (nextError) {
+      setError(getErrorMessage(nextError));
+    } finally {
+      setActionBusy("");
+    }
+  }
+
   async function issueViolation() {
     if (!selectedReport) {
       return;
@@ -1005,6 +1051,14 @@ export function ParkingReportsScreen({
                                 : "Flagged for enforcement"}
                             </span>
                           ) : null}
+                          <button
+                            type="button"
+                            className="danger-button"
+                            disabled={actionBusy === "delete"}
+                            onClick={() => void deleteSelectedReport()}
+                          >
+                            {actionBusy === "delete" ? "Deleting..." : "Delete report"}
+                          </button>
                         </div>
 
                 <div className="penalty-report-detail-grid">

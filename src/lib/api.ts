@@ -2915,6 +2915,25 @@ export async function updateSchoolParkingIncidentReport(
   );
 }
 
+export async function deleteSchoolParkingIncidentReport(
+  managedAppId: string,
+  schoolId: string,
+  reportUUID: string,
+): Promise<StudentParkingIncidentReport> {
+  const search = new URLSearchParams({
+    managed_app_id: managedAppId,
+  });
+
+  return request<StudentParkingIncidentReport>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/parking-incident-reports/${encodeURIComponent(reportUUID)}?${search.toString()}`,
+    {
+      method: "DELETE",
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+}
+
 export async function assignSchoolParkingIncidentReport(
   managedAppId: string,
   schoolId: string,
