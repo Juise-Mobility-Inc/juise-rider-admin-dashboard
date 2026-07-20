@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   fetchDashboardAuditEvents,
   type AuditOutcome,
@@ -80,8 +81,10 @@ export function AuditLogScreen({ appId }: { appId: string }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState<DashboardAuditEvent | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedEventUuid = searchParams.get("event") ?? "";
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -145,6 +148,28 @@ export function AuditLogScreen({ appId }: { appId: string }) {
     });
   }, [events, searchQuery]);
 
+  const selected = useMemo(
+    () =>
+      events.find((event) => event.event_uuid === selectedEventUuid) ?? null,
+    [events, selectedEventUuid],
+  );
+
+  const openEvent = (eventUuid: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("event", eventUuid);
+    setSearchParams(next);
+  };
+
+  const backToList = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      const next = new URLSearchParams(searchParams);
+      next.delete("event");
+      setSearchParams(next, { replace: true });
+    }
+  };
+
   const hasActiveFilters =
     Boolean(action) || Boolean(outcome) || Boolean(severity);
 
@@ -157,6 +182,94 @@ export function AuditLogScreen({ appId }: { appId: string }) {
     setCursor("");
     setPageIndex(0);
   };
+
+  if (selectedEventUuid) {
+    return (
+      <section className="screen-section">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Security &amp; compliance</p>
+            <h2>Audit Event</h2>
+            {selected ? (
+              <p>{new Date(selected.occurred_at).toLocaleString()}</p>
+            ) : null}
+          </div>
+          <button className="secondary-button" onClick={backToList}>
+            ← Back to Audit Log
+          </button>
+        </div>
+        {selected ? (
+          <div className="audit-detail-page">
+            <div className="audit-detail-badges">
+              <span className={`audit-badge audit-outcome-${selected.outcome}`}>
+                {selected.outcome}
+              </span>
+              <span
+                className={`audit-badge audit-severity-${selected.severity}`}
+              >
+                {selected.severity}
+              </span>
+            </div>
+            <p>
+              <strong>
+                <code className="audit-action-code">{selected.action}</code>
+              </strong>
+            </p>
+            <dl className="audit-detail-grid">
+              <div>
+                <dt>Occurred</dt>
+                <dd>{new Date(selected.occurred_at).toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt>Event</dt>
+                <dd>{selected.event_uuid}</dd>
+              </div>
+              <div>
+                <dt>Actor</dt>
+                <dd>{selected.actor_user_uuid ?? "Unknown"}</dd>
+              </div>
+              <div>
+                <dt>School</dt>
+                <dd>{selected.school_id ?? "App-wide"}</dd>
+              </div>
+              <div>
+                <dt>Resource</dt>
+                <dd>
+                  {[selected.resource_type, selected.resource_id]
+                    .filter(Boolean)
+                    .join(": ") || "—"}
+                </dd>
+              </div>
+              <div>
+                <dt>HTTP status</dt>
+                <dd>{selected.http_status ?? "—"}</dd>
+              </div>
+              <div>
+                <dt>Source IP</dt>
+                <dd>{selected.source_ip ?? "—"}</dd>
+              </div>
+              <div>
+                <dt>Service</dt>
+                <dd>{formatSourceService(selected.source_service)}</dd>
+              </div>
+            </dl>
+            {selected.user_agent ? (
+              <p className="audit-user-agent">{selected.user_agent}</p>
+            ) : null}
+            <pre className="audit-metadata">
+              {JSON.stringify(selected.metadata, null, 2)}
+            </pre>
+          </div>
+        ) : (
+          <div className="banner">
+            {loading
+              ? "Loading audit event…"
+              : "This audit event is not on the currently loaded page. Go back to the audit log to browse events."}
+          </div>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section className="screen-section">
@@ -268,7 +381,7 @@ export function AuditLogScreen({ appId }: { appId: string }) {
               <tr
                 key={event.event_uuid}
                 className="audit-table-row"
-                onClick={() => setSelected(event)}
+                onClick={() => openEvent(event.event_uuid)}
               >
                 <td className="audit-time-cell">
                   <span className="audit-time-relative">
@@ -349,80 +462,6 @@ export function AuditLogScreen({ appId }: { appId: string }) {
         </div>
       </div>
 
-      {selected ? (
-        <div className="modal-backdrop" onClick={() => setSelected(null)}>
-          <div
-            className="modal-card audit-detail-card"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="section-heading">
-              <h3>Audit event</h3>
-              <button className="text-button" onClick={() => setSelected(null)}>
-                Close
-              </button>
-            </div>
-            <div className="audit-detail-badges">
-              <span className={`audit-badge audit-outcome-${selected.outcome}`}>
-                {selected.outcome}
-              </span>
-              <span
-                className={`audit-badge audit-severity-${selected.severity}`}
-              >
-                {selected.severity}
-              </span>
-            </div>
-            <p>
-              <strong>
-                <code className="audit-action-code">{selected.action}</code>
-              </strong>
-            </p>
-            <dl className="audit-detail-grid">
-              <div>
-                <dt>Occurred</dt>
-                <dd>{new Date(selected.occurred_at).toLocaleString()}</dd>
-              </div>
-              <div>
-                <dt>Event</dt>
-                <dd>{selected.event_uuid}</dd>
-              </div>
-              <div>
-                <dt>Actor</dt>
-                <dd>{selected.actor_user_uuid ?? "Unknown"}</dd>
-              </div>
-              <div>
-                <dt>School</dt>
-                <dd>{selected.school_id ?? "App-wide"}</dd>
-              </div>
-              <div>
-                <dt>Resource</dt>
-                <dd>
-                  {[selected.resource_type, selected.resource_id]
-                    .filter(Boolean)
-                    .join(": ") || "—"}
-                </dd>
-              </div>
-              <div>
-                <dt>HTTP status</dt>
-                <dd>{selected.http_status ?? "—"}</dd>
-              </div>
-              <div>
-                <dt>Source IP</dt>
-                <dd>{selected.source_ip ?? "—"}</dd>
-              </div>
-              <div>
-                <dt>Service</dt>
-                <dd>{formatSourceService(selected.source_service)}</dd>
-              </div>
-            </dl>
-            {selected.user_agent ? (
-              <p className="audit-user-agent">{selected.user_agent}</p>
-            ) : null}
-            <pre className="audit-metadata">
-              {JSON.stringify(selected.metadata, null, 2)}
-            </pre>
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 }

@@ -18193,6 +18193,14 @@
         max-width: 640px;
 }
 
+.audit-detail-page {
+        max-width: 760px;
+        background: #fff;
+        border: 1px solid rgba(3, 32, 13, 0.1);
+        border-radius: 14px;
+        padding: 20px;
+}
+
 .audit-detail-badges {
         display: flex;
         gap: 8px;
