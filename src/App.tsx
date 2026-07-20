@@ -4604,7 +4604,14 @@ function App() {
                     <input
                       autoComplete="one-time-code"
                       value={mfaCode}
-                      onChange={(event) => setMfaCode(event.target.value)}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setMfaCode(value);
+                        if (/^\d{6}$/.test(value.trim()) && !authBusy) {
+                          const form = event.target.form;
+                          window.setTimeout(() => form?.requestSubmit(), 0);
+                        }
+                      }}
                       placeholder={
                         mfaChallenge.enrollment_required
                           ? "123456"
