@@ -781,6 +781,20 @@ export function CampusDevicesScreen({
     }
   }
 
+  useEffect(() => {
+    const urlUUID =
+      searchParams.get("device")?.trim() ||
+      searchParams.get("registered_device_uuid")?.trim() ||
+      "";
+    if (urlUUID) {
+      setSelectedUUID((current) => (current === urlUUID ? current : urlUUID));
+      setView((current) => (current === "detail" ? current : "detail"));
+    } else {
+      setView((current) => (current === "table" ? current : "table"));
+      setSelectedUUID((current) => (current === null ? current : null));
+    }
+  }, [searchParams]);
+
   function openDetail(uuid: string) {
     setSelectedUUID(uuid);
     setSearchParams({ device: uuid });

@@ -1,0 +1,1 @@
+- [Detail-view URL sync](detail-url-sync.md) — drill-in detail views must sync selection to URL params via the shared useDetailParamSync hook so browser back works; don't hand-roll per screen.

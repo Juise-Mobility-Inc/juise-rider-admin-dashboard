@@ -17,6 +17,7 @@ import {
   type RegisteredDeviceFeeRule,
   type RegisteredDeviceReviewEntry,
 } from "../../lib/api";
+import { useDetailParamSync } from "../../lib/useDetailParamSync";
 
 type Props = {
   activeSchoolId: string;
@@ -228,6 +229,8 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
   const [filter, setFilter] = useState("pending");
   const [search, setSearch] = useState("");
   const [selectedUUID, setSelectedUUID] = useState("");
+
+  useDetailParamSync("registration", selectedUUID, setSelectedUUID);
   const [manualAmounts, setManualAmounts] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState("");

@@ -1,0 +1,94 @@
+{
+	"namespace": "default",
+	"services": [
+		{
+			"name": "billing-api-service",
+			"displayName": "Billing",
+			"deploymentName": "billing-api-service",
+			"serviceName": "billing-api-service-service",
+			"internalBaseUrl": "http://billing-api-service-service",
+			"apiProbePath": "/health"
+		},
+		{
+			"name": "global-auth-service",
+			"displayName": "Authentication Service",
+			"deploymentName": "global-auth-service",
+			"serviceName": "global-auth-service-service",
+			"internalBaseUrl": "http://global-auth-service-service",
+			"apiProbePath": "/health"
+		},
+		{
+			"name": "hub-store-service",
+			"displayName": "Juise Bar Service",
+			"deploymentName": "hub-store-service",
+			"serviceName": "hub-store-service-service",
+			"internalBaseUrl": "http://hub-store-service-service",
+			"apiProbePath": "/health"
+		},
+		{
+			"name": "infra-secret-store",
+			"displayName": "Authentication Store",
+			"deploymentName": "infra-secret-store",
+			"serviceName": "infra-secret-store-service",
+			"internalBaseUrl": "http://infra-secret-store-service",
+			"apiProbePath": "/health"
+		},
+		{
+			"name": "kca-proxy",
+			"displayName": "Main Proxy",
+			"deploymentName": "kca-proxy",
+			"serviceName": "kca-proxy-service",
+			"internalBaseUrl": "http://kca-proxy-service",
+			"apiProbePath": "/health"
+		},
+		{
+			"name": "kca-push-notification",
+			"displayName": "Push Notification Service",
+			"deploymentName": "kca-push-notification",
+			"serviceName": "kca-push-notification-service",
+			"internalBaseUrl": "http://kca-push-notification-service",
+			"apiProbePath": "/healthz"
+		},
+		{
+			"name": "nebula-user-server",
+			"displayName": "User Server",
+			"deploymentName": "nebula-user-server",
+			"serviceName": "nebula-user-server-service",
+			"internalBaseUrl": "http://nebula-user-server-service",
+			"apiProbePath": "/health"
+		},
+		{
+			"name": "partner-api",
+			"displayName": "Partner API",
+			"deploymentName": "partner-api",
+			"serviceName": "partner-api-service",
+			"internalBaseUrl": "http://partner-api-service",
+			"apiProbePath": "/api/v1/health"
+		},
+		{
+			"name": "tcp-proxy-layer",
+			"displayName": "Cloud Communication Server",
+			"deploymentName": "tcp-proxy-layer",
+			"serviceName": "tcp-proxy-layer-service",
+			"internalBaseUrl": "http://tcp-proxy-layer-service",
+			"apiProbePath": "/health"
+		},
+		{
+			"name": "vehicle-store-service",
+			"displayName": "Vehicle Service",
+			"deploymentName": "vehicle-store-service",
+			"serviceName": "vehicle-store-service-service",
+			"internalBaseUrl": "http://vehicle-store-service-service",
+			"apiProbePath": "/health",
+			"aliases": ["vehicle-store"]
+		},
+		{
+			"name": "zone-cache-service",
+			"displayName": "Zone Service",
+			"deploymentName": "zone-cache-service",
+			"serviceName": "zone-cache-service-service",
+			"internalBaseUrl": "http://zone-cache-service-service",
+			"apiProbePath": "/health"
+		}
+	]
+}

@@ -268,10 +268,70 @@
         font-size: 0.82rem;
 }
 
-.mfa-recovery-codes code {
-        white-space: pre-wrap;
-        line-height: 1.65;
-        columns: 2;
+.mfa-secret code {
+        font-size: 0.88rem;
+        letter-spacing: 0.04em;
+}
+
+.mfa-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+}
+
+.mfa-chip-button {
+        flex-shrink: 0;
+        padding: 5px 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(3, 32, 13, 0.18);
+        background: #fff;
+        color: #14532d;
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.12s, border-color 0.12s;
+}
+
+.mfa-chip-button:hover {
+        border-color: #27cc5e;
+        background: rgba(39, 204, 94, 0.08);
+}
+
+.mfa-recovery-code-list {
+        list-style: none;
+        margin: 4px 0 0;
+        padding: 0;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px 12px;
+}
+
+.mfa-recovery-code-list li {
+        background: #fff;
+        border: 1px solid rgba(3, 32, 13, 0.1);
+        border-radius: 8px;
+        padding: 6px 8px;
+        text-align: center;
+}
+
+.mfa-recovery-code-list code {
+        font-size: 0.8rem;
+        white-space: nowrap;
+        letter-spacing: 0.02em;
+}
+
+.mfa-recovery-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 6px;
+}
+
+@media (max-width: 420px) {
+        .mfa-recovery-code-list {
+                grid-template-columns: 1fr;
+        }
 }
 
 .app-shell {
@@ -17997,6 +18057,237 @@
 
 .parking-report-filter-chip-active:hover {
         color: #fff;
+}
+
+.audit-filter-bar {
+        display: grid;
+        gap: 12px;
+        margin-bottom: 14px;
+}
+
+.audit-filter-inputs {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+}
+
+.audit-filter-chip-rows {
+        display: grid;
+        gap: 8px;
+}
+
+.audit-filter-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+}
+
+.audit-filter-chip-label {
+        min-width: 68px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #5c6670;
+}
+
+.audit-filter-chip {
+        padding: 5px 12px;
+        border-radius: 999px;
+        border: 1px solid #d4dae0;
+        background: #fff;
+        color: #3c4650;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.audit-filter-chip:hover {
+        border-color: #27cc5e;
+        color: #178a3e;
+}
+
+.audit-filter-chip-active {
+        background: #27cc5e;
+        border-color: #27cc5e;
+        color: #fff;
+}
+
+.audit-filter-chip-active:hover {
+        color: #fff;
+}
+
+.audit-table-row {
+        cursor: pointer;
+}
+
+.audit-table-row:hover {
+        background: rgba(39, 204, 94, 0.06);
+}
+
+.audit-time-cell {
+        white-space: nowrap;
+}
+
+.audit-time-relative {
+        display: block;
+        font-weight: 600;
+}
+
+.audit-time-exact {
+        display: block;
+        font-size: 0.75rem;
+        color: #71797f;
+}
+
+.audit-action-code {
+        font-size: 0.8rem;
+        background: rgba(3, 32, 13, 0.06);
+        border-radius: 6px;
+        padding: 2px 7px;
+        overflow-wrap: anywhere;
+}
+
+.audit-actor-cell,
+.audit-resource-cell {
+        max-width: 220px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.82rem;
+}
+
+.audit-source-cell {
+        font-size: 0.82rem;
+        color: #5c6670;
+        white-space: nowrap;
+}
+
+.audit-badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 0.74rem;
+        font-weight: 700;
+        text-transform: capitalize;
+        white-space: nowrap;
+}
+
+.audit-outcome-success {
+        background: rgba(39, 204, 94, 0.14);
+        color: #14803c;
+}
+
+.audit-outcome-failure {
+        background: rgba(220, 68, 68, 0.12);
+        color: #b32626;
+}
+
+.audit-outcome-blocked {
+        background: rgba(246, 174, 45, 0.16);
+        color: #9a6a0a;
+}
+
+.audit-severity-info {
+        background: rgba(59, 130, 246, 0.12);
+        color: #1d5fc4;
+}
+
+.audit-severity-warning {
+        background: rgba(246, 174, 45, 0.16);
+        color: #9a6a0a;
+}
+
+.audit-severity-high {
+        background: rgba(220, 68, 68, 0.14);
+        color: #b32626;
+}
+
+.audit-empty-cell {
+        text-align: center;
+        color: #71797f;
+        padding: 26px 12px;
+}
+
+.audit-pagination {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+}
+
+.audit-pagination-info {
+        font-size: 0.82rem;
+        color: #5c6670;
+}
+
+.audit-pagination-buttons {
+        display: flex;
+        gap: 8px;
+}
+
+.audit-detail-card {
+        max-width: 640px;
+}
+
+.audit-detail-page {
+        max-width: 760px;
+        background: #fff;
+        border: 1px solid rgba(3, 32, 13, 0.1);
+        border-radius: 14px;
+        padding: 20px;
+}
+
+.audit-detail-badges {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 8px;
+}
+
+.audit-detail-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px 16px;
+        margin: 12px 0;
+}
+
+.audit-detail-grid dt {
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: #71797f;
+}
+
+.audit-detail-grid dd {
+        margin: 2px 0 0;
+        font-size: 0.86rem;
+        overflow-wrap: anywhere;
+}
+
+.audit-user-agent {
+        font-size: 0.76rem;
+        color: #71797f;
+        overflow-wrap: anywhere;
+}
+
+.audit-metadata {
+        max-height: 260px;
+        overflow: auto;
+        background: rgba(3, 32, 13, 0.05);
+        border-radius: 10px;
+        padding: 12px;
+        font-size: 0.78rem;
+}
+
+@media (max-width: 640px) {
+        .audit-detail-grid {
+                grid-template-columns: 1fr;
+        }
 }
 
 .parking-report-filter-actions {

@@ -1527,7 +1527,7 @@ export function DashboardScreen({
                                                 activeSchoolId,
                                                 {
                                                         status: "submitted",
-                                                        limit: 500,
+                                                        limit: 100,
                                                 },
                                         ).catch(() => [] as StudentParkingIncidentReport[]),
                                 ]);

@@ -31,6 +31,7 @@ import {
         sanitizeCsvFilename,
         type CsvCell,
 } from "../../lib/csv";
+import { useDetailParamSync } from "../../lib/useDetailParamSync";
 
 type ChallengeDraft = {
         challenge_uuid: string;
@@ -894,6 +895,19 @@ export function ChallengesScreen(props: Props) {
                 "list" | "details" | "participants"
         >("list");
         const [showLiveMap, setShowLiveMap] = useState(true);
+
+        useDetailParamSync(
+                "challenge",
+                screenTab !== "list" && selectedChallengeId ? selectedChallengeId : "",
+                (value) => {
+                        if (value) {
+                                setSelectedChallengeId(value);
+                                setScreenTab("details");
+                        } else {
+                                setScreenTab("list");
+                        }
+                },
+        );
         const [dragIndex, setDragIndex] = useState<number | null>(null);
         const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
