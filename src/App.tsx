@@ -19,6 +19,7 @@ import {
   createSchoolPack,
   createSchoolAdminAccount,
   deleteSchoolChallenge,
+  DashboardLoginLockedError,
   emitDashboardAudit,
   denyReservation,
   fetchAdminSchoolPacks,
@@ -364,6 +365,40 @@ const newChallengeSelectionId = "__new_challenge__";
 
 const authAppId =
   import.meta.env.VITE_AUTH_APP_ID ?? "juise_rider_admin_dashboard";
+const loginLockStorageKey = "juise-dashboard-login-lock";
+
+interface StoredLoginLock {
+  identifier: string;
+  blockedUntil: string;
+}
+
+function normalizeLoginIdentifier(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function readStoredLoginLock(): StoredLoginLock | null {
+  try {
+    const parsed = JSON.parse(
+      localStorage.getItem(loginLockStorageKey) ?? "null",
+    ) as StoredLoginLock | null;
+    if (
+      parsed?.identifier &&
+      Number.isFinite(Date.parse(parsed.blockedUntil)) &&
+      Date.parse(parsed.blockedUntil) > Date.now()
+    ) {
+      return parsed;
+    }
+  } catch {
+    // Ignore malformed local state.
+  }
+  localStorage.removeItem(loginLockStorageKey);
+  return null;
+}
+
+function formatLoginLockCountdown(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
+}
 const defaultManagedAppId =
   import.meta.env.VITE_DEFAULT_MANAGED_APP_ID ?? "juise-customer-app";
 const schoolColorHexPattern = /^#(?:[0-9a-fA-F]{6})$/;
@@ -1470,7 +1505,16 @@ function App() {
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>("login");
 
-  const [identifier, setIdentifier] = useState("");
+  const [initialLoginLock] = useState<StoredLoginLock | null>(() =>
+    readStoredLoginLock(),
+  );
+  const [identifier, setIdentifier] = useState(
+    () => initialLoginLock?.identifier ?? "",
+  );
+  const [loginLock, setLoginLock] = useState<StoredLoginLock | null>(
+    initialLoginLock,
+  );
+  const [loginClockMs, setLoginClockMs] = useState(() => Date.now());
   const [password, setPassword] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState("");
@@ -1491,6 +1535,28 @@ function App() {
     phone: "",
     password: "",
   });
+
+  useEffect(() => {
+    if (!loginLock) return;
+    const updateClock = () => {
+      const now = Date.now();
+      setLoginClockMs(now);
+      if (Date.parse(loginLock.blockedUntil) <= now) {
+        setLoginLock(null);
+        localStorage.removeItem(loginLockStorageKey);
+      }
+    };
+    const timer = window.setInterval(updateClock, 1_000);
+    return () => window.clearInterval(timer);
+  }, [loginLock]);
+
+  const loginLockSeconds = loginLock
+    ? Math.max(
+        0,
+        Math.ceil((Date.parse(loginLock.blockedUntil) - loginClockMs) / 1_000),
+      )
+    : 0;
+  const loginIsLocked = loginLockSeconds > 0;
 
   const [schoolBusy, setSchoolBusy] = useState(false);
   const [schoolLogoUploadBusy, setSchoolLogoUploadBusy] = useState(false);
@@ -3364,6 +3430,8 @@ function App() {
       if ("mfa_required" in result) {
         await prepareMFAChallenge(result);
       } else {
+        setLoginLock(null);
+        localStorage.removeItem(loginLockStorageKey);
         setSession(result);
         setAuthMode("login");
         setBanner({
@@ -3372,6 +3440,15 @@ function App() {
         });
       }
     } catch (error) {
+      if (error instanceof DashboardLoginLockedError) {
+        const nextLock = {
+          identifier: normalizeLoginIdentifier(identifier),
+          blockedUntil: error.blockedUntil,
+        };
+        setLoginLock(nextLock);
+        setLoginClockMs(Date.now());
+        localStorage.setItem(loginLockStorageKey, JSON.stringify(nextLock));
+      }
       setAuthError(getErrorMessage(error));
     } finally {
       setAuthBusy(false);
@@ -3413,14 +3490,34 @@ function App() {
       setMfaQrCode("");
       setMfaCode("");
       setAuthMode("login");
+      setLoginLock(null);
+      localStorage.removeItem(loginLockStorageKey);
       setBanner({
         tone: "success",
         message: `Signed in as ${formatAdminIdentity(nextSession)}.`,
       });
     } catch (error) {
+      if (error instanceof DashboardLoginLockedError) {
+        const nextLock = {
+          identifier: normalizeLoginIdentifier(identifier),
+          blockedUntil: error.blockedUntil,
+        };
+        setLoginLock(nextLock);
+        setLoginClockMs(Date.now());
+        localStorage.setItem(loginLockStorageKey, JSON.stringify(nextLock));
+      }
       setAuthError(getErrorMessage(error));
     } finally {
       setAuthBusy(false);
+    }
+  }
+
+  function handleLoginIdentifierChange(value: string) {
+    setIdentifier(value);
+    if (loginLock && normalizeLoginIdentifier(value) !== loginLock.identifier) {
+      setLoginLock(null);
+      localStorage.removeItem(loginLockStorageKey);
+      setAuthError("");
     }
   }
 
@@ -4535,12 +4632,27 @@ function App() {
                     />
                   </label>
                 ) : null}
-                {authError ? <p className="error-text">{authError}</p> : null}
+                {loginIsLocked ? (
+                  <div className="login-lock-notice" role="alert">
+                    <div>
+                      <strong>Sign-in temporarily unavailable</strong>
+                      <span>Please wait before trying again.</span>
+                    </div>
+                    <time aria-label={`${loginLockSeconds} seconds remaining`}>
+                      {formatLoginLockCountdown(loginLockSeconds)}
+                    </time>
+                  </div>
+                ) : null}
+                {authError && !loginIsLocked ? (
+                  <p className="error-text">{authError}</p>
+                ) : null}
                 {!mfaChallenge.enrollment_required || mfaEnrollment ? (
                   <button
                     className="primary-button"
                     type="submit"
-                    disabled={authBusy || mfaCode.trim().length < 6}
+                    disabled={
+                      authBusy || loginIsLocked || mfaCode.trim().length < 6
+                    }
                   >
                     {authBusy
                       ? "Verifying…"
@@ -4704,12 +4816,27 @@ function App() {
                       <p className="eyebrow">Admin Login</p>
                       <h2>Welcome back</h2>
                     </div>
+                    {loginIsLocked ? (
+                      <div className="login-lock-notice" role="alert">
+                        <div>
+                          <strong>Sign-in temporarily unavailable</strong>
+                          <span>Please wait before trying again.</span>
+                        </div>
+                        <time
+                          aria-label={`${loginLockSeconds} seconds remaining`}
+                        >
+                          {formatLoginLockCountdown(loginLockSeconds)}
+                        </time>
+                      </div>
+                    ) : null}
                     <label className="field">
                       <span>Username, email, or phone</span>
                       <input
                         autoComplete="username"
                         value={identifier}
-                        onChange={(event) => setIdentifier(event.target.value)}
+                        onChange={(event) =>
+                          handleLoginIdentifierChange(event.target.value)
+                        }
                         placeholder="admin@example.com"
                         required
                       />
@@ -4725,15 +4852,19 @@ function App() {
                         required
                       />
                     </label>
-                    {authError ? (
+                    {authError && !loginIsLocked ? (
                       <p className="error-text">{authError}</p>
                     ) : null}
                     <button
                       className="primary-button"
                       type="submit"
-                      disabled={authBusy}
+                      disabled={authBusy || loginIsLocked}
                     >
-                      {authBusy ? "Signing in…" : "Enter Dashboard"}
+                      {authBusy
+                        ? "Signing in…"
+                        : loginIsLocked
+                          ? `Try again in ${formatLoginLockCountdown(loginLockSeconds)}`
+                          : "Enter Dashboard"}
                     </button>
                   </form>
                 )}

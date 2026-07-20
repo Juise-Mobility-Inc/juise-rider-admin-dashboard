@@ -190,6 +190,47 @@
         color: #1e2124;
 }
 
+.login-lock-notice {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 16px 18px;
+        border: 1px solid rgba(179, 58, 58, 0.24);
+        border-radius: 16px;
+        background: rgba(179, 58, 58, 0.08);
+        color: #651d1d;
+}
+
+.login-lock-notice > div {
+        display: grid;
+        gap: 3px;
+        min-width: 0;
+}
+
+.login-lock-notice strong {
+        font-size: 0.9rem;
+        line-height: 1.35;
+}
+
+.login-lock-notice span {
+        color: #7f3c3c;
+        font-size: 0.8rem;
+        line-height: 1.35;
+}
+
+.login-lock-notice time {
+        flex: 0 0 auto;
+        min-width: 58px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: rgba(179, 58, 58, 0.1);
+        font-size: 1rem;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        text-align: center;
+}
+
 .mfa-form {
         width: 100%;
 }

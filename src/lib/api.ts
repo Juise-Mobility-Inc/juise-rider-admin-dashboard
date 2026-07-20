@@ -1102,7 +1102,25 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function parseErrorMessage(response: Response): Promise<string> {
+interface ApiErrorPayload {
+  message: string;
+  blocked_until?: string;
+  retry_after_seconds?: number;
+}
+
+export class DashboardLoginLockedError extends Error {
+  readonly blockedUntil: string;
+  readonly retryAfterSeconds?: number;
+
+  constructor(payload: ApiErrorPayload) {
+    super(payload.message);
+    this.name = "DashboardLoginLockedError";
+    this.blockedUntil = payload.blocked_until ?? "";
+    this.retryAfterSeconds = payload.retry_after_seconds;
+  }
+}
+
+async function parseErrorPayload(response: Response): Promise<ApiErrorPayload> {
   const contentType = response.headers.get("content-type") ?? "";
   const text = await response.text();
   if (contentType.includes("application/json") && text.trim() !== "") {
@@ -1110,22 +1128,31 @@ async function parseErrorMessage(response: Response): Promise<string> {
       const payload = JSON.parse(text) as {
         message?: string;
         error?: string;
+        blocked_until?: string;
+        retry_after_seconds?: number;
       };
-      if (payload.message) {
-        return payload.message;
-      }
-      if (payload.error) {
-        return payload.error;
-      }
+      return {
+        message:
+          payload.message ??
+          payload.error ??
+          `Request failed with status ${response.status}`,
+        blocked_until: payload.blocked_until,
+        retry_after_seconds: payload.retry_after_seconds,
+      };
     } catch {
       // Fall through to raw text handling.
     }
   }
+  return {
+    message:
+      text.trim() !== ""
+        ? text
+        : `Request failed with status ${response.status}`,
+  };
+}
 
-  if (text.trim() !== "") {
-    return text;
-  }
-  return `Request failed with status ${response.status}`;
+async function parseErrorMessage(response: Response): Promise<string> {
+  return (await parseErrorPayload(response)).message;
 }
 
 async function refreshSession(): Promise<AdminSession> {
@@ -1250,7 +1277,11 @@ async function request<T>(
         metadata: { method, path },
       }).catch(() => undefined);
     }
-    throw new Error(await parseErrorMessage(response));
+    const errorPayload = await parseErrorPayload(response);
+    if (errorPayload.blocked_until) {
+      throw new DashboardLoginLockedError(errorPayload);
+    }
+    throw new Error(errorPayload.message);
   }
 
   if (authRequired && service !== "nebula" && method !== "GET") {
