@@ -27,6 +27,38 @@ export interface AdminSession {
   user?: NebulaUser;
 }
 
+export type AuditOutcome = "success" | "failure" | "blocked";
+export type AuditSeverity = "info" | "warning" | "high";
+export interface DashboardAuditEvent {
+  event_uuid: string;
+  occurred_at: string;
+  app_id: string;
+  school_id?: string;
+  actor_user_uuid?: string;
+  action: string;
+  resource_type?: string;
+  resource_id?: string;
+  outcome: AuditOutcome;
+  severity: AuditSeverity;
+  http_status?: number;
+  source_ip?: string;
+  user_agent?: string;
+  source_service: string;
+  metadata: Record<string, unknown>;
+}
+export interface DashboardAuditPage {
+  events: DashboardAuditEvent[];
+  next_cursor?: string;
+}
+export interface DashboardAuditFilters {
+  action?: string;
+  outcome?: AuditOutcome | "";
+  severity?: AuditSeverity | "";
+  actor_user_uuid?: string;
+  cursor?: string;
+  limit?: number;
+}
+
 export interface UserMediaAsset {
   media_uuid: string;
   user_uuid: string;
@@ -622,9 +654,7 @@ function beaconFrameTypes(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
   }
-  return value
-    .map((item) => apiString(item))
-    .filter(Boolean);
+  return value.map((item) => apiString(item)).filter(Boolean);
 }
 
 export function getRegisteredDeviceBeaconInfo(
@@ -898,8 +928,7 @@ function dedupeRegisteredDevices(
       return (
         key !== "" &&
         source.findIndex(
-          (candidate) =>
-            candidate.registered_device_uuid?.trim() === key,
+          (candidate) => candidate.registered_device_uuid?.trim() === key,
         ) === index
       );
     });
@@ -936,7 +965,7 @@ async function resolveSignedUserProfileImageUrl(
 
   const signedAvatarUrls = await signSchoolMedia(schoolId, [
     avatarAsset.object_key,
-  ]).catch(() => ({} as Record<string, string>));
+  ]).catch(() => ({}) as Record<string, string>);
   return signedAvatarUrls[avatarAsset.object_key] ?? null;
 }
 
@@ -964,14 +993,19 @@ interface MFACompletedResponse {
   trusted_device_expires: number;
 }
 
-const trustedDeviceStorageKey = "juise-rider-admin-dashboard.mfa-trusted-device";
+const trustedDeviceStorageKey =
+  "juise-rider-admin-dashboard.mfa-trusted-device";
 
 function readTrustedDeviceToken(): string {
   try {
-    const stored = JSON.parse(window.localStorage.getItem(trustedDeviceStorageKey) ?? "null") as
-      | { token?: string; expires?: number }
-      | null;
-    if (!stored?.token || !stored.expires || stored.expires * 1000 <= Date.now()) {
+    const stored = JSON.parse(
+      window.localStorage.getItem(trustedDeviceStorageKey) ?? "null",
+    ) as { token?: string; expires?: number } | null;
+    if (
+      !stored?.token ||
+      !stored.expires ||
+      stored.expires * 1000 <= Date.now()
+    ) {
       window.localStorage.removeItem(trustedDeviceStorageKey);
       return "";
     }
@@ -985,7 +1019,10 @@ function readTrustedDeviceToken(): string {
 function saveTrustedDevice(response: MFACompletedResponse) {
   window.localStorage.setItem(
     trustedDeviceStorageKey,
-    JSON.stringify({ token: response.trusted_device_token, expires: response.trusted_device_expires }),
+    JSON.stringify({
+      token: response.trusted_device_token,
+      expires: response.trusted_device_expires,
+    }),
   );
 }
 
@@ -1024,10 +1061,7 @@ function resolveServiceBaseUrl(
 }
 
 const serviceBase: Record<ServiceName, string> = {
-  auth: resolveServiceBaseUrl(
-    "/auth-api",
-    import.meta.env.VITE_AUTH_API_BASE,
-  ),
+  auth: resolveServiceBaseUrl("/auth-api", import.meta.env.VITE_AUTH_API_BASE),
   nebula: resolveServiceBaseUrl(
     "/nebula-api",
     import.meta.env.VITE_NEBULA_API_BASE,
@@ -1206,7 +1240,26 @@ async function request<T>(
   }
 
   if (!response.ok) {
+    if (authRequired && service !== "nebula" && method !== "GET") {
+      void emitDashboardAudit({
+        action: "dashboard.external.request",
+        resource_type: service,
+        resource_id: path,
+        outcome: "failure",
+        severity: "warning",
+        metadata: { method, path },
+      }).catch(() => undefined);
+    }
     throw new Error(await parseErrorMessage(response));
+  }
+
+  if (authRequired && service !== "nebula" && method !== "GET") {
+    void emitDashboardAudit({
+      action: "dashboard.external.request",
+      resource_type: service,
+      resource_id: path,
+      metadata: { method, path },
+    }).catch(() => undefined);
   }
 
   return parseResponse<T>(response);
@@ -1214,6 +1267,35 @@ async function request<T>(
 
 export function setApiSession(session: AdminSession | null) {
   currentSession = session;
+}
+
+export async function emitDashboardAudit(input: {
+  action: string;
+  resource_type?: string;
+  resource_id?: string;
+  outcome?: AuditOutcome;
+  severity?: AuditSeverity;
+  metadata?: Record<string, unknown>;
+}): Promise<void> {
+  const appId = currentSession?.authAppId ?? "juise_rider_admin_dashboard";
+  await request(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(appId)}/audit-events/client`,
+    { method: "POST", body: input },
+  );
+}
+
+export async function fetchDashboardAuditEvents(
+  appId: string,
+  filters: DashboardAuditFilters = {},
+): Promise<DashboardAuditPage> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters))
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  return request<DashboardAuditPage>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(appId)}/audit-events?${query.toString()}`,
+  );
 }
 
 export function setSessionObserver(
@@ -1251,25 +1333,32 @@ export async function loginWithIdentifier(
   password: string,
   authAppId: string,
 ): Promise<MFAChallenge | AdminSession> {
-  const response = await request<MFAChallenge | AuthTokenBundle>("auth", "/api/v1/auth/login", {
-    method: "POST",
-    body: {
-      identifier,
-      password,
-      app_id: authAppId,
-      trusted_device_token: readTrustedDeviceToken(),
+  const response = await request<MFAChallenge | AuthTokenBundle>(
+    "auth",
+    "/api/v1/auth/login",
+    {
+      method: "POST",
+      body: {
+        identifier,
+        password,
+        app_id: authAppId,
+        trusted_device_token: readTrustedDeviceToken(),
+      },
+      authRequired: false,
+      appIdHeader: authAppId,
+      retryOnUnauthorized: false,
     },
-    authRequired: false,
-    appIdHeader: authAppId,
-    retryOnUnauthorized: false,
-  });
+  );
   if ("mfa_required" in response) {
     return response;
   }
   return createAdminSession(response, authAppId);
 }
 
-async function createAdminSession(tokens: AuthTokenBundle, authAppId: string): Promise<AdminSession> {
+async function createAdminSession(
+  tokens: AuthTokenBundle,
+  authAppId: string,
+): Promise<AdminSession> {
   const claims = await inspectAccessToken(tokens, authAppId);
   if (!claims.admin) {
     throw new Error("This account is not marked as an admin user.");
@@ -1298,23 +1387,41 @@ async function createAdminSession(tokens: AuthTokenBundle, authAppId: string): P
   }
 }
 
-export async function beginMFAEnrollment(authAppId: string, mfaToken: string): Promise<MFAEnrollment> {
+export async function beginMFAEnrollment(
+  authAppId: string,
+  mfaToken: string,
+): Promise<MFAEnrollment> {
   return request<MFAEnrollment>("auth", "/api/v1/auth/mfa/enroll", {
-    method: "POST", body: { mfa_token: mfaToken }, authRequired: false,
-    appIdHeader: authAppId, retryOnUnauthorized: false,
+    method: "POST",
+    body: { mfa_token: mfaToken },
+    authRequired: false,
+    appIdHeader: authAppId,
+    retryOnUnauthorized: false,
   });
 }
 
-async function completeMFA(path: string, authAppId: string, mfaToken: string, code: string): Promise<AdminSession> {
+async function completeMFA(
+  path: string,
+  authAppId: string,
+  mfaToken: string,
+  code: string,
+): Promise<AdminSession> {
   const response = await request<MFACompletedResponse>("auth", path, {
-    method: "POST", body: { mfa_token: mfaToken, code }, authRequired: false,
-    appIdHeader: authAppId, retryOnUnauthorized: false,
+    method: "POST",
+    body: { mfa_token: mfaToken, code },
+    authRequired: false,
+    appIdHeader: authAppId,
+    retryOnUnauthorized: false,
   });
   saveTrustedDevice(response);
   return createAdminSession(response.tokens, authAppId);
 }
 
-export function confirmMFAEnrollment(authAppId: string, mfaToken: string, code: string) {
+export function confirmMFAEnrollment(
+  authAppId: string,
+  mfaToken: string,
+  code: string,
+) {
   return completeMFA("/api/v1/auth/mfa/confirm", authAppId, mfaToken, code);
 }
 
@@ -1361,18 +1468,13 @@ export async function createSchoolAdminAccount(
     payload.phone = trimmedPhone;
   }
 
-  return request<MFAChallenge>(
-    "auth",
-    "/api/v1/user/create-school-admin",
-    {
-      method: "POST",
-      body: payload,
-      authRequired: false,
-      appIdHeader: authAppId,
-      retryOnUnauthorized: false,
-    },
-  );
-
+  return request<MFAChallenge>("auth", "/api/v1/user/create-school-admin", {
+    method: "POST",
+    body: payload,
+    authRequired: false,
+    appIdHeader: authAppId,
+    retryOnUnauthorized: false,
+  });
 }
 
 export async function fetchSchools(managedAppId: string): Promise<School[]> {
@@ -1624,10 +1726,7 @@ export async function uploadSchoolChallengeImage(
   return parseResponse<SchoolChallengeImageUploadResponse>(response);
 }
 
-function normalizeEntityMediaSegment(
-  value: string,
-  fallback: string,
-): string {
+function normalizeEntityMediaSegment(value: string, fallback: string): string {
   const normalized = value
     .trim()
     .replace(/[^a-zA-Z0-9._-]+/g, "_")
@@ -1710,13 +1809,17 @@ export async function uploadUserEntityMedia(
 ): Promise<UploadedEntityMedia> {
   const fileExt = input.file.name.split(".").pop()?.trim() ?? "";
   const contentType = input.file.type?.trim() ?? "";
-  const initUpload = await initUserEntityMediaUpload(managedAppId, {
-    entity_type: input.entityType,
-    entity_uuid: input.entityUUID,
-    slot: input.slot,
-    file_ext: fileExt,
-    content_type: contentType,
-  }, appIdHeader);
+  const initUpload = await initUserEntityMediaUpload(
+    managedAppId,
+    {
+      entity_type: input.entityType,
+      entity_uuid: input.entityUUID,
+      slot: input.slot,
+      file_ext: fileExt,
+      content_type: contentType,
+    },
+    appIdHeader,
+  );
 
   await uploadFileToSignedUrl(
     initUpload.put_url,
@@ -1863,7 +1966,9 @@ export async function uploadFileToSignedUrl(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text.trim() || `Upload failed with status ${response.status}`);
+    throw new Error(
+      text.trim() || `Upload failed with status ${response.status}`,
+    );
   }
 }
 
@@ -2263,26 +2368,31 @@ export async function fetchStudentPublicProfile(
     const [summary, mediaAssets] = await Promise.all([
       request<RouteHistorySummary>(
         "nebula",
-        `/api/v1/apps/${encodeURIComponent(managedAppId)}/user/${encodeURIComponent(targetUserUUID)}/route-history/summary?${new URLSearchParams({
-          school_id: schoolId,
-        }).toString()}`,
+        `/api/v1/apps/${encodeURIComponent(managedAppId)}/user/${encodeURIComponent(targetUserUUID)}/route-history/summary?${new URLSearchParams(
+          {
+            school_id: schoolId,
+          },
+        ).toString()}`,
         {
           appIdHeader: managedAppId,
         },
       ),
-      fetchUserMediaAssets(managedAppId, targetUserUUID, "user_profile", targetUserUUID).catch(
-        () => [] as UserMediaAsset[],
-      ),
+      fetchUserMediaAssets(
+        managedAppId,
+        targetUserUUID,
+        "user_profile",
+        targetUserUUID,
+      ).catch(() => [] as UserMediaAsset[]),
     ]);
 
     const avatarAsset = pickAvatarAsset(mediaAssets);
     const signedAvatarUrls: Record<string, string> = avatarAsset?.object_key
       ? await signSchoolMedia(schoolId, [avatarAsset.object_key]).catch(
-          () => ({} as Record<string, string>),
+          () => ({}) as Record<string, string>,
         )
       : {};
     const signedAvatarUrl = avatarAsset?.object_key
-      ? signedAvatarUrls[avatarAsset.object_key] ?? null
+      ? (signedAvatarUrls[avatarAsset.object_key] ?? null)
       : null;
 
     return {
@@ -2467,21 +2577,13 @@ export interface StudentParkingViolationUpdateInput {
 }
 
 export type ParkingIncidentReportType =
-  | "reserved_spot_occupied"
-  | "improper_parking"
-  | "blocking_access"
-  | "other";
+  "reserved_spot_occupied" | "improper_parking" | "blocking_access" | "other";
 
 export type ParkingIncidentReportStatus =
-  | "submitted"
-  | "under_review"
-  | "resolved"
-  | "dismissed";
+  "submitted" | "under_review" | "resolved" | "dismissed";
 
 export type ParkingIncidentResponsibilityConsequence =
-  | "none"
-  | "points"
-  | "fine";
+  "none" | "points" | "fine";
 
 export interface StudentParkingIncidentReport {
   report_uuid: string;
@@ -2517,7 +2619,8 @@ export interface StudentParkingIncidentReport {
   flag_resolved_at?: number | null;
   linked_violation_uuid?: string | null;
   violation_issued_at?: number | null;
-  responsibility_consequence?: ParkingIncidentResponsibilityConsequence | string;
+  responsibility_consequence?:
+    ParkingIncidentResponsibilityConsequence | string;
   responsibility_points_lost?: number;
   responsibility_fine_cents?: number | null;
   responsibility_note?: string;
@@ -2772,7 +2875,7 @@ export async function fetchStudentParkingViolations(
   });
 
   return request<StudentParkingViolation[]>(
-    'kcaProxy',
+    "kcaProxy",
     `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violations?${search.toString()}`,
     {
       appIdHeader: currentSession?.authAppId ?? managedAppId,
@@ -3124,7 +3227,10 @@ export async function deleteParkingViolationFeeRule(
   );
 }
 
-function buildManagedSchoolSearch(managedAppId: string, options?: Record<string, string | undefined>) {
+function buildManagedSchoolSearch(
+  managedAppId: string,
+  options?: Record<string, string | undefined>,
+) {
   const search = new URLSearchParams({
     managed_app_id: managedAppId,
   });
@@ -3364,7 +3470,9 @@ export async function uploadSchoolParkingViolationMedia(
   });
   if (!uploadResponse.ok) {
     const text = await uploadResponse.text();
-    throw new Error(text.trim() || `Upload failed with status ${uploadResponse.status}`);
+    throw new Error(
+      text.trim() || `Upload failed with status ${uploadResponse.status}`,
+    );
   }
 
   return request<AdminParkingViolationMediaUploadResponse>(

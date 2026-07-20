@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  emitDashboardAudit,
   fetchAdminSchoolPacks,
   fetchSchool,
   fetchSchoolPOIs,
@@ -474,7 +475,8 @@ function estimatePenaltySpeedMph(
     }
 
     const bestCoordDiff =
-      Math.abs(best.latitude - event.lat) + Math.abs(best.longitude - event.lng);
+      Math.abs(best.latitude - event.lat) +
+      Math.abs(best.longitude - event.lng);
     const pointCoordDiff =
       Math.abs(point.latitude - event.lat) +
       Math.abs(point.longitude - event.lng);
@@ -623,6 +625,12 @@ function downloadBlob(filename: string, blob: Blob): void {
   document.body.removeChild(link);
 
   URL.revokeObjectURL(url);
+  void emitDashboardAudit({
+    action: "dashboard.export.download",
+    resource_type: "report_bundle",
+    resource_id: filename,
+    metadata: { filename, format: "zip" },
+  }).catch(() => undefined);
 }
 
 const crc32Table = (() => {
@@ -756,7 +764,11 @@ function createZipBlob(files: ReportCsvFile[]): Blob {
   writeUint32(endOfCentralDirectory, 16, centralDirectoryOffset);
   writeUint16(endOfCentralDirectory, 20, 0);
 
-  const zipChunks = [...chunks, ...centralDirectoryChunks, endOfCentralDirectory];
+  const zipChunks = [
+    ...chunks,
+    ...centralDirectoryChunks,
+    endOfCentralDirectory,
+  ];
   const zipBytes = new Uint8Array(
     zipChunks.reduce((sum, chunk) => sum + chunk.length, 0),
   );
@@ -797,7 +809,9 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
-function countOpenParkingViolations(violations: StudentParkingViolation[]): number {
+function countOpenParkingViolations(
+  violations: StudentParkingViolation[],
+): number {
   return violations.filter((violation) => {
     const status = violation.status.trim().toLowerCase();
     return (
@@ -811,9 +825,7 @@ function countOpenParkingViolations(violations: StudentParkingViolation[]): numb
 
 function resolveReportDeviceTypes(devices: RegisteredDevice[]): string {
   return Array.from(
-    new Set(
-      devices.map((device) => device.device_type.trim()).filter(Boolean),
-    ),
+    new Set(devices.map((device) => device.device_type.trim()).filter(Boolean)),
   )
     .sort()
     .join("; ");
@@ -945,7 +957,11 @@ export function ReportsScreen({
         packsResult,
       ] = await Promise.allSettled([
         fetchSchoolStudentRoster(managedAppId, activeSchoolId),
-        fetchSchoolTermReservations(adminUserUUID, managedAppId, activeSchoolId),
+        fetchSchoolTermReservations(
+          adminUserUUID,
+          managedAppId,
+          activeSchoolId,
+        ),
         fetchSchoolPOIs(managedAppId, activeSchoolId),
         fetchSchoolZones(managedAppId, activeSchoolId),
         fetchSchool(managedAppId, activeSchoolId),
@@ -958,7 +974,9 @@ export function ReportsScreen({
 
       const errors: ReportDataError[] = [];
       const reservations =
-        reservationsResult.status === "fulfilled" ? reservationsResult.value : [];
+        reservationsResult.status === "fulfilled"
+          ? reservationsResult.value
+          : [];
       const pois = poisResult.status === "fulfilled" ? poisResult.value : [];
       const zones = zonesResult.status === "fulfilled" ? zonesResult.value : [];
       const terms =
@@ -1008,23 +1026,20 @@ export function ReportsScreen({
         4,
         async (entry) => {
           const studentUserUUID = resolveStudentUserUUID(entry);
-          const [
-            profileResult,
-            routeHistoryResult,
-            parkingViolationsResult,
-          ] = await Promise.allSettled([
-            fetchStudentProfile(managedAppId, studentUserUUID),
-            fetchStudentRouteHistory(
-              managedAppId,
-              activeSchoolId,
-              studentUserUUID,
-            ),
-            fetchStudentParkingViolations(
-              managedAppId,
-              activeSchoolId,
-              studentUserUUID,
-            ),
-          ]);
+          const [profileResult, routeHistoryResult, parkingViolationsResult] =
+            await Promise.allSettled([
+              fetchStudentProfile(managedAppId, studentUserUUID),
+              fetchStudentRouteHistory(
+                managedAppId,
+                activeSchoolId,
+                studentUserUUID,
+              ),
+              fetchStudentParkingViolations(
+                managedAppId,
+                activeSchoolId,
+                studentUserUUID,
+              ),
+            ]);
           const studentErrors: ReportDataError[] = [];
 
           if (profileResult.status === "rejected") {
@@ -1167,7 +1182,8 @@ export function ReportsScreen({
         ),
         top_speed_mph: mphFromMetersPerSecond(topSpeedMps),
         poi_visit_count: poiVisits.length,
-        unique_poi_count: new Set(poiVisits.map(({ poi }) => poi.poi_uuid)).size,
+        unique_poi_count: new Set(poiVisits.map(({ poi }) => poi.poi_uuid))
+          .size,
         ride_penalty_count: ridePenalties.length,
         speeding_penalty_count: ridePenalties.filter(
           ({ event }) => event.zone_type === "speed_limit",
@@ -1261,7 +1277,11 @@ export function ReportsScreen({
 
     const rows = dataset.students.flatMap((bundle) =>
       getFilteredPenaltyEvents(bundle, dateRange).map(({ session, event }) => {
-        const matchingZone = resolvePenaltyZone(session, dataset.zones, event.zone_uuid);
+        const matchingZone = resolvePenaltyZone(
+          session,
+          dataset.zones,
+          event.zone_uuid,
+        );
         const estimatedSpeedMph =
           event.zone_type === "speed_limit"
             ? estimatePenaltySpeedMph(session, event)
@@ -1275,7 +1295,9 @@ export function ReportsScreen({
           session_started_at: formatUnixTimestamp(session.started_at),
           zone_uuid: event.zone_uuid,
           zone_title:
-            event.title || matchingZone?.title || formatZoneType(event.zone_type),
+            event.title ||
+            matchingZone?.title ||
+            formatZoneType(event.zone_type),
           zone_type: formatZoneType(event.zone_type),
           reason: event.reason,
           occurred_at: formatUnixTimestamp(event.occurred_at),
@@ -1772,7 +1794,10 @@ export function ReportsScreen({
       return;
     }
 
-    downloadBlob(buildZipFilename(activeSchoolId, dateRange), createZipBlob(files));
+    downloadBlob(
+      buildZipFilename(activeSchoolId, dateRange),
+      createZipBlob(files),
+    );
   }
 
   return (
@@ -1797,7 +1822,9 @@ export function ReportsScreen({
             onClick={() => void handleBuildDataset()}
             disabled={loadState.status === "loading" || !activeSchoolId}
           >
-            {loadState.status === "loading" ? "Building..." : "Build Report Data"}
+            {loadState.status === "loading"
+              ? "Building..."
+              : "Build Report Data"}
           </button>
         </div>
       </div>

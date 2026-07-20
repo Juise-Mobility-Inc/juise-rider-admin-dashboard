@@ -19,6 +19,7 @@ import {
   createSchoolPack,
   createSchoolAdminAccount,
   deleteSchoolChallenge,
+  emitDashboardAudit,
   denyReservation,
   fetchAdminSchoolPacks,
   fetchNebulaUser,
@@ -98,6 +99,7 @@ import {
   type DashboardContext,
 } from "./lib/storage";
 import { CampusDevicesScreen } from "./screens/dashboard/CampusDevicesScreen";
+import { AuditLogScreen } from "./screens/dashboard/AuditLogScreen";
 import { ChallengesScreen } from "./screens/dashboard/ChallengesScreen";
 import { DashboardScreen } from "./screens/dashboard/DashboardScreen";
 import { StudentLeaderboardScreen } from "./screens/dashboard/StudentLeaderboardScreen";
@@ -130,6 +132,7 @@ import { useAppDispatch, useAppSelector } from "./store/hooks";
 
 type Section =
   | "dashboard"
+  | "auditLog"
   | "school"
   | "terms"
   | "pois"
@@ -162,6 +165,7 @@ const dashboardSections: Array<{
   path: string;
 }> = [
   { section: "dashboard", label: "Dashboard", path: "/dashboard" },
+  { section: "auditLog", label: "Audit Log", path: "/audit-log" },
   { section: "school", label: "School Profile", path: "/school" },
   { section: "terms", label: "School Terms", path: "/terms" },
   { section: "pois", label: "School POIs", path: "/pois" },
@@ -2121,6 +2125,12 @@ function App() {
         targetPack.pack_uuid,
       ),
     );
+    void emitDashboardAudit({
+      action: "dashboard.export.download",
+      resource_type: "pack_qr",
+      resource_id: targetPack.pack_uuid,
+      metadata: { format: "png" },
+    }).catch(() => undefined);
   }
 
   function handleDownloadPackSpotQrCode(spot: PackSpot) {
@@ -2138,6 +2148,12 @@ function App() {
         spot.spot_uuid,
       ),
     );
+    void emitDashboardAudit({
+      action: "dashboard.export.download",
+      resource_type: "pack_spot_qr",
+      resource_id: spot.spot_uuid,
+      metadata: { format: "png" },
+    }).catch(() => undefined);
   }
 
   async function handleGeneratePackQrCode(targetPack: Pack) {
@@ -3471,6 +3487,10 @@ function App() {
   }
 
   function handleLogout() {
+    void emitDashboardAudit({
+      action: "dashboard.auth.logout",
+      resource_type: "session",
+    }).catch(() => undefined);
     setSession(null);
     setAuthError("");
     setPassword("");
@@ -5018,6 +5038,8 @@ function App() {
             handleImagePreview={handleOpenImagePreview}
           />
         );
+      case "auditLog":
+        return <AuditLogScreen appId={authAppId} />;
       case "studentLeaderboard":
         return (
           <StudentLeaderboardScreen
@@ -5340,6 +5362,14 @@ function App() {
               }
             >
               Report Builder
+            </NavLink>
+            <NavLink
+              to="/audit-log"
+              className={({ isActive }) =>
+                isActive ? "nav-button nav-button-active" : "nav-button"
+              }
+            >
+              Audit Log
             </NavLink>
 
             {/* Campus Setup group */}

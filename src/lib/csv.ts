@@ -1,3 +1,5 @@
+import { emitDashboardAudit } from "./api";
+
 export type CsvCell = string | number | boolean | null | undefined;
 
 export function csvRow(cells: readonly CsvCell[]): string {
@@ -65,7 +67,10 @@ export function csvRowsToObjects(
   }
 
   const normalizedHeaders = headers.map((header) =>
-    header.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_"),
+    header
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_"),
   );
 
   return bodyRows.map((bodyRow) =>
@@ -113,4 +118,14 @@ export function downloadCsv(
   link.click();
 
   URL.revokeObjectURL(url);
+  void emitDashboardAudit({
+    action: "dashboard.export.download",
+    resource_type: "report",
+    resource_id: link.download,
+    metadata: {
+      filename: link.download,
+      format: "csv",
+      record_count: rows.length,
+    },
+  }).catch(() => undefined);
 }
