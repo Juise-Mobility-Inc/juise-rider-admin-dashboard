@@ -1480,6 +1480,40 @@ function App() {
   );
   const [mfaQrCode, setMfaQrCode] = useState("");
   const [mfaCode, setMfaCode] = useState("");
+  const [mfaCopied, setMfaCopied] = useState<"" | "secret" | "codes">("");
+
+  const copyMfaText = async (text: string, kind: "secret" | "codes") => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setMfaCopied(kind);
+      window.setTimeout(() => {
+        setMfaCopied((current) => (current === kind ? "" : current));
+      }, 2000);
+    } catch {
+      setMfaCopied("");
+    }
+  };
+
+  const downloadRecoveryCodes = (codes: string[]) => {
+    const content = [
+      "Juise Rider Admin Dashboard — MFA recovery codes",
+      `Generated: ${new Date().toLocaleString()}`,
+      "",
+      "Each code can be used once if you lose access to Google Authenticator.",
+      "",
+      ...codes,
+      "",
+    ].join("\n");
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "juise-recovery-codes.txt";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
   const [isSignupSchoolModalOpen, setIsSignupSchoolModalOpen] = useState(false);
   const [signupSchoolName, setSignupSchoolName] = useState("");
   const [signupForm, setSignupForm] = useState<SignupFormState>({
@@ -3426,6 +3460,7 @@ function App() {
     setMfaEnrollment(null);
     setMfaQrCode("");
     setMfaCode("");
+    setMfaCopied("");
     setAuthError("");
   }
 
@@ -4504,13 +4539,62 @@ function App() {
                 {mfaEnrollment ? (
                   <>
                     <div className="mfa-secret">
-                      <span>Manual setup key</span>
+                      <div className="mfa-panel-header">
+                        <span>Manual setup key</span>
+                        <button
+                          type="button"
+                          className="mfa-chip-button"
+                          onClick={() =>
+                            void copyMfaText(mfaEnrollment.secret, "secret")
+                          }
+                        >
+                          {mfaCopied === "secret" ? "Copied!" : "Copy"}
+                        </button>
+                      </div>
                       <code>{mfaEnrollment.secret}</code>
                     </div>
                     <div className="mfa-recovery-codes">
-                      <strong>Save these one-time recovery codes now</strong>
-                      <p>They will not be shown again.</p>
-                      <code>{mfaEnrollment.recovery_codes.join("\n")}</code>
+                      <div className="mfa-panel-header">
+                        <strong>Save these one-time recovery codes now</strong>
+                      </div>
+                      <p>
+                        They will not be shown again. Each code can be used
+                        once if you lose access to Google Authenticator.
+                      </p>
+                      <ul className="mfa-recovery-code-list">
+                        {mfaEnrollment.recovery_codes.map((code) => (
+                          <li key={code}>
+                            <code>{code}</code>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="mfa-recovery-actions">
+                        <button
+                          type="button"
+                          className="mfa-chip-button"
+                          onClick={() =>
+                            void copyMfaText(
+                              mfaEnrollment.recovery_codes.join("\n"),
+                              "codes",
+                            )
+                          }
+                        >
+                          {mfaCopied === "codes"
+                            ? "Copied!"
+                            : "Copy all codes"}
+                        </button>
+                        <button
+                          type="button"
+                          className="mfa-chip-button"
+                          onClick={() =>
+                            downloadRecoveryCodes(
+                              mfaEnrollment.recovery_codes,
+                            )
+                          }
+                        >
+                          Download .txt
+                        </button>
+                      </div>
                     </div>
                   </>
                 ) : null}

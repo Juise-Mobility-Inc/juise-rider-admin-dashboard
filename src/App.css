@@ -227,10 +227,70 @@
         font-size: 0.82rem;
 }
 
-.mfa-recovery-codes code {
-        white-space: pre-wrap;
-        line-height: 1.65;
-        columns: 2;
+.mfa-secret code {
+        font-size: 0.88rem;
+        letter-spacing: 0.04em;
+}
+
+.mfa-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+}
+
+.mfa-chip-button {
+        flex-shrink: 0;
+        padding: 5px 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(3, 32, 13, 0.18);
+        background: #fff;
+        color: #14532d;
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.12s, border-color 0.12s;
+}
+
+.mfa-chip-button:hover {
+        border-color: #27cc5e;
+        background: rgba(39, 204, 94, 0.08);
+}
+
+.mfa-recovery-code-list {
+        list-style: none;
+        margin: 4px 0 0;
+        padding: 0;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px 12px;
+}
+
+.mfa-recovery-code-list li {
+        background: #fff;
+        border: 1px solid rgba(3, 32, 13, 0.1);
+        border-radius: 8px;
+        padding: 6px 8px;
+        text-align: center;
+}
+
+.mfa-recovery-code-list code {
+        font-size: 0.8rem;
+        white-space: nowrap;
+        letter-spacing: 0.02em;
+}
+
+.mfa-recovery-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 6px;
+}
+
+@media (max-width: 420px) {
+        .mfa-recovery-code-list {
+                grid-template-columns: 1fr;
+        }
 }
 
 .app-shell {
