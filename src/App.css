@@ -18128,65 +18128,20 @@
         color: #178a3e;
 }
 
-.audit-filter-bar {
-        display: grid;
-        gap: 12px;
+.audit-table-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
         margin-bottom: 14px;
 }
 
-.audit-filter-inputs {
+.audit-table-toolbar-actions {
         display: flex;
-        flex-wrap: wrap;
         align-items: center;
         gap: 10px;
-}
-
-.audit-filter-chip-rows {
-        display: grid;
-        gap: 8px;
-}
-
-.audit-filter-chip-row {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 8px;
-}
-
-.audit-filter-chip-label {
-        min-width: 68px;
-        font-size: 0.72rem;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: #5c6670;
-}
-
-.audit-filter-chip {
-        padding: 5px 12px;
-        border-radius: 999px;
-        border: 1px solid #d4dae0;
-        background: #fff;
-        color: #3c4650;
-        font-size: 0.8rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: background 0.12s, border-color 0.12s, color 0.12s;
-}
-
-.audit-filter-chip:hover {
-        border-color: #27cc5e;
-        color: #178a3e;
-}
-
-.audit-filter-chip-active {
-        background: #27cc5e;
-        border-color: #27cc5e;
-        color: #fff;
-}
-
-.audit-filter-chip-active:hover {
-        color: #fff;
+        margin-left: auto;
 }
 
 .audit-table-row {

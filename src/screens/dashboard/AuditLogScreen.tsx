@@ -75,7 +75,6 @@ export function AuditLogScreen({ appId }: { appId: string }) {
   const [events, setEvents] = useState<DashboardAuditEvent[]>([]);
   const [cursor, setCursor] = useState("");
   const [nextCursor, setNextCursor] = useState("");
-  const [actionInput, setActionInput] = useState("");
   const [action, setAction] = useState("");
   const [outcome, setOutcome] = useState<AuditOutcome | "">("");
   const [severity, setSeverity] = useState<AuditSeverity | "">("");
@@ -89,18 +88,13 @@ export function AuditLogScreen({ appId }: { appId: string }) {
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState("");
   const [exportNotice, setExportNotice] = useState("");
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [draftAction, setDraftAction] = useState("");
+  const [draftOutcome, setDraftOutcome] = useState<AuditOutcome | "">("");
+  const [draftSeverity, setDraftSeverity] = useState<AuditSeverity | "">("");
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedEventUuid = searchParams.get("event") ?? "";
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setAction(actionInput.trim());
-      setCursor("");
-      setPageIndex(0);
-    }, 350);
-    return () => window.clearTimeout(timer);
-  }, [actionInput]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -304,17 +298,39 @@ export function AuditLogScreen({ appId }: { appId: string }) {
     }
   };
 
-  const hasActiveFilters =
-    Boolean(action) || Boolean(outcome) || Boolean(severity);
+  const activeFilterCount =
+    (action ? 1 : 0) + (outcome ? 1 : 0) + (severity ? 1 : 0);
+  const hasActiveFilters = activeFilterCount > 0;
 
   const clearFilters = () => {
-    setActionInput("");
     setAction("");
     setOutcome("");
     setSeverity("");
     setSearchQuery("");
     setCursor("");
     setPageIndex(0);
+  };
+
+  const openFilterModal = () => {
+    setDraftAction(action);
+    setDraftOutcome(outcome);
+    setDraftSeverity(severity);
+    setFilterModalOpen(true);
+  };
+
+  const applyFilters = () => {
+    setAction(draftAction.trim());
+    setOutcome(draftOutcome);
+    setSeverity(draftSeverity);
+    setCursor("");
+    setPageIndex(0);
+    setFilterModalOpen(false);
+  };
+
+  const resetFilterModal = () => {
+    setDraftAction("");
+    setDraftOutcome("");
+    setDraftSeverity("");
   };
 
   if (selectedEventUuid) {
@@ -486,22 +502,15 @@ export function AuditLogScreen({ appId }: { appId: string }) {
         </div>
       ) : null}
 
-      <div className="audit-filter-bar">
-        <div className="audit-filter-inputs">
-          <input
-            className="cd-table-search"
-            type="search"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search this page"
-          />
-          <input
-            className="cd-table-search"
-            type="search"
-            value={actionInput}
-            onChange={(event) => setActionInput(event.target.value)}
-            placeholder="Filter by action (e.g. auth.login)"
-          />
+      <div className="audit-table-toolbar">
+        <input
+          className="cd-table-search"
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search this page"
+        />
+        <div className="audit-table-toolbar-actions">
           {hasActiveFilters || searchQuery ? (
             <button
               type="button"
@@ -511,50 +520,120 @@ export function AuditLogScreen({ appId }: { appId: string }) {
               Clear filters
             </button>
           ) : null}
-        </div>
-        <div className="audit-filter-chip-rows">
-          <div className="audit-filter-chip-row">
-            <span className="audit-filter-chip-label">Outcome</span>
-            {outcomeFilters.map((option) => (
-              <button
-                key={option.value || "all"}
-                type="button"
-                className={`audit-filter-chip${
-                  outcome === option.value ? " audit-filter-chip-active" : ""
-                }`}
-                aria-pressed={outcome === option.value}
-                onClick={() => {
-                  setOutcome(option.value);
-                  setCursor("");
-                  setPageIndex(0);
-                }}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          <div className="audit-filter-chip-row">
-            <span className="audit-filter-chip-label">Severity</span>
-            {severityFilters.map((option) => (
-              <button
-                key={option.value || "all"}
-                type="button"
-                className={`audit-filter-chip${
-                  severity === option.value ? " audit-filter-chip-active" : ""
-                }`}
-                aria-pressed={severity === option.value}
-                onClick={() => {
-                  setSeverity(option.value);
-                  setCursor("");
-                  setPageIndex(0);
-                }}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <button
+            type="button"
+            className="cd-table-btn"
+            onClick={openFilterModal}
+          >
+            Filters
+            {activeFilterCount > 0 ? (
+              <span className="parking-report-filter-count">
+                {activeFilterCount}
+              </span>
+            ) : null}
+          </button>
         </div>
       </div>
+
+      {filterModalOpen ? (
+        <div
+          className="management-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="audit-filter-title"
+          onClick={() => setFilterModalOpen(false)}
+        >
+          <div
+            className="management-modal-sheet parking-report-filter-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="management-modal-header">
+              <div>
+                <p className="section-eyebrow">Table filters</p>
+                <h3 id="audit-filter-title">Filter Audit Log</h3>
+                <p className="muted">
+                  Choose the outcome, severity, and action shown in the table.
+                </p>
+              </div>
+              <button
+                className="management-modal-close"
+                type="button"
+                onClick={() => setFilterModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="parking-report-filter-grid">
+              <div className="parking-report-filter-group">
+                <span className="parking-report-filter-label">Outcome</span>
+                <div className="parking-report-filter-chips">
+                  {outcomeFilters.map((option) => (
+                    <button
+                      key={option.value || "all"}
+                      type="button"
+                      className={`parking-report-filter-chip${
+                        draftOutcome === option.value
+                          ? " parking-report-filter-chip-active"
+                          : ""
+                      }`}
+                      aria-pressed={draftOutcome === option.value}
+                      onClick={() => setDraftOutcome(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="parking-report-filter-group">
+                <span className="parking-report-filter-label">Severity</span>
+                <div className="parking-report-filter-chips">
+                  {severityFilters.map((option) => (
+                    <button
+                      key={option.value || "all"}
+                      type="button"
+                      className={`parking-report-filter-chip${
+                        draftSeverity === option.value
+                          ? " parking-report-filter-chip-active"
+                          : ""
+                      }`}
+                      aria-pressed={draftSeverity === option.value}
+                      onClick={() => setDraftSeverity(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="parking-report-filter-group">
+                <span className="parking-report-filter-label">Action</span>
+                <input
+                  className="cd-table-search"
+                  type="search"
+                  value={draftAction}
+                  onChange={(event) => setDraftAction(event.target.value)}
+                  placeholder="e.g. auth.login"
+                />
+              </div>
+            </div>
+            <div className="parking-report-filter-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={resetFilterModal}
+              >
+                Reset
+              </button>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={applyFilters}
+              >
+                Apply filters
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {error ? <div className="banner banner-error">{error}</div> : null}
 
