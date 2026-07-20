@@ -6,6 +6,7 @@ import {
   type AuditSeverity,
   type DashboardAuditEvent,
 } from "../../lib/api";
+import { downloadCsv, type CsvCell } from "../../lib/csv";
 
 const sourceServiceDisplayNames: Record<string, string> = {
   "billing-api-service": "Billing",
@@ -82,6 +83,12 @@ export function AuditLogScreen({ appId }: { appId: string }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportStart, setExportStart] = useState("");
+  const [exportEnd, setExportEnd] = useState("");
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const [exportNotice, setExportNotice] = useState("");
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedEventUuid = searchParams.get("event") ?? "";
@@ -167,6 +174,133 @@ export function AuditLogScreen({ appId }: { appId: string }) {
       const next = new URLSearchParams(searchParams);
       next.delete("event");
       setSearchParams(next, { replace: true });
+    }
+  };
+
+  const exportRangeInvalid = Boolean(
+    exportStart && exportEnd && exportStart > exportEnd,
+  );
+
+  const handleExport = async () => {
+    if (exportBusy || exportRangeInvalid) {
+      return;
+    }
+    setExportBusy(true);
+    setExportError("");
+    setExportNotice("");
+    try {
+      const startMs = exportStart
+        ? new Date(`${exportStart}T00:00:00`).getTime()
+        : null;
+      const endMs = exportEnd
+        ? new Date(`${exportEnd}T23:59:59.999`).getTime()
+        : null;
+
+      const collected: DashboardAuditEvent[] = [];
+      const maxEvents = 10000;
+      let pageCursor = "";
+      let truncated = false;
+
+      for (let pageCount = 0; pageCount < 200; pageCount += 1) {
+        const page = await fetchDashboardAuditEvents(appId, {
+          action,
+          outcome,
+          severity,
+          cursor: pageCursor,
+          limit: 50,
+        });
+        const pageEvents = page.events ?? [];
+        let reachedOlderThanStart = false;
+
+        // Events are returned newest-first across cursor pages, so once we
+        // see an event older than the start date we can stop paging.
+        for (const event of pageEvents) {
+          const occurredMs = new Date(event.occurred_at).getTime();
+          if (Number.isNaN(occurredMs)) {
+            continue;
+          }
+          if (endMs !== null && occurredMs > endMs) {
+            continue;
+          }
+          if (startMs !== null && occurredMs < startMs) {
+            reachedOlderThanStart = true;
+            continue;
+          }
+          if (collected.length >= maxEvents) {
+            truncated = true;
+            break;
+          }
+          collected.push(event);
+        }
+
+        if (truncated) {
+          break;
+        }
+        if (reachedOlderThanStart && startMs !== null) {
+          break;
+        }
+        pageCursor = page.next_cursor ?? "";
+        if (!pageCursor) {
+          break;
+        }
+      }
+
+      if (collected.length === 0) {
+        setExportError("No audit events found for the selected date range.");
+        return;
+      }
+
+      const header: CsvCell[] = [
+        "Occurred at",
+        "Action",
+        "Outcome",
+        "Severity",
+        "Actor",
+        "School",
+        "Resource type",
+        "Resource ID",
+        "HTTP status",
+        "Source IP",
+        "Service",
+        "Event UUID",
+        "Metadata",
+      ];
+      const rows: CsvCell[][] = [
+        header,
+        ...collected.map((event) => [
+          new Date(event.occurred_at).toISOString(),
+          event.action,
+          event.outcome,
+          event.severity,
+          event.actor_user_uuid ?? "",
+          event.school_id ?? "",
+          event.resource_type ?? "",
+          event.resource_id ?? "",
+          event.http_status ?? "",
+          event.source_ip ?? "",
+          formatSourceService(event.source_service),
+          event.event_uuid,
+          JSON.stringify(event.metadata ?? {}),
+        ]),
+      ];
+
+      const rangeLabel = [exportStart || "start", exportEnd || "today"].join(
+        "_to_",
+      );
+      downloadCsv(`audit-log_${rangeLabel}`, rows);
+      setExportNotice(
+        `Downloaded ${collected.length.toLocaleString()} event${
+          collected.length === 1 ? "" : "s"
+        }${truncated ? " (capped at 10,000 — narrow the date range for the rest)" : ""}.`,
+      );
+    } catch (caught) {
+      setExportError(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to export audit events",
+      );
+    } finally {
+      setExportBusy(false);
     }
   };
 
@@ -282,14 +416,75 @@ export function AuditLogScreen({ appId }: { appId: string }) {
             changes.
           </p>
         </div>
-        <button
-          className="secondary-button"
-          onClick={() => void load()}
-          disabled={loading}
-        >
-          {loading ? "Loading…" : "Refresh"}
-        </button>
+        <div className="audit-heading-actions">
+          <button
+            className="secondary-button"
+            onClick={() => {
+              setExportOpen((open) => !open);
+              setExportError("");
+              setExportNotice("");
+            }}
+            aria-expanded={exportOpen}
+          >
+            {exportOpen ? "Close download" : "Download CSV"}
+          </button>
+          <button
+            className="secondary-button"
+            onClick={() => void load()}
+            disabled={loading}
+          >
+            {loading ? "Loading…" : "Refresh"}
+          </button>
+        </div>
       </div>
+
+      {exportOpen ? (
+        <div className="audit-export-panel">
+          <div className="audit-export-fields">
+            <label className="audit-export-field">
+              <span>Start date</span>
+              <input
+                type="date"
+                value={exportStart}
+                max={exportEnd || undefined}
+                onChange={(event) => setExportStart(event.target.value)}
+              />
+            </label>
+            <label className="audit-export-field">
+              <span>End date</span>
+              <input
+                type="date"
+                value={exportEnd}
+                min={exportStart || undefined}
+                onChange={(event) => setExportEnd(event.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="primary-button audit-export-btn"
+              onClick={() => void handleExport()}
+              disabled={exportBusy || exportRangeInvalid}
+            >
+              {exportBusy ? "Preparing…" : "Download CSV"}
+            </button>
+          </div>
+          <p className="audit-export-hint">
+            Leave dates empty to export everything. Active outcome, severity,
+            and action filters are applied to the download.
+          </p>
+          {exportRangeInvalid ? (
+            <p className="audit-export-error">
+              Start date must be on or before the end date.
+            </p>
+          ) : null}
+          {exportError ? (
+            <p className="audit-export-error">{exportError}</p>
+          ) : null}
+          {exportNotice ? (
+            <p className="audit-export-notice">{exportNotice}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="audit-filter-bar">
         <div className="audit-filter-inputs">
