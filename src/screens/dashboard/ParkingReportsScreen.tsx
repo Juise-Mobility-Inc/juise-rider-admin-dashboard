@@ -19,6 +19,7 @@ import {
   type StudentParkingIncidentReport,
   updateSchoolParkingIncidentReport,
 } from "../../lib/api";
+import { useDetailParamSync } from "../../lib/useDetailParamSync";
 
 type Props = {
   activeSchoolId: string;
@@ -195,6 +196,19 @@ export function ParkingReportsScreen({
   const [detailOpen, setDetailOpen] = useState(false);
   const [reports, setReports] = useState<StudentParkingIncidentReport[]>([]);
   const [selectedReportId, setSelectedReportId] = useState("");
+
+  useDetailParamSync(
+    "report",
+    detailOpen && selectedReportId ? selectedReportId : "",
+    (value) => {
+      if (value) {
+        setSelectedReportId(value);
+        setDetailOpen(true);
+      } else {
+        setDetailOpen(false);
+      }
+    },
+  );
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const [registeredDevices, setRegisteredDevices] = useState<
     RegisteredDeviceReviewEntry[]

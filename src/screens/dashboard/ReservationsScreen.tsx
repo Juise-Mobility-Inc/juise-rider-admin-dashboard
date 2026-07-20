@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useDetailParamSync } from "../../lib/useDetailParamSync";
 import type {
   ComponentType,
   CSSProperties,
@@ -129,6 +130,7 @@ export function ReservationsScreen(props: Props) {
     activeSchoolId,
     reservationsBusy,
     reservations,
+    selectedReservationId,
     setSelectedReservationId,
     selectedReservation,
     refreshReservations,
@@ -218,6 +220,10 @@ export function ReservationsScreen(props: Props) {
       return haystack.includes(q);
     });
   }, [reservations, search]);
+
+  useDetailParamSync("reservation", selectedReservationId, (value) => {
+    setSelectedReservationId(value);
+  });
 
   const openReservation = (uuid: string) => {
     setSelectedReservationId(uuid);

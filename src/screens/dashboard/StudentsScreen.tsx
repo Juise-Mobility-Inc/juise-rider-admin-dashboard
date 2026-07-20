@@ -5,6 +5,7 @@ import {
         type SetStateAction,
 } from "react";
 import { useNavigate } from "react-router-dom";
+import { useDetailParamSync } from "../../lib/useDetailParamSync";
 import { StudentEventMiniMap } from "../../components/StudentEventMiniMap";
 import {
         csvObjectRow,
@@ -909,6 +910,14 @@ export function StudentsScreen(props: Props) {
                 DetailRow,
                 UuidCopyField,
         } = props;
+
+        useDetailParamSync("student", selectedStudentMembershipId ?? "", (value) => {
+                if (value) {
+                        void handleSelectStudentInRoster(value);
+                } else {
+                        resetSelectedStudentState();
+                }
+        });
 
         const [detailTab, setDetailTab] = useState<DetailTab>("profile");
         const [activitySubTab, setActivitySubTab] = useState<
