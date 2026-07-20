@@ -6,6 +6,25 @@ import {
   type DashboardAuditEvent,
 } from "../../lib/api";
 
+const sourceServiceDisplayNames: Record<string, string> = {
+  "billing-api-service": "Billing",
+  "global-auth-service": "Authentication Service",
+  "hub-store-service": "Juise Bar Service",
+  "infra-secret-store": "Authentication Store",
+  "kca-proxy": "Main Proxy",
+  "kca-push-notification": "Push Notification Service",
+  "nebula-user-server": "User Server",
+  "partner-api": "Partner API",
+  "tcp-proxy-layer": "Cloud Communication Server",
+  "vehicle-store-service": "Vehicle Service",
+  "vehicle-store": "Vehicle Service",
+  "zone-cache-service": "Zone Service",
+};
+
+function formatSourceService(name: string): string {
+  return sourceServiceDisplayNames[name] ?? name;
+}
+
 const outcomeFilters: Array<{ value: AuditOutcome | ""; label: string }> = [
   { value: "", label: "All outcomes" },
   { value: "success", label: "Success" },
@@ -116,6 +135,7 @@ export function AuditLogScreen({ appId }: { appId: string }) {
         event.outcome,
         event.severity,
         event.source_service,
+        formatSourceService(event.source_service),
         event.source_ip ?? "",
         event.school_id ?? "",
       ]
@@ -281,7 +301,9 @@ export function AuditLogScreen({ appId }: { appId: string }) {
                     {event.severity}
                   </span>
                 </td>
-                <td className="audit-source-cell">{event.source_service}</td>
+                <td className="audit-source-cell">
+                  {formatSourceService(event.source_service)}
+                </td>
               </tr>
             ))}
             {!loading && filteredEvents.length === 0 ? (
@@ -389,7 +411,7 @@ export function AuditLogScreen({ appId }: { appId: string }) {
               </div>
               <div>
                 <dt>Service</dt>
-                <dd>{selected.source_service}</dd>
+                <dd>{formatSourceService(selected.source_service)}</dd>
               </div>
             </dl>
             {selected.user_agent ? (
