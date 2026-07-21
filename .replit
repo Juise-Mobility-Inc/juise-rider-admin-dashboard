@@ -46,10 +46,10 @@ publicDir = "dist"
 [userenv]
 
 [userenv.shared]
-VITE_AUTH_PROXY_TARGET = "https://global-auth-service.kuhmute.net"
-VITE_NEBULA_PROXY_TARGET = "https://nebula-user-server.kuhmute.net"
-VITE_HUB_STORE_PROXY_TARGET = "https://hub-store-service.kuhmute.net"
-VITE_KCA_PROXY_TARGET = "https://kca-proxy.kuhmute.net"
+VITE_AUTH_PROXY_TARGET = "https://global-auth-service.juisemobility.com"
+VITE_NEBULA_PROXY_TARGET = "https://nebula-user-server.juisemobility.com"
+VITE_HUB_STORE_PROXY_TARGET = "https://hub-store-service.juisemobility.com"
+VITE_KCA_PROXY_TARGET = "https://kca-proxy.juisemobility.com"
 
 [postMerge]
 path = "scripts/post-merge.sh"

@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
     "/auth-api": {
       target: envTarget(
         "VITE_AUTH_PROXY_TARGET",
-        "https://global-auth-service.kuhmute.net",
+        "https://global-auth-service.juisemobility.com",
       ),
       changeOrigin: true,
       rewrite: (path: string) => path.replace(/^\/auth-api/, ""),
@@ -18,7 +18,7 @@ export default defineConfig(({ mode }) => {
     "/nebula-api": {
       target: envTarget(
         "VITE_NEBULA_PROXY_TARGET",
-        "https://nebula-user-server.kuhmute.net",
+        "https://nebula-user-server.juisemobility.com",
       ),
       changeOrigin: true,
       rewrite: (path: string) => path.replace(/^\/nebula-api/, ""),
@@ -26,13 +26,16 @@ export default defineConfig(({ mode }) => {
     "/hub-store-api": {
       target: envTarget(
         "VITE_HUB_STORE_PROXY_TARGET",
-        "https://hub-store-service.kuhmute.net",
+        "https://hub-store-service.juisemobility.com",
       ),
       changeOrigin: true,
       rewrite: (path: string) => path.replace(/^\/hub-store-api/, ""),
     },
     "/kca-api": {
-      target: envTarget("VITE_KCA_PROXY_TARGET", "https://kca-proxy.kuhmute.net"),
+      target: envTarget(
+        "VITE_KCA_PROXY_TARGET",
+        "https://kca-proxy.juisemobility.com",
+      ),
       changeOrigin: true,
       rewrite: (path: string) => path.replace(/^\/kca-api/, ""),
     },
