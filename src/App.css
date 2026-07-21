@@ -18059,33 +18059,35 @@
         color: #fff;
 }
 
-.audit-filter-bar {
-        display: grid;
-        gap: 12px;
-        margin-bottom: 14px;
-}
-
-.audit-filter-inputs {
+.audit-heading-actions {
         display: flex;
-        flex-wrap: wrap;
         align-items: center;
         gap: 10px;
 }
 
-.audit-filter-chip-rows {
+.audit-export-panel {
         display: grid;
         gap: 8px;
+        margin-bottom: 14px;
+        padding: 14px 16px;
+        border: 1px solid #d4dae0;
+        border-radius: 12px;
+        background: #f8fafb;
 }
 
-.audit-filter-chip-row {
+.audit-export-fields {
         display: flex;
         flex-wrap: wrap;
-        align-items: center;
-        gap: 8px;
+        align-items: flex-end;
+        gap: 12px;
 }
 
-.audit-filter-chip-label {
-        min-width: 68px;
+.audit-export-field {
+        display: grid;
+        gap: 4px;
+}
+
+.audit-export-field span {
         font-size: 0.72rem;
         font-weight: 700;
         letter-spacing: 0.06em;
@@ -18093,31 +18095,53 @@
         color: #5c6670;
 }
 
-.audit-filter-chip {
-        padding: 5px 12px;
-        border-radius: 999px;
+.audit-export-field input {
+        padding: 7px 10px;
         border: 1px solid #d4dae0;
+        border-radius: 8px;
         background: #fff;
-        color: #3c4650;
-        font-size: 0.8rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: background 0.12s, border-color 0.12s, color 0.12s;
+        font-size: 0.85rem;
+        color: #2c3640;
 }
 
-.audit-filter-chip:hover {
-        border-color: #27cc5e;
+.audit-export-btn {
+        white-space: nowrap;
+}
+
+.audit-export-hint {
+        margin: 0;
+        font-size: 0.78rem;
+        color: #5c6670;
+}
+
+.audit-export-error {
+        margin: 0;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #c92a2a;
+}
+
+.audit-export-notice {
+        margin: 0;
+        font-size: 0.8rem;
+        font-weight: 600;
         color: #178a3e;
 }
 
-.audit-filter-chip-active {
-        background: #27cc5e;
-        border-color: #27cc5e;
-        color: #fff;
+.audit-table-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 14px;
 }
 
-.audit-filter-chip-active:hover {
-        color: #fff;
+.audit-table-toolbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-left: auto;
 }
 
 .audit-table-row {
