@@ -7187,6 +7187,47 @@
         width: min(560px, 100%);
 }
 
+.signup-school-choice {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 4px;
+        padding: 4px;
+        border-radius: 12px;
+        background: rgba(3, 32, 13, 0.07);
+}
+
+.signup-school-choice-button {
+        min-height: 44px;
+        padding: 10px 14px;
+        border: 0;
+        border-radius: 9px;
+        background: transparent;
+        color: #424549;
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.875rem;
+        font-weight: 700;
+}
+
+.signup-school-choice-button-active {
+        background: #27cc5e;
+        color: #010c05;
+        box-shadow:
+                0 1px 6px rgba(3, 32, 13, 0.13),
+                0 0 0 1px rgba(3, 32, 13, 0.08);
+}
+
+.signup-school-choice-button:disabled {
+        cursor: not-allowed;
+        opacity: 0.62;
+}
+
+@media (max-width: 520px) {
+        .signup-school-choice {
+                grid-template-columns: 1fr;
+        }
+}
+
 .management-import-body,
 .management-import-instructions {
         display: grid;

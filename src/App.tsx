@@ -158,6 +158,7 @@ type Section =
 type PackTab = "create" | "existing";
 type BannerTone = "success" | "error" | "info";
 type AuthMode = "login" | "signup";
+type SignupSchoolMode = "existing" | "new";
 const maxSessionExpiryCheckDelayMs = 2_147_483_647;
 
 const dashboardSections: Array<{
@@ -1562,6 +1563,8 @@ function App() {
     URL.revokeObjectURL(url);
   };
   const [isSignupSchoolModalOpen, setIsSignupSchoolModalOpen] = useState(false);
+  const [signupSchoolMode, setSignupSchoolMode] =
+    useState<SignupSchoolMode>("existing");
   const [signupSchoolName, setSignupSchoolName] = useState("");
   const [signupForm, setSignupForm] = useState<SignupFormState>({
     school_id: "",
@@ -3574,51 +3577,42 @@ function App() {
     setAuthError("");
   }
 
-  async function handleCreateSchoolAdmin(event: FormEvent<HTMLFormElement>) {
+  function handleCreateSchoolAdmin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setAuthBusy(true);
     setAuthError("");
-
-    try {
-      const challenge = await createSchoolAdminAccount(authAppId, signupForm);
-      setSignupForm((current) => ({
-        ...current,
-        password: "",
-      }));
-      setSignupSchoolName("");
-      setIsSignupSchoolModalOpen(false);
-      await prepareMFAChallenge(challenge);
-    } catch (error) {
-      const message = getErrorMessage(error);
-      if (message.toLowerCase().includes("school_name")) {
-        setSignupSchoolName(
-          (current) => current || signupForm.school_id.trim(),
-        );
-        setIsSignupSchoolModalOpen(true);
-        setAuthError("");
-      } else {
-        setAuthError(message);
-      }
-    } finally {
-      setAuthBusy(false);
-    }
+    setSignupSchoolMode("existing");
+    setIsSignupSchoolModalOpen(true);
   }
 
-  async function handleCreateSignupSchool(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmitSignupSchool(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const schoolId = signupForm.school_id.trim();
+    if (!schoolId) {
+      setAuthError("School ID is required.");
+      return;
+    }
+
+    const schoolName = signupSchoolName.trim();
+    if (signupSchoolMode === "new" && !schoolName) {
+      setAuthError("School name is required.");
+      return;
+    }
+
     setAuthBusy(true);
     setAuthError("");
 
     try {
       const challenge = await createSchoolAdminAccount(authAppId, {
         ...signupForm,
-        school_name: signupSchoolName,
+        school_id: schoolId,
+        school_name: signupSchoolMode === "new" ? schoolName : undefined,
       });
       setSignupForm((current) => ({
         ...current,
         password: "",
       }));
       setSignupSchoolName("");
+      setSignupSchoolMode("existing");
       setIsSignupSchoolModalOpen(false);
       await prepareMFAChallenge(challenge);
     } catch (error) {
@@ -3641,6 +3635,7 @@ function App() {
       password: "",
     }));
     setSignupSchoolName("");
+    setSignupSchoolMode("existing");
     setIsSignupSchoolModalOpen(false);
     setBanner({
       tone: "info",
@@ -4786,6 +4781,7 @@ function App() {
                     onClick={() => {
                       setAuthMode("signup");
                       setAuthError("");
+                      setSignupSchoolMode("existing");
                       setIsSignupSchoolModalOpen(false);
                     }}
                   >
@@ -4801,6 +4797,7 @@ function App() {
                     onClick={() => {
                       setAuthMode("login");
                       setAuthError("");
+                      setSignupSchoolMode("existing");
                       setIsSignupSchoolModalOpen(false);
                     }}
                   >
@@ -4910,7 +4907,7 @@ function App() {
                       type="submit"
                       disabled={authBusy}
                     >
-                      {authBusy ? "Creating account…" : "Create School Admin"}
+                      Continue
                     </button>
                   </form>
                 ) : (
@@ -4980,28 +4977,89 @@ function App() {
             className="management-modal-backdrop"
             role="dialog"
             aria-modal="true"
-            aria-label="Create school"
-            onClick={() => setIsSignupSchoolModalOpen(false)}
+            aria-label="Choose or create a school"
+            onClick={() => {
+              if (!authBusy) setIsSignupSchoolModalOpen(false);
+            }}
           >
             <form
               className="management-modal-sheet signup-school-modal"
               onClick={(event) => event.stopPropagation()}
-              onSubmit={handleCreateSignupSchool}
+              onSubmit={handleSubmitSignupSchool}
             >
               <div className="management-modal-header">
                 <div>
-                  <p className="eyebrow">New school</p>
-                  <h3>Create school profile</h3>
+                  <p className="eyebrow">School setup</p>
+                  <h3>Choose your school</h3>
                 </div>
                 <button
                   className="text-button management-modal-close"
                   type="button"
                   onClick={() => setIsSignupSchoolModalOpen(false)}
+                  disabled={authBusy}
                 >
                   Close
                 </button>
               </div>
-              <div className="form-grid">
+
+              <div
+                className="signup-school-choice"
+                role="tablist"
+                aria-label="School setup option"
+              >
+                <button
+                  className={
+                    signupSchoolMode === "existing"
+                      ? "signup-school-choice-button signup-school-choice-button-active"
+                      : "signup-school-choice-button"
+                  }
+                  type="button"
+                  role="tab"
+                  aria-selected={signupSchoolMode === "existing"}
+                  onClick={() => {
+                    setSignupSchoolMode("existing");
+                    setAuthError("");
+                  }}
+                  disabled={authBusy}
+                >
+                  Existing school
+                </button>
+                <button
+                  className={
+                    signupSchoolMode === "new"
+                      ? "signup-school-choice-button signup-school-choice-button-active"
+                      : "signup-school-choice-button"
+                  }
+                  type="button"
+                  role="tab"
+                  aria-selected={signupSchoolMode === "new"}
+                  onClick={() => {
+                    setSignupSchoolMode("new");
+                    setAuthError("");
+                  }}
+                  disabled={authBusy}
+                >
+                  Create a new school
+                </button>
+              </div>
+
+              <label className="field">
+                <span>School ID</span>
+                <input
+                  value={signupForm.school_id}
+                  onChange={(event) =>
+                    setSignupForm((current) => ({
+                      ...current,
+                      school_id: event.target.value,
+                    }))
+                  }
+                  placeholder="ou"
+                  autoFocus
+                  required
+                />
+              </label>
+
+              {signupSchoolMode === "new" ? (
                 <label className="field">
                   <span>School name</span>
                   <input
@@ -5013,7 +5071,8 @@ function App() {
                     required
                   />
                 </label>
-              </div>
+              ) : null}
+
               {authError ? <p className="error-text">{authError}</p> : null}
               <div className="form-actions">
                 <button
@@ -5027,9 +5086,17 @@ function App() {
                 <button
                   className="primary-button"
                   type="submit"
-                  disabled={authBusy || !signupSchoolName.trim()}
+                  disabled={
+                    authBusy ||
+                    !signupForm.school_id.trim() ||
+                    (signupSchoolMode === "new" && !signupSchoolName.trim())
+                  }
                 >
-                  {authBusy ? "Creating..." : "Create School and Account"}
+                  {authBusy
+                    ? "Creating..."
+                    : signupSchoolMode === "new"
+                      ? "Create School and Account"
+                      : "Continue with School"}
                 </button>
               </div>
             </form>
