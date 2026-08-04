@@ -27,3 +27,26 @@ If this is your first time using the dashboard:
 Your access is limited to the school associated with your account. If the wrong school appears—or no school appears—stop and contact your Juise administrator.
 
 Actions such as approving a reservation, declining a vehicle, sending a notification, or deleting a rule can immediately affect students. Confirm the selected student, school, audience, dates, and status before continuing.
+
+## Developer API boundary
+
+The dashboard has one backend origin: KCA. It must not connect directly to
+Global Auth, Nebula User Server, or Hub Store Service. KCA validates Juise
+administrator tokens and adds its Google Cloud service identity when invoking
+those private services.
+
+For local QA development, configure only:
+
+```env
+VITE_API_BASE=/kca-api
+VITE_KCA_PROXY_TARGET=https://qa-kca-proxy.juisemobility.com
+```
+
+For a deployed QA dashboard without a same-origin reverse proxy, build with:
+
+```env
+VITE_API_BASE=https://qa-kca-proxy.juisemobility.com
+```
+
+Do not disable TLS verification in Vite. Direct private service URLs returning
+Google `403` is expected behavior.

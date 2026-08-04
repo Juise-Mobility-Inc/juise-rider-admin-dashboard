@@ -19,6 +19,8 @@ import {
   createSchoolPack,
   createSchoolAdminAccount,
   deleteSchoolChallenge,
+  downloadAdminPackQrCode,
+  downloadAdminPackSpotQrCode,
   DashboardLoginLockedError,
   emitDashboardAudit,
   denyReservation,
@@ -38,8 +40,6 @@ import {
   generateAdminPackQrCode,
   generateAdminPackSpotQrCode,
   getSessionRefreshExpiryMs,
-  getAdminPackQrCodeDownloadUrl,
-  getAdminPackSpotQrCodeDownloadUrl,
   loginWithIdentifier,
   verifyMFA,
   refreshDashboardSession,
@@ -1023,17 +1023,20 @@ async function copyTextToClipboard(value: string): Promise<void> {
   }
 }
 
-function triggerFileDownload(url: string): void {
+function triggerFileDownload(file: Blob, filename: string): void {
   if (typeof document === "undefined") {
     return;
   }
 
+  const url = URL.createObjectURL(file);
   const link = document.createElement("a");
   link.href = url;
+  link.download = filename;
   link.rel = "noopener noreferrer";
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function resolveMediaObjectKey(
@@ -2206,7 +2209,7 @@ function App() {
     );
   }
 
-  function handleDownloadPackQrCode(targetPack: Pack) {
+  async function handleDownloadPackQrCode(targetPack: Pack) {
     if (
       !session?.claims.user_uuid ||
       !targetPack.pack_uuid ||
@@ -2219,21 +2222,25 @@ function App() {
       return;
     }
 
-    triggerFileDownload(
-      getAdminPackQrCodeDownloadUrl(
+    try {
+      const qrCode = await downloadAdminPackQrCode(
         session.claims.user_uuid,
+        context.managedAppId,
         targetPack.pack_uuid,
-      ),
-    );
-    void emitDashboardAudit({
-      action: "dashboard.export.download",
-      resource_type: "pack_qr",
-      resource_id: targetPack.pack_uuid,
-      metadata: { format: "png" },
-    }).catch(() => undefined);
+      );
+      triggerFileDownload(qrCode, `pack-${targetPack.pack_uuid}-qr.png`);
+      void emitDashboardAudit({
+        action: "dashboard.export.download",
+        resource_type: "pack_qr",
+        resource_id: targetPack.pack_uuid,
+        metadata: { format: "png" },
+      }).catch(() => undefined);
+    } catch (error) {
+      setBanner({ tone: "error", message: getErrorMessage(error) });
+    }
   }
 
-  function handleDownloadPackSpotQrCode(spot: PackSpot) {
+  async function handleDownloadPackSpotQrCode(spot: PackSpot) {
     if (!session?.claims.user_uuid || !spot.spot_uuid || !spot.qr_code) {
       setBanner({
         tone: "error",
@@ -2242,18 +2249,22 @@ function App() {
       return;
     }
 
-    triggerFileDownload(
-      getAdminPackSpotQrCodeDownloadUrl(
+    try {
+      const qrCode = await downloadAdminPackSpotQrCode(
         session.claims.user_uuid,
+        context.managedAppId,
         spot.spot_uuid,
-      ),
-    );
-    void emitDashboardAudit({
-      action: "dashboard.export.download",
-      resource_type: "pack_spot_qr",
-      resource_id: spot.spot_uuid,
-      metadata: { format: "png" },
-    }).catch(() => undefined);
+      );
+      triggerFileDownload(qrCode, `pack-spot-${spot.spot_uuid}-qr.png`);
+      void emitDashboardAudit({
+        action: "dashboard.export.download",
+        resource_type: "pack_spot_qr",
+        resource_id: spot.spot_uuid,
+        metadata: { format: "png" },
+      }).catch(() => undefined);
+    } catch (error) {
+      setBanner({ tone: "error", message: getErrorMessage(error) });
+    }
   }
 
   async function handleGeneratePackQrCode(targetPack: Pack) {
@@ -2269,6 +2280,7 @@ function App() {
     try {
       const updatedPack = await generateAdminPackQrCode(
         session.claims.user_uuid,
+        context.managedAppId,
         targetPack.pack_uuid,
       );
       upsertSchoolPack(updatedPack);
@@ -2299,6 +2311,7 @@ function App() {
     try {
       const updatedSpot = await generateAdminPackSpotQrCode(
         session.claims.user_uuid,
+        context.managedAppId,
         spot.spot_uuid,
       );
       upsertSchoolPackSpot(updatedSpot);
@@ -4523,6 +4536,7 @@ function App() {
     try {
       await approveReservation(
         session.claims.user_uuid,
+        context.managedAppId,
         selectedReservation.reservation_uuid,
       );
       setBanner({
@@ -4556,6 +4570,7 @@ function App() {
     try {
       await denyReservation(
         session.claims.user_uuid,
+        context.managedAppId,
         selectedReservation.reservation_uuid,
       );
       setBanner({

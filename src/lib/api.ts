@@ -1060,20 +1060,16 @@ function resolveServiceBaseUrl(
   return normalizedConfiguredBase;
 }
 
+const kcaEdgeBase = resolveServiceBaseUrl(
+  "/kca-api",
+  import.meta.env.VITE_API_BASE ?? import.meta.env.VITE_KCA_PROXY_API_BASE,
+);
+
 const serviceBase: Record<ServiceName, string> = {
-  auth: resolveServiceBaseUrl("/auth-api", import.meta.env.VITE_AUTH_API_BASE),
-  nebula: resolveServiceBaseUrl(
-    "/nebula-api",
-    import.meta.env.VITE_NEBULA_API_BASE,
-  ),
-  hubStore: resolveServiceBaseUrl(
-    "/hub-store-api",
-    import.meta.env.VITE_HUB_STORE_API_BASE,
-  ),
-  kcaProxy: resolveServiceBaseUrl(
-    "/kca-api",
-    import.meta.env.VITE_KCA_PROXY_API_BASE,
-  ),
+  auth: `${kcaEdgeBase}/api/v1/dashboard/auth`,
+  nebula: `${kcaEdgeBase}/api/v1/dashboard/nebula`,
+  hubStore: `${kcaEdgeBase}/api/v1/dashboard/hub-store`,
+  kcaProxy: kcaEdgeBase,
 };
 
 let currentSession: AdminSession | null = null;
@@ -1296,6 +1292,34 @@ async function request<T>(
   return parseResponse<T>(response);
 }
 
+async function requestBlob(
+  service: ServiceName,
+  path: string,
+  appIdHeader: string,
+  retryOnUnauthorized = true,
+): Promise<Blob> {
+  const bearerToken = currentSession?.tokens.access_token.token;
+  if (!bearerToken) {
+    throw new Error("Login required");
+  }
+
+  const response = await fetch(`${serviceBase[service]}${path}`, {
+    headers: {
+      Authorization: `Bearer ${bearerToken}`,
+      "X-App-Id": appIdHeader,
+    },
+  });
+
+  if (response.status === 401 && retryOnUnauthorized) {
+    await refreshSession();
+    return requestBlob(service, path, appIdHeader, false);
+  }
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response));
+  }
+  return response.blob();
+}
+
 export function setApiSession(session: AdminSession | null) {
   currentSession = session;
 }
@@ -1312,7 +1336,7 @@ export async function emitDashboardAudit(input: {
   await request(
     "nebula",
     `/api/v1/apps/${encodeURIComponent(appId)}/audit-events/client`,
-    { method: "POST", body: input },
+    { method: "POST", body: input, appIdHeader: appId },
   );
 }
 
@@ -1326,6 +1350,7 @@ export async function fetchDashboardAuditEvents(
   return request<DashboardAuditPage>(
     "nebula",
     `/api/v1/apps/${encodeURIComponent(appId)}/audit-events?${query.toString()}`,
+    { appIdHeader: appId },
   );
 }
 
@@ -2033,9 +2058,7 @@ export async function createSchoolPack(
     {
       method: "POST",
       body: formData,
-      authRequired: false,
       appIdHeader: input.school_owner.app_id,
-      retryOnUnauthorized: false,
     },
   );
 }
@@ -2071,9 +2094,7 @@ export async function updateSchoolPack(
     {
       method: "PUT",
       body: formData,
-      authRequired: false,
       appIdHeader: managedAppId,
-      retryOnUnauthorized: false,
     },
   );
 }
@@ -2092,28 +2113,38 @@ export async function fetchAdminSchoolPacks(
     "hubStore",
     `/api/v1/admin/${encodeURIComponent(adminUser)}/school-packs?${search.toString()}`,
     {
-      authRequired: false,
-      retryOnUnauthorized: false,
+      appIdHeader: managedAppId,
     },
   );
 }
 
-export function getAdminPackQrCodeDownloadUrl(
+export function downloadAdminPackQrCode(
   adminUser: string,
+  managedAppId: string,
   packUUID: string,
-): string {
-  return `${serviceBase.hubStore}/api/v1/admin/${encodeURIComponent(adminUser)}/pack/${encodeURIComponent(packUUID)}/qr-code/download`;
+): Promise<Blob> {
+  return requestBlob(
+    "hubStore",
+    `/api/v1/admin/${encodeURIComponent(adminUser)}/pack/${encodeURIComponent(packUUID)}/qr-code/download`,
+    managedAppId,
+  );
 }
 
-export function getAdminPackSpotQrCodeDownloadUrl(
+export function downloadAdminPackSpotQrCode(
   adminUser: string,
+  managedAppId: string,
   spotUUID: string,
-): string {
-  return `${serviceBase.hubStore}/api/v1/admin/${encodeURIComponent(adminUser)}/pack/spot/${encodeURIComponent(spotUUID)}/qr-code/download`;
+): Promise<Blob> {
+  return requestBlob(
+    "hubStore",
+    `/api/v1/admin/${encodeURIComponent(adminUser)}/pack/spot/${encodeURIComponent(spotUUID)}/qr-code/download`,
+    managedAppId,
+  );
 }
 
 export async function generateAdminPackQrCode(
   adminUser: string,
+  managedAppId: string,
   packUUID: string,
 ): Promise<Pack> {
   return request<Pack>(
@@ -2121,14 +2152,14 @@ export async function generateAdminPackQrCode(
     `/api/v1/admin/${encodeURIComponent(adminUser)}/pack/${encodeURIComponent(packUUID)}/qr-code`,
     {
       method: "POST",
-      authRequired: false,
-      retryOnUnauthorized: false,
+      appIdHeader: managedAppId,
     },
   );
 }
 
 export async function generateAdminPackSpotQrCode(
   adminUser: string,
+  managedAppId: string,
   spotUUID: string,
 ): Promise<PackSpot> {
   return request<PackSpot>(
@@ -2136,8 +2167,7 @@ export async function generateAdminPackSpotQrCode(
     `/api/v1/admin/${encodeURIComponent(adminUser)}/pack/spot/${encodeURIComponent(spotUUID)}/qr-code`,
     {
       method: "POST",
-      authRequired: false,
-      retryOnUnauthorized: false,
+      appIdHeader: managedAppId,
     },
   );
 }
@@ -2173,8 +2203,7 @@ export async function fetchSchoolTermReservations(
     "hubStore",
     `/api/v1/admin/${encodeURIComponent(adminUser)}/pack/term-reservations?${search.toString()}`,
     {
-      authRequired: false,
-      retryOnUnauthorized: false,
+      appIdHeader: managedAppId,
     },
   );
 }
@@ -2279,6 +2308,7 @@ export async function signSchoolMedia(
 
 export async function approveReservation(
   adminUser: string,
+  managedAppId: string,
   reservationUUID: string,
 ): Promise<PackSpotReservation> {
   return request<PackSpotReservation>(
@@ -2286,14 +2316,14 @@ export async function approveReservation(
     `/api/v1/admin/${encodeURIComponent(adminUser)}/pack/term-reservation/${encodeURIComponent(reservationUUID)}/approve`,
     {
       method: "POST",
-      authRequired: false,
-      retryOnUnauthorized: false,
+      appIdHeader: managedAppId,
     },
   );
 }
 
 export async function denyReservation(
   adminUser: string,
+  managedAppId: string,
   reservationUUID: string,
 ): Promise<PackSpotReservation> {
   return request<PackSpotReservation>(
@@ -2301,8 +2331,7 @@ export async function denyReservation(
     `/api/v1/admin/${encodeURIComponent(adminUser)}/pack/term-reservation/${encodeURIComponent(reservationUUID)}/deny`,
     {
       method: "POST",
-      authRequired: false,
-      retryOnUnauthorized: false,
+      appIdHeader: managedAppId,
     },
   );
 }
