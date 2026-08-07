@@ -64,3 +64,20 @@ VITE_API_BASE=https://qa-kca-proxy.juisemobility.com
 
 Do not disable TLS verification in Vite. Direct private service URLs returning
 Google `403` is expected behavior.
+
+## Google Cloud deployment
+
+The dashboard is migrating from Replit to a public Cloud Run service. Replit
+remains available until QA is verified and the public DNS record is changed.
+
+| Environment | Branch | Intended URL | Google project | KCA upstream |
+| --- | --- | --- | --- | --- |
+| QA | `qa` | `https://qa-dashboard.juisemobility.com` | `juise-fed-pre-run-154427` | QA KCA Cloud Run origin |
+| Production | `prod` | `https://dashboard.juisemobility.com` | `juise-fed-prod-run-154427` | Production KCA Cloud Run origin |
+
+The container serves the compiled Vite application and forwards `/kca-api/*`
+to the KCA target configured by Terraform. This keeps API traffic same-origin
+in the browser and prevents direct dashboard access to private services.
+
+See [GCP-DEPLOYMENT.md](GCP-DEPLOYMENT.md) for bootstrap, release, DNS cutover,
+verification, and rollback instructions.
