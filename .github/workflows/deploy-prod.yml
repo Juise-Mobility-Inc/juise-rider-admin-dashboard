@@ -65,10 +65,10 @@ jobs:
           gcloud auth configure-docker "${ARTIFACT_REGISTRY_HOST}" --quiet
           IMAGE="${ARTIFACT_REGISTRY_HOST}/${GCP_PROJECT_ID}/${ARTIFACT_REGISTRY_REPOSITORY}/${IMAGE_NAME}"
           docker build --tag "${IMAGE}:${GITHUB_SHA}" .
-          docker push "${IMAGE}:${GITHUB_SHA}"
-          DIGEST="$(gcloud artifacts docker images describe "${IMAGE}:${GITHUB_SHA}" --project "${GCP_PROJECT_ID}" --format='value(image_summary.fully_qualified_digest)')"
+          PUSH_OUTPUT="$(docker push "${IMAGE}:${GITHUB_SHA}" | tee /dev/stderr)"
+          DIGEST="$(printf '%s\n' "${PUSH_OUTPUT}" | sed -n 's/.*digest: \(sha256:[0-9a-f]\{64\}\).*/\1/p' | tail -n 1)"
           test -n "${DIGEST}"
-          echo "SERVICE_DIGEST_REF=${DIGEST}" >> "${GITHUB_ENV}"
+          echo "SERVICE_DIGEST_REF=${IMAGE}@${DIGEST}" >> "${GITHUB_ENV}"
       - name: Confirm Terraform bootstrap
         run: gcloud run services describe "${SERVICE_NAME}" --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" >/dev/null
       - name: Deploy and verify production
