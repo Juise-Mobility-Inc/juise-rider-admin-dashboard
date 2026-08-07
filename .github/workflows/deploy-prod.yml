@@ -1,0 +1,85 @@
+name: Deploy Production to Google Cloud
+
+on:
+  workflow_dispatch:
+    inputs:
+      change_reference:
+        description: Approved production change or ticket reference
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: juise-rider-admin-dashboard-production
+  cancel-in-progress: false
+
+env:
+  GCP_PROJECT_ID: juise-fed-prod-run-154427
+  GCP_REGION: us-east5
+  ARTIFACT_REGISTRY_HOST: us-east5-docker.pkg.dev
+  ARTIFACT_REGISTRY_REPOSITORY: juise-containers
+  SERVICE_NAME: juise-rider-admin-dashboard
+  IMAGE_NAME: juise-rider-admin-dashboard
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          VITE_API_BASE: /kca-api
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify production deployment context
+        env:
+          CHANGE_REFERENCE: ${{ inputs.change_reference }}
+        run: |
+          set -euo pipefail
+          test -n "${CHANGE_REFERENCE}"
+          test "${GITHUB_REPOSITORY_OWNER}" = "Juise-Mobility-Inc"
+          test "${GITHUB_REF}" = "refs/heads/prod"
+          test "${GITHUB_EVENT_NAME}" = "workflow_dispatch"
+      - uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Build and push immutable image
+        run: |
+          set -euo pipefail
+          gcloud auth configure-docker "${ARTIFACT_REGISTRY_HOST}" --quiet
+          IMAGE="${ARTIFACT_REGISTRY_HOST}/${GCP_PROJECT_ID}/${ARTIFACT_REGISTRY_REPOSITORY}/${IMAGE_NAME}"
+          docker build --tag "${IMAGE}:${GITHUB_SHA}" .
+          docker push "${IMAGE}:${GITHUB_SHA}"
+          DIGEST="$(gcloud artifacts docker images describe "${IMAGE}:${GITHUB_SHA}" --project "${GCP_PROJECT_ID}" --format='value(image_summary.fully_qualified_digest)')"
+          test -n "${DIGEST}"
+          echo "SERVICE_DIGEST_REF=${DIGEST}" >> "${GITHUB_ENV}"
+      - name: Confirm Terraform bootstrap
+        run: gcloud run services describe "${SERVICE_NAME}" --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" >/dev/null
+      - name: Deploy and verify production
+        env:
+          CHANGE_REFERENCE: ${{ inputs.change_reference }}
+        run: |
+          set -euo pipefail
+          gcloud run services update "${SERVICE_NAME}" --image "${SERVICE_DIGEST_REF}" --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" --quiet
+          URL="$(gcloud run services describe "${SERVICE_NAME}" --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" --format='value(status.url)')"
+          REVISION="$(gcloud run services describe "${SERVICE_NAME}" --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" --format='value(status.latestReadyRevisionName)')"
+          DEPLOYED="$(gcloud run revisions describe "${REVISION}" --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" --format='value(spec.containers[0].image)')"
+          test "${DEPLOYED}" = "${SERVICE_DIGEST_REF}"
+          test "$(curl --fail --silent --output /dev/null --write-out '%{http_code}' "${URL}/health/live")" = "200"
+          printf '## Dashboard production\n\n- Change: %s\n- Image: `%s`\n- Revision: `%s`\n- Cloud Run URL: %s\n- Intended hostname: https://dashboard.juisemobility.com\n' "${CHANGE_REFERENCE}" "${SERVICE_DIGEST_REF}" "${REVISION}" "${URL}" >> "${GITHUB_STEP_SUMMARY}"
