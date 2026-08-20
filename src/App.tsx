@@ -33,6 +33,7 @@ import {
   fetchSchoolChallenges,
   fetchSchoolPOIs,
   fetchSchoolZones,
+  fetchSchools,
   fetchStudentProfile,
   fetchUserMediaAssets,
   generateAdminPackQrCode,
@@ -366,6 +367,7 @@ const newChallengeSelectionId = "__new_challenge__";
 const authAppId =
   import.meta.env.VITE_AUTH_APP_ID ?? "juise_rider_admin_dashboard";
 const loginLockStorageKey = "juise-dashboard-login-lock";
+const newSignupSchoolOption = "__new_signup_school__";
 
 interface StoredLoginLock {
   identifier: string;
@@ -1560,6 +1562,10 @@ function App() {
   };
   const [isSignupSchoolModalOpen, setIsSignupSchoolModalOpen] = useState(false);
   const [signupSchoolName, setSignupSchoolName] = useState("");
+  const [signupSchools, setSignupSchools] = useState<School[]>([]);
+  const [signupSchoolsBusy, setSignupSchoolsBusy] = useState(false);
+  const [signupSchoolsError, setSignupSchoolsError] = useState("");
+  const [signupSchoolsReloadToken, setSignupSchoolsReloadToken] = useState(0);
   const [signupForm, setSignupForm] = useState<SignupFormState>({
     school_id: "",
     first: "",
@@ -1569,6 +1575,39 @@ function App() {
     phone: "",
     password: "",
   });
+
+  useEffect(() => {
+    if (authMode !== "signup") {
+      return;
+    }
+
+    let cancelled = false;
+    setSignupSchoolsBusy(true);
+    setSignupSchoolsError("");
+
+    void fetchSchools(context.managedAppId)
+      .then((schools) => {
+        if (cancelled) {
+          return;
+        }
+        setSignupSchools(schools.filter((school) => school.active));
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        setSignupSchoolsError(getErrorMessage(error));
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSignupSchoolsBusy(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authMode, context.managedAppId, signupSchoolsReloadToken]);
 
   useEffect(() => {
     if (!loginLock) return;
@@ -3563,6 +3602,12 @@ function App() {
 
   async function handleCreateSchoolAdmin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!signupForm.school_id.trim()) {
+      setAuthError("Select your school, or choose the option to create a new one.");
+      return;
+    }
+
     setAuthBusy(true);
     setAuthError("");
 
@@ -3613,6 +3658,25 @@ function App() {
     } finally {
       setAuthBusy(false);
     }
+  }
+
+  function handleSignupSchoolChange(value: string) {
+    if (value === newSignupSchoolOption) {
+      setSignupForm((current) => ({
+        ...current,
+        school_id: "",
+      }));
+      setSignupSchoolName("");
+      setAuthError("");
+      setIsSignupSchoolModalOpen(true);
+      return;
+    }
+
+    setSignupForm((current) => ({
+      ...current,
+      school_id: value,
+    }));
+    setAuthError("");
   }
 
   function handleLogout() {
@@ -4830,6 +4894,69 @@ function App() {
                         />
                       </label>
                     </div>
+                    <label className="field">
+                      <span>School</span>
+                      <select
+                        value={signupForm.school_id}
+                        onChange={(event) =>
+                          handleSignupSchoolChange(event.target.value)
+                        }
+                        required
+                        disabled={signupSchoolsBusy || authBusy}
+                      >
+                        <option value="">
+                          {signupSchoolsBusy
+                            ? "Loading schools…"
+                            : "Select your school"}
+                        </option>
+                        {signupSchools
+                          .slice()
+                          .sort((left, right) => {
+                            const leftName =
+                              left.name.trim() ||
+                              left.title.trim() ||
+                              left.school_id;
+                            const rightName =
+                              right.name.trim() ||
+                              right.title.trim() ||
+                              right.school_id;
+                            return leftName.localeCompare(rightName);
+                          })
+                          .map((school) => (
+                            <option
+                              key={school.school_id}
+                              value={school.school_id}
+                            >
+                              {school.name.trim() ||
+                                school.title.trim() ||
+                                school.school_id}
+                            </option>
+                          ))}
+                        <option value={newSignupSchoolOption}>
+                          My school isn’t listed — create a new school
+                        </option>
+                      </select>
+                      {signupSchoolsError ? (
+                        <small className="signup-school-load-error">
+                          Couldn’t load schools. {signupSchoolsError}{" "}
+                          <button
+                            className="text-button"
+                            type="button"
+                            onClick={() =>
+                              setSignupSchoolsReloadToken((current) => current + 1)
+                            }
+                            disabled={signupSchoolsBusy || authBusy}
+                          >
+                            Try again
+                          </button>
+                        </small>
+                      ) : (
+                        <small>
+                          Choose an existing school, or select the last option
+                          to create one.
+                        </small>
+                      )}
+                    </label>
                     <label className="field">
                       <span>Username</span>
                       <input

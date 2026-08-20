@@ -1514,6 +1514,8 @@ export async function fetchSchools(managedAppId: string): Promise<School[]> {
     `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools`,
     {
       appIdHeader: managedAppId,
+      authRequired: false,
+      retryOnUnauthorized: false,
     },
   );
 }
