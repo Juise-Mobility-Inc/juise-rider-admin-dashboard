@@ -162,6 +162,37 @@
         box-shadow: 0 0 0 3px rgba(39, 204, 94, 0.15);
 }
 
+.login-form .field select {
+        background: rgba(3, 32, 13, 0.04);
+        border-color: rgba(3, 32, 13, 0.15);
+        border-radius: 12px;
+        padding: 14px 16px;
+        color: #010c05;
+        transition:
+                border-color 0.16s,
+                box-shadow 0.16s,
+                background 0.16s;
+}
+
+.login-form .field select:focus {
+        outline: none;
+        background: #fff;
+        border-color: #27cc5e;
+        box-shadow: 0 0 0 3px rgba(39, 204, 94, 0.15);
+}
+
+.signup-school-load-error {
+        color: #9a3d35;
+}
+
+.signup-school-load-error .text-button {
+        display: inline;
+        padding: 0;
+        color: #176b38;
+        font-size: inherit;
+        font-weight: 700;
+}
+
 .login-form .primary-button {
         padding: 15px 20px;
         font-size: 1rem;
