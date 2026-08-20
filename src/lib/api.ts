@@ -1534,11 +1534,13 @@ export async function createSchoolAdminAccount(
 }
 
 export async function fetchSchools(managedAppId: string): Promise<School[]> {
+  // Genuinely public route (no auth at all) - the authenticated
+  // /api/v1/apps/{app_id}/schools path requires an admin JWT, which a
+  // pre-signup caller doesn't have yet.
   return request<School[]>(
-    "nebula",
-    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools`,
+    "kcaProxy",
+    `/api/v1/public/apps/${encodeURIComponent(managedAppId)}/schools`,
     {
-      appIdHeader: managedAppId,
       authRequired: false,
       retryOnUnauthorized: false,
     },
