@@ -35,14 +35,28 @@ Global Auth, Nebula User Server, or Hub Store Service. KCA validates Juise
 administrator tokens and adds its Google Cloud service identity when invoking
 those private services.
 
-For local QA development, configure only:
+The KCA target is selected from the Git branch at build/start time:
+
+| Git branch | Environment | KCA URL |
+| --- | --- | --- |
+| `qa` | QA | `https://qa-kca-proxy.juisemobility.com` |
+| `main`, `prod`, `production` | Production | `https://kca-proxy.juisemobility.com` |
+| Feature, development, or unknown branch | QA | `https://qa-kca-proxy.juisemobility.com` |
+
+Unknown branches intentionally use QA so a new branch cannot accidentally
+send traffic to production. The Vite development and preview servers expose a
+same-origin `/kca-api` path and forward it to the selected KCA URL.
+
+For normal local development, configure only:
 
 ```env
 VITE_API_BASE=/kca-api
-VITE_KCA_PROXY_TARGET=https://qa-kca-proxy.juisemobility.com
 ```
 
-For a deployed QA dashboard without a same-origin reverse proxy, build with:
+Use `VITE_DEPLOYMENT_ENV=qa|prod`, `VITE_GIT_BRANCH=<branch>`, or
+`VITE_KCA_PROXY_TARGET=<url>` only when an explicit override is required. For
+a deployment without the Vite same-origin proxy, build with the appropriate
+direct KCA origin:
 
 ```env
 VITE_API_BASE=https://qa-kca-proxy.juisemobility.com
