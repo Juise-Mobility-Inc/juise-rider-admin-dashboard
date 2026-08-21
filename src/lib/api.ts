@@ -1490,6 +1490,7 @@ export async function createSchoolAdminAccount(
   input: {
     school_id: string;
     school_name?: string;
+    join_code?: string;
     first?: string;
     last?: string;
     username: string;
@@ -1509,6 +1510,11 @@ export async function createSchoolAdminAccount(
   const trimmedSchoolName = input.school_name?.trim();
   if (trimmedSchoolName) {
     payload.school_name = trimmedSchoolName;
+  }
+
+  const trimmedJoinCode = input.join_code?.trim();
+  if (trimmedJoinCode) {
+    payload.join_code = trimmedJoinCode;
   }
 
   const trimmedFirst = input.first?.trim();
@@ -1560,16 +1566,31 @@ export async function fetchMySchoolMemberships(
 export async function joinSchool(
   authAppId: string,
   schoolId: string,
+  joinCode?: string,
 ): Promise<AdminSchoolMembership> {
   return request<AdminSchoolMembership>(
     "auth",
     "/api/v1/user/school-memberships",
     {
       method: "POST",
-      body: { school_id: schoolId },
+      body: { school_id: schoolId, join_code: joinCode ?? "" },
       appIdHeader: authAppId,
     },
   );
+}
+
+export async function fetchSchoolJoinCode(
+  managedAppId: string,
+  schoolId: string,
+): Promise<string> {
+  const response = await request<{ join_code: string }>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/join-code`,
+    {
+      appIdHeader: managedAppId,
+    },
+  );
+  return response.join_code;
 }
 
 export async function fetchSchools(managedAppId: string): Promise<School[]> {
