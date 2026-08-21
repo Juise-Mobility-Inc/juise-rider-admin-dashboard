@@ -33,6 +33,7 @@ import {
   fetchSchoolParkingIncidentReports,
   fetchSchoolRegisteredDevices,
   fetchSchool,
+  fetchSchoolJoinCode,
   fetchSchoolChallengeParticipants,
   fetchSchoolChallenges,
   fetchSchoolPOIs,
@@ -302,6 +303,7 @@ interface ZoneDraft {
 
 interface SignupFormState {
   school_id: string;
+  join_code: string;
   first: string;
   last: string;
   username: string;
@@ -1523,6 +1525,7 @@ function App() {
   );
   const setSelectedSchoolId = (schoolId: string) => {
     setSelectedSchoolIdState(schoolId);
+    setViewJoinCode(null);
     try {
       if (schoolId) {
         localStorage.setItem("selectedSchoolId", schoolId);
@@ -1534,9 +1537,16 @@ function App() {
     }
   };
   const [pickerSchools, setPickerSchools] = useState<School[]>([]);
+  const [joinSchoolMode, setJoinSchoolMode] = useState<"existing" | "new">(
+    "existing",
+  );
   const [joinSchoolId, setJoinSchoolId] = useState("");
+  const [joinSchoolCode, setJoinSchoolCode] = useState("");
+  const [joinNewSchoolName, setJoinNewSchoolName] = useState("");
   const [joinSchoolBusy, setJoinSchoolBusy] = useState(false);
   const [joinSchoolError, setJoinSchoolError] = useState("");
+  const [viewJoinCode, setViewJoinCode] = useState<string | null>(null);
+  const [viewJoinCodeBusy, setViewJoinCodeBusy] = useState(false);
   const [context] = useState<DashboardContext>(() =>
     readDashboardContext(defaultManagedAppId),
   );
@@ -1602,6 +1612,7 @@ function App() {
   const [signupSchoolName, setSignupSchoolName] = useState("");
   const [signupForm, setSignupForm] = useState<SignupFormState>({
     school_id: "",
+    join_code: "",
     first: "",
     last: "",
     username: "",
@@ -1775,15 +1786,55 @@ function App() {
       setJoinSchoolError("School ID is required");
       return;
     }
+    if (joinSchoolMode === "new" && !joinNewSchoolName.trim()) {
+      setJoinSchoolError("School name is required");
+      return;
+    }
     setJoinSchoolBusy(true);
     setJoinSchoolError("");
     try {
-      const membership = await joinSchool(session.authAppId, schoolId);
+      if (joinSchoolMode === "new") {
+        await saveSchool(context.managedAppId, schoolId, {
+          name: joinNewSchoolName.trim(),
+          title: joinNewSchoolName.trim(),
+          logo_url: "",
+          default_campus_id: "",
+          color_scheme: {},
+          metadata: {},
+        });
+      }
+      const membership = await joinSchool(
+        session.authAppId,
+        schoolId,
+        joinSchoolMode === "existing" ? joinSchoolCode.trim() : undefined,
+      );
       setSchoolMemberships((current) => [
         ...current.filter((m) => m.school_id !== membership.school_id),
         membership,
       ]);
+      setPickerSchools((current) =>
+        current.some((s) => s.school_id === schoolId)
+          ? current
+          : [
+              ...current,
+              {
+                school_id: schoolId,
+                app_id: context.managedAppId,
+                name: joinNewSchoolName.trim() || schoolId,
+                title: joinNewSchoolName.trim() || schoolId,
+                logo_url: "",
+                default_campus_id: "",
+                color_scheme: {},
+                terms: [],
+                active: true,
+                created_at: 0,
+                updated_at: 0,
+              },
+            ],
+      );
       setJoinSchoolId("");
+      setJoinSchoolCode("");
+      setJoinNewSchoolName("");
       setSelectedSchoolId(membership.school_id);
     } catch (error) {
       setJoinSchoolError(getErrorMessage(error));
@@ -1795,6 +1846,26 @@ function App() {
   function schoolDisplayName(schoolId: string): string {
     const match = pickerSchools.find((s) => s.school_id === schoolId);
     return match?.title || match?.name || schoolId;
+  }
+
+  async function handleShowJoinCode() {
+    if (!activeSchoolId || viewJoinCodeBusy) return;
+    if (viewJoinCode !== null) {
+      setViewJoinCode(null);
+      return;
+    }
+    setViewJoinCodeBusy(true);
+    try {
+      const code = await fetchSchoolJoinCode(
+        context.managedAppId,
+        activeSchoolId,
+      );
+      setViewJoinCode(code);
+    } catch (error) {
+      setBanner({ tone: "error", message: getErrorMessage(error) });
+    } finally {
+      setViewJoinCodeBusy(false);
+    }
   }
 
   function findPickerSchool(schoolId: string): School | undefined {
@@ -3761,6 +3832,7 @@ function App() {
       setSignupForm((current) => ({
         ...current,
         password: "",
+        join_code: "",
       }));
       setSignupSchoolName("");
       setSignupSchoolMode("existing");
@@ -5233,6 +5305,19 @@ function App() {
                       placeholder="ou"
                     />
                   </details>
+                  <label className="field">
+                    <span>Join code</span>
+                    <input
+                      value={signupForm.join_code}
+                      onChange={(event) =>
+                        setSignupForm((current) => ({
+                          ...current,
+                          join_code: event.target.value,
+                        }))
+                      }
+                      placeholder="Ask an existing admin of this school"
+                    />
+                  </label>
                 </div>
               ) : (
                 <label className="field">
@@ -5355,42 +5440,139 @@ function App() {
           <div className="login-form-header">
             <p className="eyebrow">Join another school</p>
           </div>
+
+          <div
+            className="signup-school-choice"
+            role="tablist"
+            aria-label="Join school option"
+          >
+            <button
+              className={
+                joinSchoolMode === "existing"
+                  ? "signup-school-choice-button signup-school-choice-button-active"
+                  : "signup-school-choice-button"
+              }
+              type="button"
+              role="tab"
+              aria-selected={joinSchoolMode === "existing"}
+              onClick={() => {
+                setJoinSchoolMode("existing");
+                setJoinSchoolError("");
+                setJoinSchoolId("");
+              }}
+              disabled={joinSchoolBusy}
+            >
+              Join existing school
+            </button>
+            <button
+              className={
+                joinSchoolMode === "new"
+                  ? "signup-school-choice-button signup-school-choice-button-active"
+                  : "signup-school-choice-button"
+              }
+              type="button"
+              role="tab"
+              aria-selected={joinSchoolMode === "new"}
+              onClick={() => {
+                setJoinSchoolMode("new");
+                setJoinSchoolError("");
+                setJoinSchoolId("");
+              }}
+              disabled={joinSchoolBusy}
+            >
+              Create a new school
+            </button>
+          </div>
+
           {joinSchoolError ? (
             <p className="auth-error">{joinSchoolError}</p>
           ) : null}
-          <div className="school-option-list" role="list">
-            {pickerSchools
-              .filter(
-                (school) =>
-                  !schoolMemberships.some(
-                    (m) => m.school_id === school.school_id,
-                  ),
-              )
-              .map((school) => (
-                <SchoolOptionCard
-                  key={school.school_id}
-                  school={school}
-                  onClick={() => {
-                    if (joinSchoolBusy) return;
-                    setJoinSchoolId(school.school_id);
-                    void handleJoinSchool();
-                  }}
-                />
-              ))}
-          </div>
-          {joinSchoolBusy ? (
-            <p className="login-initializing-text">Joining…</p>
-          ) : null}
 
-          <details className="signup-manual-school-entry">
-            <summary>Can't find your school? Enter its ID</summary>
+          {joinSchoolMode === "existing" ? (
+            <>
+              <div className="school-option-list" role="list">
+                {pickerSchools
+                  .filter(
+                    (school) =>
+                      !schoolMemberships.some(
+                        (m) => m.school_id === school.school_id,
+                      ),
+                  )
+                  .map((school) => (
+                    <SchoolOptionCard
+                      key={school.school_id}
+                      school={school}
+                      selected={joinSchoolId === school.school_id}
+                      onClick={() => {
+                        setJoinSchoolError("");
+                        setJoinSchoolId(school.school_id);
+                      }}
+                    />
+                  ))}
+              </div>
+
+              <details
+                className="signup-manual-school-entry"
+                open={
+                  !!joinSchoolId &&
+                  !pickerSchools.some((s) => s.school_id === joinSchoolId)
+                }
+              >
+                <summary>Can't find your school? Enter its ID</summary>
+                <input
+                  value={joinSchoolId}
+                  onChange={(event) => setJoinSchoolId(event.target.value)}
+                  placeholder="School ID"
+                  disabled={joinSchoolBusy}
+                />
+              </details>
+
+              {joinSchoolId ? (
+                <form className="login-form" onSubmit={handleJoinSchool}>
+                  <label className="field">
+                    <span>Join code</span>
+                    <input
+                      value={joinSchoolCode}
+                      onChange={(event) =>
+                        setJoinSchoolCode(event.target.value)
+                      }
+                      placeholder="Ask an existing admin of this school"
+                      disabled={joinSchoolBusy}
+                      autoFocus
+                    />
+                  </label>
+                  <button
+                    className="primary-button"
+                    type="submit"
+                    disabled={joinSchoolBusy}
+                  >
+                    {joinSchoolBusy
+                      ? "Joining…"
+                      : `Join ${schoolDisplayName(joinSchoolId)}`}
+                  </button>
+                </form>
+              ) : null}
+            </>
+          ) : (
             <form className="login-form" onSubmit={handleJoinSchool}>
               <label className="field">
                 <span>School ID</span>
                 <input
                   value={joinSchoolId}
                   onChange={(event) => setJoinSchoolId(event.target.value)}
-                  placeholder="School ID"
+                  placeholder="ou"
+                  disabled={joinSchoolBusy}
+                  autoFocus
+                />
+              </label>
+              <label className="field">
+                <span>School name</span>
+                <input
+                  value={joinNewSchoolName}
+                  onChange={(event) =>
+                    setJoinNewSchoolName(event.target.value)
+                  }
+                  placeholder="Oakland University"
                   disabled={joinSchoolBusy}
                 />
               </label>
@@ -5399,10 +5581,10 @@ function App() {
                 type="submit"
                 disabled={joinSchoolBusy}
               >
-                {joinSchoolBusy ? "Joining…" : "Join School"}
+                {joinSchoolBusy ? "Creating…" : "Create School and Join"}
               </button>
             </form>
-          </details>
+          )}
 
           <button
             className="text-button"
@@ -5958,6 +6140,21 @@ function App() {
               </span>
               <span className="sidebar-school-switcher-change">Change</span>
             </button>
+            <button
+              type="button"
+              className="sidebar-join-code-toggle"
+              onClick={() => void handleShowJoinCode()}
+              disabled={viewJoinCodeBusy}
+            >
+              {viewJoinCodeBusy
+                ? "Loading…"
+                : viewJoinCode !== null
+                  ? "Hide join code"
+                  : "Show join code to invite admins"}
+            </button>
+            {viewJoinCode !== null ? (
+              <p className="sidebar-join-code-value">{viewJoinCode}</p>
+            ) : null}
           </div>
 
           <nav className="section-nav">
