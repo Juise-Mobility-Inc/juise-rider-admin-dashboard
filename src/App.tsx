@@ -1751,7 +1751,9 @@ function App() {
   }, [session]);
 
   useEffect(() => {
-    if (!session || selectedSchoolId) return;
+    // Public endpoint — fetched once on mount so both the pre-login
+    // signup school picker and the post-login school switcher can show
+    // names/logos instead of raw school_id values.
     let cancelled = false;
     fetchSchools(context.managedAppId)
       .then((schools) => {
@@ -1763,10 +1765,10 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [session, selectedSchoolId, context.managedAppId]);
+  }, [context.managedAppId]);
 
-  async function handleJoinSchool(event: React.FormEvent) {
-    event.preventDefault();
+  async function handleJoinSchool(event?: React.FormEvent) {
+    event?.preventDefault();
     if (!session) return;
     const schoolId = joinSchoolId.trim();
     if (!schoolId) {
@@ -1793,6 +1795,42 @@ function App() {
   function schoolDisplayName(schoolId: string): string {
     const match = pickerSchools.find((s) => s.school_id === schoolId);
     return match?.title || match?.name || schoolId;
+  }
+
+  function findPickerSchool(schoolId: string): School | undefined {
+    return pickerSchools.find((s) => s.school_id === schoolId);
+  }
+
+  function SchoolOptionCard({
+    school,
+    selected,
+    onClick,
+  }: {
+    school: School;
+    selected?: boolean;
+    onClick: () => void;
+  }) {
+    const label = school.title || school.name || school.school_id;
+    return (
+      <button
+        type="button"
+        className={
+          selected
+            ? "school-option-card school-option-card-selected"
+            : "school-option-card"
+        }
+        onClick={onClick}
+      >
+        {school.logo_url ? (
+          <img src={school.logo_url} alt="" className="school-option-logo" />
+        ) : (
+          <span className="school-option-logo school-option-logo-placeholder">
+            {label.charAt(0).toUpperCase()}
+          </span>
+        )}
+        <span className="school-option-name">{label}</span>
+      </button>
+    );
   }
 
   const currentSection =
@@ -5158,21 +5196,61 @@ function App() {
                 </button>
               </div>
 
-              <label className="field">
-                <span>School ID</span>
-                <input
-                  value={signupForm.school_id}
-                  onChange={(event) =>
-                    setSignupForm((current) => ({
-                      ...current,
-                      school_id: event.target.value,
-                    }))
-                  }
-                  placeholder="ou"
-                  autoFocus
-                  required
-                />
-              </label>
+              {signupSchoolMode === "existing" ? (
+                <div className="field">
+                  <span>School</span>
+                  {pickerSchools.length > 0 ? (
+                    <div className="school-option-list" role="list">
+                      {pickerSchools.map((school) => (
+                        <SchoolOptionCard
+                          key={school.school_id}
+                          school={school}
+                          selected={
+                            signupForm.school_id === school.school_id
+                          }
+                          onClick={() =>
+                            setSignupForm((current) => ({
+                              ...current,
+                              school_id: school.school_id,
+                            }))
+                          }
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mfa-help">Loading schools…</p>
+                  )}
+                  <details className="signup-manual-school-entry">
+                    <summary>Can't find your school? Enter its ID</summary>
+                    <input
+                      value={signupForm.school_id}
+                      onChange={(event) =>
+                        setSignupForm((current) => ({
+                          ...current,
+                          school_id: event.target.value,
+                        }))
+                      }
+                      placeholder="ou"
+                    />
+                  </details>
+                </div>
+              ) : (
+                <label className="field">
+                  <span>School ID</span>
+                  <input
+                    value={signupForm.school_id}
+                    onChange={(event) =>
+                      setSignupForm((current) => ({
+                        ...current,
+                        school_id: event.target.value,
+                      }))
+                    }
+                    placeholder="ou"
+                    autoFocus
+                    required
+                  />
+                </label>
+              )}
 
               {signupSchoolMode === "new" ? (
                 <label className="field">
@@ -5242,18 +5320,31 @@ function App() {
           {schoolMembershipsLoading ? (
             <p className="login-initializing-text">Loading your schools…</p>
           ) : schoolMemberships.length > 0 ? (
-            <div className="signup-school-choice" role="list">
-              {schoolMemberships.map((membership) => (
-                <button
-                  key={membership.membership_uuid}
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => setSelectedSchoolId(membership.school_id)}
-                >
-                  {schoolDisplayName(membership.school_id)}
-                  {membership.role !== "admin" ? ` (${membership.role})` : ""}
-                </button>
-              ))}
+            <div className="school-option-list" role="list">
+              {schoolMemberships.map((membership) => {
+                const school = findPickerSchool(membership.school_id);
+                return school ? (
+                  <SchoolOptionCard
+                    key={membership.membership_uuid}
+                    school={school}
+                    onClick={() => setSelectedSchoolId(membership.school_id)}
+                  />
+                ) : (
+                  <button
+                    key={membership.membership_uuid}
+                    type="button"
+                    className="school-option-card"
+                    onClick={() => setSelectedSchoolId(membership.school_id)}
+                  >
+                    <span className="school-option-logo school-option-logo-placeholder">
+                      {membership.school_id.charAt(0).toUpperCase()}
+                    </span>
+                    <span className="school-option-name">
+                      {membership.school_id}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           ) : (
             <p className="mfa-help">
@@ -5261,27 +5352,57 @@ function App() {
             </p>
           )}
 
-          <form className="login-form" onSubmit={handleJoinSchool}>
-            <label className="field">
-              <span>Join another school</span>
-              <input
-                value={joinSchoolId}
-                onChange={(event) => setJoinSchoolId(event.target.value)}
-                placeholder="School ID"
+          <div className="login-form-header">
+            <p className="eyebrow">Join another school</p>
+          </div>
+          {joinSchoolError ? (
+            <p className="auth-error">{joinSchoolError}</p>
+          ) : null}
+          <div className="school-option-list" role="list">
+            {pickerSchools
+              .filter(
+                (school) =>
+                  !schoolMemberships.some(
+                    (m) => m.school_id === school.school_id,
+                  ),
+              )
+              .map((school) => (
+                <SchoolOptionCard
+                  key={school.school_id}
+                  school={school}
+                  onClick={() => {
+                    if (joinSchoolBusy) return;
+                    setJoinSchoolId(school.school_id);
+                    void handleJoinSchool();
+                  }}
+                />
+              ))}
+          </div>
+          {joinSchoolBusy ? (
+            <p className="login-initializing-text">Joining…</p>
+          ) : null}
+
+          <details className="signup-manual-school-entry">
+            <summary>Can't find your school? Enter its ID</summary>
+            <form className="login-form" onSubmit={handleJoinSchool}>
+              <label className="field">
+                <span>School ID</span>
+                <input
+                  value={joinSchoolId}
+                  onChange={(event) => setJoinSchoolId(event.target.value)}
+                  placeholder="School ID"
+                  disabled={joinSchoolBusy}
+                />
+              </label>
+              <button
+                className="primary-button"
+                type="submit"
                 disabled={joinSchoolBusy}
-              />
-            </label>
-            {joinSchoolError ? (
-              <p className="auth-error">{joinSchoolError}</p>
-            ) : null}
-            <button
-              className="primary-button"
-              type="submit"
-              disabled={joinSchoolBusy}
-            >
-              {joinSchoolBusy ? "Joining…" : "Join School"}
-            </button>
-          </form>
+              >
+                {joinSchoolBusy ? "Joining…" : "Join School"}
+              </button>
+            </form>
+          </details>
 
           <button
             className="text-button"
@@ -5815,6 +5936,28 @@ function App() {
                 )}
               </div>
             </div>
+            <button
+              type="button"
+              className="sidebar-school-switcher"
+              onClick={() => setSelectedSchoolId("")}
+              title="Switch school"
+            >
+              {findPickerSchool(activeSchoolId)?.logo_url ? (
+                <img
+                  src={findPickerSchool(activeSchoolId)?.logo_url}
+                  alt=""
+                  className="sidebar-school-switcher-logo"
+                />
+              ) : (
+                <span className="sidebar-school-switcher-logo sidebar-school-switcher-logo-placeholder">
+                  {schoolDisplayName(activeSchoolId).charAt(0).toUpperCase()}
+                </span>
+              )}
+              <span className="sidebar-school-switcher-name">
+                {schoolDisplayName(activeSchoolId)}
+              </span>
+              <span className="sidebar-school-switcher-change">Change</span>
+            </button>
           </div>
 
           <nav className="section-nav">
@@ -6189,15 +6332,6 @@ function App() {
           </nav>
 
           <div className="sidebar-footer">
-            {schoolMemberships.length > 1 ? (
-              <button
-                className="secondary-button full-width-button"
-                type="button"
-                onClick={() => setSelectedSchoolId("")}
-              >
-                Switch School
-              </button>
-            ) : null}
             <button
               className="secondary-button full-width-button"
               type="button"
