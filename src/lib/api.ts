@@ -1533,6 +1533,45 @@ export async function createSchoolAdminAccount(
   });
 }
 
+export interface AdminSchoolMembership {
+  membership_uuid: string;
+  user_uuid: string;
+  app_id: string;
+  school_id: string;
+  role: string;
+  active: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+export async function fetchMySchoolMemberships(
+  authAppId: string,
+): Promise<AdminSchoolMembership[]> {
+  return request<AdminSchoolMembership[]>(
+    "auth",
+    "/api/v1/user/school-memberships",
+    {
+      method: "GET",
+      appIdHeader: authAppId,
+    },
+  );
+}
+
+export async function joinSchool(
+  authAppId: string,
+  schoolId: string,
+): Promise<AdminSchoolMembership> {
+  return request<AdminSchoolMembership>(
+    "auth",
+    "/api/v1/user/school-memberships",
+    {
+      method: "POST",
+      body: { school_id: schoolId },
+      appIdHeader: authAppId,
+    },
+  );
+}
+
 export async function fetchSchools(managedAppId: string): Promise<School[]> {
   // Genuinely public route (no auth at all) - the authenticated
   // /api/v1/apps/{app_id}/schools path requires an admin JWT, which a

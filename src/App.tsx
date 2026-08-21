@@ -25,6 +25,8 @@ import {
   emitDashboardAudit,
   denyReservation,
   fetchAdminSchoolPacks,
+  fetchMySchoolMemberships,
+  joinSchool,
   fetchNebulaUser,
   fetchPendingReservations,
   fetchSchoolParkingViolations,
@@ -34,6 +36,7 @@ import {
   fetchSchoolChallengeParticipants,
   fetchSchoolChallenges,
   fetchSchoolPOIs,
+  fetchSchools,
   fetchSchoolZones,
   fetchStudentProfile,
   fetchUserMediaAssets,
@@ -57,6 +60,7 @@ import {
   type PackSpot,
   type PackSpotReservation,
   type School,
+  type AdminSchoolMembership,
   type SchoolColorScheme,
   type SchoolChallenge,
   type SchoolChallengeCheckpointWriteInput,
@@ -1503,6 +1507,36 @@ function App() {
   const [authInitializing, setAuthInitializing] = useState(
     () => initialSession !== null,
   );
+  const [schoolMemberships, setSchoolMemberships] = useState<
+    AdminSchoolMembership[]
+  >([]);
+  const [schoolMembershipsLoading, setSchoolMembershipsLoading] =
+    useState(false);
+  const [selectedSchoolId, setSelectedSchoolIdState] = useState<string>(
+    () => {
+      try {
+        return localStorage.getItem("selectedSchoolId") ?? "";
+      } catch {
+        return "";
+      }
+    },
+  );
+  const setSelectedSchoolId = (schoolId: string) => {
+    setSelectedSchoolIdState(schoolId);
+    try {
+      if (schoolId) {
+        localStorage.setItem("selectedSchoolId", schoolId);
+      } else {
+        localStorage.removeItem("selectedSchoolId");
+      }
+    } catch {
+      // ignore storage errors (private browsing, etc.)
+    }
+  };
+  const [pickerSchools, setPickerSchools] = useState<School[]>([]);
+  const [joinSchoolId, setJoinSchoolId] = useState("");
+  const [joinSchoolBusy, setJoinSchoolBusy] = useState(false);
+  const [joinSchoolError, setJoinSchoolError] = useState("");
   const [context] = useState<DashboardContext>(() =>
     readDashboardContext(defaultManagedAppId),
   );
@@ -1680,8 +1714,87 @@ function App() {
   const [reservationStudentBusy, setReservationStudentBusy] = useState(false);
   const [reservationStudentError, setReservationStudentError] = useState("");
   const [studentRosterSearch, setStudentRosterSearch] = useState("");
-  const scopedSchoolId = session?.claims.school_id?.trim() ?? "";
-  const activeSchoolId = scopedSchoolId;
+  const activeSchoolId = session ? selectedSchoolId : "";
+
+  useEffect(() => {
+    if (!session) {
+      setSchoolMemberships([]);
+      return;
+    }
+    let cancelled = false;
+    setSchoolMembershipsLoading(true);
+    fetchMySchoolMemberships(session.authAppId)
+      .then((memberships) => {
+        if (!cancelled) {
+          setSchoolMemberships(memberships);
+          if (
+            selectedSchoolId &&
+            !memberships.some((m) => m.school_id === selectedSchoolId)
+          ) {
+            // Previously-selected school is no longer a valid membership
+            // (revoked, or leftover from a different account) — clear it
+            // so the picker shows instead of silently scoping to nothing.
+            setSelectedSchoolId("");
+          }
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSchoolMemberships([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSchoolMembershipsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
+
+  useEffect(() => {
+    if (!session || selectedSchoolId) return;
+    let cancelled = false;
+    fetchSchools(context.managedAppId)
+      .then((schools) => {
+        if (!cancelled) setPickerSchools(schools);
+      })
+      .catch(() => {
+        if (!cancelled) setPickerSchools([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session, selectedSchoolId, context.managedAppId]);
+
+  async function handleJoinSchool(event: React.FormEvent) {
+    event.preventDefault();
+    if (!session) return;
+    const schoolId = joinSchoolId.trim();
+    if (!schoolId) {
+      setJoinSchoolError("School ID is required");
+      return;
+    }
+    setJoinSchoolBusy(true);
+    setJoinSchoolError("");
+    try {
+      const membership = await joinSchool(session.authAppId, schoolId);
+      setSchoolMemberships((current) => [
+        ...current.filter((m) => m.school_id !== membership.school_id),
+        membership,
+      ]);
+      setJoinSchoolId("");
+      setSelectedSchoolId(membership.school_id);
+    } catch (error) {
+      setJoinSchoolError(getErrorMessage(error));
+    } finally {
+      setJoinSchoolBusy(false);
+    }
+  }
+
+  function schoolDisplayName(schoolId: string): string {
+    const match = pickerSchools.find((s) => s.school_id === schoolId);
+    return match?.title || match?.name || schoolId;
+  }
+
   const currentSection =
     resolveSectionFromPathname(location.pathname) ?? "dashboard";
   const isChallengeGamesSection = currentSection === "challengeGames";
@@ -3628,6 +3741,8 @@ function App() {
       resource_type: "session",
     }).catch(() => undefined);
     setSession(null);
+    setSelectedSchoolId("");
+    setSchoolMemberships([]);
     setAuthError("");
     setPassword("");
     setSignupForm((current) => ({
@@ -5106,6 +5221,80 @@ function App() {
     );
   }
 
+  if (!selectedSchoolId) {
+    return (
+      <div className="login-shell">
+        <div className="login-center-card">
+          <img
+            src="/Juise_Icon_Bolt.png"
+            className="login-brand-icon"
+            alt="Juise"
+          />
+          <p className="login-brand-title">Juise Rider Admin Dashboard</p>
+          <div className="login-form-header">
+            <p className="eyebrow">School setup</p>
+            <h2>Choose your school</h2>
+            <p className="mfa-help">
+              Select which school you want to manage this session.
+            </p>
+          </div>
+
+          {schoolMembershipsLoading ? (
+            <p className="login-initializing-text">Loading your schools…</p>
+          ) : schoolMemberships.length > 0 ? (
+            <div className="signup-school-choice" role="list">
+              {schoolMemberships.map((membership) => (
+                <button
+                  key={membership.membership_uuid}
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setSelectedSchoolId(membership.school_id)}
+                >
+                  {schoolDisplayName(membership.school_id)}
+                  {membership.role !== "admin" ? ` (${membership.role})` : ""}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="mfa-help">
+              You don't have access to any schools yet. Join one below.
+            </p>
+          )}
+
+          <form className="login-form" onSubmit={handleJoinSchool}>
+            <label className="field">
+              <span>Join another school</span>
+              <input
+                value={joinSchoolId}
+                onChange={(event) => setJoinSchoolId(event.target.value)}
+                placeholder="School ID"
+                disabled={joinSchoolBusy}
+              />
+            </label>
+            {joinSchoolError ? (
+              <p className="auth-error">{joinSchoolError}</p>
+            ) : null}
+            <button
+              className="primary-button"
+              type="submit"
+              disabled={joinSchoolBusy}
+            >
+              {joinSchoolBusy ? "Joining…" : "Join School"}
+            </button>
+          </form>
+
+          <button
+            className="text-button"
+            type="button"
+            onClick={handleLogout}
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const schoolProfileContent = (
     <SchoolProfileScreen
       activeSchoolId={activeSchoolId}
@@ -6000,6 +6189,15 @@ function App() {
           </nav>
 
           <div className="sidebar-footer">
+            {schoolMemberships.length > 1 ? (
+              <button
+                className="secondary-button full-width-button"
+                type="button"
+                onClick={() => setSelectedSchoolId("")}
+              >
+                Switch School
+              </button>
+            ) : null}
             <button
               className="secondary-button full-width-button"
               type="button"
