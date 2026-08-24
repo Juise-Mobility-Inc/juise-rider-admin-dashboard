@@ -1061,7 +1061,7 @@ function resolveServiceBaseUrl(
 }
 
 const kcaEdgeBase = resolveServiceBaseUrl(
-  "/kca-api",
+  "https://kca-proxy-tzzr64nf2a-ul.a.run.app",
   import.meta.env.VITE_API_BASE ?? import.meta.env.VITE_KCA_PROXY_API_BASE,
 );
 
