@@ -73,6 +73,161 @@
         width: 100%;
 }
 
+.school-selection-card {
+        width: min(980px, 100%);
+        max-width: 980px;
+        align-items: stretch;
+}
+
+.school-selection-card .login-brand-icon,
+.school-selection-card .login-brand-title {
+        align-self: center;
+}
+
+.school-selection-card .login-brand-title {
+        margin-bottom: 22px;
+}
+
+.school-selection-header {
+        width: 100%;
+        margin-bottom: 0;
+}
+
+.school-selection-header h2 {
+        margin-bottom: 6px;
+}
+
+.school-selection-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+        align-items: start;
+        gap: 20px;
+        width: 100%;
+}
+
+.school-selection-panel {
+        display: grid;
+        gap: 16px;
+        min-width: 0;
+        padding: 20px;
+        border: 1px solid rgba(3, 32, 13, 0.12);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.84);
+        box-shadow: 0 12px 30px rgba(3, 32, 13, 0.08);
+}
+
+.school-selection-panel-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+}
+
+.school-selection-panel-header .eyebrow {
+        margin-bottom: 5px;
+}
+
+.school-selection-panel-header h3 {
+        margin: 0;
+        color: #010c05;
+        font-size: 1.12rem;
+        letter-spacing: -0.025em;
+}
+
+.school-selection-count {
+        display: inline-grid;
+        place-items: center;
+        min-width: 30px;
+        height: 30px;
+        padding: 0 8px;
+        border-radius: 999px;
+        background: rgba(39, 204, 94, 0.15);
+        color: #176b38;
+        font-size: 0.78rem;
+        font-weight: 800;
+}
+
+.school-selection-panel .school-option-list {
+        max-height: 340px;
+        padding: 6px;
+        background: rgba(3, 32, 13, 0.055);
+}
+
+.school-selection-panel .school-option-card {
+        min-height: 52px;
+        padding: 10px 12px;
+        border: 1px solid transparent;
+        background: rgba(255, 255, 255, 0.45);
+}
+
+.school-selection-panel .school-option-card:hover {
+        border-color: rgba(39, 204, 94, 0.45);
+        background: rgba(255, 255, 255, 0.92);
+}
+
+.school-selection-panel .school-option-card-selected {
+        border-color: rgba(39, 204, 94, 0.7);
+        background: #27cc5e;
+}
+
+.school-selection-panel .signup-school-choice {
+        margin-top: -2px;
+}
+
+.school-selection-alert {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 14px 15px;
+        border: 2px solid #c23b3b;
+        border-radius: 14px;
+        background: #fff1f0;
+        color: #6f1d1d;
+        box-shadow: 0 4px 12px rgba(194, 59, 59, 0.12);
+}
+
+.school-selection-alert-icon {
+        display: inline-grid;
+        place-items: center;
+        flex: 0 0 24px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #c23b3b;
+        color: #fff;
+        font-size: 0.85rem;
+        font-weight: 900;
+}
+
+.school-selection-alert strong {
+        display: block;
+        color: #5d1515;
+        font-size: 0.9rem;
+}
+
+.school-selection-alert p {
+        margin: 3px 0 0;
+        color: #6f1d1d;
+        font-size: 0.84rem;
+        font-weight: 600;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+}
+
+.school-selection-panel .login-form {
+        gap: 14px;
+}
+
+@media (max-width: 760px) {
+        .school-selection-layout {
+                grid-template-columns: 1fr;
+        }
+
+        .school-selection-panel {
+                padding: 16px;
+        }
+}
+
 /* ── AUTH SWITCHER ────────────────────────── */
 .auth-switcher {
         display: flex;

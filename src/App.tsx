@@ -5387,14 +5387,14 @@ function App() {
   if (!selectedSchoolId) {
     return (
       <div className="login-shell">
-        <div className="login-center-card">
+        <div className="login-center-card school-selection-card">
           <img
             src="/Juise_Icon_Bolt.png"
             className="login-brand-icon"
             alt="Juise"
           />
           <p className="login-brand-title">Juise Rider Admin Dashboard</p>
-          <div className="login-form-header">
+          <div className="login-form-header school-selection-header">
             <p className="eyebrow">School setup</p>
             <h2>Choose your school</h2>
             <p className="mfa-help">
@@ -5402,143 +5402,205 @@ function App() {
             </p>
           </div>
 
-          {schoolMembershipsLoading ? (
-            <p className="login-initializing-text">Loading your schools…</p>
-          ) : schoolMemberships.length > 0 ? (
-            <div className="school-option-list" role="list">
-              {schoolMemberships.map((membership) => {
-                const school = findPickerSchool(membership.school_id);
-                return school ? (
-                  <SchoolOptionCard
-                    key={membership.membership_uuid}
-                    school={school}
-                    onClick={() => setSelectedSchoolId(membership.school_id)}
-                  />
-                ) : (
-                  <button
-                    key={membership.membership_uuid}
-                    type="button"
-                    className="school-option-card"
-                    onClick={() => setSelectedSchoolId(membership.school_id)}
-                  >
-                    <span className="school-option-logo school-option-logo-placeholder">
-                      {membership.school_id.charAt(0).toUpperCase()}
-                    </span>
-                    <span className="school-option-name">
-                      {membership.school_id}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="mfa-help">
-              You don't have access to any schools yet. Join one below.
-            </p>
-          )}
+          <div className="school-selection-layout">
+            <section className="school-selection-panel">
+              <div className="school-selection-panel-header">
+                <div>
+                  <p className="eyebrow">Your schools</p>
+                  <h3>Choose a school to manage</h3>
+                </div>
+                <span className="school-selection-count">
+                  {schoolMemberships.length}
+                </span>
+              </div>
+              {schoolMembershipsLoading ? (
+                <p className="login-initializing-text">Loading your schools…</p>
+              ) : schoolMemberships.length > 0 ? (
+                <div className="school-option-list" role="list">
+                  {schoolMemberships.map((membership) => {
+                    const school = findPickerSchool(membership.school_id);
+                    return school ? (
+                      <SchoolOptionCard
+                        key={membership.membership_uuid}
+                        school={school}
+                        onClick={() => setSelectedSchoolId(membership.school_id)}
+                      />
+                    ) : (
+                      <button
+                        key={membership.membership_uuid}
+                        type="button"
+                        className="school-option-card"
+                        onClick={() =>
+                          setSelectedSchoolId(membership.school_id)
+                        }
+                      >
+                        <span className="school-option-logo school-option-logo-placeholder">
+                          {membership.school_id.charAt(0).toUpperCase()}
+                        </span>
+                        <span className="school-option-name">
+                          {membership.school_id}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="mfa-help">
+                  You don't have access to any schools yet. Join one from the
+                  panel beside this one.
+                </p>
+              )}
+            </section>
 
-          <div className="login-form-header">
-            <p className="eyebrow">Join another school</p>
-          </div>
-
-          <div
-            className="signup-school-choice"
-            role="tablist"
-            aria-label="Join school option"
-          >
-            <button
-              className={
-                joinSchoolMode === "existing"
-                  ? "signup-school-choice-button signup-school-choice-button-active"
-                  : "signup-school-choice-button"
-              }
-              type="button"
-              role="tab"
-              aria-selected={joinSchoolMode === "existing"}
-              onClick={() => {
-                setJoinSchoolMode("existing");
-                setJoinSchoolError("");
-                setJoinSchoolId("");
-              }}
-              disabled={joinSchoolBusy}
-            >
-              Join existing school
-            </button>
-            <button
-              className={
-                joinSchoolMode === "new"
-                  ? "signup-school-choice-button signup-school-choice-button-active"
-                  : "signup-school-choice-button"
-              }
-              type="button"
-              role="tab"
-              aria-selected={joinSchoolMode === "new"}
-              onClick={() => {
-                setJoinSchoolMode("new");
-                setJoinSchoolError("");
-                setJoinSchoolId("");
-              }}
-              disabled={joinSchoolBusy}
-            >
-              Create a new school
-            </button>
-          </div>
-
-          {joinSchoolError ? (
-            <p className="auth-error">{joinSchoolError}</p>
-          ) : null}
-
-          {joinSchoolMode === "existing" ? (
-            <>
-              <div className="school-option-list" role="list">
-                {pickerSchools
-                  .filter(
-                    (school) =>
-                      !schoolMemberships.some(
-                        (m) => m.school_id === school.school_id,
-                      ),
-                  )
-                  .map((school) => (
-                    <SchoolOptionCard
-                      key={school.school_id}
-                      school={school}
-                      selected={joinSchoolId === school.school_id}
-                      onClick={() => {
-                        setJoinSchoolError("");
-                        setJoinSchoolId(school.school_id);
-                      }}
-                    />
-                  ))}
+            <section className="school-selection-panel school-selection-join-panel">
+              <div className="school-selection-panel-header">
+                <div>
+                  <p className="eyebrow">Join another school</p>
+                  <h3>Find or create a school</h3>
+                </div>
               </div>
 
-              <details
-                className="signup-manual-school-entry"
-                open={
-                  !!joinSchoolId &&
-                  !pickerSchools.some((s) => s.school_id === joinSchoolId)
-                }
+              <div
+                className="signup-school-choice"
+                role="tablist"
+                aria-label="Join school option"
               >
-                <summary>Can't find your school? Enter its ID</summary>
-                <input
-                  value={joinSchoolId}
-                  onChange={(event) => setJoinSchoolId(event.target.value)}
-                  placeholder="School ID"
+                <button
+                  className={
+                    joinSchoolMode === "existing"
+                      ? "signup-school-choice-button signup-school-choice-button-active"
+                      : "signup-school-choice-button"
+                  }
+                  type="button"
+                  role="tab"
+                  aria-selected={joinSchoolMode === "existing"}
+                  onClick={() => {
+                    setJoinSchoolMode("existing");
+                    setJoinSchoolError("");
+                    setJoinSchoolId("");
+                  }}
                   disabled={joinSchoolBusy}
-                />
-              </details>
+                >
+                  Join existing school
+                </button>
+                <button
+                  className={
+                    joinSchoolMode === "new"
+                      ? "signup-school-choice-button signup-school-choice-button-active"
+                      : "signup-school-choice-button"
+                  }
+                  type="button"
+                  role="tab"
+                  aria-selected={joinSchoolMode === "new"}
+                  onClick={() => {
+                    setJoinSchoolMode("new");
+                    setJoinSchoolError("");
+                    setJoinSchoolId("");
+                  }}
+                  disabled={joinSchoolBusy}
+                >
+                  Create a new school
+                </button>
+              </div>
 
-              {joinSchoolId ? (
+              {joinSchoolError ? (
+                <div className="school-selection-alert" role="alert">
+                  <span className="school-selection-alert-icon" aria-hidden="true">
+                    !
+                  </span>
+                  <div>
+                    <strong>We couldn’t complete that request</strong>
+                    <p>{joinSchoolError}</p>
+                  </div>
+                </div>
+              ) : null}
+
+              {joinSchoolMode === "existing" ? (
+                <>
+                  <div className="school-option-list" role="list">
+                    {pickerSchools
+                      .filter(
+                        (school) =>
+                          !schoolMemberships.some(
+                            (m) => m.school_id === school.school_id,
+                          ),
+                      )
+                      .map((school) => (
+                        <SchoolOptionCard
+                          key={school.school_id}
+                          school={school}
+                          selected={joinSchoolId === school.school_id}
+                          onClick={() => {
+                            setJoinSchoolError("");
+                            setJoinSchoolId(school.school_id);
+                          }}
+                        />
+                      ))}
+                  </div>
+
+                  <details
+                    className="signup-manual-school-entry"
+                    open={
+                      !!joinSchoolId &&
+                      !pickerSchools.some((s) => s.school_id === joinSchoolId)
+                    }
+                  >
+                    <summary>Can't find your school? Enter its ID</summary>
+                    <input
+                      value={joinSchoolId}
+                      onChange={(event) => setJoinSchoolId(event.target.value)}
+                      placeholder="School ID"
+                      disabled={joinSchoolBusy}
+                    />
+                  </details>
+
+                  {joinSchoolId ? (
+                    <form className="login-form" onSubmit={handleJoinSchool}>
+                      <label className="field">
+                        <span>Join code</span>
+                        <input
+                          value={joinSchoolCode}
+                          onChange={(event) =>
+                            setJoinSchoolCode(event.target.value)
+                          }
+                          placeholder="Ask an existing admin of this school"
+                          disabled={joinSchoolBusy}
+                          autoFocus
+                        />
+                      </label>
+                      <button
+                        className="primary-button"
+                        type="submit"
+                        disabled={joinSchoolBusy}
+                      >
+                        {joinSchoolBusy
+                          ? "Joining…"
+                          : `Join ${schoolDisplayName(joinSchoolId)}`}
+                      </button>
+                    </form>
+                  ) : null}
+                </>
+              ) : (
                 <form className="login-form" onSubmit={handleJoinSchool}>
                   <label className="field">
-                    <span>Join code</span>
+                    <span>School ID</span>
                     <input
-                      value={joinSchoolCode}
-                      onChange={(event) =>
-                        setJoinSchoolCode(event.target.value)
-                      }
-                      placeholder="Ask an existing admin of this school"
+                      value={joinSchoolId}
+                      onChange={(event) => setJoinSchoolId(event.target.value)}
+                      placeholder="ou"
                       disabled={joinSchoolBusy}
                       autoFocus
+                    />
+                  </label>
+                  <label className="field">
+                    <span>School name</span>
+                    <input
+                      value={joinNewSchoolName}
+                      onChange={(event) =>
+                        setJoinNewSchoolName(event.target.value)
+                      }
+                      placeholder="Oakland University"
+                      disabled={joinSchoolBusy}
                     />
                   </label>
                   <button
@@ -5546,45 +5608,12 @@ function App() {
                     type="submit"
                     disabled={joinSchoolBusy}
                   >
-                    {joinSchoolBusy
-                      ? "Joining…"
-                      : `Join ${schoolDisplayName(joinSchoolId)}`}
+                    {joinSchoolBusy ? "Creating…" : "Create School and Join"}
                   </button>
                 </form>
-              ) : null}
-            </>
-          ) : (
-            <form className="login-form" onSubmit={handleJoinSchool}>
-              <label className="field">
-                <span>School ID</span>
-                <input
-                  value={joinSchoolId}
-                  onChange={(event) => setJoinSchoolId(event.target.value)}
-                  placeholder="ou"
-                  disabled={joinSchoolBusy}
-                  autoFocus
-                />
-              </label>
-              <label className="field">
-                <span>School name</span>
-                <input
-                  value={joinNewSchoolName}
-                  onChange={(event) =>
-                    setJoinNewSchoolName(event.target.value)
-                  }
-                  placeholder="Oakland University"
-                  disabled={joinSchoolBusy}
-                />
-              </label>
-              <button
-                className="primary-button"
-                type="submit"
-                disabled={joinSchoolBusy}
-              >
-                {joinSchoolBusy ? "Creating…" : "Create School and Join"}
-              </button>
-            </form>
-          )}
+              )}
+            </section>
+          </div>
 
           <button
             className="text-button"
