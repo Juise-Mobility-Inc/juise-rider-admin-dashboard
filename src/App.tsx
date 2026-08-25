@@ -1872,6 +1872,24 @@ function App() {
     return pickerSchools.find((s) => s.school_id === schoolId);
   }
 
+  // Lowercase, letters and underscores only. Internal whitespace becomes
+  // an underscore; leading/trailing whitespace is dropped outright. Run
+  // on every keystroke without collapsing a just-typed trailing space —
+  // sanitizeSchoolIdOnBlur additionally trims stray leading/trailing
+  // underscores once the field loses focus, so "ou state " typed live
+  // becomes "ou_state" rather than losing the space before more text
+  // follows it.
+  function sanitizeSchoolIdInput(value: string): string {
+    return value
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-z_]/g, "");
+  }
+
+  function sanitizeSchoolIdOnBlur(value: string): string {
+    return sanitizeSchoolIdInput(value).replace(/^_+|_+$/g, "");
+  }
+
   function SchoolOptionCard({
     school,
     selected,
@@ -5299,7 +5317,13 @@ function App() {
                       onChange={(event) =>
                         setSignupForm((current) => ({
                           ...current,
-                          school_id: event.target.value,
+                          school_id: sanitizeSchoolIdInput(event.target.value),
+                        }))
+                      }
+                      onBlur={(event) =>
+                        setSignupForm((current) => ({
+                          ...current,
+                          school_id: sanitizeSchoolIdOnBlur(event.target.value),
                         }))
                       }
                       placeholder="ou"
@@ -5327,7 +5351,13 @@ function App() {
                     onChange={(event) =>
                       setSignupForm((current) => ({
                         ...current,
-                        school_id: event.target.value,
+                        school_id: sanitizeSchoolIdInput(event.target.value),
+                      }))
+                    }
+                    onBlur={(event) =>
+                      setSignupForm((current) => ({
+                        ...current,
+                        school_id: sanitizeSchoolIdOnBlur(event.target.value),
                       }))
                     }
                     placeholder="ou"
@@ -5548,7 +5578,12 @@ function App() {
                     <summary>Can't find your school? Enter its ID</summary>
                     <input
                       value={joinSchoolId}
-                      onChange={(event) => setJoinSchoolId(event.target.value)}
+                      onChange={(event) =>
+                        setJoinSchoolId(sanitizeSchoolIdInput(event.target.value))
+                      }
+                      onBlur={(event) =>
+                        setJoinSchoolId(sanitizeSchoolIdOnBlur(event.target.value))
+                      }
                       placeholder="School ID"
                       disabled={joinSchoolBusy}
                     />
@@ -5586,7 +5621,12 @@ function App() {
                     <span>School ID</span>
                     <input
                       value={joinSchoolId}
-                      onChange={(event) => setJoinSchoolId(event.target.value)}
+                      onChange={(event) =>
+                        setJoinSchoolId(sanitizeSchoolIdInput(event.target.value))
+                      }
+                      onBlur={(event) =>
+                        setJoinSchoolId(sanitizeSchoolIdOnBlur(event.target.value))
+                      }
                       placeholder="ou"
                       disabled={joinSchoolBusy}
                       autoFocus
