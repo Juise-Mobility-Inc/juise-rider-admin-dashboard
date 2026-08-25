@@ -7448,6 +7448,49 @@
         white-space: nowrap;
 }
 
+.school-option-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+}
+
+.school-option-row .school-option-card {
+        flex: 1;
+        min-width: 0;
+}
+
+.school-option-leave-button {
+        flex-shrink: 0;
+        width: 32px;
+        height: 32px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: #b3261e;
+        cursor: pointer;
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+}
+
+.school-option-leave-button:hover {
+        background: rgba(179, 38, 30, 0.1);
+}
+
+.school-option-leave-button:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+}
+
+.signup-join-code-callout {
+        margin-top: 6px;
+        padding: 12px;
+        border-radius: 10px;
+        border: 1.5px solid #27cc5e;
+        background: rgba(39, 204, 94, 0.08);
+}
+
 .signup-manual-school-entry {
         margin-top: 4px;
 }

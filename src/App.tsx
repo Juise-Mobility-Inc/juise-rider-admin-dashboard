@@ -27,6 +27,7 @@ import {
   fetchAdminSchoolPacks,
   fetchMySchoolMemberships,
   joinSchool,
+  leaveSchool,
   fetchNebulaUser,
   fetchPendingReservations,
   fetchSchoolParkingViolations,
@@ -1547,6 +1548,9 @@ function App() {
   const [joinSchoolError, setJoinSchoolError] = useState("");
   const [viewJoinCode, setViewJoinCode] = useState<string | null>(null);
   const [viewJoinCodeBusy, setViewJoinCodeBusy] = useState(false);
+  const [leavingMembershipUuid, setLeavingMembershipUuid] = useState<
+    string | null
+  >(null);
   const [context] = useState<DashboardContext>(() =>
     readDashboardContext(defaultManagedAppId),
   );
@@ -1840,6 +1844,38 @@ function App() {
       setJoinSchoolError(getErrorMessage(error));
     } finally {
       setJoinSchoolBusy(false);
+    }
+  }
+
+  async function handleLeaveSchool(
+    membership: AdminSchoolMembership,
+    event: React.MouseEvent,
+  ) {
+    event.stopPropagation();
+    if (!session || leavingMembershipUuid) return;
+    const name = schoolDisplayName(membership.school_id);
+    if (
+      !window.confirm(
+        `Leave ${name}? You can rejoin later without needing the join code again.`,
+      )
+    ) {
+      return;
+    }
+    setLeavingMembershipUuid(membership.membership_uuid);
+    try {
+      await leaveSchool(session.authAppId, membership.membership_uuid);
+      setSchoolMemberships((current) =>
+        current.filter(
+          (m) => m.membership_uuid !== membership.membership_uuid,
+        ),
+      );
+      if (selectedSchoolId === membership.school_id) {
+        setSelectedSchoolId("");
+      }
+    } catch (error) {
+      setBanner({ tone: "error", message: getErrorMessage(error) });
+    } finally {
+      setLeavingMembershipUuid(null);
     }
   }
 
@@ -5329,19 +5365,27 @@ function App() {
                       placeholder="ou"
                     />
                   </details>
-                  <label className="field">
-                    <span>Join code</span>
-                    <input
-                      value={signupForm.join_code}
-                      onChange={(event) =>
-                        setSignupForm((current) => ({
-                          ...current,
-                          join_code: event.target.value,
-                        }))
-                      }
-                      placeholder="Ask an existing admin of this school"
-                    />
-                  </label>
+                  {signupForm.school_id ? (
+                    <div className="signup-join-code-callout">
+                      <label className="field">
+                        <span>
+                          Join code for{" "}
+                          {schoolDisplayName(signupForm.school_id)}
+                        </span>
+                        <input
+                          value={signupForm.join_code}
+                          onChange={(event) =>
+                            setSignupForm((current) => ({
+                              ...current,
+                              join_code: event.target.value,
+                            }))
+                          }
+                          placeholder="Ask an existing admin of this school"
+                          autoFocus
+                        />
+                      </label>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <label className="field">
@@ -5449,28 +5493,52 @@ function App() {
                 <div className="school-option-list" role="list">
                   {schoolMemberships.map((membership) => {
                     const school = findPickerSchool(membership.school_id);
-                    return school ? (
-                      <SchoolOptionCard
+                    return (
+                      <div
                         key={membership.membership_uuid}
-                        school={school}
-                        onClick={() => setSelectedSchoolId(membership.school_id)}
-                      />
-                    ) : (
-                      <button
-                        key={membership.membership_uuid}
-                        type="button"
-                        className="school-option-card"
-                        onClick={() =>
-                          setSelectedSchoolId(membership.school_id)
-                        }
+                        className="school-option-row"
                       >
-                        <span className="school-option-logo school-option-logo-placeholder">
-                          {membership.school_id.charAt(0).toUpperCase()}
-                        </span>
-                        <span className="school-option-name">
-                          {membership.school_id}
-                        </span>
-                      </button>
+                        {school ? (
+                          <SchoolOptionCard
+                            school={school}
+                            onClick={() =>
+                              setSelectedSchoolId(membership.school_id)
+                            }
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            className="school-option-card"
+                            onClick={() =>
+                              setSelectedSchoolId(membership.school_id)
+                            }
+                          >
+                            <span className="school-option-logo school-option-logo-placeholder">
+                              {membership.school_id.charAt(0).toUpperCase()}
+                            </span>
+                            <span className="school-option-name">
+                              {membership.school_id}
+                            </span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="school-option-leave-button"
+                          onClick={(event) =>
+                            handleLeaveSchool(membership, event)
+                          }
+                          disabled={
+                            leavingMembershipUuid ===
+                            membership.membership_uuid
+                          }
+                          title={`Leave ${schoolDisplayName(membership.school_id)}`}
+                          aria-label={`Leave ${schoolDisplayName(membership.school_id)}`}
+                        >
+                          {leavingMembershipUuid === membership.membership_uuid
+                            ? "…"
+                            : "🗑"}
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
