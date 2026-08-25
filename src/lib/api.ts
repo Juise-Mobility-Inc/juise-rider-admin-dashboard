@@ -2403,6 +2403,10 @@ export async function fetchUserMediaAssets(
         `/api/v1/apps/${encodeURIComponent(appId)}/user/${encodeURIComponent(userUUID)}/media?${search.toString()}`,
         {
           appIdHeader: appId,
+          // Racing multiple app_id candidates for backward compatibility —
+          // at least one is expected not to match, so its 403 shouldn't
+          // trigger a session refresh on the caller's behalf.
+          retryOnUnauthorized: false,
         },
       ),
     ),
@@ -2449,6 +2453,7 @@ export async function signSchoolMedia(
       `/api/v1/admin/school/${encodeURIComponent(schoolId)}/media/sign`,
       {
         method: "POST",
+        retryOnUnauthorized: false,
         body: {
           object_keys: chunk,
         },
@@ -2530,6 +2535,9 @@ export async function fetchStudentProfile(
           `/api/v1/apps/${encodeURIComponent(appId)}/user/${encodedUserUUID}/registered-devices`,
           {
             appIdHeader: appId,
+            // Racing multiple app_id candidates for backward compatibility
+            // — at least one is expected not to match.
+            retryOnUnauthorized: false,
           },
         ),
       ),
@@ -2562,6 +2570,13 @@ export async function fetchStudentPublicProfile(
       `/api/v1/user/social/profiles/${encodeURIComponent(targetUserUUID)}?${search.toString()}`,
       {
         appIdHeader: managedAppId,
+        // Called once per student while hydrating a whole roster — a 403
+        // here (e.g. no visible public profile for this student) is
+        // routine and expected, not a signal the caller's own session is
+        // stale. Letting each of these independently trigger a session
+        // refresh caused a refresh-and-rerender storm on rosters where
+        // many students hit this at once.
+        retryOnUnauthorized: false,
       },
     );
     if (profile.user.profile_image_url?.trim()) {
@@ -3179,6 +3194,11 @@ export async function fetchSchoolParkingIncidentReports(
         `/api/v1/admin/school/${encodeURIComponent(schoolId)}/parking-incident-reports?${buildSearch(appId).toString()}`,
         {
           appIdHeader: currentSession?.authAppId ?? appId,
+          // Racing multiple app_id candidates for backward compatibility —
+          // at least one (typically the legacy juise-admin-app one) is
+          // expected not to match and 403, which isn't a signal the
+          // session itself is stale.
+          retryOnUnauthorized: false,
         },
       ),
     ),
