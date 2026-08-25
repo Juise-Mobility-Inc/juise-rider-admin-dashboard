@@ -1579,6 +1579,20 @@ export async function joinSchool(
   );
 }
 
+export async function leaveSchool(
+  authAppId: string,
+  membershipUuid: string,
+): Promise<AdminSchoolMembership> {
+  return request<AdminSchoolMembership>(
+    "auth",
+    `/api/v1/user/school-memberships/${encodeURIComponent(membershipUuid)}`,
+    {
+      method: "DELETE",
+      appIdHeader: authAppId,
+    },
+  );
+}
+
 export async function fetchSchoolJoinCode(
   managedAppId: string,
   schoolId: string,
