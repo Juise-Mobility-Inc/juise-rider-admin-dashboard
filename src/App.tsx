@@ -164,7 +164,6 @@ type Section =
 type PackTab = "create" | "existing";
 type BannerTone = "success" | "error" | "info";
 type AuthMode = "login" | "signup";
-type SignupSchoolMode = "existing" | "new";
 const maxSessionExpiryCheckDelayMs = 2_147_483_647;
 
 const dashboardSections: Array<{
@@ -1515,15 +1514,13 @@ function App() {
   >([]);
   const [schoolMembershipsLoading, setSchoolMembershipsLoading] =
     useState(false);
-  const [selectedSchoolId, setSelectedSchoolIdState] = useState<string>(
-    () => {
-      try {
-        return localStorage.getItem("selectedSchoolId") ?? "";
-      } catch {
-        return "";
-      }
-    },
-  );
+  const [selectedSchoolId, setSelectedSchoolIdState] = useState<string>(() => {
+    try {
+      return localStorage.getItem("selectedSchoolId") ?? "";
+    } catch {
+      return "";
+    }
+  });
   const setSelectedSchoolId = (schoolId: string) => {
     setSelectedSchoolIdState(schoolId);
     setViewJoinCode(null);
@@ -1612,10 +1609,6 @@ function App() {
     link.remove();
     URL.revokeObjectURL(url);
   };
-  const [isSignupSchoolModalOpen, setIsSignupSchoolModalOpen] = useState(false);
-  const [signupSchoolMode, setSignupSchoolMode] =
-    useState<SignupSchoolMode>("existing");
-  const [signupSchoolName, setSignupSchoolName] = useState("");
   const [signupForm, setSignupForm] = useState<SignupFormState>({
     school_id: "",
     join_code: "",
@@ -1870,9 +1863,7 @@ function App() {
     try {
       await leaveSchool(session.authAppId, membership.membership_uuid);
       setSchoolMemberships((current) =>
-        current.filter(
-          (m) => m.membership_uuid !== membership.membership_uuid,
-        ),
+        current.filter((m) => m.membership_uuid !== membership.membership_uuid),
       );
       if (selectedSchoolId === membership.school_id) {
         setSelectedSchoolId("");
@@ -3858,44 +3849,24 @@ function App() {
     setAuthError("");
   }
 
-  function handleCreateSchoolAdmin(event: FormEvent<HTMLFormElement>) {
+  async function handleCreateSchoolAdmin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setAuthError("");
-    setSignupSchoolMode("existing");
-    setIsSignupSchoolModalOpen(true);
-  }
-
-  async function handleSubmitSignupSchool(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const schoolId = signupForm.school_id.trim();
-    if (!schoolId) {
-      setAuthError("School ID is required.");
-      return;
-    }
-
-    const schoolName = signupSchoolName.trim();
-    if (signupSchoolMode === "new" && !schoolName) {
-      setAuthError("School name is required.");
-      return;
-    }
-
     setAuthBusy(true);
     setAuthError("");
 
     try {
+      // School selection happens after MFA enrollment now, via the
+      // self-service join-school flow on the post-login picker (which
+      // already auto-selects the school on success) — school_id is
+      // deliberately omitted here.
       const challenge = await createSchoolAdminAccount(authAppId, {
         ...signupForm,
-        school_id: schoolId,
-        school_name: signupSchoolMode === "new" ? schoolName : undefined,
       });
       setSignupForm((current) => ({
         ...current,
         password: "",
         join_code: "",
       }));
-      setSignupSchoolName("");
-      setSignupSchoolMode("existing");
-      setIsSignupSchoolModalOpen(false);
       await prepareMFAChallenge(challenge);
     } catch (error) {
       setAuthError(getErrorMessage(error));
@@ -3918,9 +3889,6 @@ function App() {
       ...current,
       password: "",
     }));
-    setSignupSchoolName("");
-    setSignupSchoolMode("existing");
-    setIsSignupSchoolModalOpen(false);
     setBanner({
       tone: "info",
       message: "Signed out.",
@@ -4949,8 +4917,8 @@ function App() {
                         <strong>Save these one-time recovery codes now</strong>
                       </div>
                       <p>
-                        They will not be shown again. Each code can be used
-                        once if you lose access to Google Authenticator.
+                        They will not be shown again. Each code can be used once
+                        if you lose access to Google Authenticator.
                       </p>
                       <ul className="mfa-recovery-code-list">
                         {mfaEnrollment.recovery_codes.map((code) => (
@@ -4970,17 +4938,13 @@ function App() {
                             )
                           }
                         >
-                          {mfaCopied === "codes"
-                            ? "Copied!"
-                            : "Copy all codes"}
+                          {mfaCopied === "codes" ? "Copied!" : "Copy all codes"}
                         </button>
                         <button
                           type="button"
                           className="mfa-chip-button"
                           onClick={() =>
-                            downloadRecoveryCodes(
-                              mfaEnrollment.recovery_codes,
-                            )
+                            downloadRecoveryCodes(mfaEnrollment.recovery_codes)
                           }
                         >
                           Download .txt
@@ -5065,8 +5029,6 @@ function App() {
                     onClick={() => {
                       setAuthMode("signup");
                       setAuthError("");
-                      setSignupSchoolMode("existing");
-                      setIsSignupSchoolModalOpen(false);
                     }}
                   >
                     Create Account
@@ -5081,8 +5043,6 @@ function App() {
                     onClick={() => {
                       setAuthMode("login");
                       setAuthError("");
-                      setSignupSchoolMode("existing");
-                      setIsSignupSchoolModalOpen(false);
                     }}
                   >
                     Sign In
@@ -5256,209 +5216,6 @@ function App() {
             )}
           </div>
         </div>
-        {isSignupSchoolModalOpen ? (
-          <div
-            className="management-modal-backdrop"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Choose or create a school"
-            onClick={() => {
-              if (!authBusy) setIsSignupSchoolModalOpen(false);
-            }}
-          >
-            <form
-              className="management-modal-sheet signup-school-modal"
-              onClick={(event) => event.stopPropagation()}
-              onSubmit={handleSubmitSignupSchool}
-            >
-              <div className="management-modal-header">
-                <div>
-                  <p className="eyebrow">School setup</p>
-                  <h3>Choose your school</h3>
-                </div>
-                <button
-                  className="text-button management-modal-close"
-                  type="button"
-                  onClick={() => setIsSignupSchoolModalOpen(false)}
-                  disabled={authBusy}
-                >
-                  Close
-                </button>
-              </div>
-
-              <div
-                className="signup-school-choice"
-                role="tablist"
-                aria-label="School setup option"
-              >
-                <button
-                  className={
-                    signupSchoolMode === "existing"
-                      ? "signup-school-choice-button signup-school-choice-button-active"
-                      : "signup-school-choice-button"
-                  }
-                  type="button"
-                  role="tab"
-                  aria-selected={signupSchoolMode === "existing"}
-                  onClick={() => {
-                    setSignupSchoolMode("existing");
-                    setAuthError("");
-                  }}
-                  disabled={authBusy}
-                >
-                  Existing school
-                </button>
-                <button
-                  className={
-                    signupSchoolMode === "new"
-                      ? "signup-school-choice-button signup-school-choice-button-active"
-                      : "signup-school-choice-button"
-                  }
-                  type="button"
-                  role="tab"
-                  aria-selected={signupSchoolMode === "new"}
-                  onClick={() => {
-                    setSignupSchoolMode("new");
-                    setAuthError("");
-                  }}
-                  disabled={authBusy}
-                >
-                  Create a new school
-                </button>
-              </div>
-
-              {signupSchoolMode === "existing" ? (
-                <div className="field">
-                  <span>School</span>
-                  {pickerSchools.length > 0 ? (
-                    <div className="school-option-list" role="list">
-                      {pickerSchools.map((school) => (
-                        <SchoolOptionCard
-                          key={school.school_id}
-                          school={school}
-                          selected={
-                            signupForm.school_id === school.school_id
-                          }
-                          onClick={() =>
-                            setSignupForm((current) => ({
-                              ...current,
-                              school_id: school.school_id,
-                            }))
-                          }
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mfa-help">Loading schools…</p>
-                  )}
-                  <details className="signup-manual-school-entry">
-                    <summary>Can't find your school? Enter its ID</summary>
-                    <input
-                      value={signupForm.school_id}
-                      onChange={(event) =>
-                        setSignupForm((current) => ({
-                          ...current,
-                          school_id: sanitizeSchoolIdInput(event.target.value),
-                        }))
-                      }
-                      onBlur={(event) =>
-                        setSignupForm((current) => ({
-                          ...current,
-                          school_id: sanitizeSchoolIdOnBlur(event.target.value),
-                        }))
-                      }
-                      placeholder="ou"
-                    />
-                  </details>
-                  {signupForm.school_id ? (
-                    <div className="signup-join-code-callout">
-                      <label className="field">
-                        <span>
-                          Join code for{" "}
-                          {schoolDisplayName(signupForm.school_id)}
-                        </span>
-                        <input
-                          value={signupForm.join_code}
-                          onChange={(event) =>
-                            setSignupForm((current) => ({
-                              ...current,
-                              join_code: event.target.value,
-                            }))
-                          }
-                          placeholder="Ask an existing admin of this school"
-                          autoFocus
-                        />
-                      </label>
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <label className="field">
-                  <span>School ID</span>
-                  <input
-                    value={signupForm.school_id}
-                    onChange={(event) =>
-                      setSignupForm((current) => ({
-                        ...current,
-                        school_id: sanitizeSchoolIdInput(event.target.value),
-                      }))
-                    }
-                    onBlur={(event) =>
-                      setSignupForm((current) => ({
-                        ...current,
-                        school_id: sanitizeSchoolIdOnBlur(event.target.value),
-                      }))
-                    }
-                    placeholder="ou"
-                    autoFocus
-                    required
-                  />
-                </label>
-              )}
-
-              {signupSchoolMode === "new" ? (
-                <label className="field">
-                  <span>School name</span>
-                  <input
-                    value={signupSchoolName}
-                    onChange={(event) =>
-                      setSignupSchoolName(event.target.value)
-                    }
-                    placeholder="Oakland University"
-                    required
-                  />
-                </label>
-              ) : null}
-
-              {authError ? <p className="error-text">{authError}</p> : null}
-              <div className="form-actions">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => setIsSignupSchoolModalOpen(false)}
-                  disabled={authBusy}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="primary-button"
-                  type="submit"
-                  disabled={
-                    authBusy ||
-                    !signupForm.school_id.trim() ||
-                    (signupSchoolMode === "new" && !signupSchoolName.trim())
-                  }
-                >
-                  {authBusy
-                    ? "Creating..."
-                    : signupSchoolMode === "new"
-                      ? "Create School and Account"
-                      : "Continue with School"}
-                </button>
-              </div>
-            </form>
-          </div>
-        ) : null}
       </>
     );
   }
@@ -5533,8 +5290,7 @@ function App() {
                             promptLeaveSchool(membership, event)
                           }
                           disabled={
-                            leavingMembershipUuid ===
-                            membership.membership_uuid
+                            leavingMembershipUuid === membership.membership_uuid
                           }
                           title={`Leave ${schoolDisplayName(membership.school_id)}`}
                           aria-label={`Leave ${schoolDisplayName(membership.school_id)}`}
@@ -5608,7 +5364,10 @@ function App() {
 
               {joinSchoolError ? (
                 <div className="school-selection-alert" role="alert">
-                  <span className="school-selection-alert-icon" aria-hidden="true">
+                  <span
+                    className="school-selection-alert-icon"
+                    aria-hidden="true"
+                  >
                     !
                   </span>
                   <div>
@@ -5649,17 +5408,23 @@ function App() {
                     }
                   >
                     <summary>Can't find your school? Enter its ID</summary>
-                    <input
-                      value={joinSchoolId}
-                      onChange={(event) =>
-                        setJoinSchoolId(sanitizeSchoolIdInput(event.target.value))
-                      }
-                      onBlur={(event) =>
-                        setJoinSchoolId(sanitizeSchoolIdOnBlur(event.target.value))
-                      }
-                      placeholder="School ID"
-                      disabled={joinSchoolBusy}
-                    />
+                    <label className="field">
+                      <input
+                        value={joinSchoolId}
+                        onChange={(event) =>
+                          setJoinSchoolId(
+                            sanitizeSchoolIdInput(event.target.value),
+                          )
+                        }
+                        onBlur={(event) =>
+                          setJoinSchoolId(
+                            sanitizeSchoolIdOnBlur(event.target.value),
+                          )
+                        }
+                        placeholder="School ID"
+                        disabled={joinSchoolBusy}
+                      />
+                    </label>
                   </details>
 
                   {joinSchoolId ? (
@@ -5673,7 +5438,6 @@ function App() {
                           }
                           placeholder="Ask an existing admin of this school"
                           disabled={joinSchoolBusy}
-                          autoFocus
                         />
                       </label>
                       <button
@@ -5695,10 +5459,14 @@ function App() {
                     <input
                       value={joinSchoolId}
                       onChange={(event) =>
-                        setJoinSchoolId(sanitizeSchoolIdInput(event.target.value))
+                        setJoinSchoolId(
+                          sanitizeSchoolIdInput(event.target.value),
+                        )
                       }
                       onBlur={(event) =>
-                        setJoinSchoolId(sanitizeSchoolIdOnBlur(event.target.value))
+                        setJoinSchoolId(
+                          sanitizeSchoolIdOnBlur(event.target.value),
+                        )
                       }
                       placeholder="ou"
                       disabled={joinSchoolBusy}
@@ -5728,11 +5496,7 @@ function App() {
             </section>
           </div>
 
-          <button
-            className="text-button"
-            type="button"
-            onClick={handleLogout}
-          >
+          <button className="text-button" type="button" onClick={handleLogout}>
             Sign Out
           </button>
         </div>
@@ -5752,22 +5516,13 @@ function App() {
                 <div>
                   <p className="eyebrow">Leave school</p>
                   <h3>
-                    Leave{" "}
-                    {schoolDisplayName(pendingLeaveMembership.school_id)}?
+                    Leave {schoolDisplayName(pendingLeaveMembership.school_id)}?
                   </h3>
                 </div>
-                <button
-                  className="text-button management-modal-close"
-                  type="button"
-                  onClick={cancelLeaveSchool}
-                >
-                  Close
-                </button>
               </div>
               <p className="mfa-help">
-                You'll lose access to this school's dashboard until you
-                rejoin. Rejoining later won't require the join code
-                again.
+                You'll lose access to this school's dashboard until you rejoin.
+                Rejoining later won't require the join code again.
               </p>
               <div className="form-actions">
                 <button

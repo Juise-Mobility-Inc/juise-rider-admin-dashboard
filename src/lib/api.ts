@@ -1488,7 +1488,7 @@ export function verifyMFA(authAppId: string, mfaToken: string, code: string) {
 export async function createSchoolAdminAccount(
   authAppId: string,
   input: {
-    school_id: string;
+    school_id?: string;
     school_name?: string;
     join_code?: string;
     first?: string;
@@ -1501,11 +1501,15 @@ export async function createSchoolAdminAccount(
 ): Promise<MFAChallenge> {
   const payload: Record<string, unknown> = {
     app_id: authAppId,
-    school_id: input.school_id,
     username: input.username,
     email: input.email,
     password: input.password,
   };
+
+  const trimmedSchoolId = input.school_id?.trim();
+  if (trimmedSchoolId) {
+    payload.school_id = trimmedSchoolId;
+  }
 
   const trimmedSchoolName = input.school_name?.trim();
   if (trimmedSchoolName) {
