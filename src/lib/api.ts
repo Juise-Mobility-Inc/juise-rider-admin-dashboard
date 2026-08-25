@@ -1074,10 +1074,20 @@ const serviceBase: Record<ServiceName, string> = {
 
 let currentSession: AdminSession | null = null;
 let sessionObserver: ((session: AdminSession | null) => void) | null = null;
-// See the 403 branch in request() below — bounds 403-triggered refresh
-// recovery to one attempt per "episode" so a genuinely persistent 403
-// (not just a stale token) can't loop forever via effect-driven requests.
-let forbiddenRecoveryAttempted = false;
+// See the 403 branch in request() below — rate-limits 403-triggered
+// refresh recovery so a genuinely persistent 403 (not just a stale token)
+// can't loop forever via effect-driven requests. A per-request flag that's
+// cleared on ANY successful request isn't enough: if one endpoint keeps
+// genuinely 403ing while unrelated requests nearby succeed, each success
+// clears the flag and the failing endpoint's next 403 trips it again,
+// still refreshing (and republishing the session, rerendering everything
+// that depends on it) every time. A time-based cooldown bounds the rate
+// regardless of what else is succeeding or failing around it.
+let lastForbiddenRecoveryAt = 0;
+const forbiddenRecoveryCooldownMs = 5_000;
+function forbiddenRecoveryIsOnCooldown(): boolean {
+  return Date.now() - lastForbiddenRecoveryAt < forbiddenRecoveryCooldownMs;
+}
 const tokenExpirySkewMs = 30_000;
 
 function updateSession(session: AdminSession | null) {
@@ -1291,7 +1301,7 @@ async function request<T>(
     response.status === 403 &&
     authRequired &&
     retryOnUnauthorized &&
-    !forbiddenRecoveryAttempted
+    !forbiddenRecoveryIsOnCooldown()
   ) {
     // A 403 here can mean the access token is still technically valid but
     // was minted before a permission model change (e.g. a new claim like
@@ -1302,20 +1312,14 @@ async function request<T>(
     // which reruns every effect that depends on `session` — including
     // whatever effect fired this very request. If the 403 is genuine (the
     // caller actually lacks permission), that effect refires, gets the
-    // same 403, and would retry-refresh again forever. forbiddenRecoveryAttempted
-    // bounds this to one recovery attempt per "episode": it's cleared the
-    // next time any request actually succeeds, so an unrelated, later
-    // stale-token 403 still gets its own retry.
-    forbiddenRecoveryAttempted = true;
+    // same 403, and would retry-refresh again forever. The cooldown bounds
+    // the rate of recovery attempts globally, so this can't loop.
+    lastForbiddenRecoveryAt = Date.now();
     await refreshSession();
     return request<T>(service, path, {
       ...options,
       retryOnUnauthorized: false,
     });
-  }
-
-  if (response.ok) {
-    forbiddenRecoveryAttempted = false;
   }
 
   if (!response.ok) {
@@ -1373,14 +1377,11 @@ async function requestBlob(
   if (
     response.status === 403 &&
     retryOnUnauthorized &&
-    !forbiddenRecoveryAttempted
+    !forbiddenRecoveryIsOnCooldown()
   ) {
-    forbiddenRecoveryAttempted = true;
+    lastForbiddenRecoveryAt = Date.now();
     await refreshSession();
     return requestBlob(service, path, appIdHeader, false);
-  }
-  if (response.ok) {
-    forbiddenRecoveryAttempted = false;
   }
   if (!response.ok) {
     throw new Error(await parseErrorMessage(response));
@@ -1927,14 +1928,11 @@ export async function uploadSchoolChallengeImage(
   if (
     response.status === 403 &&
     retryOnUnauthorized &&
-    !forbiddenRecoveryAttempted
+    !forbiddenRecoveryIsOnCooldown()
   ) {
-    forbiddenRecoveryAttempted = true;
+    lastForbiddenRecoveryAt = Date.now();
     await refreshSession();
     return uploadSchoolChallengeImage(managedAppId, schoolId, file, false);
-  }
-  if (response.ok) {
-    forbiddenRecoveryAttempted = false;
   }
 
   if (!response.ok) {
