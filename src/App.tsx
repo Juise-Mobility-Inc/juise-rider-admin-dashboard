@@ -1779,7 +1779,7 @@ function App() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
+  }, [session?.claims.user_uuid]);
 
   useEffect(() => {
     // Public endpoint — fetched once on mount so both the pre-login
@@ -2785,7 +2785,8 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.claims.user_uuid]);
 
   useEffect(() => {
     writeDashboardContext(context);
@@ -2871,7 +2872,8 @@ function App() {
         adminUserUUID: session.claims.user_uuid,
       }),
     );
-  }, [activeSchoolId, context.managedAppId, session, studentsDispatch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSchoolId, context.managedAppId, session?.claims.user_uuid, studentsDispatch]);
 
   useEffect(() => {
     setDashboardHeaderCounts({
@@ -2903,7 +2905,8 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [session, activeSchoolId, context.managedAppId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.claims.user_uuid, activeSchoolId, context.managedAppId]);
 
   useEffect(() => {
     if (!session || !activeSchoolId) {
@@ -2932,7 +2935,8 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [session, activeSchoolId, context.managedAppId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.claims.user_uuid, activeSchoolId, context.managedAppId]);
 
   useEffect(() => {
     if (!session || !activeSchoolId) {
@@ -2955,7 +2959,8 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [session, activeSchoolId, context.managedAppId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.claims.user_uuid, activeSchoolId, context.managedAppId]);
 
   useEffect(() => {
     if (!schoolStudentRosterReady) {
@@ -2993,7 +2998,8 @@ function App() {
       setTermDrafts([]);
       return;
     }
-  }, [session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.claims.user_uuid]);
 
   useEffect(() => {
     if (!session || !activeSchoolId) {
@@ -3008,7 +3014,8 @@ function App() {
         adminUserUUID: session.claims.user_uuid,
       }),
     );
-  }, [activeSchoolId, context.managedAppId, session, studentsDispatch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSchoolId, context.managedAppId, session?.claims.user_uuid, studentsDispatch]);
 
   useEffect(() => {
     if (!imagePreview && !selectedStudentDeviceUUID) {
@@ -3189,7 +3196,8 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeSchoolId, context.managedAppId, session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSchoolId, context.managedAppId, session?.claims.user_uuid]);
 
   useEffect(() => {
     if (!session || !activeSchoolId) {
@@ -3241,7 +3249,8 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeSchoolId, context.managedAppId, session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSchoolId, context.managedAppId, session?.claims.user_uuid]);
 
   useEffect(() => {
     if (!session || currentSection !== "pois" || !activeSchoolId) {
@@ -3281,7 +3290,8 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeSchoolId, context.managedAppId, currentSection, session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSchoolId, context.managedAppId, currentSection, session?.claims.user_uuid]);
 
   useEffect(() => {
     if (!session || currentSection !== "zones" || !activeSchoolId) {
@@ -3321,7 +3331,8 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeSchoolId, context.managedAppId, currentSection, session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSchoolId, context.managedAppId, currentSection, session?.claims.user_uuid]);
 
   useEffect(() => {
     if (
@@ -3365,7 +3376,8 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeSchoolId, context.managedAppId, currentSection, session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSchoolId, context.managedAppId, currentSection, session?.claims.user_uuid]);
 
   useEffect(() => {
     if (
@@ -3415,13 +3427,14 @@ function App() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeSchoolId,
     context.managedAppId,
     currentSection,
     selectedChallenge,
     selectedChallengeId,
-    session,
+    session?.claims.user_uuid,
   ]);
 
   useEffect(() => {
@@ -3476,7 +3489,8 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeSchoolId, context.managedAppId, selectedReservation, session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSchoolId, context.managedAppId, selectedReservation, session?.claims.user_uuid]);
 
   useEffect(() => {
     if (!session || currentSection !== "packs" || !activeSchoolId) {
@@ -3518,7 +3532,8 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeSchoolId, context.managedAppId, currentSection, session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSchoolId, context.managedAppId, currentSection, session?.claims.user_uuid]);
 
   async function refreshActiveSchool() {
     if (!session || !activeSchoolId) {
