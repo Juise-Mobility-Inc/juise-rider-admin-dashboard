@@ -7491,6 +7491,19 @@
         background: rgba(39, 204, 94, 0.08);
 }
 
+.leave-school-modal {
+        max-width: 420px;
+}
+
+.leave-school-confirm-button {
+        background: #b3261e;
+        color: #fff;
+}
+
+.leave-school-confirm-button:hover {
+        background: #93201a;
+}
+
 .signup-manual-school-entry {
         margin-top: 4px;
 }
