@@ -1074,6 +1074,10 @@ const serviceBase: Record<ServiceName, string> = {
 
 let currentSession: AdminSession | null = null;
 let sessionObserver: ((session: AdminSession | null) => void) | null = null;
+// See the 403 branch in request() below — bounds 403-triggered refresh
+// recovery to one attempt per "episode" so a genuinely persistent 403
+// (not just a stale token) can't loop forever via effect-driven requests.
+let forbiddenRecoveryAttempted = false;
 const tokenExpirySkewMs = 30_000;
 
 function updateSession(session: AdminSession | null) {
@@ -1151,7 +1155,24 @@ async function parseErrorMessage(response: Response): Promise<string> {
   return (await parseErrorPayload(response)).message;
 }
 
-async function refreshSession(): Promise<AdminSession> {
+// Many concurrent requests can 401/403 around the same time (e.g. every
+// panel on a page load hitting a stale token together). Each one calling
+// refreshSession() independently races the others against the same refresh
+// token, producing inconsistent results depending on which response lands
+// last. Sharing one in-flight refresh across all concurrent callers makes
+// the outcome deterministic.
+let inFlightRefresh: Promise<AdminSession> | null = null;
+
+function refreshSession(): Promise<AdminSession> {
+  if (!inFlightRefresh) {
+    inFlightRefresh = performRefresh().finally(() => {
+      inFlightRefresh = null;
+    });
+  }
+  return inFlightRefresh;
+}
+
+async function performRefresh(): Promise<AdminSession> {
   const previousSession = currentSession;
   if (!previousSession) {
     throw new Error("Login required");
@@ -1254,12 +1275,47 @@ async function request<T>(
         : undefined,
   });
 
-  if (response.status === 401 && authRequired && retryOnUnauthorized) {
+  if (
+    response.status === 401 &&
+    authRequired &&
+    retryOnUnauthorized
+  ) {
     await refreshSession();
     return request<T>(service, path, {
       ...options,
       retryOnUnauthorized: false,
     });
+  }
+
+  if (
+    response.status === 403 &&
+    authRequired &&
+    retryOnUnauthorized &&
+    !forbiddenRecoveryAttempted
+  ) {
+    // A 403 here can mean the access token is still technically valid but
+    // was minted before a permission model change (e.g. a new claim like
+    // school_admin) — refreshing re-mints the token from current account
+    // state, which picks up the change.
+    //
+    // But refreshSession() publishes the new session through the observer,
+    // which reruns every effect that depends on `session` — including
+    // whatever effect fired this very request. If the 403 is genuine (the
+    // caller actually lacks permission), that effect refires, gets the
+    // same 403, and would retry-refresh again forever. forbiddenRecoveryAttempted
+    // bounds this to one recovery attempt per "episode": it's cleared the
+    // next time any request actually succeeds, so an unrelated, later
+    // stale-token 403 still gets its own retry.
+    forbiddenRecoveryAttempted = true;
+    await refreshSession();
+    return request<T>(service, path, {
+      ...options,
+      retryOnUnauthorized: false,
+    });
+  }
+
+  if (response.ok) {
+    forbiddenRecoveryAttempted = false;
   }
 
   if (!response.ok) {
@@ -1313,6 +1369,18 @@ async function requestBlob(
   if (response.status === 401 && retryOnUnauthorized) {
     await refreshSession();
     return requestBlob(service, path, appIdHeader, false);
+  }
+  if (
+    response.status === 403 &&
+    retryOnUnauthorized &&
+    !forbiddenRecoveryAttempted
+  ) {
+    forbiddenRecoveryAttempted = true;
+    await refreshSession();
+    return requestBlob(service, path, appIdHeader, false);
+  }
+  if (response.ok) {
+    forbiddenRecoveryAttempted = false;
   }
   if (!response.ok) {
     throw new Error(await parseErrorMessage(response));
@@ -1855,6 +1923,18 @@ export async function uploadSchoolChallengeImage(
   if (response.status === 401 && retryOnUnauthorized) {
     await refreshSession();
     return uploadSchoolChallengeImage(managedAppId, schoolId, file, false);
+  }
+  if (
+    response.status === 403 &&
+    retryOnUnauthorized &&
+    !forbiddenRecoveryAttempted
+  ) {
+    forbiddenRecoveryAttempted = true;
+    await refreshSession();
+    return uploadSchoolChallengeImage(managedAppId, schoolId, file, false);
+  }
+  if (response.ok) {
+    forbiddenRecoveryAttempted = false;
   }
 
   if (!response.ok) {
