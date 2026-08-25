@@ -1254,7 +1254,16 @@ async function request<T>(
         : undefined,
   });
 
-  if (response.status === 401 && authRequired && retryOnUnauthorized) {
+  if (
+    (response.status === 401 || response.status === 403) &&
+    authRequired &&
+    retryOnUnauthorized
+  ) {
+    // A 403 here can mean the access token is still technically valid but
+    // was minted before a permission model change (e.g. a new claim like
+    // school_admin) — refreshing re-mints the token from current account
+    // state, which picks up the change. If the caller genuinely lacks
+    // permission, the retry just fails with the same 403 again.
     await refreshSession();
     return request<T>(service, path, {
       ...options,
@@ -1310,7 +1319,10 @@ async function requestBlob(
     },
   });
 
-  if (response.status === 401 && retryOnUnauthorized) {
+  if (
+    (response.status === 401 || response.status === 403) &&
+    retryOnUnauthorized
+  ) {
     await refreshSession();
     return requestBlob(service, path, appIdHeader, false);
   }
@@ -1852,7 +1864,10 @@ export async function uploadSchoolChallengeImage(
     },
   );
 
-  if (response.status === 401 && retryOnUnauthorized) {
+  if (
+    (response.status === 401 || response.status === 403) &&
+    retryOnUnauthorized
+  ) {
     await refreshSession();
     return uploadSchoolChallengeImage(managedAppId, schoolId, file, false);
   }
