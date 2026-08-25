@@ -11,6 +11,7 @@ export interface AuthTokenBundle {
 
 export interface AccessClaims {
   admin: boolean;
+  school_admin: boolean;
   user_uuid: string;
   app_id?: string;
   school_id?: string;
@@ -1416,9 +1417,11 @@ async function createAdminSession(
   authAppId: string,
 ): Promise<AdminSession> {
   const claims = await inspectAccessToken(tokens, authAppId);
-  if (!claims.admin) {
-    throw new Error("This account is not marked as an admin user.");
-  }
+  // A freshly signed-up account legitimately has no school memberships yet
+  // (school_admin is granted on first successful join, not at signup), so
+  // this intentionally doesn't gate session creation on admin/school_admin
+  // — dashboard routes that require it already 403 server-side, and the
+  // post-login UI prompts an admin-less session to join a school.
 
   const session: AdminSession = {
     authAppId,
@@ -1567,12 +1570,22 @@ export async function fetchMySchoolMemberships(
   );
 }
 
+export interface SchoolMembershipChange {
+  membership: AdminSchoolMembership;
+  tokens: AuthTokenBundle;
+}
+
+// Joining/leaving a school changes whether the caller has active school
+// membership (school_admin), so the server reissues a fresh token pair
+// reflecting that — the caller should feed `tokens` back into the session
+// (see applySchoolMembershipChange) rather than waiting for the old access
+// token to expire.
 export async function joinSchool(
   authAppId: string,
   schoolId: string,
   joinCode?: string,
-): Promise<AdminSchoolMembership> {
-  return request<AdminSchoolMembership>(
+): Promise<SchoolMembershipChange> {
+  return request<SchoolMembershipChange>(
     "auth",
     "/api/v1/user/school-memberships",
     {
@@ -1586,8 +1599,8 @@ export async function joinSchool(
 export async function leaveSchool(
   authAppId: string,
   membershipUuid: string,
-): Promise<AdminSchoolMembership> {
-  return request<AdminSchoolMembership>(
+): Promise<SchoolMembershipChange> {
+  return request<SchoolMembershipChange>(
     "auth",
     `/api/v1/user/school-memberships/${encodeURIComponent(membershipUuid)}`,
     {
@@ -1595,6 +1608,16 @@ export async function leaveSchool(
       appIdHeader: authAppId,
     },
   );
+}
+
+// Swaps the reissued tokens from joinSchool/leaveSchool into the active
+// session so the new school_admin claim takes effect immediately, without
+// forcing a re-login or waiting for the previous access token to expire.
+export async function applySchoolMembershipChange(
+  authAppId: string,
+  change: SchoolMembershipChange,
+): Promise<AdminSession> {
+  return createAdminSession(change.tokens, authAppId);
 }
 
 export async function fetchSchoolJoinCode(

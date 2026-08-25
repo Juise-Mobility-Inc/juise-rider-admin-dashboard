@@ -28,6 +28,7 @@ import {
   fetchMySchoolMemberships,
   joinSchool,
   leaveSchool,
+  applySchoolMembershipChange,
   fetchNebulaUser,
   fetchPendingReservations,
   fetchSchoolParkingViolations,
@@ -1802,11 +1803,13 @@ function App() {
           metadata: {},
         });
       }
-      const membership = await joinSchool(
+      const change = await joinSchool(
         session.authAppId,
         schoolId,
         joinSchoolMode === "existing" ? joinSchoolCode.trim() : undefined,
       );
+      const { membership } = change;
+      await applySchoolMembershipChange(session.authAppId, change);
       setSchoolMemberships((current) => [
         ...current.filter((m) => m.school_id !== membership.school_id),
         membership,
@@ -1861,7 +1864,11 @@ function App() {
     setPendingLeaveMembership(null);
     setLeavingMembershipUuid(membership.membership_uuid);
     try {
-      await leaveSchool(session.authAppId, membership.membership_uuid);
+      const change = await leaveSchool(
+        session.authAppId,
+        membership.membership_uuid,
+      );
+      await applySchoolMembershipChange(session.authAppId, change);
       setSchoolMemberships((current) =>
         current.filter((m) => m.membership_uuid !== membership.membership_uuid),
       );
