@@ -1551,6 +1551,8 @@ function App() {
   const [leavingMembershipUuid, setLeavingMembershipUuid] = useState<
     string | null
   >(null);
+  const [pendingLeaveMembership, setPendingLeaveMembership] =
+    useState<AdminSchoolMembership | null>(null);
   const [context] = useState<DashboardContext>(() =>
     readDashboardContext(defaultManagedAppId),
   );
@@ -1847,20 +1849,23 @@ function App() {
     }
   }
 
-  async function handleLeaveSchool(
+  function promptLeaveSchool(
     membership: AdminSchoolMembership,
     event: React.MouseEvent,
   ) {
     event.stopPropagation();
-    if (!session || leavingMembershipUuid) return;
-    const name = schoolDisplayName(membership.school_id);
-    if (
-      !window.confirm(
-        `Leave ${name}? You can rejoin later without needing the join code again.`,
-      )
-    ) {
-      return;
-    }
+    if (leavingMembershipUuid) return;
+    setPendingLeaveMembership(membership);
+  }
+
+  function cancelLeaveSchool() {
+    setPendingLeaveMembership(null);
+  }
+
+  async function confirmLeaveSchool() {
+    const membership = pendingLeaveMembership;
+    if (!session || !membership) return;
+    setPendingLeaveMembership(null);
     setLeavingMembershipUuid(membership.membership_uuid);
     try {
       await leaveSchool(session.authAppId, membership.membership_uuid);
@@ -5525,7 +5530,7 @@ function App() {
                           type="button"
                           className="school-option-leave-button"
                           onClick={(event) =>
-                            handleLeaveSchool(membership, event)
+                            promptLeaveSchool(membership, event)
                           }
                           disabled={
                             leavingMembershipUuid ===
@@ -5731,6 +5736,58 @@ function App() {
             Sign Out
           </button>
         </div>
+        {pendingLeaveMembership ? (
+          <div
+            className="management-modal-backdrop"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Leave school"
+            onClick={cancelLeaveSchool}
+          >
+            <div
+              className="management-modal-sheet leave-school-modal"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="management-modal-header">
+                <div>
+                  <p className="eyebrow">Leave school</p>
+                  <h3>
+                    Leave{" "}
+                    {schoolDisplayName(pendingLeaveMembership.school_id)}?
+                  </h3>
+                </div>
+                <button
+                  className="text-button management-modal-close"
+                  type="button"
+                  onClick={cancelLeaveSchool}
+                >
+                  Close
+                </button>
+              </div>
+              <p className="mfa-help">
+                You'll lose access to this school's dashboard until you
+                rejoin. Rejoining later won't require the join code
+                again.
+              </p>
+              <div className="form-actions">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={cancelLeaveSchool}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="primary-button leave-school-confirm-button"
+                  type="button"
+                  onClick={confirmLeaveSchool}
+                >
+                  Leave school
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   }
