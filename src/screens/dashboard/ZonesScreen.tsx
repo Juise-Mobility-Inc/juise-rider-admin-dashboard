@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
   type ChangeEvent,
   type Dispatch,
@@ -231,6 +232,9 @@ export function ZonesScreen(props: Props) {
   } = props;
   const [isZoneModalOpen, setIsZoneModalOpen] = useState(false);
   const [zoneSnapshot, setZoneSnapshot] = useState<ZoneDraft | null>(null);
+  const [zoneFormError, setZoneFormError] = useState("");
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const speedLimitInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!zoneEditRequestId) {
@@ -241,6 +245,7 @@ export function ZonesScreen(props: Props) {
     );
     if (requestedZone) {
       setIsZoneModalOpen(true);
+      setZoneFormError("");
       setZoneSnapshot(requestedZone);
     }
     onZoneEditRequestHandled?.();
@@ -252,6 +257,7 @@ export function ZonesScreen(props: Props) {
   function openZoneModal(zoneId: string, snapshot?: ZoneDraft) {
     setActiveZoneDraftId(zoneId);
     setIsZoneModalOpen(true);
+    setZoneFormError("");
     setZoneSnapshot(
       snapshot ?? zoneDrafts.find((zone) => zone.id === zoneId) ?? null,
     );
@@ -271,6 +277,34 @@ export function ZonesScreen(props: Props) {
 
   function closeZoneModal() {
     setIsZoneModalOpen(false);
+    setZoneFormError("");
+  }
+
+  function validateZoneDraftForSave(
+    zone: ZoneDraft,
+  ): { message: string; focus?: () => void } | null {
+    if (!zone.title.trim()) {
+      return {
+        message: "Title is required.",
+        focus: () => titleInputRef.current?.focus(),
+      };
+    }
+    if (zone.polygon.length < 3) {
+      return {
+        message:
+          "Draw at least 3 points on the map to define this zone's shape.",
+      };
+    }
+    if (zone.zone_type === "speed_limit") {
+      const parsedSpeedLimit = Number(zone.speed_limit_mph.trim());
+      if (!Number.isFinite(parsedSpeedLimit) || parsedSpeedLimit <= 0) {
+        return {
+          message: "Speed limit must be greater than 0 mph.",
+          focus: () => speedLimitInputRef.current?.focus(),
+        };
+      }
+    }
+    return null;
   }
 
   function discardZoneChanges() {
@@ -337,6 +371,16 @@ export function ZonesScreen(props: Props) {
   }
 
   async function saveModalZone() {
+    if (!selectedZoneDraft) {
+      return;
+    }
+    const validationError = validateZoneDraftForSave(selectedZoneDraft);
+    if (validationError) {
+      setZoneFormError(validationError.message);
+      validationError.focus?.();
+      return;
+    }
+    setZoneFormError("");
     const didSave = await handleSaveZones(zoneDrafts);
     if (didSave) {
       setIsZoneModalOpen(false);
@@ -789,10 +833,16 @@ export function ZonesScreen(props: Props) {
               </div>
 
               <div className="data-section">
+                {zoneFormError ? (
+                  <p className="error-text" role="alert">
+                    {zoneFormError}
+                  </p>
+                ) : null}
                 <div className="form-grid">
                   <label className="field">
                     <span>Title</span>
                     <input
+                      ref={titleInputRef}
                       value={selectedZoneDraft.title}
                       onChange={(event) =>
                         patchZone(selectedZoneDraft.id, {
@@ -825,6 +875,7 @@ export function ZonesScreen(props: Props) {
                   <label className="field">
                     <span>Speed Limit (mph)</span>
                     <input
+                      ref={speedLimitInputRef}
                       disabled={selectedZoneDraft.zone_type !== "speed_limit"}
                       min={1}
                       step={1}
@@ -836,14 +887,6 @@ export function ZonesScreen(props: Props) {
                         })
                       }
                       placeholder="15"
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Vertices</span>
-                    <input
-                      disabled
-                      value={String(selectedZoneDraft.polygon.length)}
-                      placeholder="0"
                     />
                   </label>
                   <label className="field field-span-2">
