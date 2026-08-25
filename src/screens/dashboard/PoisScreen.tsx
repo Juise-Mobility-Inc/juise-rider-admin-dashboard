@@ -129,6 +129,12 @@ export function PoisScreen(props: Props) {
   }
 
   function addPoi() {
+    // A pending edit-request (deep link from elsewhere) resolves in an
+    // effect keyed on poiDrafts, which this call also changes — without
+    // clearing it here first, that effect can fire right after and
+    // overwrite this brand new POI's modal with whatever POI was
+    // previously requested.
+    onPoiEditRequestHandled?.();
     const draft = createEmptyPOIDraft();
     setPoiDrafts((current) => [...current, draft]);
     openPoiModal(draft.id, draft);
