@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
   type ChangeEvent,
   type Dispatch,
@@ -106,9 +107,15 @@ export function PoisScreen(props: Props) {
   } = props;
   const [isPoiModalOpen, setIsPoiModalOpen] = useState(false);
   const [poiSnapshot, setPoiSnapshot] = useState<POIDraft | null>(null);
+  const [poiFormError, setPoiFormError] = useState("");
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [pendingImportedPois, setPendingImportedPois] = useState<POIDraft[]>([]);
   const [importMessage, setImportMessage] = useState("");
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const bonusPointsInputRef = useRef<HTMLInputElement>(null);
+  const radiusInputRef = useRef<HTMLInputElement>(null);
+  const latInputRef = useRef<HTMLInputElement>(null);
+  const lngInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!poiEditRequestId) {
@@ -117,6 +124,7 @@ export function PoisScreen(props: Props) {
     const requestedPoi = poiDrafts.find((poi) => poi.id === poiEditRequestId);
     if (requestedPoi) {
       setIsPoiModalOpen(true);
+      setPoiFormError("");
       setPoiSnapshot(requestedPoi);
     }
     onPoiEditRequestHandled?.();
@@ -125,6 +133,7 @@ export function PoisScreen(props: Props) {
   function openPoiModal(poiId: string, snapshot?: POIDraft) {
     setActivePoiDraftId(poiId);
     setIsPoiModalOpen(true);
+    setPoiFormError("");
     setPoiSnapshot(snapshot ?? poiDrafts.find((poi) => poi.id === poiId) ?? null);
   }
 
@@ -142,6 +151,51 @@ export function PoisScreen(props: Props) {
 
   function closePoiModal() {
     setIsPoiModalOpen(false);
+    setPoiFormError("");
+  }
+
+  function validatePoiDraftForSave(
+    poi: POIDraft,
+  ): { message: string; focus?: () => void } | null {
+    if (!poi.title.trim()) {
+      return {
+        message: "Title is required.",
+        focus: () => titleInputRef.current?.focus(),
+      };
+    }
+    const lat = resolvePoiNumber(poi.lat);
+    if (lat === null) {
+      return {
+        message: "Latitude must be a valid number.",
+        focus: () => latInputRef.current?.focus(),
+      };
+    }
+    const lng = resolvePoiNumber(poi.lng);
+    if (lng === null) {
+      return {
+        message: "Longitude must be a valid number.",
+        focus: () => lngInputRef.current?.focus(),
+      };
+    }
+    const bonusPoints = Number.parseInt(poi.bonus_points.trim(), 10);
+    if (!Number.isFinite(bonusPoints) || bonusPoints < 0) {
+      return {
+        message: "Bonus points must be a whole number greater than or equal to 0.",
+        focus: () => bonusPointsInputRef.current?.focus(),
+      };
+    }
+    const radiusFeet = resolvePoiNumber(poi.radius_feet);
+    if (
+      radiusFeet === null ||
+      radiusFeet < POI_RADIUS_MIN_FEET ||
+      radiusFeet > POI_RADIUS_MAX_FEET
+    ) {
+      return {
+        message: `Entry radius must be between ${POI_RADIUS_MIN_FEET} ft and ${POI_RADIUS_MAX_FEET.toLocaleString()} ft.`,
+        focus: () => radiusInputRef.current?.focus(),
+      };
+    }
+    return null;
   }
 
   function discardPoiChanges() {
@@ -157,6 +211,16 @@ export function PoisScreen(props: Props) {
   }
 
   async function saveModalPoi() {
+    if (!selectedPoiDraft) {
+      return;
+    }
+    const validationError = validatePoiDraftForSave(selectedPoiDraft);
+    if (validationError) {
+      setPoiFormError(validationError.message);
+      validationError.focus?.();
+      return;
+    }
+    setPoiFormError("");
     const didSave = await handleSavePOIs(poiDrafts);
     if (didSave) {
       setIsPoiModalOpen(false);
@@ -578,10 +642,16 @@ export function PoisScreen(props: Props) {
               </div>
 
               <div className="data-section">
+                {poiFormError ? (
+                  <p className="error-text" role="alert">
+                    {poiFormError}
+                  </p>
+                ) : null}
                 <div className="form-grid">
                   <label className="field">
                     <span>Title</span>
                     <input
+                      ref={titleInputRef}
                       value={selectedPoiDraft.title}
                       onChange={(event) =>
                         patchPoi(selectedPoiDraft.id, {
@@ -594,6 +664,7 @@ export function PoisScreen(props: Props) {
                   <label className="field">
                     <span>Bonus Points</span>
                     <input
+                      ref={bonusPointsInputRef}
                       type="number"
                       min={0}
                       step={1}
@@ -622,6 +693,7 @@ export function PoisScreen(props: Props) {
                         }
                       />
                       <input
+                        ref={radiusInputRef}
                         type="number"
                         min={POI_RADIUS_MIN_FEET}
                         max={POI_RADIUS_MAX_FEET}
@@ -644,6 +716,7 @@ export function PoisScreen(props: Props) {
                   <label className="field">
                     <span>Latitude</span>
                     <input
+                      ref={latInputRef}
                       value={selectedPoiDraft.lat}
                       onChange={(event) =>
                         patchPoi(selectedPoiDraft.id, {
@@ -656,6 +729,7 @@ export function PoisScreen(props: Props) {
                   <label className="field">
                     <span>Longitude</span>
                     <input
+                      ref={lngInputRef}
                       value={selectedPoiDraft.lng}
                       onChange={(event) =>
                         patchPoi(selectedPoiDraft.id, {
