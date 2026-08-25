@@ -1151,7 +1151,24 @@ async function parseErrorMessage(response: Response): Promise<string> {
   return (await parseErrorPayload(response)).message;
 }
 
-async function refreshSession(): Promise<AdminSession> {
+// Many concurrent requests can 401/403 around the same time (e.g. every
+// panel on a page load hitting a stale token together). Each one calling
+// refreshSession() independently races the others against the same refresh
+// token, producing inconsistent results depending on which response lands
+// last. Sharing one in-flight refresh across all concurrent callers makes
+// the outcome deterministic.
+let inFlightRefresh: Promise<AdminSession> | null = null;
+
+function refreshSession(): Promise<AdminSession> {
+  if (!inFlightRefresh) {
+    inFlightRefresh = performRefresh().finally(() => {
+      inFlightRefresh = null;
+    });
+  }
+  return inFlightRefresh;
+}
+
+async function performRefresh(): Promise<AdminSession> {
   const previousSession = currentSession;
   if (!previousSession) {
     throw new Error("Login required");

@@ -1506,6 +1506,13 @@ function App() {
     readDashboardSession(),
   );
   const [session, setSession] = useState<AdminSession | null>(null);
+  // A background refresh (from an earlier failed request) can still be
+  // in flight when the user explicitly logs out or their session expires.
+  // If it resolves afterward, the session observer would otherwise revive
+  // the session right after it was cleared. This guard makes any deliberate
+  // "the session is ending" action ignore observer-driven revivals until
+  // the next deliberate login/signup/MFA success explicitly clears it.
+  const sessionEndedGuardRef = useRef(false);
   const [authInitializing, setAuthInitializing] = useState(
     () => initialSession !== null,
   );
@@ -2701,6 +2708,7 @@ function App() {
           return;
         }
 
+        sessionEndedGuardRef.current = false;
         setSession(nextSession);
       } catch (error) {
         if (cancelled) {
@@ -2783,6 +2791,7 @@ function App() {
         return;
       }
 
+      sessionEndedGuardRef.current = true;
       setSession(null);
       setAuthError("");
       setPassword("");
@@ -2823,6 +2832,9 @@ function App() {
 
   useEffect(() => {
     setSessionObserver((nextSession) => {
+      if (sessionEndedGuardRef.current && nextSession) {
+        return;
+      }
       setSession(nextSession);
     });
 
@@ -3751,6 +3763,7 @@ function App() {
       } else {
         setLoginLock(null);
         localStorage.removeItem(loginLockStorageKey);
+        sessionEndedGuardRef.current = false;
         setSession(result);
         setAuthMode("login");
         setBanner({
@@ -3803,6 +3816,7 @@ function App() {
       const nextSession = mfaChallenge.enrollment_required
         ? await confirmMFAEnrollment(authAppId, mfaChallenge.mfa_token, mfaCode)
         : await verifyMFA(authAppId, mfaChallenge.mfa_token, mfaCode);
+      sessionEndedGuardRef.current = false;
       setSession(nextSession);
       setMfaChallenge(null);
       setMfaEnrollment(null);
@@ -3876,6 +3890,7 @@ function App() {
   }
 
   function handleLogout() {
+    sessionEndedGuardRef.current = true;
     void emitDashboardAudit({
       action: "dashboard.auth.logout",
       resource_type: "session",
