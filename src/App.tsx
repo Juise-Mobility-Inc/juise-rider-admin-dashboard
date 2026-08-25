@@ -2,6 +2,7 @@ import {
   type ChangeEvent,
   type CSSProperties,
   type FormEvent,
+  useCallback,
   useEffect,
   useDeferredValue,
   useMemo,
@@ -1664,6 +1665,19 @@ function App() {
   const [zoneBusy, setZoneBusy] = useState(false);
   const [activeZoneDraftId, setActiveZoneDraftId] = useState("");
   const [zoneEditRequestId, setZoneEditRequestId] = useState("");
+  // Stable references: ZonesScreen/PoisScreen's edit-request effects depend
+  // on these, and a fresh arrow function every render would make those
+  // effects re-run (and re-apply a stale/already-handled edit request) on
+  // every unrelated App.tsx render, not just when the request id itself
+  // changes.
+  const handleZoneEditRequestHandled = useCallback(
+    () => setZoneEditRequestId(""),
+    [],
+  );
+  const handlePoiEditRequestHandled = useCallback(
+    () => setPoiEditRequestId(""),
+    [],
+  );
   const [schoolChallenges, setSchoolChallenges] = useState<SchoolChallenge[]>(
     [],
   );
@@ -5622,7 +5636,7 @@ function App() {
             handleSavePOIs={handleSavePOIs}
             handlePoiLocationSelect={handlePoiLocationSelect}
             poiEditRequestId={poiEditRequestId}
-            onPoiEditRequestHandled={() => setPoiEditRequestId("")}
+            onPoiEditRequestHandled={handlePoiEditRequestHandled}
             DetailRow={DetailRow}
           />
         );
@@ -5645,7 +5659,7 @@ function App() {
             handleZonePointInsert={handleZonePointInsert}
             handleZonePointMove={handleZonePointMove}
             zoneEditRequestId={zoneEditRequestId}
-            onZoneEditRequestHandled={() => setZoneEditRequestId("")}
+            onZoneEditRequestHandled={handleZoneEditRequestHandled}
             DetailRow={DetailRow}
           />
         );

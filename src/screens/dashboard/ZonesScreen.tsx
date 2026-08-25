@@ -258,6 +258,12 @@ export function ZonesScreen(props: Props) {
   }
 
   function addZone() {
+    // A pending edit-request (from Map Overview's "edit this zone" deep
+    // link) resolves in an effect keyed on zoneDrafts, which this call
+    // also changes — without clearing it here first, that effect can
+    // fire right after and overwrite this brand new zone's modal with
+    // whatever zone was previously requested.
+    onZoneEditRequestHandled?.();
     const draft = createEmptyZoneDraft("no_go");
     setZoneDrafts((current) => [...current, draft]);
     openZoneModal(draft.id, draft);
