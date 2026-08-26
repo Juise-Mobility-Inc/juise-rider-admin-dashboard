@@ -1480,7 +1480,7 @@ export async function loginWithIdentifier(
   return createAdminSession(response, authAppId);
 }
 
-async function createAdminSession(
+export async function createAdminSession(
   tokens: AuthTokenBundle,
   authAppId: string,
 ): Promise<AdminSession> {
@@ -1638,34 +1638,50 @@ export async function fetchMySchoolMemberships(
   );
 }
 
+export interface SchoolMembershipChange {
+  membership: AdminSchoolMembership;
+  session: AdminSession;
+}
+
+// The backend wraps the membership in { membership, tokens } — it reissues
+// tokens on every join/leave so the caller's school_admin claim reflects
+// the change immediately, without waiting on the old token to expire.
+async function schoolMembershipChangeToSession(
+  response: { membership: AdminSchoolMembership; tokens: AuthTokenBundle },
+  authAppId: string,
+): Promise<SchoolMembershipChange> {
+  const session = await createAdminSession(response.tokens, authAppId);
+  return { membership: response.membership, session };
+}
+
 export async function joinSchool(
   authAppId: string,
   schoolId: string,
   joinCode?: string,
-): Promise<AdminSchoolMembership> {
-  return request<AdminSchoolMembership>(
-    "auth",
-    "/api/v1/user/school-memberships",
-    {
-      method: "POST",
-      body: { school_id: schoolId, join_code: joinCode ?? "" },
-      appIdHeader: authAppId,
-    },
-  );
+): Promise<SchoolMembershipChange> {
+  const response = await request<{
+    membership: AdminSchoolMembership;
+    tokens: AuthTokenBundle;
+  }>("auth", "/api/v1/user/school-memberships", {
+    method: "POST",
+    body: { school_id: schoolId, join_code: joinCode ?? "" },
+    appIdHeader: authAppId,
+  });
+  return schoolMembershipChangeToSession(response, authAppId);
 }
 
 export async function leaveSchool(
   authAppId: string,
   membershipUuid: string,
-): Promise<AdminSchoolMembership> {
-  return request<AdminSchoolMembership>(
-    "auth",
-    `/api/v1/user/school-memberships/${encodeURIComponent(membershipUuid)}`,
-    {
-      method: "DELETE",
-      appIdHeader: authAppId,
-    },
-  );
+): Promise<SchoolMembershipChange> {
+  const response = await request<{
+    membership: AdminSchoolMembership;
+    tokens: AuthTokenBundle;
+  }>("auth", `/api/v1/user/school-memberships/${encodeURIComponent(membershipUuid)}`, {
+    method: "DELETE",
+    appIdHeader: authAppId,
+  });
+  return schoolMembershipChangeToSession(response, authAppId);
 }
 
 export async function fetchSchoolJoinCode(

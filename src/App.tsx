@@ -1826,24 +1826,15 @@ function App() {
           metadata: {},
         });
       }
-      const membership = await joinSchool(
+      const { membership, session: refreshedSession } = await joinSchool(
         session.authAppId,
         schoolId,
         joinSchoolMode === "existing" ? joinSchoolCode.trim() : undefined,
       );
-      // Joining a school doesn't reissue tokens on its own, so the session
-      // still carries the school_admin claim as it was before this
-      // membership existed. Mint a fresh token now (the refresh endpoint
-      // recomputes school_admin from current memberships) so the dashboard
-      // we're about to render doesn't immediately 401/403 on every request.
-      try {
-        const refreshedSession = await refreshDashboardSession();
-        setSession(refreshedSession);
-      } catch {
-        // Non-fatal — the request-level retry-on-401/403 logic will
-        // recover on the first failed request if this refresh didn't
-        // happen for some reason.
-      }
+      // The join response carries freshly-reissued tokens reflecting this
+      // new membership's school_admin claim — apply them now so the
+      // dashboard we're about to render doesn't 401/403 on a stale token.
+      setSession(refreshedSession);
       setSchoolMemberships((current) => [
         ...current.filter((m) => m.school_id !== membership.school_id),
         membership,
@@ -1904,7 +1895,11 @@ function App() {
     setPendingLeaveMembership(null);
     setLeavingMembershipUuid(membership.membership_uuid);
     try {
-      await leaveSchool(session.authAppId, membership.membership_uuid);
+      const { session: refreshedSession } = await leaveSchool(
+        session.authAppId,
+        membership.membership_uuid,
+      );
+      setSession(refreshedSession);
       setSchoolMemberships((current) =>
         current.filter((m) => m.membership_uuid !== membership.membership_uuid),
       );
