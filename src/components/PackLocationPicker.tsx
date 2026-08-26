@@ -6,9 +6,15 @@ import {
   useMemo,
   useRef,
   useState,
-} from 'react'
-import { DomEvent, LatLngBounds, divIcon, type Icon, type LatLngLiteral } from 'leaflet'
-import { juisePackIcon } from '../lib/mapIcons'
+} from "react";
+import {
+  DomEvent,
+  LatLngBounds,
+  divIcon,
+  type Icon,
+  type LatLngLiteral,
+} from "leaflet";
+import { juisePackIcon } from "../lib/mapIcons";
 import {
   Circle,
   MapContainer,
@@ -17,153 +23,161 @@ import {
   TileLayer,
   useMap,
   useMapEvents,
-} from 'react-leaflet'
+} from "react-leaflet";
 
 export interface PackMapPoint {
-  lat: number
-  lng: number
+  lat: number;
+  lng: number;
 }
 
 export interface PackMapMarker extends PackMapPoint {
-  id: string
-  label: string
-  description?: string
-  spotCount?: number
-  radiusMeters?: number
+  id: string;
+  label: string;
+  description?: string;
+  spotCount?: number;
+  radiusMeters?: number;
 }
 
 interface PackLocationPickerProps {
-  value: PackMapPoint | null
-  onChange: (nextValue: PackMapPoint) => void
-  onPlaceSelect?: (nextValue: PackMapPoint, label: string, detail?: string) => void
-  disabled?: boolean
-  otherMarkers?: PackMapMarker[]
-  radiusMeters?: number
-  markerIcon?: Icon
+  value: PackMapPoint | null;
+  onChange: (nextValue: PackMapPoint) => void;
+  onPlaceSelect?: (
+    nextValue: PackMapPoint,
+    label: string,
+    detail?: string,
+  ) => void;
+  disabled?: boolean;
+  otherMarkers?: PackMapMarker[];
+  radiusMeters?: number;
+  markerIcon?: Icon;
 }
 
 interface PackLocationsMapProps {
-  markers: PackMapMarker[]
-  markerIcon?: Icon
-  onEditMarker?: (markerId: string) => void
+  markers: PackMapMarker[];
+  markerIcon?: Icon;
+  onEditMarker?: (markerId: string) => void;
+  type?: "pack" | "poi";
 }
 
 const DEFAULT_CENTER: LatLngLiteral = {
   lat: 39.8283,
   lng: -98.5795,
-}
+};
 
-const DEFAULT_ZOOM = 4
-const SELECTED_ZOOM = 17
-const MARKER_MAP_ZOOM = 15
+const DEFAULT_ZOOM = 4;
+const SELECTED_ZOOM = 17;
+const MARKER_MAP_ZOOM = 15;
 const TILE_LAYER_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-const TILE_LAYER_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? ''
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+const TILE_LAYER_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+const GOOGLE_PLACES_API_KEY =
+  import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? "";
 
 interface LocationSearchOption {
-  id: string
-  label: string
-  detail?: string
-  source: 'google' | 'osm'
-  placeResource?: string
-  point?: PackMapPoint
+  id: string;
+  label: string;
+  detail?: string;
+  source: "google" | "osm";
+  placeResource?: string;
+  point?: PackMapPoint;
 }
 
 interface NominatimSearchResult {
-  display_name: string
-  lat: string
-  lon: string
+  display_name: string;
+  lat: string;
+  lon: string;
 }
 
 interface GooglePlaceSuggestion {
   placePrediction?: {
-    place?: string
-    placeId?: string
+    place?: string;
+    placeId?: string;
     text?: {
-      text?: string
-    }
+      text?: string;
+    };
     structuredFormat?: {
       mainText?: {
-        text?: string
-      }
+        text?: string;
+      };
       secondaryText?: {
-        text?: string
-      }
-    }
-  }
+        text?: string;
+      };
+    };
+  };
 }
 
 interface GoogleAutocompleteResponse {
-  suggestions?: GooglePlaceSuggestion[]
+  suggestions?: GooglePlaceSuggestion[];
 }
 
 interface GooglePlaceDetailsResponse {
   displayName?: {
-    text?: string
-  }
-  formattedAddress?: string
+    text?: string;
+  };
+  formattedAddress?: string;
   location?: {
-    latitude?: number
-    longitude?: number
-  }
+    latitude?: number;
+    longitude?: number;
+  };
 }
 
 function createSearchSessionToken() {
   if (crypto.randomUUID) {
-    return crypto.randomUUID()
+    return crypto.randomUUID();
   }
 
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function createSearchResultIcon() {
   return divIcon({
-    className: 'school-zone-search-result-icon',
-    html: '<span></span>',
+    className: "school-zone-search-result-icon",
+    html: "<span></span>",
     iconSize: [22, 22],
     iconAnchor: [11, 11],
-  })
+  });
 }
 
 function getBoundsForPoints(points: PackMapPoint[]) {
   if (points.length === 0) {
-    return null
+    return null;
   }
 
-  return new LatLngBounds(points.map(({ lat, lng }) => [lat, lng] as [number, number]))
+  return new LatLngBounds(
+    points.map(({ lat, lng }) => [lat, lng] as [number, number]),
+  );
 }
 
 function getCenterForPoints(points: PackMapPoint[]) {
-  const bounds = getBoundsForPoints(points)
+  const bounds = getBoundsForPoints(points);
   if (!bounds || !bounds.isValid()) {
-    return null
+    return null;
   }
 
-  const center = bounds.getCenter()
+  const center = bounds.getCenter();
   return {
     lat: center.lat,
     lng: center.lng,
-  }
+  };
 }
 
 function getSearchBias(markers: PackMapMarker[]) {
-  const bounds = getBoundsForPoints(markers)
+  const bounds = getBoundsForPoints(markers);
   if (!bounds || !bounds.isValid()) {
-    return ''
+    return "";
   }
 
-  const paddedBounds = bounds.pad(0.45)
-  return `&viewbox=${paddedBounds.getWest()},${paddedBounds.getNorth()},${paddedBounds.getEast()},${paddedBounds.getSouth()}`
+  const paddedBounds = bounds.pad(0.45);
+  return `&viewbox=${paddedBounds.getWest()},${paddedBounds.getNorth()},${paddedBounds.getEast()},${paddedBounds.getSouth()}`;
 }
 
 function getLocationBias(markers: PackMapMarker[]) {
-  const bounds = getBoundsForPoints(markers)
+  const bounds = getBoundsForPoints(markers);
   if (!bounds || !bounds.isValid()) {
-    return null
+    return null;
   }
 
-  const paddedBounds = bounds.pad(0.45)
+  const paddedBounds = bounds.pad(0.45);
   return {
     rectangle: {
       low: {
@@ -175,7 +189,7 @@ function getLocationBias(markers: PackMapMarker[]) {
         longitude: paddedBounds.getEast(),
       },
     },
-  }
+  };
 }
 
 async function fetchGoogleLocationOptions(
@@ -184,35 +198,38 @@ async function fetchGoogleLocationOptions(
   locationBias: ReturnType<typeof getLocationBias>,
   sessionToken: string,
 ) {
-  const response = await fetch('https://places.googleapis.com/v1/places:autocomplete', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
-      'X-Goog-FieldMask':
-        'suggestions.placePrediction.place,suggestions.placePrediction.placeId,suggestions.placePrediction.text.text,suggestions.placePrediction.structuredFormat.mainText.text,suggestions.placePrediction.structuredFormat.secondaryText.text',
+  const response = await fetch(
+    "https://places.googleapis.com/v1/places:autocomplete",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
+        "X-Goog-FieldMask":
+          "suggestions.placePrediction.place,suggestions.placePrediction.placeId,suggestions.placePrediction.text.text,suggestions.placePrediction.structuredFormat.mainText.text,suggestions.placePrediction.structuredFormat.secondaryText.text",
+      },
+      body: JSON.stringify({
+        input: trimmedQuery,
+        includedRegionCodes: ["us"],
+        locationBias: locationBias ?? undefined,
+        sessionToken,
+      }),
+      signal,
     },
-    body: JSON.stringify({
-      input: trimmedQuery,
-      includedRegionCodes: ['us'],
-      locationBias: locationBias ?? undefined,
-      sessionToken,
-    }),
-    signal,
-  })
+  );
 
   if (!response.ok) {
-    throw new Error('Google location search is unavailable right now.')
+    throw new Error("Google location search is unavailable right now.");
   }
 
-  const data = (await response.json()) as GoogleAutocompleteResponse
+  const data = (await response.json()) as GoogleAutocompleteResponse;
   return (
     data.suggestions
       ?.map((suggestion): LocationSearchOption | null => {
-        const prediction = suggestion.placePrediction
-        const placeResource = prediction?.place
+        const prediction = suggestion.placePrediction;
+        const placeResource = prediction?.place;
         if (!prediction || !placeResource) {
-          return null
+          return null;
         }
 
         return {
@@ -220,14 +237,14 @@ async function fetchGoogleLocationOptions(
           label:
             prediction.structuredFormat?.mainText?.text ??
             prediction.text?.text ??
-            'Unnamed location',
+            "Unnamed location",
           detail: prediction.structuredFormat?.secondaryText?.text,
-          source: 'google',
+          source: "google",
           placeResource,
-        }
+        };
       })
       .filter((option): option is LocationSearchOption => Boolean(option)) ?? []
-  )
+  );
 }
 
 async function fetchOpenStreetMapLocationOptions(
@@ -240,295 +257,317 @@ async function fetchOpenStreetMapLocationOptions(
       trimmedQuery,
     )}${searchBias}`,
     { signal },
-  )
+  );
 
   if (!response.ok) {
-    throw new Error('Location search is unavailable right now.')
+    throw new Error("Location search is unavailable right now.");
   }
 
-  const results = (await response.json()) as NominatimSearchResult[]
+  const results = (await response.json()) as NominatimSearchResult[];
   return results
     .map((result, index): LocationSearchOption | null => {
       const point = {
         lat: Number(result.lat),
         lng: Number(result.lon),
-      }
+      };
 
       if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) {
-        return null
+        return null;
       }
 
-      const [label, ...details] = result.display_name.split(', ')
+      const [label, ...details] = result.display_name.split(", ");
       return {
         id: `${result.lat}-${result.lon}-${index}`,
         label: label || result.display_name,
-        detail: details.join(', '),
-        source: 'osm',
+        detail: details.join(", "),
+        source: "osm",
         point,
-      }
+      };
     })
-    .filter((option): option is LocationSearchOption => Boolean(option))
+    .filter((option): option is LocationSearchOption => Boolean(option));
 }
 
 function ClickToSelectPin(props: PackLocationPickerProps) {
-  const map = useMap()
+  const map = useMap();
 
   useMapEvents({
     click(event) {
       if (props.disabled) {
-        return
+        return;
       }
 
       props.onChange({
         lat: event.latlng.lat,
         lng: event.latlng.lng,
-      })
+      });
     },
-  })
+  });
 
   useEffect(() => {
     if (!props.value) {
-      const otherMarkers = props.otherMarkers ?? []
-      const bounds = getBoundsForPoints(otherMarkers)
+      const otherMarkers = props.otherMarkers ?? [];
+      const bounds = getBoundsForPoints(otherMarkers);
       if (!bounds || !bounds.isValid()) {
-        return
+        return;
       }
 
       if (otherMarkers.length === 1) {
         map.flyTo(otherMarkers[0], MARKER_MAP_ZOOM, {
           animate: true,
           duration: 0.35,
-        })
-        return
+        });
+        return;
       }
 
       map.flyToBounds(bounds.pad(0.22), {
         animate: true,
         duration: 0.35,
         padding: [24, 24],
-      })
-      return
+      });
+      return;
     }
 
     map.flyTo(props.value, Math.max(map.getZoom(), SELECTED_ZOOM), {
       animate: true,
       duration: 0.35,
-    })
-  }, [map, props.otherMarkers, props.value])
+    });
+  }, [map, props.otherMarkers, props.value]);
 
   return props.value ? (
     <>
-      {typeof props.radiusMeters === 'number' && Number.isFinite(props.radiusMeters) ? (
+      {typeof props.radiusMeters === "number" &&
+      Number.isFinite(props.radiusMeters) ? (
         <Circle
           center={props.value}
           radius={props.radiusMeters}
           pathOptions={{
-            color: '#f6ae2d',
-            fillColor: '#f6ae2d',
+            color: "#f6ae2d",
+            fillColor: "#f6ae2d",
             fillOpacity: 0.12,
             weight: 2,
           }}
         />
       ) : null}
-      <Marker
-        position={props.value}
-        icon={props.markerIcon ?? juisePackIcon}
-      />
+      <Marker position={props.value} icon={props.markerIcon ?? juisePackIcon} />
     </>
-  ) : null
+  ) : null;
 }
 
 interface PlaceSearchControlProps {
-  disabled?: boolean
-  markers: PackMapMarker[]
-  onSelect: (point: PackMapPoint, label: string, detail?: string) => void
+  disabled?: boolean;
+  markers: PackMapMarker[];
+  onSelect: (point: PackMapPoint, label: string, detail?: string) => void;
 }
 
 function PlaceSearchControl(props: PlaceSearchControlProps) {
-  const map = useMap()
-  const controlRef = useRef<HTMLDivElement | null>(null)
-  const [sessionToken, setSessionToken] = useState(createSearchSessionToken)
-  const [query, setQuery] = useState('')
-  const [options, setOptions] = useState<LocationSearchOption[]>([])
-  const [status, setStatus] = useState<'idle' | 'searching' | 'selecting' | 'error'>('idle')
-  const [message, setMessage] = useState('')
-  const [isSearchActive, setIsSearchActive] = useState(false)
-  const searchBias = useMemo(() => getSearchBias(props.markers), [props.markers])
-  const googleLocationBias = useMemo(() => getLocationBias(props.markers), [props.markers])
+  const map = useMap();
+  const controlRef = useRef<HTMLDivElement | null>(null);
+  const [sessionToken, setSessionToken] = useState(createSearchSessionToken);
+  const [query, setQuery] = useState("");
+  const [options, setOptions] = useState<LocationSearchOption[]>([]);
+  const [status, setStatus] = useState<
+    "idle" | "searching" | "selecting" | "error"
+  >("idle");
+  const [message, setMessage] = useState("");
+  const [isSearchActive, setIsSearchActive] = useState(false);
+  const searchBias = useMemo(
+    () => getSearchBias(props.markers),
+    [props.markers],
+  );
+  const googleLocationBias = useMemo(
+    () => getLocationBias(props.markers),
+    [props.markers],
+  );
 
   useEffect(() => {
     if (!controlRef.current) {
-      return
+      return;
     }
 
-    DomEvent.disableClickPropagation(controlRef.current)
-    DomEvent.disableScrollPropagation(controlRef.current)
-  }, [])
+    DomEvent.disableClickPropagation(controlRef.current);
+    DomEvent.disableScrollPropagation(controlRef.current);
+  }, []);
 
   useEffect(() => {
     function handleDocumentPointerDown(event: PointerEvent) {
       if (controlRef.current?.contains(event.target as Node)) {
-        return
+        return;
       }
 
-      setOptions([])
-      setIsSearchActive(false)
+      setOptions([]);
+      setIsSearchActive(false);
     }
 
     function handleDocumentKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setOptions([])
-        setIsSearchActive(false)
+      if (event.key === "Escape") {
+        setOptions([]);
+        setIsSearchActive(false);
       }
     }
 
-    document.addEventListener('pointerdown', handleDocumentPointerDown)
-    document.addEventListener('keydown', handleDocumentKeyDown)
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    document.addEventListener("keydown", handleDocumentKeyDown);
 
     return () => {
-      document.removeEventListener('pointerdown', handleDocumentPointerDown)
-      document.removeEventListener('keydown', handleDocumentKeyDown)
-    }
-  }, [])
+      document.removeEventListener("pointerdown", handleDocumentPointerDown);
+      document.removeEventListener("keydown", handleDocumentKeyDown);
+    };
+  }, []);
 
-  const fetchOptions = useCallback(async (trimmedQuery: string, signal: AbortSignal) => {
-    setStatus('searching')
-    setMessage('')
+  const fetchOptions = useCallback(
+    async (trimmedQuery: string, signal: AbortSignal) => {
+      setStatus("searching");
+      setMessage("");
 
-    try {
-      const nextOptions = GOOGLE_PLACES_API_KEY
-        ? await fetchGoogleLocationOptions(trimmedQuery, signal, googleLocationBias, sessionToken)
-        : await fetchOpenStreetMapLocationOptions(trimmedQuery, signal, searchBias)
+      try {
+        const nextOptions = GOOGLE_PLACES_API_KEY
+          ? await fetchGoogleLocationOptions(
+              trimmedQuery,
+              signal,
+              googleLocationBias,
+              sessionToken,
+            )
+          : await fetchOpenStreetMapLocationOptions(
+              trimmedQuery,
+              signal,
+              searchBias,
+            );
 
-      if (signal.aborted) {
-        return
+        if (signal.aborted) {
+          return;
+        }
+
+        setOptions(nextOptions);
+        setStatus("idle");
+        setMessage(
+          nextOptions.length === 0 ? "No matching locations found." : "",
+        );
+      } catch (error) {
+        if (signal.aborted) {
+          return;
+        }
+
+        setOptions([]);
+        setStatus("error");
+        setMessage(
+          error instanceof Error && error.message
+            ? error.message
+            : "Location search is unavailable right now.",
+        );
       }
-
-      setOptions(nextOptions)
-      setStatus('idle')
-      setMessage(nextOptions.length === 0 ? 'No matching locations found.' : '')
-    } catch (error) {
-      if (signal.aborted) {
-        return
-      }
-
-      setOptions([])
-      setStatus('error')
-      setMessage(
-        error instanceof Error && error.message
-          ? error.message
-          : 'Location search is unavailable right now.',
-      )
-    }
-  }, [googleLocationBias, searchBias, sessionToken])
+    },
+    [googleLocationBias, searchBias, sessionToken],
+  );
 
   useEffect(() => {
-    const trimmedQuery = query.trim()
+    const trimmedQuery = query.trim();
     if (!isSearchActive || !trimmedQuery || props.disabled) {
-      setOptions([])
-      setMessage('')
-      setStatus('idle')
-      return
+      setOptions([]);
+      setMessage("");
+      setStatus("idle");
+      return;
     }
 
-    const controller = new AbortController()
+    const controller = new AbortController();
     const timeoutId = window.setTimeout(() => {
-      void fetchOptions(trimmedQuery, controller.signal)
-    }, 250)
+      void fetchOptions(trimmedQuery, controller.signal);
+    }, 250);
 
     return () => {
-      window.clearTimeout(timeoutId)
-      controller.abort()
-    }
-  }, [fetchOptions, isSearchActive, props.disabled, query])
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [fetchOptions, isSearchActive, props.disabled, query]);
 
   async function focusSearchOption(option: LocationSearchOption) {
-    setStatus('selecting')
-    setMessage('')
+    setStatus("selecting");
+    setMessage("");
 
     try {
       const result =
-        option.source === 'google' ? await fetchGooglePlaceResult(option) : optionToSearchResult(option)
+        option.source === "google"
+          ? await fetchGooglePlaceResult(option)
+          : optionToSearchResult(option);
 
       if (!result) {
-        throw new Error('That location does not include map coordinates.')
+        throw new Error("That location does not include map coordinates.");
       }
 
       map.flyTo(result.point, SELECTED_ZOOM, {
         animate: true,
         duration: 0.45,
-      })
-      props.onSelect(result.point, result.label, result.detail)
-      setQuery(result.label)
-      setOptions([])
-      setIsSearchActive(false)
-      setStatus('idle')
-      setSessionToken(createSearchSessionToken())
-      setMessage('POI pin moved to this location.')
+      });
+      props.onSelect(result.point, result.label, result.detail);
+      setQuery(result.label);
+      setOptions([]);
+      setIsSearchActive(false);
+      setStatus("idle");
+      setSessionToken(createSearchSessionToken());
+      setMessage("POI pin moved to this location.");
     } catch (error) {
-      setStatus('error')
+      setStatus("error");
       setMessage(
         error instanceof Error && error.message
           ? error.message
-          : 'Location search is unavailable right now.',
-      )
+          : "Location search is unavailable right now.",
+      );
     }
   }
 
   async function fetchGooglePlaceResult(option: LocationSearchOption) {
     if (!option.placeResource) {
-      return null
+      return null;
     }
 
     const response = await fetch(
       `https://places.googleapis.com/v1/${option.placeResource}?fields=location,formattedAddress,displayName&sessionToken=${encodeURIComponent(
         sessionToken,
       )}&key=${encodeURIComponent(GOOGLE_PLACES_API_KEY)}`,
-    )
+    );
 
     if (!response.ok) {
-      throw new Error('Could not load details for that location.')
+      throw new Error("Could not load details for that location.");
     }
 
-    const details = (await response.json()) as GooglePlaceDetailsResponse
+    const details = (await response.json()) as GooglePlaceDetailsResponse;
     const point = {
       lat: Number(details.location?.latitude),
       lng: Number(details.location?.longitude),
-    }
+    };
 
     if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) {
-      return null
+      return null;
     }
 
     return {
       label: details.displayName?.text ?? option.label,
       detail: details.formattedAddress ?? option.detail,
       point,
-    }
+    };
   }
 
   function optionToSearchResult(option: LocationSearchOption) {
     if (!option.point) {
-      return null
+      return null;
     }
 
     return {
       label: option.label,
       detail: option.detail,
       point: option.point,
-    }
+    };
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    event.stopPropagation()
+    event.preventDefault();
+    event.stopPropagation();
 
-    const firstOption = options[0]
-    if (!firstOption || props.disabled || status === 'selecting') {
-      return
+    const firstOption = options[0];
+    if (!firstOption || props.disabled || status === "selecting") {
+      return;
     }
 
-    void focusSearchOption(firstOption)
+    void focusSearchOption(firstOption);
   }
 
   return (
@@ -543,7 +582,7 @@ function PlaceSearchControl(props: PlaceSearchControlProps) {
         <label className="school-zone-search-field">
           <span>Find place</span>
           <input
-            disabled={props.disabled || status === 'selecting'}
+            disabled={props.disabled || status === "selecting"}
             onFocus={() => setIsSearchActive(true)}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search addresses and places"
@@ -552,10 +591,15 @@ function PlaceSearchControl(props: PlaceSearchControlProps) {
         </label>
         <button
           className="secondary-button"
-          disabled={props.disabled || status === 'searching' || status === 'selecting' || options.length === 0}
+          disabled={
+            props.disabled ||
+            status === "searching" ||
+            status === "selecting" ||
+            options.length === 0
+          }
           type="submit"
         >
-          {status === 'selecting' ? 'Opening...' : 'Search'}
+          {status === "selecting" ? "Opening..." : "Search"}
         </button>
       </form>
       {options.length > 0 ? (
@@ -563,7 +607,7 @@ function PlaceSearchControl(props: PlaceSearchControlProps) {
           {options.map((option) => (
             <button
               key={option.id}
-              disabled={status === 'selecting'}
+              disabled={status === "selecting"}
               onClick={() => void focusSearchOption(option)}
               type="button"
             >
@@ -571,65 +615,77 @@ function PlaceSearchControl(props: PlaceSearchControlProps) {
               {option.detail ? <span>{option.detail}</span> : null}
             </button>
           ))}
-          {GOOGLE_PLACES_API_KEY ? <span className="school-zone-search-provider">Powered by Google</span> : null}
+          {GOOGLE_PLACES_API_KEY ? (
+            <span className="school-zone-search-provider">
+              Powered by Google
+            </span>
+          ) : null}
         </div>
       ) : null}
       {message ? (
-        <p className={status === 'error' ? 'school-zone-search-error' : undefined}>{message}</p>
+        <p
+          className={
+            status === "error" ? "school-zone-search-error" : undefined
+          }
+        >
+          {message}
+        </p>
       ) : null}
     </div>
-  )
+  );
 }
 
 function FitPackLocations(props: PackLocationsMapProps) {
-  const map = useMap()
+  const map = useMap();
 
   useEffect(() => {
     if (props.markers.length === 0) {
-      map.setView(DEFAULT_CENTER, DEFAULT_ZOOM)
-      return
+      map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+      return;
     }
 
     if (props.markers.length === 1) {
       map.flyTo(props.markers[0], MARKER_MAP_ZOOM, {
         animate: true,
         duration: 0.35,
-      })
-      return
+      });
+      return;
     }
 
     const bounds = new LatLngBounds(
       props.markers.map(({ lat, lng }) => [lat, lng] as [number, number]),
-    )
+    );
     map.flyToBounds(bounds.pad(0.2), {
       animate: true,
       duration: 0.35,
       padding: [24, 24],
-    })
-  }, [map, props.markers])
+    });
+  }, [map, props.markers]);
 
-  return null
+  return null;
 }
 
 export function PackLocationPicker(props: PackLocationPickerProps) {
-  const otherMarkers = props.otherMarkers ?? []
+  const otherMarkers = props.otherMarkers ?? [];
   const markersForSearch = props.value
     ? [
         ...otherMarkers,
         {
-          id: 'selected-poi',
-          label: 'Selected POI',
+          id: "selected-poi",
+          label: "Selected POI",
           lat: props.value.lat,
           lng: props.value.lng,
         },
       ]
-    : otherMarkers
+    : otherMarkers;
   const initialCenter =
-    props.value ?? getCenterForPoints(otherMarkers) ?? DEFAULT_CENTER
-  const searchResultIcon = useMemo(() => createSearchResultIcon(), [])
+    props.value ?? getCenterForPoints(otherMarkers) ?? DEFAULT_CENTER;
+  const searchResultIcon = useMemo(() => createSearchResultIcon(), []);
 
   return (
-    <div className={`pack-map-shell ${props.disabled ? 'pack-map-shell-disabled' : ''}`}>
+    <div
+      className={`pack-map-shell ${props.disabled ? "pack-map-shell-disabled" : ""}`}
+    >
       <MapContainer
         center={initialCenter}
         className="pack-map"
@@ -642,41 +698,45 @@ export function PackLocationPicker(props: PackLocationPickerProps) {
           markers={markersForSearch}
           onSelect={(point, label, detail) => {
             if (props.onPlaceSelect) {
-              props.onPlaceSelect(point, label, detail)
-              return
+              props.onPlaceSelect(point, label, detail);
+              return;
             }
 
-            props.onChange(point)
+            props.onChange(point);
           }}
         />
         <ClickToSelectPin {...props} />
         {props.value ? (
-          <Marker icon={searchResultIcon} position={props.value} zIndexOffset={1000}>
+          <Marker
+            icon={searchResultIcon}
+            position={props.value}
+            zIndexOffset={1000}
+          >
             <Popup>Selected POI location</Popup>
           </Marker>
         ) : null}
         {otherMarkers.map((marker) => (
           <Fragment key={marker.id}>
-            {typeof marker.radiusMeters === 'number' && Number.isFinite(marker.radiusMeters) ? (
+            {typeof marker.radiusMeters === "number" &&
+            Number.isFinite(marker.radiusMeters) ? (
               <Circle
                 center={marker}
                 radius={marker.radiusMeters}
                 pathOptions={{
-                  color: '#9ca3af',
-                  fillColor: '#9ca3af',
+                  color: "#9ca3af",
+                  fillColor: "#9ca3af",
                   fillOpacity: 0.08,
                   weight: 1,
                 }}
               />
             ) : null}
-            <Marker
-              position={marker}
-              icon={props.markerIcon ?? juisePackIcon}
-            >
+            <Marker position={marker} icon={props.markerIcon ?? juisePackIcon}>
               <Popup>
                 <strong>{marker.label}</strong>
                 {marker.description ? <div>{marker.description}</div> : null}
-                <div>{marker.lat.toFixed(6)}, {marker.lng.toFixed(6)}</div>
+                <div>
+                  {marker.lat.toFixed(6)}, {marker.lng.toFixed(6)}
+                </div>
               </Popup>
             </Marker>
           </Fragment>
@@ -684,15 +744,15 @@ export function PackLocationPicker(props: PackLocationPickerProps) {
       </MapContainer>
       <div className="pack-map-caption">
         {props.disabled
-          ? 'Select a POI from the list to place its pin.'
-          : 'Click anywhere on the map to drop or move this POI\'s pin.'}
+          ? "Select a POI from the list to place its pin."
+          : "Click anywhere on the map to drop or move this POI's pin."}
       </div>
     </div>
-  )
+  );
 }
 
 export function PackLocationsMap(props: PackLocationsMapProps) {
-  const initialCenter = props.markers[0] ?? DEFAULT_CENTER
+  const initialCenter = props.markers[0] ?? DEFAULT_CENTER;
 
   return (
     <div className="pack-map-shell">
@@ -706,26 +766,24 @@ export function PackLocationsMap(props: PackLocationsMapProps) {
         <FitPackLocations markers={props.markers} />
         {props.markers.map((marker) => (
           <Fragment key={marker.id}>
-            {typeof marker.radiusMeters === 'number' && Number.isFinite(marker.radiusMeters) ? (
+            {typeof marker.radiusMeters === "number" &&
+            Number.isFinite(marker.radiusMeters) ? (
               <Circle
                 center={marker}
                 radius={marker.radiusMeters}
                 pathOptions={{
-                  color: '#27cc5e',
-                  fillColor: '#27cc5e',
+                  color: "#27cc5e",
+                  fillColor: "#27cc5e",
                   fillOpacity: 0.1,
                   weight: 2,
                 }}
               />
             ) : null}
-            <Marker
-              position={marker}
-              icon={props.markerIcon ?? juisePackIcon}
-            >
+            <Marker position={marker} icon={props.markerIcon ?? juisePackIcon}>
               <Popup>
                 <strong>{marker.label}</strong>
                 {marker.description ? <div>{marker.description}</div> : null}
-                {typeof marker.spotCount === 'number' ? (
+                {typeof marker.spotCount === "number" ? (
                   <div>{marker.spotCount} spots</div>
                 ) : null}
                 {props.onEditMarker ? (
@@ -743,10 +801,14 @@ export function PackLocationsMap(props: PackLocationsMapProps) {
         ))}
       </MapContainer>
       <div className="pack-map-caption">
-        {props.markers.length === 0
-          ? 'No Juise Pack pins are available yet.'
-          : `${props.markers.length} Juise Pack pin${props.markers.length === 1 ? '' : 's'} shown on the map.`}
+        {props.type === "poi"
+          ? props.markers.length === 0
+            ? "No POI pins are available yet."
+            : `${props.markers.length} POI${props.markers.length === 1 ? "" : "s"} shown on the map.`
+          : props.markers.length === 0
+            ? "No Juise Pack pins are available yet."
+            : `${props.markers.length} Juise Pack pin${props.markers.length === 1 ? "" : "s"} shown on the map.`}
       </div>
     </div>
-  )
+  );
 }

@@ -73,7 +73,9 @@ function resolvePoiNumber(value: string): number | null {
 
 function formatPoiRadiusFeet(value: string) {
   const parsed = resolvePoiNumber(value);
-  return parsed === null ? "250 ft" : `${Math.round(parsed).toLocaleString()} ft`;
+  return parsed === null
+    ? "250 ft"
+    : `${Math.round(parsed).toLocaleString()} ft`;
 }
 
 function resolveImportedRadiusFeet(row: Record<string, string>) {
@@ -109,7 +111,9 @@ export function PoisScreen(props: Props) {
   const [poiSnapshot, setPoiSnapshot] = useState<POIDraft | null>(null);
   const [poiFormError, setPoiFormError] = useState("");
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [pendingImportedPois, setPendingImportedPois] = useState<POIDraft[]>([]);
+  const [pendingImportedPois, setPendingImportedPois] = useState<POIDraft[]>(
+    [],
+  );
   const [importMessage, setImportMessage] = useState("");
   const titleInputRef = useRef<HTMLInputElement>(null);
   const bonusPointsInputRef = useRef<HTMLInputElement>(null);
@@ -134,7 +138,9 @@ export function PoisScreen(props: Props) {
     setActivePoiDraftId(poiId);
     setIsPoiModalOpen(true);
     setPoiFormError("");
-    setPoiSnapshot(snapshot ?? poiDrafts.find((poi) => poi.id === poiId) ?? null);
+    setPoiSnapshot(
+      snapshot ?? poiDrafts.find((poi) => poi.id === poiId) ?? null,
+    );
   }
 
   function addPoi() {
@@ -180,7 +186,8 @@ export function PoisScreen(props: Props) {
     const bonusPoints = Number.parseInt(poi.bonus_points.trim(), 10);
     if (!Number.isFinite(bonusPoints) || bonusPoints < 0) {
       return {
-        message: "Bonus points must be a whole number greater than or equal to 0.",
+        message:
+          "Bonus points must be a whole number greater than or equal to 0.",
         focus: () => bonusPointsInputRef.current?.focus(),
       };
     }
@@ -305,7 +312,10 @@ export function PoisScreen(props: Props) {
       return;
     }
 
-    const didSave = await handleSavePOIs([...poiDrafts, ...pendingImportedPois]);
+    const didSave = await handleSavePOIs([
+      ...poiDrafts,
+      ...pendingImportedPois,
+    ]);
     if (didSave) {
       setIsImportModalOpen(false);
       setPendingImportedPois([]);
@@ -409,6 +419,7 @@ export function PoisScreen(props: Props) {
               markers={poiMapMarkers}
               markerIcon={visitedPoiIcon}
               onEditMarker={(poiId) => openPoiModal(poiId)}
+              type="poi"
             />
           </div>
 
@@ -447,8 +458,12 @@ export function PoisScreen(props: Props) {
                       return (
                         <tr key={poi.id}>
                           <td>
-                            <strong>{poi.title.trim() || `POI ${index + 1}`}</strong>
-                            <span>{poi.description.trim() || "No description"}</span>
+                            <strong>
+                              {poi.title.trim() || `POI ${index + 1}`}
+                            </strong>
+                            <span>
+                              {poi.description.trim() || "No description"}
+                            </span>
                           </td>
                           <td>{poi.bonus_points || "0"}</td>
                           <td>{formatPoiRadiusFeet(poi.radius_feet)}</td>
@@ -514,7 +529,9 @@ export function PoisScreen(props: Props) {
             <div className="management-import-body">
               <div className="management-import-instructions">
                 <h4>Required CSV headers</h4>
-                <code>title,description,latitude,longitude,radius_feet,bonus_points</code>
+                <code>
+                  title,description,latitude,longitude,radius_feet,bonus_points
+                </code>
                 <p className="muted-text">
                   Latitude and longitude must be decimal coordinates. Radius is
                   the entry distance in feet, and bonus points should be a whole
@@ -533,7 +550,9 @@ export function PoisScreen(props: Props) {
                 Choose CSV
               </label>
 
-              {importMessage ? <p className="empty-state">{importMessage}</p> : null}
+              {importMessage ? (
+                <p className="empty-state">{importMessage}</p>
+              ) : null}
 
               {pendingImportedPois.length > 0 ? (
                 <div className="management-table-scroll">

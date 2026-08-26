@@ -2890,7 +2890,12 @@ function App() {
       }),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSchoolId, context.managedAppId, session?.claims.user_uuid, studentsDispatch]);
+  }, [
+    activeSchoolId,
+    context.managedAppId,
+    session?.claims.user_uuid,
+    studentsDispatch,
+  ]);
 
   useEffect(() => {
     setDashboardHeaderCounts({
@@ -3032,7 +3037,12 @@ function App() {
       }),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSchoolId, context.managedAppId, session?.claims.user_uuid, studentsDispatch]);
+  }, [
+    activeSchoolId,
+    context.managedAppId,
+    session?.claims.user_uuid,
+    studentsDispatch,
+  ]);
 
   useEffect(() => {
     if (!imagePreview && !selectedStudentDeviceUUID) {
@@ -3308,7 +3318,12 @@ function App() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSchoolId, context.managedAppId, currentSection, session?.claims.user_uuid]);
+  }, [
+    activeSchoolId,
+    context.managedAppId,
+    currentSection,
+    session?.claims.user_uuid,
+  ]);
 
   useEffect(() => {
     if (!session || currentSection !== "zones" || !activeSchoolId) {
@@ -3349,7 +3364,12 @@ function App() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSchoolId, context.managedAppId, currentSection, session?.claims.user_uuid]);
+  }, [
+    activeSchoolId,
+    context.managedAppId,
+    currentSection,
+    session?.claims.user_uuid,
+  ]);
 
   useEffect(() => {
     if (
@@ -3394,7 +3414,12 @@ function App() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSchoolId, context.managedAppId, currentSection, session?.claims.user_uuid]);
+  }, [
+    activeSchoolId,
+    context.managedAppId,
+    currentSection,
+    session?.claims.user_uuid,
+  ]);
 
   useEffect(() => {
     if (
@@ -3507,7 +3532,12 @@ function App() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSchoolId, context.managedAppId, selectedReservation, session?.claims.user_uuid]);
+  }, [
+    activeSchoolId,
+    context.managedAppId,
+    selectedReservation,
+    session?.claims.user_uuid,
+  ]);
 
   useEffect(() => {
     if (!session || currentSection !== "packs" || !activeSchoolId) {
@@ -3550,7 +3580,12 @@ function App() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSchoolId, context.managedAppId, currentSection, session?.claims.user_uuid]);
+  }, [
+    activeSchoolId,
+    context.managedAppId,
+    currentSection,
+    session?.claims.user_uuid,
+  ]);
 
   async function refreshActiveSchool() {
     if (!session || !activeSchoolId) {
@@ -3812,10 +3847,6 @@ function App() {
         sessionEndedGuardRef.current = false;
         setSession(result);
         setAuthMode("login");
-        setBanner({
-          tone: "success",
-          message: `Signed in as ${formatAdminIdentity(result)}.`,
-        });
       }
     } catch (error) {
       if (error instanceof DashboardLoginLockedError) {
@@ -3871,10 +3902,6 @@ function App() {
       setAuthMode("login");
       setLoginLock(null);
       localStorage.removeItem(loginLockStorageKey);
-      setBanner({
-        tone: "success",
-        message: `Signed in as ${formatAdminIdentity(nextSession)}.`,
-      });
     } catch (error) {
       if (error instanceof DashboardLoginLockedError) {
         const nextLock = {
@@ -5337,7 +5364,9 @@ function App() {
                             }
                           >
                             <span className="school-option-logo school-option-logo-placeholder">
-                              {(membership.school_id || "?").charAt(0).toUpperCase()}
+                              {(membership.school_id || "?")
+                                .charAt(0)
+                                .toUpperCase()}
                             </span>
                             <span className="school-option-name">
                               {membership.school_id || "Unknown school"}
