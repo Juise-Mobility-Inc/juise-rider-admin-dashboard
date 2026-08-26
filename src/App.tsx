@@ -1758,9 +1758,12 @@ function App() {
       .then((memberships) => {
         if (!cancelled) {
           setSchoolMemberships(memberships);
+          const normalizedSelected = selectedSchoolId.trim().toLowerCase();
           if (
-            selectedSchoolId &&
-            !memberships.some((m) => m.school_id === selectedSchoolId)
+            normalizedSelected &&
+            !memberships.some(
+              (m) => m.school_id.trim().toLowerCase() === normalizedSelected,
+            )
           ) {
             // Previously-selected school is no longer a valid membership
             // (revoked, or leftover from a different account) — clear it
@@ -1828,6 +1831,19 @@ function App() {
         schoolId,
         joinSchoolMode === "existing" ? joinSchoolCode.trim() : undefined,
       );
+      // Joining a school doesn't reissue tokens on its own, so the session
+      // still carries the school_admin claim as it was before this
+      // membership existed. Mint a fresh token now (the refresh endpoint
+      // recomputes school_admin from current memberships) so the dashboard
+      // we're about to render doesn't immediately 401/403 on every request.
+      try {
+        const refreshedSession = await refreshDashboardSession();
+        setSession(refreshedSession);
+      } catch {
+        // Non-fatal — the request-level retry-on-401/403 logic will
+        // recover on the first failed request if this refresh didn't
+        // happen for some reason.
+      }
       setSchoolMemberships((current) => [
         ...current.filter((m) => m.school_id !== membership.school_id),
         membership,
