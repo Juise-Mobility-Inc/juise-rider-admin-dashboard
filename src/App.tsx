@@ -1406,7 +1406,7 @@ function formatAdminIdentity(session: AdminSession): string {
   if (fullName) {
     return fullName;
   }
-  return session.claims.user_uuid;
+  return session.claims.user_uuid || "Admin";
 }
 
 function formatNebulaUserName(profile: {
@@ -1872,6 +1872,12 @@ function App() {
       setJoinSchoolCode("");
       setJoinNewSchoolName("");
       setSelectedSchoolId(membership.school_id);
+      // The URL may still be pointing at whatever section a previous
+      // session (or a previous account, after signing out) left it on —
+      // land somewhere that's guaranteed to make sense for a school this
+      // admin has just entered, rather than a section that assumes
+      // existing data.
+      navigate(sectionPathByName.dashboard, { replace: true });
     } catch (error) {
       setJoinSchoolError(getErrorMessage(error));
     } finally {
@@ -1914,7 +1920,7 @@ function App() {
 
   function schoolDisplayName(schoolId: string): string {
     const match = pickerSchools.find((s) => s.school_id === schoolId);
-    return match?.title || match?.name || schoolId;
+    return match?.title || match?.name || schoolId || "School";
   }
 
   async function handleShowJoinCode() {
@@ -1968,7 +1974,7 @@ function App() {
     selected?: boolean;
     onClick: () => void;
   }) {
-    const label = school.title || school.name || school.school_id;
+    const label = school.title || school.name || school.school_id || "?";
     return (
       <button
         type="button"
@@ -5336,10 +5342,10 @@ function App() {
                             }
                           >
                             <span className="school-option-logo school-option-logo-placeholder">
-                              {membership.school_id.charAt(0).toUpperCase()}
+                              {(membership.school_id || "?").charAt(0).toUpperCase()}
                             </span>
                             <span className="school-option-name">
-                              {membership.school_id}
+                              {membership.school_id || "Unknown school"}
                             </span>
                           </button>
                         )}
