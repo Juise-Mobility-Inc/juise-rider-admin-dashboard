@@ -1484,10 +1484,12 @@ async function createAdminSession(
   tokens: AuthTokenBundle,
   authAppId: string,
 ): Promise<AdminSession> {
+  // Dashboard access is no longer gated on the legacy is_admin claim — a
+  // brand new signup legitimately has is_admin=false and no school
+  // memberships yet, and still needs a session to reach the "join a
+  // school" screen. Per-school authorization is enforced server-side via
+  // the school_admin claim on every actual data request.
   const claims = await inspectAccessToken(tokens, authAppId);
-  if (!claims.admin) {
-    throw new Error("This account is not marked as an admin user.");
-  }
 
   const session: AdminSession = {
     authAppId,
