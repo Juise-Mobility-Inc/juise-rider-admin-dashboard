@@ -998,6 +998,17 @@ function getErrorMessage(error: unknown): string {
   return "An unexpected error occurred.";
 }
 
+// Matches global-auth-service's two "this mfa_token can never succeed again"
+// error strings (expired/malformed JWT, and the per-challenge 5-attempt
+// cap) - distinct from a plain wrong-code rejection, which is retryable
+// against the same challenge.
+const deadMfaChallengePattern =
+  /MFA challenge (is invalid or expired|has expired or has too many attempts)/i;
+
+function isDeadMfaChallengeError(error: unknown): boolean {
+  return error instanceof Error && deadMfaChallengePattern.test(error.message);
+}
+
 async function copyTextToClipboard(value: string): Promise<void> {
   const normalizedValue = value.trim();
   if (!normalizedValue) {
@@ -3911,8 +3922,24 @@ function App() {
         setLoginLock(nextLock);
         setLoginClockMs(Date.now());
         localStorage.setItem(loginLockStorageKey, JSON.stringify(nextLock));
+        setAuthError(getErrorMessage(error));
+      } else if (isDeadMfaChallengeError(error)) {
+        // The mfa_token itself is dead (its 5-minute TTL passed, or its
+        // per-challenge attempt cap was hit) - every retry against it is
+        // guaranteed to fail with this same error regardless of code
+        // correctness. There's no way to silently mint a fresh one without
+        // the password (cleared after login), so send the user back to sign
+        // in again instead of leaving them stuck resubmitting a dead token.
+        setMfaChallenge(null);
+        setMfaEnrollment(null);
+        setMfaQrCode("");
+        setMfaCode("");
+        setAuthError(
+          "Your verification session expired. Please sign in again to continue.",
+        );
+      } else {
+        setAuthError(getErrorMessage(error));
       }
-      setAuthError(getErrorMessage(error));
     } finally {
       setAuthBusy(false);
     }
@@ -5000,6 +5027,19 @@ function App() {
                       </div>
                       <code>{mfaEnrollment.secret}</code>
                     </div>
+                    {mfaEnrollment.recovery_codes.length === 0 ? (
+                      // A resumed-but-not-yet-confirmed enrollment reuses its
+                      // existing secret (see prepareMFAChallenge) instead of
+                      // generating a new one, so there are no fresh recovery
+                      // codes to show - the ones from the original attempt
+                      // are hashed at rest and can't be redisplayed here.
+                      <p className="mfa-recovery-resumed-note">
+                        Continuing your earlier setup. Your recovery codes
+                        were shown when you first started - if you didn't
+                        save them, contact an admin to reset your MFA
+                        enrollment.
+                      </p>
+                    ) : (
                     <div className="mfa-recovery-codes">
                       <div className="mfa-panel-header">
                         <strong>Save these one-time recovery codes now</strong>
@@ -5039,6 +5079,7 @@ function App() {
                         </button>
                       </div>
                     </div>
+                    )}
                   </>
                 ) : null}
                 {!mfaChallenge.enrollment_required || mfaEnrollment ? (
