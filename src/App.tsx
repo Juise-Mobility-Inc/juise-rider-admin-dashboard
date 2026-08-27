@@ -5027,19 +5027,6 @@ function App() {
                       </div>
                       <code>{mfaEnrollment.secret}</code>
                     </div>
-                    {mfaEnrollment.recovery_codes.length === 0 ? (
-                      // A resumed-but-not-yet-confirmed enrollment reuses its
-                      // existing secret (see prepareMFAChallenge) instead of
-                      // generating a new one, so there are no fresh recovery
-                      // codes to show - the ones from the original attempt
-                      // are hashed at rest and can't be redisplayed here.
-                      <p className="mfa-recovery-resumed-note">
-                        Continuing your earlier setup. Your recovery codes
-                        were shown when you first started - if you didn't
-                        save them, contact an admin to reset your MFA
-                        enrollment.
-                      </p>
-                    ) : (
                     <div className="mfa-recovery-codes">
                       <div className="mfa-panel-header">
                         <strong>Save these one-time recovery codes now</strong>
@@ -5079,7 +5066,6 @@ function App() {
                         </button>
                       </div>
                     </div>
-                    )}
                   </>
                 ) : null}
                 {!mfaChallenge.enrollment_required || mfaEnrollment ? (
