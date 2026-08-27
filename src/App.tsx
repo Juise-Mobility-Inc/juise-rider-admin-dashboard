@@ -3928,12 +3928,21 @@ function App() {
         // per-challenge attempt cap was hit) - every retry against it is
         // guaranteed to fail with this same error regardless of code
         // correctness. There's no way to silently mint a fresh one without
-        // the password (cleared after login), so send the user back to sign
-        // in again instead of leaving them stuck resubmitting a dead token.
+        // the password (cleared after login/signup), so send the user back
+        // to sign in again instead of leaving them stuck resubmitting a dead
+        // token. Force authMode to "login" - a challenge reached from
+        // handleCreateSchoolAdmin leaves authMode as "signup", and
+        // resubmitting the signup form here (with its password already
+        // cleared) would either fail outright or attempt to recreate the
+        // same account instead of showing the promised sign-in form.
+        if (!identifier.trim() && signupForm.email.trim()) {
+          setIdentifier(signupForm.email.trim());
+        }
         setMfaChallenge(null);
         setMfaEnrollment(null);
         setMfaQrCode("");
         setMfaCode("");
+        setAuthMode("login");
         setAuthError(
           "Your verification session expired. Please sign in again to continue.",
         );
