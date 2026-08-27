@@ -998,6 +998,17 @@ function getErrorMessage(error: unknown): string {
   return "An unexpected error occurred.";
 }
 
+// Matches global-auth-service's two "this mfa_token can never succeed again"
+// error strings (expired/malformed JWT, and the per-challenge 5-attempt
+// cap) - distinct from a plain wrong-code rejection, which is retryable
+// against the same challenge.
+const deadMfaChallengePattern =
+  /MFA challenge (is invalid or expired|has expired or has too many attempts)/i;
+
+function isDeadMfaChallengeError(error: unknown): boolean {
+  return error instanceof Error && deadMfaChallengePattern.test(error.message);
+}
+
 async function copyTextToClipboard(value: string): Promise<void> {
   const normalizedValue = value.trim();
   if (!normalizedValue) {
@@ -3911,8 +3922,33 @@ function App() {
         setLoginLock(nextLock);
         setLoginClockMs(Date.now());
         localStorage.setItem(loginLockStorageKey, JSON.stringify(nextLock));
+        setAuthError(getErrorMessage(error));
+      } else if (isDeadMfaChallengeError(error)) {
+        // The mfa_token itself is dead (its 5-minute TTL passed, or its
+        // per-challenge attempt cap was hit) - every retry against it is
+        // guaranteed to fail with this same error regardless of code
+        // correctness. There's no way to silently mint a fresh one without
+        // the password (cleared after login/signup), so send the user back
+        // to sign in again instead of leaving them stuck resubmitting a dead
+        // token. Force authMode to "login" - a challenge reached from
+        // handleCreateSchoolAdmin leaves authMode as "signup", and
+        // resubmitting the signup form here (with its password already
+        // cleared) would either fail outright or attempt to recreate the
+        // same account instead of showing the promised sign-in form.
+        if (!identifier.trim() && signupForm.email.trim()) {
+          setIdentifier(signupForm.email.trim());
+        }
+        setMfaChallenge(null);
+        setMfaEnrollment(null);
+        setMfaQrCode("");
+        setMfaCode("");
+        setAuthMode("login");
+        setAuthError(
+          "Your verification session expired. Please sign in again to continue.",
+        );
+      } else {
+        setAuthError(getErrorMessage(error));
       }
-      setAuthError(getErrorMessage(error));
     } finally {
       setAuthBusy(false);
     }
