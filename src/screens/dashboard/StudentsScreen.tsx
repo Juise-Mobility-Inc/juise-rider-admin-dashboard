@@ -1,4 +1,5 @@
 import {
+        useEffect,
         useState,
         type ComponentType,
         type Dispatch,
@@ -19,14 +20,18 @@ import {
 } from "../../lib/routeHistoryPoints";
 
 import {
+        createSchoolInvite,
         fetchAdminSchoolPacks,
+        fetchSchoolInvites,
         fetchSchoolZones,
         fetchStudentParkingViolations,
         fetchStudentProfile,
         fetchStudentPublicProfile,
         fetchStudentRouteHistory,
+        revokeSchoolInvite,
         type Pack,
         type PackSpotReservation,
+        type SchoolEmailInvite,
         type SchoolZone,
         type SchoolStudentRosterEntry,
         type StudentParkingViolation,
@@ -850,6 +855,147 @@ function buildStudentExportRows({
         return { fullName, rows };
 }
 
+// Keyed by schoolId from the parent so switching schools remounts this
+// component with fresh state, rather than needing an effect to imperatively
+// reset multiple pieces of state on every schoolId change.
+function SchoolInvitePanel({
+        managedAppId,
+        schoolId,
+}: {
+        managedAppId: string;
+        schoolId: string;
+}) {
+        const [schoolInvites, setSchoolInvites] = useState<SchoolEmailInvite[]>([]);
+        const [schoolInvitesBusy, setSchoolInvitesBusy] = useState(false);
+        const [schoolInvitesError, setSchoolInvitesError] = useState("");
+        const [inviteEmail, setInviteEmail] = useState("");
+        const [inviteCampusId, setInviteCampusId] = useState("");
+        const [inviteBusy, setInviteBusy] = useState(false);
+        const [inviteError, setInviteError] = useState("");
+
+        async function loadSchoolInvites() {
+                setSchoolInvitesBusy(true);
+                setSchoolInvitesError("");
+                try {
+                        const invites = await fetchSchoolInvites(managedAppId, schoolId);
+                        setSchoolInvites(invites);
+                } catch (err) {
+                        setSchoolInvitesError(
+                                err instanceof Error ? err.message : "Unable to load beta invites.",
+                        );
+                } finally {
+                        setSchoolInvitesBusy(false);
+                }
+        }
+
+        useEffect(() => {
+                void loadSchoolInvites();
+                // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [managedAppId, schoolId]);
+
+        async function handleCreateInvite() {
+                const email = inviteEmail.trim();
+                if (!email) {
+                        setInviteError("Enter an email address to invite.");
+                        return;
+                }
+                setInviteBusy(true);
+                setInviteError("");
+                try {
+                        await createSchoolInvite(managedAppId, schoolId, {
+                                email,
+                                campus_id: inviteCampusId.trim() || undefined,
+                        });
+                        setInviteEmail("");
+                        setInviteCampusId("");
+                        await loadSchoolInvites();
+                } catch (err) {
+                        setInviteError(err instanceof Error ? err.message : "Unable to send invite.");
+                } finally {
+                        setInviteBusy(false);
+                }
+        }
+
+        async function handleRevokeInvite(inviteUuid: string) {
+                setSchoolInvitesError("");
+                try {
+                        await revokeSchoolInvite(managedAppId, schoolId, inviteUuid);
+                        await loadSchoolInvites();
+                } catch (err) {
+                        setSchoolInvitesError(
+                                err instanceof Error ? err.message : "Unable to revoke invite.",
+                        );
+                }
+        }
+
+        return (
+                <div className="school-invite-panel">
+                        <div className="school-invite-header">
+                                <h3>Beta invites</h3>
+                                <span className="muted-text">
+                                        Invite a student by email to join this school&apos;s beta.
+                                        They&apos;ll be added automatically once they sign up or log in
+                                        with that email address.
+                                </span>
+                        </div>
+                        <div className="school-invite-form">
+                                <input
+                                        className="school-invite-email-input"
+                                        type="email"
+                                        placeholder="student@example.com"
+                                        value={inviteEmail}
+                                        onChange={(e) => setInviteEmail(e.target.value)}
+                                        disabled={inviteBusy}
+                                />
+                                <input
+                                        className="school-invite-campus-input"
+                                        type="text"
+                                        placeholder="Campus ID (optional)"
+                                        value={inviteCampusId}
+                                        onChange={(e) => setInviteCampusId(e.target.value)}
+                                        disabled={inviteBusy}
+                                />
+                                <button
+                                        type="button"
+                                        className="secondary-button"
+                                        onClick={() => void handleCreateInvite()}
+                                        disabled={inviteBusy || !inviteEmail.trim()}>
+                                        {inviteBusy ? "Sending…" : "Send invite"}
+                                </button>
+                        </div>
+                        {inviteError ? <p className="error-text">{inviteError}</p> : null}
+                        {schoolInvitesError ? (
+                                <p className="error-text">{schoolInvitesError}</p>
+                        ) : null}
+                        {schoolInvitesBusy ? (
+                                <p className="muted-text">Loading invites…</p>
+                        ) : schoolInvites.length === 0 ? (
+                                <p className="muted-text">No pending invites yet.</p>
+                        ) : (
+                                <ul className="school-invite-list">
+                                        {schoolInvites.map((invite) => (
+                                                <li key={invite.invite_uuid} className="school-invite-list-item">
+                                                        <span className="school-invite-email">{invite.email}</span>
+                                                        <span
+                                                                className={`school-invite-status school-invite-status-${invite.status}`}>
+                                                                {invite.status}
+                                                        </span>
+                                                        {invite.status === "pending" ? (
+                                                                <button
+                                                                        type="button"
+                                                                        className="secondary-button school-invite-revoke-btn"
+                                                                        onClick={() => void handleRevokeInvite(invite.invite_uuid)}>
+                                                                        Revoke
+                                                                </button>
+                                                        ) : null}
+                                                </li>
+                                        ))}
+                                </ul>
+                        )}
+                </div>
+        );
+}
+
 function downloadStudentCSV(params: StudentExportParams) {
         const { fullName, rows } = buildStudentExportRows(params);
 
@@ -1140,6 +1286,14 @@ export function StudentsScreen(props: Props) {
                         ) : null}
                         {schoolStudentRosterError ? (
                                 <p className="error-text">{schoolStudentRosterError}</p>
+                        ) : null}
+
+                        {activeSchoolId ? (
+                                <SchoolInvitePanel
+                                        key={activeSchoolId}
+                                        managedAppId={managedAppId}
+                                        schoolId={activeSchoolId}
+                                />
                         ) : null}
 
                         {activeSchoolId ? (
