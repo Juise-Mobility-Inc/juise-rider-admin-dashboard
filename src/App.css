@@ -5879,6 +5879,78 @@
         gap: 10px;
 }
 
+.school-invite-compose {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+}
+
+.school-invite-chip-input {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--input-border);
+        border-radius: 10px;
+        padding: 7px 9px;
+        background: rgba(255, 255, 255, 0.8);
+        min-height: 40px;
+}
+
+.school-invite-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border-radius: 999px;
+        padding: 3px 6px 3px 10px;
+        font-size: 0.82rem;
+        color: var(--text-strong);
+        background: rgba(17, 45, 78, 0.08);
+        white-space: nowrap;
+}
+
+.school-invite-chip-invalid {
+        color: #9a3b3b;
+        background: rgba(154, 59, 59, 0.1);
+}
+
+.school-invite-chip-remove {
+        border: none;
+        background: transparent;
+        color: inherit;
+        font-size: 1rem;
+        line-height: 1;
+        padding: 2px 4px;
+        cursor: pointer;
+        border-radius: 999px;
+}
+
+.school-invite-chip-remove:hover {
+        background: rgba(0, 0, 0, 0.08);
+}
+
+.school-invite-chip-text-input {
+        flex: 1;
+        min-width: 160px;
+        border: none;
+        outline: none;
+        background: transparent;
+        font: inherit;
+        font-size: 0.88rem;
+        color: var(--text-strong);
+        padding: 4px;
+}
+
+.school-invite-compose-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+}
+
+.school-invite-csv-input {
+        display: none;
+}
+
 .school-invite-email-input,
 .school-invite-campus-input {
         border: 1px solid var(--input-border);
