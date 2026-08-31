@@ -1,5 +1,6 @@
 import {
         useEffect,
+        useRef,
         useState,
         type ComponentType,
         type Dispatch,
@@ -872,19 +873,28 @@ function SchoolInvitePanel({
         const [inviteCampusId, setInviteCampusId] = useState("");
         const [inviteBusy, setInviteBusy] = useState(false);
         const [inviteError, setInviteError] = useState("");
+        // Guards against a slower, earlier fetch (e.g. the initial mount load)
+        // resolving after a later one (e.g. the reload after creating an
+        // invite) and overwriting it with stale data.
+        const loadSchoolInvitesRequestId = useRef(0);
 
         async function loadSchoolInvites() {
+                const requestId = ++loadSchoolInvitesRequestId.current;
                 setSchoolInvitesBusy(true);
                 setSchoolInvitesError("");
                 try {
                         const invites = await fetchSchoolInvites(managedAppId, schoolId);
+                        if (requestId !== loadSchoolInvitesRequestId.current) return;
                         setSchoolInvites(invites);
                 } catch (err) {
+                        if (requestId !== loadSchoolInvitesRequestId.current) return;
                         setSchoolInvitesError(
                                 err instanceof Error ? err.message : "Unable to load beta invites.",
                         );
                 } finally {
-                        setSchoolInvitesBusy(false);
+                        if (requestId === loadSchoolInvitesRequestId.current) {
+                                setSchoolInvitesBusy(false);
+                        }
                 }
         }
 
