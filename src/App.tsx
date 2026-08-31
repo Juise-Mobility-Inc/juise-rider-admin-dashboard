@@ -110,6 +110,7 @@ import { CampusDevicesScreen } from "./screens/dashboard/CampusDevicesScreen";
 import { AuditLogScreen } from "./screens/dashboard/AuditLogScreen";
 import { ChallengesScreen } from "./screens/dashboard/ChallengesScreen";
 import { DashboardScreen } from "./screens/dashboard/DashboardScreen";
+import { BetaInvitesScreen } from "./screens/dashboard/BetaInvitesScreen";
 import { StudentLeaderboardScreen } from "./screens/dashboard/StudentLeaderboardScreen";
 import { NotificationsScreen } from "./screens/dashboard/NotificationsScreen";
 import { PacksScreen } from "./screens/dashboard/PacksScreen";
@@ -149,6 +150,7 @@ type Section =
   | "challengeGames"
   | "students"
   | "studentLeaderboard"
+  | "betaInvites"
   | "notifications"
   | "vehicleRegistrations"
   | "campusDevices"
@@ -189,6 +191,11 @@ const dashboardSections: Array<{
     section: "studentLeaderboard",
     label: "Student Leaderboard",
     path: "/student-leaderboard",
+  },
+  {
+    section: "betaInvites",
+    label: "Beta Invites",
+    path: "/beta-invites",
   },
   { section: "notifications", label: "Notifications", path: "/notifications" },
   {
@@ -5915,6 +5922,14 @@ function App() {
             managedAppId={context.managedAppId}
           />
         );
+      case "betaInvites":
+        return (
+          <BetaInvitesScreen
+            key={activeSchoolId}
+            activeSchoolId={activeSchoolId}
+            managedAppId={context.managedAppId}
+          />
+        );
       case "notifications":
         return (
           <NotificationsScreen
@@ -6449,6 +6464,16 @@ function App() {
                     }
                   >
                     Student Leaderboard
+                  </NavLink>
+                  <NavLink
+                    to="/beta-invites"
+                    className={({ isActive }) =>
+                      isActive
+                        ? "nav-sub-item nav-sub-item-active"
+                        : "nav-sub-item"
+                    }
+                  >
+                    Beta Invites
                   </NavLink>
                 </div>
               )}
