@@ -329,6 +329,27 @@ export interface School {
   updated_at: number;
 }
 
+export interface SchoolEmailInvite {
+  invite_uuid: string;
+  app_id: string;
+  school_id: string;
+  campus_id?: string;
+  email: string;
+  inviter_user_uuid: string;
+  status: "pending" | "accepted" | "expired" | "revoked";
+  invited_at: number;
+  expires_at?: number;
+  responded_at?: number;
+  redeemed_user_uuid?: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface SchoolEmailInviteWriteInput {
+  email: string;
+  campus_id?: string;
+}
+
 export interface SchoolWriteInput {
   name: string;
   title: string;
@@ -1696,6 +1717,50 @@ export async function fetchSchoolJoinCode(
     },
   );
   return response.join_code;
+}
+
+export async function fetchSchoolInvites(
+  managedAppId: string,
+  schoolId: string,
+): Promise<SchoolEmailInvite[]> {
+  return request<SchoolEmailInvite[]>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/invites`,
+    {
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
+export async function createSchoolInvite(
+  managedAppId: string,
+  schoolId: string,
+  input: SchoolEmailInviteWriteInput,
+): Promise<SchoolEmailInvite> {
+  return request<SchoolEmailInvite>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/invites`,
+    {
+      method: "POST",
+      body: input,
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
+export async function revokeSchoolInvite(
+  managedAppId: string,
+  schoolId: string,
+  inviteUuid: string,
+): Promise<SchoolEmailInvite> {
+  return request<SchoolEmailInvite>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/invites/${encodeURIComponent(inviteUuid)}`,
+    {
+      method: "DELETE",
+      appIdHeader: managedAppId,
+    },
+  );
 }
 
 export async function fetchSchools(managedAppId: string): Promise<School[]> {

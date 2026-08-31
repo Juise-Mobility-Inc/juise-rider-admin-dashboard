@@ -5851,6 +5851,105 @@
         padding: 16px;
 }
 
+.school-invite-panel {
+        border: 1px solid var(--panel-border);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+}
+
+.school-invite-header {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+}
+
+.school-invite-header h3 {
+        margin: 0;
+        font-size: 0.95rem;
+}
+
+.school-invite-form {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+}
+
+.school-invite-email-input,
+.school-invite-campus-input {
+        border: 1px solid var(--input-border);
+        border-radius: 10px;
+        padding: 9px 12px;
+        font: inherit;
+        font-size: 0.88rem;
+        background: rgba(255, 255, 255, 0.8);
+        color: var(--text-strong);
+}
+
+.school-invite-email-input {
+        flex: 2;
+        min-width: 220px;
+}
+
+.school-invite-campus-input {
+        flex: 1;
+        min-width: 140px;
+}
+
+.school-invite-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+}
+
+.school-invite-list-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 0;
+        border-bottom: 1px solid var(--panel-border);
+}
+
+.school-invite-email {
+        flex: 1;
+        font-size: 0.88rem;
+        color: var(--text-strong);
+}
+
+.school-invite-status {
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        border-radius: 999px;
+        padding: 3px 9px;
+        color: var(--muted);
+        background: rgba(17, 45, 78, 0.08);
+}
+
+.school-invite-status-accepted {
+        color: #1f7a3f;
+        background: rgba(31, 122, 63, 0.12);
+}
+
+.school-invite-status-revoked,
+.school-invite-status-expired {
+        color: #9a3b3b;
+        background: rgba(154, 59, 59, 0.1);
+}
+
+.school-invite-revoke-btn {
+        padding: 4px 10px;
+        font-size: 0.78rem;
+}
+
 .students-list {
         flex: 1;
         overflow-y: auto;
