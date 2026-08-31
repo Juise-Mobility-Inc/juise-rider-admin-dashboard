@@ -1,9 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -210,9 +205,7 @@ export function BetaInvitesScreen({ activeSchoolId, managedAppId }: Props) {
       );
     }
     if (sentCount > 0) {
-      setInviteStatus(
-        `Sent ${sentCount} invite${sentCount === 1 ? "" : "s"}.`,
-      );
+      setInviteStatus(`Sent ${sentCount} invite${sentCount === 1 ? "" : "s"}.`);
     }
 
     setInviteBusy(false);
@@ -232,7 +225,7 @@ export function BetaInvitesScreen({ activeSchoolId, managedAppId }: Props) {
   }
 
   return (
-    <section className="dashboard-section">
+    <section className="dashboard-section beta-invites-section">
       <button
         type="button"
         className="secondary-button res-back-button"
@@ -241,17 +234,36 @@ export function BetaInvitesScreen({ activeSchoolId, managedAppId }: Props) {
         ← Back to dashboard
       </button>
 
-      <div className="section-header">
+      <div className="section-header beta-invites-header">
         <div>
           <p className="eyebrow">Campus information</p>
           <h2>Beta Invites</h2>
           <p className="muted-text">
             Invite students by email to join this school&apos;s beta. Type an
-            email and press space (or Enter) to add it, or upload a CSV with
-            an &quot;email&quot; column. They&apos;ll be added automatically
-            once they sign up or log in with that email address.
+            email and press space (or Enter) to add it, or upload a CSV with an
+            &quot;email&quot; column. They&apos;ll be added automatically once
+            they sign up or log in with that email address.
           </p>
         </div>
+        {activeSchoolId ? (
+          <div className="school-invite-upload-action">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="school-invite-csv-input"
+              onChange={(e) => void handleCsvFileChange(e)}
+            />
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={inviteBusy}
+            >
+              Upload CSV
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {!activeSchoolId ? (
@@ -261,62 +273,47 @@ export function BetaInvitesScreen({ activeSchoolId, managedAppId }: Props) {
       ) : (
         <div className="school-invite-panel">
           <div className="school-invite-compose">
-            <div className="school-invite-chip-input">
-              {pendingEmails.map((email) => (
-                <span
-                  key={email}
-                  className={
-                    EMAIL_PATTERN.test(email)
-                      ? "school-invite-chip"
-                      : "school-invite-chip school-invite-chip-invalid"
-                  }
-                >
-                  {email}
-                  <button
-                    type="button"
-                    className="school-invite-chip-remove"
-                    onClick={() => removeEmail(email)}
-                    aria-label={`Remove ${email}`}
-                    disabled={inviteBusy}
+            <div className="school-invite-entry-row">
+              <div className="school-invite-chip-input">
+                {pendingEmails.map((email) => (
+                  <span
+                    key={email}
+                    className={
+                      EMAIL_PATTERN.test(email)
+                        ? "school-invite-chip"
+                        : "school-invite-chip school-invite-chip-invalid"
+                    }
                   >
-                    ×
-                  </button>
-                </span>
-              ))}
-              <input
-                type="text"
-                className="school-invite-chip-text-input"
-                placeholder={
-                  pendingEmails.length === 0
-                    ? "student@example.com"
-                    : "Add another…"
-                }
-                value={emailInputValue}
-                onChange={(e) => setEmailInputValue(e.target.value)}
-                onKeyDown={handleEmailInputKeyDown}
-                onBlur={commitTypedEmail}
-                disabled={inviteBusy}
-              />
-            </div>
-            <div className="school-invite-compose-actions">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,text/csv"
-                className="school-invite-csv-input"
-                onChange={(e) => void handleCsvFileChange(e)}
-              />
+                    {email}
+                    <button
+                      type="button"
+                      className="school-invite-chip-remove"
+                      onClick={() => removeEmail(email)}
+                      aria-label={`Remove ${email}`}
+                      disabled={inviteBusy}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                <input
+                  type="text"
+                  className="school-invite-chip-text-input"
+                  placeholder={
+                    pendingEmails.length === 0
+                      ? "student@example.com"
+                      : "Add another…"
+                  }
+                  value={emailInputValue}
+                  onChange={(e) => setEmailInputValue(e.target.value)}
+                  onKeyDown={handleEmailInputKeyDown}
+                  onBlur={commitTypedEmail}
+                  disabled={inviteBusy}
+                />
+              </div>
               <button
                 type="button"
-                className="secondary-button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={inviteBusy}
-              >
-                Upload CSV
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
+                className="primary-button school-invite-send-button"
                 onClick={() => void handleSendInvites()}
                 disabled={
                   inviteBusy ||

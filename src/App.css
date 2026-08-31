@@ -5854,11 +5854,46 @@
 .school-invite-panel {
         border: 1px solid var(--panel-border);
         border-radius: 12px;
-        padding: 16px;
-        margin-bottom: 16px;
+        padding: 20px;
+        margin-bottom: 0;
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 16px;
+}
+
+.beta-invites-section {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        padding-bottom: 24px;
+}
+
+.beta-invites-section .res-back-button {
+        margin: 20px 0 0;
+}
+
+.beta-invites-section .section-header > div {
+        display: grid;
+        gap: 6px;
+}
+
+.beta-invites-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 24px;
+}
+
+.beta-invites-header > :first-child {
+        flex: 1;
+        min-width: 0;
+}
+
+.beta-invites-section .section-header h2,
+.beta-invites-section .section-header p,
+.school-invite-panel > .muted-text,
+.school-invite-panel > .error-text {
+        margin: 0;
 }
 
 .school-invite-header {
@@ -5882,11 +5917,24 @@
 .school-invite-compose {
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 12px;
+}
+
+.school-invite-upload-action {
+        display: flex;
+        flex: 0 0 auto;
+        justify-content: flex-end;
+}
+
+.school-invite-entry-row {
+        display: flex;
+        align-items: stretch;
+        gap: 12px;
 }
 
 .school-invite-chip-input {
         display: flex;
+        flex: 1;
         flex-wrap: wrap;
         align-items: center;
         gap: 6px;
@@ -5941,10 +5989,10 @@
         padding: 4px;
 }
 
-.school-invite-compose-actions {
-        display: flex;
-        align-items: center;
-        gap: 10px;
+.school-invite-send-button {
+        flex: 0 0 auto;
+        padding-inline: 22px;
+        white-space: nowrap;
 }
 
 .school-invite-csv-input {
@@ -5985,8 +6033,40 @@
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 6px 0;
+        padding: 10px 0;
         border-bottom: 1px solid var(--panel-border);
+}
+
+.school-invite-list-item:first-child {
+        padding-top: 4px;
+}
+
+@media (max-width: 640px) {
+        .beta-invites-section {
+                gap: 16px;
+        }
+
+        .school-invite-panel {
+                padding: 16px;
+        }
+
+        .beta-invites-header {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 12px;
+        }
+
+        .school-invite-upload-action {
+                align-self: flex-end;
+        }
+
+        .school-invite-entry-row {
+                flex-direction: column;
+        }
+
+        .school-invite-send-button {
+                width: 100%;
+        }
 }
 
 .school-invite-email {
