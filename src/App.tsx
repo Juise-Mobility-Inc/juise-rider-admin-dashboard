@@ -1540,6 +1540,10 @@ function App() {
   >([]);
   const [schoolMembershipsLoading, setSchoolMembershipsLoading] =
     useState(false);
+  const [schoolMembershipsError, setSchoolMembershipsError] = useState<
+    string | null
+  >(null);
+  const [membershipsReloadKey, setMembershipsReloadKey] = useState(0);
   const [selectedSchoolId, setSelectedSchoolIdState] = useState<string>(() => {
     try {
       return localStorage.getItem("selectedSchoolId") ?? "";
@@ -1793,33 +1797,43 @@ function App() {
   useEffect(() => {
     if (!session) {
       setSchoolMemberships([]);
+      setSchoolMembershipsError(null);
       return;
     }
     let cancelled = false;
     setSchoolMembershipsLoading(true);
+    setSchoolMembershipsError(null);
     fetchMySchoolMemberships(session.authAppId)
       .then((memberships) => {
-        if (!cancelled) {
-          setSchoolMemberships(memberships);
-          const normalizedSelected = selectedSchoolId.trim().toLowerCase();
-          if (
-            normalizedSelected &&
-            !memberships.some(
-              (m) =>
-                m.active &&
-                m.school_id.trim().toLowerCase() === normalizedSelected,
-            )
-          ) {
-            // Previously-selected school is no longer an active membership
-            // (revoked, inactive, or leftover from a different account) —
-            // clear it so the picker shows instead of silently scoping to a
-            // school every request will 403 on.
-            setSelectedSchoolId("");
-          }
+        if (cancelled) {
+          return;
+        }
+        setSchoolMemberships(memberships);
+        setSchoolMembershipsError(null);
+        const normalizedSelected = selectedSchoolId.trim().toLowerCase();
+        if (
+          normalizedSelected &&
+          !memberships.some(
+            (m) =>
+              m.active &&
+              m.school_id.trim().toLowerCase() === normalizedSelected,
+          )
+        ) {
+          // Previously-selected school is no longer an active membership
+          // (revoked, inactive, or leftover from a different account) —
+          // clear it so the picker shows instead of silently scoping to a
+          // school every request will 403 on.
+          setSelectedSchoolId("");
         }
       })
-      .catch(() => {
-        if (!cancelled) setSchoolMemberships([]);
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        // Transient lookup failure — keep whatever memberships and persisted
+        // selection we already had, and surface a retry. Clearing here would
+        // strand the user in an access-less picker with no way back.
+        setSchoolMembershipsError(getErrorMessage(error));
       })
       .finally(() => {
         if (!cancelled) setSchoolMembershipsLoading(false);
@@ -1828,7 +1842,7 @@ function App() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.claims.user_uuid]);
+  }, [session?.claims.user_uuid, membershipsReloadKey]);
 
   useEffect(() => {
     // Public endpoint — fetched once on mount so both the pre-login
@@ -5550,6 +5564,19 @@ function App() {
               </div>
               {schoolMembershipsLoading ? (
                 <p className="login-initializing-text">Loading your schools…</p>
+              ) : schoolMembershipsError && activeMemberships.length === 0 ? (
+                <div className="school-selection-load-error">
+                  <p className="mfa-help">
+                    We couldn&rsquo;t load your schools. {schoolMembershipsError}
+                  </p>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setMembershipsReloadKey((key) => key + 1)}
+                  >
+                    Try again
+                  </button>
+                </div>
               ) : activeMemberships.length > 0 ? (
                 <div className="school-option-list" role="list">
                   {activeMemberships.map((membership) => {
@@ -5684,7 +5711,11 @@ function App() {
                     {pickerSchools
                       .filter(
                         (school) =>
-                          !schoolMemberships.some(
+                          // Exclude only schools you're actively in — a school
+                          // with an inactive membership should still appear
+                          // here so it can be rejoined without the manual-ID
+                          // path.
+                          !activeMemberships.some(
                             (m) => m.school_id === school.school_id,
                           ),
                       )
