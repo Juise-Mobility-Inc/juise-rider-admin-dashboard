@@ -1768,7 +1768,27 @@ function App() {
   const [reservationStudentBusy, setReservationStudentBusy] = useState(false);
   const [reservationStudentError, setReservationStudentError] = useState("");
   const [studentRosterSearch, setStudentRosterSearch] = useState("");
-  const activeSchoolId = session ? selectedSchoolId : "";
+
+  const activeMemberships = useMemo(
+    () => schoolMemberships.filter((membership) => membership.active),
+    [schoolMemberships],
+  );
+
+  // Only scope requests to a school once it's confirmed as a current, active
+  // membership for this account. A stale localStorage value, or a revoked /
+  // inactive membership, would otherwise make every per-school fetch (zones,
+  // POIs, violations, roster, ...) 403 — repeatedly, because the effects
+  // re-run. While memberships are still loading we also hold at "".
+  const activeSchoolId = useMemo(() => {
+    if (!session || !selectedSchoolId || schoolMembershipsLoading) {
+      return "";
+    }
+    const target = selectedSchoolId.trim().toLowerCase();
+    const isActiveMember = activeMemberships.some(
+      (membership) => membership.school_id.trim().toLowerCase() === target,
+    );
+    return isActiveMember ? selectedSchoolId : "";
+  }, [session, selectedSchoolId, schoolMembershipsLoading, activeMemberships]);
 
   useEffect(() => {
     if (!session) {
@@ -1785,12 +1805,15 @@ function App() {
           if (
             normalizedSelected &&
             !memberships.some(
-              (m) => m.school_id.trim().toLowerCase() === normalizedSelected,
+              (m) =>
+                m.active &&
+                m.school_id.trim().toLowerCase() === normalizedSelected,
             )
           ) {
-            // Previously-selected school is no longer a valid membership
-            // (revoked, or leftover from a different account) — clear it
-            // so the picker shows instead of silently scoping to nothing.
+            // Previously-selected school is no longer an active membership
+            // (revoked, inactive, or leftover from a different account) —
+            // clear it so the picker shows instead of silently scoping to a
+            // school every request will 403 on.
             setSelectedSchoolId("");
           }
         }
@@ -5522,14 +5545,14 @@ function App() {
                   <h3>Choose a school to manage</h3>
                 </div>
                 <span className="school-selection-count">
-                  {schoolMemberships.length}
+                  {activeMemberships.length}
                 </span>
               </div>
               {schoolMembershipsLoading ? (
                 <p className="login-initializing-text">Loading your schools…</p>
-              ) : schoolMemberships.length > 0 ? (
+              ) : activeMemberships.length > 0 ? (
                 <div className="school-option-list" role="list">
-                  {schoolMemberships.map((membership) => {
+                  {activeMemberships.map((membership) => {
                     const school = findPickerSchool(membership.school_id);
                     return (
                       <div

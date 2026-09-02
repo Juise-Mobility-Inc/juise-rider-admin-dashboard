@@ -35,6 +35,7 @@ import {
         type SchoolRegisteredDeviceBeaconLocation,
         type PackSpotReservation,
 } from "../../lib/api";
+import { BEACONS_ENABLED } from "../../lib/flags";
 
 function getPackPhotoUrl(pack: Pick<Pack, "photo"> | null | undefined): string {
         return pack?.photo?.path_do_spaces?.trim() ?? "";
@@ -236,6 +237,11 @@ export function MapOverviewScreen({
         }, [activeSchoolId, managedAppId]);
 
         useEffect(() => {
+                // Beacons are temporarily disabled (src/lib/flags.ts): skip the
+                // initial fetch and the 15s poller entirely.
+                if (!BEACONS_ENABLED) {
+                        return;
+                }
                 void refreshBeaconLocations();
                 if (!activeSchoolId || !managedAppId) {
                         return;
@@ -711,15 +717,19 @@ export function MapOverviewScreen({
                                                         <span className="mo-layer-count">{l.count}</span>
                                                 </button>
                                         ))}
-                                        <div className="mo-legend-divider" />
-                                        <button
-                                                className="mo-legend-refresh"
-                                                type="button"
-                                                title="Refresh beacon locations"
-                                                onClick={() => void refreshBeaconLocations()}
-                                                disabled={beaconLoading}>
-                                                {beaconLoading ? "…" : "⟳"} Refresh beacons
-                                        </button>
+                                        {BEACONS_ENABLED ? (
+                                                <>
+                                                        <div className="mo-legend-divider" />
+                                                        <button
+                                                                className="mo-legend-refresh"
+                                                                type="button"
+                                                                title="Refresh beacon locations"
+                                                                onClick={() => void refreshBeaconLocations()}
+                                                                disabled={beaconLoading}>
+                                                                {beaconLoading ? "…" : "⟳"} Refresh beacons
+                                                        </button>
+                                                </>
+                                        ) : null}
                                 </div>
                         </div>
 
