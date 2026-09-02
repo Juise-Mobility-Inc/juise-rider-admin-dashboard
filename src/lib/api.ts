@@ -1341,9 +1341,18 @@ async function request<T>(
     // identity): the retry either succeeds or throws normally and stops — no
     // refresh loop. Reads take this path too; the earlier "GETs never
     // recover" rule left genuinely-new access stuck until a full reload.
-    forbiddenRecoveredSessions.add(currentSession);
+    const sessionBeingRecovered = currentSession;
+    forbiddenRecoveredSessions.add(sessionBeingRecovered);
     lastForbiddenRecoveryAt = Date.now();
-    await refreshSession();
+    try {
+      await refreshSession();
+    } catch (refreshError) {
+      // The refresh itself failed transiently (network / parse / token
+      // inspection). Release the guard for this session so a later 403 can
+      // try again, instead of locking recovery out until a full reload.
+      forbiddenRecoveredSessions.delete(sessionBeingRecovered);
+      throw refreshError;
+    }
     if (currentSession != null) {
       forbiddenRecoveredSessions.add(currentSession);
     }
