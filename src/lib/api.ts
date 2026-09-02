@@ -2754,6 +2754,60 @@ export async function fetchStudentRouteHistory(
   return normalizeStudentRouteHistorySessions(sessions);
 }
 
+// Every student's route history for a school in one paginated sweep, for the
+// dashboard's aggregate views. The server strips the GPS trail from each row
+// (the dashboard only aggregates summary fields / visited POIs / penalty
+// events), so this stays small even for large schools.
+export async function fetchSchoolRouteHistory(
+  managedAppId: string,
+  schoolId: string,
+  options: {
+    from?: number;
+    to?: number;
+    pageSize?: number;
+    maxPages?: number;
+    onPage?: (loaded: number) => void;
+  } = {},
+): Promise<StudentRouteHistorySession[]> {
+  const pageSize = Math.max(1, Math.min(1000, options.pageSize ?? 500));
+  const maxPages = Math.max(1, options.maxPages ?? 20);
+  const collected: StudentRouteHistorySession[] = [];
+  let offset = 0;
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const search = new URLSearchParams({
+      limit: String(pageSize),
+      offset: String(offset),
+    });
+    if (typeof options.from === "number") {
+      search.set("from", String(Math.trunc(options.from)));
+    }
+    if (typeof options.to === "number") {
+      search.set("to", String(Math.trunc(options.to)));
+    }
+
+    const payload = await request<{
+      items?: StudentRouteHistorySession[];
+      has_more?: boolean;
+    }>(
+      "nebula",
+      `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/route-history?${search.toString()}`,
+      { appIdHeader: managedAppId },
+    );
+
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    collected.push(...items);
+    options.onPage?.(collected.length);
+
+    if (!payload?.has_more || items.length === 0) {
+      break;
+    }
+    offset += items.length;
+  }
+
+  return normalizeStudentRouteHistorySessions(collected);
+}
+
 export async function fetchRouteHistoryPenaltyReviews(
   managedAppId: string,
   schoolId: string,
