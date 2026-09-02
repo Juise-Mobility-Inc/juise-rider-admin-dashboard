@@ -1928,6 +1928,11 @@ function App() {
       setJoinSchoolCode("");
       setJoinNewSchoolName("");
       setSelectedSchoolId(membership.school_id);
+      // A membership lookup kicked off on mount may still be in flight; its
+      // stale (pre-join) list would otherwise replace the merge above and
+      // leave activeSchoolId unable to confirm the just-joined school.
+      // Bumping this cancels that in-flight run and refetches authoritatively.
+      setMembershipsReloadKey((key) => key + 1);
       // The URL may still be pointing at whatever section a previous
       // session (or a previous account, after signing out) left it on —
       // land somewhere that's guaranteed to make sense for a school this
