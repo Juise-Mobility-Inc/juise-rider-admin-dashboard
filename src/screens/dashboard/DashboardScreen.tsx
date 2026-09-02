@@ -1598,6 +1598,23 @@ export function DashboardScreen({
                                         countOpenParkingIncidentReports(parkingIncidentReports),
                                 );
 
+                                // Route history and violations are the core of every
+                                // dashboard total / leaderboard. If either failed (a page
+                                // request, or the pagination runaway guard), fail the whole
+                                // load rather than caching a dataset that silently
+                                // under-counts. Secondary data (POIs, reservations, incident
+                                // reports) stays best-effort.
+                                if (!routeHistoryResult.ok) {
+                                        throw new Error(
+                                                `Couldn't load ride history for this school. ${routeHistoryResult.error}`,
+                                        );
+                                }
+                                if (!parkingViolationsResult.ok) {
+                                        throw new Error(
+                                                `Couldn't load parking violations for this school. ${parkingViolationsResult.error}`,
+                                        );
+                                }
+
                                 const historyByUser = groupByUserUUID(
                                         routeHistoryResult.sessions,
                                         (session) => session.user_uuid,
@@ -1606,16 +1623,6 @@ export function DashboardScreen({
                                         parkingViolationsResult.violations,
                                         (violation) => violation.user_uuid,
                                 );
-                                const bundleError = [
-                                        routeHistoryResult.ok
-                                                ? ""
-                                                : `Route history: ${routeHistoryResult.error}`,
-                                        parkingViolationsResult.ok
-                                                ? ""
-                                                : `Penalty reports: ${parkingViolationsResult.error}`,
-                                ]
-                                        .filter(Boolean)
-                                        .join("; ");
 
                                 const students: StudentActivityBundle[] = roster.map((entry) => {
                                         const studentUserUUID = resolveStudentUserUUID(entry);
@@ -1624,7 +1631,7 @@ export function DashboardScreen({
                                                 routeHistory: historyByUser.get(studentUserUUID) ?? [],
                                                 parkingViolations:
                                                         violationsByUser.get(studentUserUUID) ?? [],
-                                                error: bundleError,
+                                                error: "",
                                         } satisfies StudentActivityBundle;
                                 });
 
