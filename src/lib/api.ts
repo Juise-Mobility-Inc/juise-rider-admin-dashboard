@@ -1326,23 +1326,21 @@ async function request<T>(
     response.status === 403 &&
     authRequired &&
     retryOnUnauthorized &&
-    method !== "GET" &&
     currentSession != null &&
     !forbiddenRecoveredSessions.has(currentSession)
   ) {
-    // A 403 on a mutation can mean the access token is still valid but was
-    // minted before a permission-model change (e.g. a new claim like
-    // school_admin) — a refresh re-mints it from current account state.
+    // A 403 can mean the access token is still valid but was minted before a
+    // permission-model change (e.g. an admin grants a school_admin membership
+    // out of band while the dashboard is open) — a refresh re-mints it from
+    // current account state so the newly-accessible data loads.
     //
-    // But refreshSession() republishes the session through the observer,
-    // which reruns every effect that depends on `session` — including
-    // whatever fired this request. So:
-    //   - GETs never take this path: a GET that 403s is a genuine "you
-    //     can't see this", and the read is almost always effect-driven, so
-    //     refreshing just re-fires it → a storm. Let it throw.
-    //   - Even for a mutation, try the re-mint at most once per session, so
-    //     a genuinely forbidden action can't refresh-loop while the user
-    //     sits on the error.
+    // refreshSession() republishes the session through the observer, which
+    // reruns every effect that depends on `session` — including whatever
+    // fired this request. If the 403 is a genuine denial, that effect refires
+    // and 403s again. So recover AT MOST ONCE per session (tracked by session
+    // identity): the retry either succeeds or throws normally and stops — no
+    // refresh loop. Reads take this path too; the earlier "GETs never
+    // recover" rule left genuinely-new access stuck until a full reload.
     forbiddenRecoveredSessions.add(currentSession);
     lastForbiddenRecoveryAt = Date.now();
     await refreshSession();
