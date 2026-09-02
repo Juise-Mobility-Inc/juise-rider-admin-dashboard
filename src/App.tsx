@@ -1543,6 +1543,7 @@ function App() {
   const [schoolMembershipsError, setSchoolMembershipsError] = useState<
     string | null
   >(null);
+  const [membershipsResolved, setMembershipsResolved] = useState(false);
   const [membershipsReloadKey, setMembershipsReloadKey] = useState(0);
   const [selectedSchoolId, setSelectedSchoolIdState] = useState<string>(() => {
     try {
@@ -1798,6 +1799,7 @@ function App() {
     if (!session) {
       setSchoolMemberships([]);
       setSchoolMembershipsError(null);
+      setMembershipsResolved(false);
       return;
     }
     let cancelled = false;
@@ -1836,7 +1838,10 @@ function App() {
         setSchoolMembershipsError(getErrorMessage(error));
       })
       .finally(() => {
-        if (!cancelled) setSchoolMembershipsLoading(false);
+        if (!cancelled) {
+          setSchoolMembershipsLoading(false);
+          setMembershipsResolved(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -5533,7 +5538,11 @@ function App() {
     );
   }
 
-  if (!selectedSchoolId) {
+  // Show the picker when there's no selection, or when a persisted selection
+  // could not be confirmed as an active membership once the lookup settled
+  // (revoked, or the lookup failed). Otherwise the retry / error UI below is
+  // unreachable and the user lands in an unscoped dashboard.
+  if (!selectedSchoolId || (membershipsResolved && !activeSchoolId)) {
     return (
       <div className="login-shell">
         <div className="login-center-card school-selection-card">
