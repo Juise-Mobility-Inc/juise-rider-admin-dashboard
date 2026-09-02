@@ -1324,19 +1324,27 @@ async function request<T>(
     retryOnUnauthorized &&
     !forbiddenRecoveryIsOnCooldown()
   ) {
-    // A 403 here can mean the access token is still technically valid but
-    // was minted before a permission model change (e.g. a new claim like
-    // school_admin) — refreshing re-mints the token from current account
-    // state, which picks up the change.
+    // A 403 can mean the access token is still valid but was minted before a
+    // permission-model change (e.g. an admin grants a school_admin membership
+    // out of band while the dashboard is open) — a refresh re-mints it from
+    // current account state so the newly-accessible data loads. This applies
+    // to reads too, not just mutations.
     //
-    // But refreshSession() publishes the new session through the observer,
+    // But refreshSession() republishes the session through the observer,
     // which reruns every effect that depends on `session` — including
-    // whatever effect fired this very request. If the 403 is genuine (the
-    // caller actually lacks permission), that effect refires, gets the
-    // same 403, and would retry-refresh again forever. The cooldown bounds
-    // the rate of recovery attempts globally, so this can't loop.
+    // whatever fired this request. If the 403 is a genuine denial that effect
+    // refires and 403s again, so the recovery is rate-limited: at most one
+    // 403-triggered refresh per `forbiddenRecoveryCooldownMs`. That bounds
+    // the loop while still letting a later, real permission change recover
+    // once the window passes. A failed refresh clears the cooldown so it can
+    // be retried sooner than the full window.
     lastForbiddenRecoveryAt = Date.now();
-    await refreshSession();
+    try {
+      await refreshSession();
+    } catch (refreshError) {
+      lastForbiddenRecoveryAt = 0;
+      throw refreshError;
+    }
     return request<T>(service, path, {
       ...options,
       retryOnUnauthorized: false,
