@@ -73,6 +73,43 @@
         width: 100%;
 }
 
+/* Widen only the authenticator-enrollment step so the QR code and the
+   setup directions sit side by side. Every other row in the form stays at
+   a comfortable reading width and is centered in the wider card. */
+.login-center-card--mfa-enroll {
+        max-width: 640px;
+}
+
+.login-center-card--mfa-enroll .mfa-form {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+}
+
+.login-center-card--mfa-enroll .mfa-form
+        > *:not(.mfa-username-hint):not(.mfa-enroll-layout) {
+        width: 100%;
+        max-width: 460px;
+}
+
+.login-center-card--mfa-enroll .login-form-header {
+        text-align: center;
+        margin-bottom: 0;
+}
+
+.login-center-card--mfa-enroll .mfa-help {
+        margin-left: auto;
+        margin-right: auto;
+        max-width: 400px;
+}
+
+@media (max-width: 600px) {
+        .login-center-card--mfa-enroll {
+                max-width: 420px;
+        }
+}
+
 .school-selection-card {
         width: min(980px, 100%);
         max-width: 980px;
@@ -451,6 +488,108 @@
 .mfa-chip-button:hover {
         border-color: #27cc5e;
         background: rgba(39, 204, 94, 0.08);
+}
+
+.mfa-username-hint {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+        border: 0;
+}
+
+/* QR + directions band on the enrollment step */
+.mfa-enroll-layout {
+        width: 100%;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 26px;
+        align-items: center;
+        padding: 20px;
+        border: 1px solid rgba(3, 32, 13, 0.12);
+        border-radius: 16px;
+        background: #fff;
+}
+
+.mfa-enroll-qr {
+        display: flex;
+}
+
+.mfa-enroll-layout .mfa-qr-code {
+        width: 200px;
+}
+
+.mfa-qr-code--pending {
+        width: 200px;
+        height: 200px;
+}
+
+.mfa-methods {
+        display: grid;
+        gap: 14px;
+        align-content: center;
+}
+
+.mfa-method {
+        border: 0;
+        padding: 0;
+        background: none;
+}
+
+.mfa-method-title {
+        margin: 0 0 3px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: #14532d;
+}
+
+.mfa-method ol {
+        margin: 0;
+        padding-left: 1.1rem;
+        display: grid;
+        gap: 3px;
+        color: #5b625e;
+        font-size: 0.82rem;
+        line-height: 1.45;
+}
+
+.mfa-enroll-hint {
+        width: 100%;
+        margin: 0;
+        text-align: center;
+        color: #5b625e;
+        font-size: 0.84rem;
+        line-height: 1.5;
+}
+
+@media (max-width: 600px) {
+        .mfa-enroll-layout {
+                grid-template-columns: minmax(0, 1fr);
+                justify-items: center;
+                text-align: left;
+        }
+
+        .mfa-enroll-layout .mfa-methods {
+                width: 100%;
+        }
+}
+
+.mfa-panel-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        justify-content: flex-end;
+}
+
+.mfa-panel-hint {
+        margin: 2px 0 0;
+        color: #5b625e;
+        font-size: 0.78rem;
+        line-height: 1.45;
 }
 
 .mfa-recovery-code-list {

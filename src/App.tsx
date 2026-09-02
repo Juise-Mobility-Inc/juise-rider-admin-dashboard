@@ -1601,9 +1601,14 @@ function App() {
   );
   const [mfaQrCode, setMfaQrCode] = useState("");
   const [mfaCode, setMfaCode] = useState("");
-  const [mfaCopied, setMfaCopied] = useState<"" | "secret" | "codes">("");
+  const [mfaCopied, setMfaCopied] = useState<"" | "secret" | "codes" | "uri">(
+    "",
+  );
 
-  const copyMfaText = async (text: string, kind: "secret" | "codes") => {
+  const copyMfaText = async (
+    text: string,
+    kind: "secret" | "codes" | "uri",
+  ) => {
     try {
       await navigator.clipboard.writeText(text);
       setMfaCopied(kind);
@@ -3895,8 +3900,12 @@ function App() {
       setMfaEnrollment(enrollment);
       setMfaQrCode(
         await QRCode.toDataURL(enrollment.otpauth_uri, {
-          width: 240,
-          margin: 1,
+          // Rendered on a desktop monitor and scanned by a phone camera:
+          // a wider quiet zone and higher error correction let the phone
+          // lock on faster despite glare / off-angle capture.
+          width: 232,
+          margin: 3,
+          errorCorrectionLevel: "Q",
         }),
       );
     }
@@ -4986,7 +4995,13 @@ function App() {
     return (
       <>
         <div className="login-shell">
-          <div className="login-center-card">
+          <div
+            className={
+              mfaChallenge?.enrollment_required && mfaEnrollment
+                ? "login-center-card login-center-card--mfa-enroll"
+                : "login-center-card"
+            }
+          >
             <img
               src="/Juise_Icon_Bolt.png"
               className="login-brand-icon"
@@ -4996,17 +5011,32 @@ function App() {
 
             {mfaChallenge ? (
               <form className="login-form mfa-form" onSubmit={handleMFA}>
+                {/* Present-but-hidden username so the browser / password
+                    manager keeps the sign-in it just saw associated with
+                    this step: it can finish offering to save the password,
+                    and for returning users it can attach or surface the
+                    verification code against the right login. */}
+                <input
+                  className="mfa-username-hint"
+                  type="text"
+                  name="username"
+                  autoComplete="username"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  readOnly
+                  value={identifier.trim() || signupForm.email.trim()}
+                />
                 <div className="login-form-header">
                   <p className="eyebrow">Two-step verification</p>
                   <h2>
                     {mfaChallenge.enrollment_required
-                      ? "Set up Google Authenticator"
+                      ? "Set up two-step verification"
                       : "Enter your security code"}
                   </h2>
                   <p className="mfa-help">
                     {mfaChallenge.enrollment_required
-                      ? "Scan this QR code with Google Authenticator, then enter the current 6-digit code."
-                      : "Enter the 6-digit code from Google Authenticator or one of your recovery codes."}
+                      ? "Add this account to an authenticator app or to your iPhone, then enter the 6-digit code it shows."
+                      : "Enter the 6-digit code from your authenticator app or one of your recovery codes."}
                   </p>
                 </div>
                 {mfaChallenge.enrollment_required && !mfaEnrollment ? (
@@ -5019,29 +5049,99 @@ function App() {
                     Retry authenticator setup
                   </button>
                 ) : null}
-                {mfaQrCode ? (
-                  <img
-                    className="mfa-qr-code"
-                    src={mfaQrCode}
-                    alt="Google Authenticator setup QR code"
-                  />
+                {mfaChallenge.enrollment_required && mfaEnrollment ? (
+                  <>
+                    <div className="mfa-enroll-layout">
+                      <div className="mfa-enroll-qr">
+                        {mfaQrCode ? (
+                          <img
+                            className="mfa-qr-code"
+                            src={mfaQrCode}
+                            alt="Two-step verification setup QR code"
+                          />
+                        ) : (
+                          <div
+                            className="mfa-qr-code mfa-qr-code--pending"
+                            aria-hidden="true"
+                          />
+                        )}
+                      </div>
+                      <div className="mfa-methods">
+                        <div className="mfa-method">
+                          <p className="mfa-method-title">
+                            Use an authenticator app
+                          </p>
+                          <ol>
+                            <li>
+                              Install <strong>Google Authenticator</strong>,
+                              Microsoft Authenticator, Authy, or 1Password.
+                            </li>
+                            <li>
+                              Tap <strong>+</strong> &rarr; &ldquo;Scan a QR
+                              code&rdquo; and point it at the code.
+                            </li>
+                          </ol>
+                        </div>
+                        <div className="mfa-method">
+                          <p className="mfa-method-title">
+                            Or scan with your iPhone
+                          </p>
+                          <ol>
+                            <li>
+                              Open the <strong>Camera</strong> app and point it
+                              at the code.
+                            </li>
+                            <li>
+                              Tap the pop-up &mdash; choose your saved Juise
+                              login, or tap <strong>+</strong> to add one with
+                              your username and password.
+                            </li>
+                          </ol>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="mfa-enroll-hint">
+                      Enter the 6-digit code from your app below, and save your
+                      recovery codes before you finish.
+                    </p>
+                  </>
                 ) : null}
                 {mfaEnrollment ? (
                   <>
                     <div className="mfa-secret">
                       <div className="mfa-panel-header">
-                        <span>Manual setup key</span>
-                        <button
-                          type="button"
-                          className="mfa-chip-button"
-                          onClick={() =>
-                            void copyMfaText(mfaEnrollment.secret, "secret")
-                          }
-                        >
-                          {mfaCopied === "secret" ? "Copied!" : "Copy"}
-                        </button>
+                        <span>Can&rsquo;t scan? Add it manually</span>
+                        <div className="mfa-panel-actions">
+                          <button
+                            type="button"
+                            className="mfa-chip-button"
+                            onClick={() =>
+                              void copyMfaText(mfaEnrollment.secret, "secret")
+                            }
+                          >
+                            {mfaCopied === "secret" ? "Copied!" : "Copy key"}
+                          </button>
+                          <button
+                            type="button"
+                            className="mfa-chip-button"
+                            onClick={() =>
+                              void copyMfaText(
+                                mfaEnrollment.otpauth_uri,
+                                "uri",
+                              )
+                            }
+                          >
+                            {mfaCopied === "uri" ? "Copied!" : "Copy setup link"}
+                          </button>
+                        </div>
                       </div>
                       <code>{mfaEnrollment.secret}</code>
+                      <p className="mfa-panel-hint">
+                        Use this key if your app asks for one instead of
+                        scanning. On iPhone: Passwords app &rarr;{" "}
+                        <strong>+</strong> &rarr; New Password &rarr; Set Up
+                        Verification Code &rarr; Enter Setup Key.
+                      </p>
                     </div>
                     <div className="mfa-recovery-codes">
                       <div className="mfa-panel-header">
@@ -5049,7 +5149,7 @@ function App() {
                       </div>
                       <p>
                         They will not be shown again. Each code can be used once
-                        if you lose access to Google Authenticator.
+                        if you lose access to your authenticator app.
                       </p>
                       <ul className="mfa-recovery-code-list">
                         {mfaEnrollment.recovery_codes.map((code) => (
@@ -5089,11 +5189,25 @@ function App() {
                     <span>Authenticator or recovery code</span>
                     <input
                       autoComplete="one-time-code"
+                      inputMode={
+                        mfaChallenge.enrollment_required ? "numeric" : "text"
+                      }
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      maxLength={
+                        mfaChallenge.enrollment_required ? 6 : undefined
+                      }
                       value={mfaCode}
                       onChange={(event) => {
-                        const value = event.target.value;
+                        // Authenticator apps and paste often include a
+                        // space ("123 456"); during enrollment the code is
+                        // always 6 digits, so strip anything else.
+                        const value = mfaChallenge.enrollment_required
+                          ? event.target.value.replace(/\D/g, "").slice(0, 6)
+                          : event.target.value.replace(/\s/g, "");
                         setMfaCode(value);
-                        if (/^\d{6}$/.test(value.trim()) && !authBusy) {
+                        if (/^\d{6}$/.test(value) && !authBusy) {
                           const form = event.target.form;
                           window.setTimeout(() => form?.requestSubmit(), 0);
                         }
@@ -5193,6 +5307,8 @@ function App() {
                       <label className="field">
                         <span>First name</span>
                         <input
+                          name="given-name"
+                          autoComplete="given-name"
                           value={signupForm.first}
                           onChange={(event) =>
                             setSignupForm((current) => ({
@@ -5206,6 +5322,8 @@ function App() {
                       <label className="field">
                         <span>Last name</span>
                         <input
+                          name="family-name"
+                          autoComplete="family-name"
                           value={signupForm.last}
                           onChange={(event) =>
                             setSignupForm((current) => ({
@@ -5220,6 +5338,13 @@ function App() {
                     <label className="field">
                       <span>Username</span>
                       <input
+                        id="signup-username"
+                        name="username"
+                        type="text"
+                        autoComplete="username"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
                         value={signupForm.username}
                         onChange={(event) =>
                           setSignupForm((current) => ({
@@ -5234,7 +5359,12 @@ function App() {
                     <label className="field">
                       <span>Email</span>
                       <input
+                        id="signup-email"
+                        name="email"
                         type="email"
+                        autoComplete="email"
+                        autoCapitalize="off"
+                        spellCheck={false}
                         value={signupForm.email}
                         onChange={(event) =>
                           setSignupForm((current) => ({
@@ -5249,6 +5379,10 @@ function App() {
                     <label className="field">
                       <span>Phone (optional)</span>
                       <input
+                        name="tel"
+                        type="tel"
+                        autoComplete="tel"
+                        inputMode="tel"
                         value={signupForm.phone}
                         onChange={(event) =>
                           setSignupForm((current) => ({
@@ -5262,7 +5396,10 @@ function App() {
                     <label className="field">
                       <span>Password</span>
                       <input
+                        id="signup-password"
+                        name="new-password"
                         type="password"
+                        autoComplete="new-password"
                         value={signupForm.password}
                         onChange={(event) =>
                           setSignupForm((current) => ({
@@ -5307,7 +5444,13 @@ function App() {
                     <label className="field">
                       <span>Username, email, or phone</span>
                       <input
+                        id="admin-identifier"
+                        name="username"
+                        type="text"
                         autoComplete="username"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
                         value={identifier}
                         onChange={(event) =>
                           handleLoginIdentifierChange(event.target.value)
@@ -5319,6 +5462,8 @@ function App() {
                     <label className="field">
                       <span>Password</span>
                       <input
+                        id="admin-password"
+                        name="password"
                         type="password"
                         autoComplete="current-password"
                         value={password}
