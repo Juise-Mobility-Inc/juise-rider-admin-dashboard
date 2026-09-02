@@ -1109,10 +1109,6 @@ const forbiddenRecoveryCooldownMs = 5_000;
 function forbiddenRecoveryIsOnCooldown(): boolean {
   return Date.now() - lastForbiddenRecoveryAt < forbiddenRecoveryCooldownMs;
 }
-// Sessions we've already tried a 403 claim-refresh for. A WeakSet so it
-// resets itself when the session object is replaced (a real re-login or an
-// expiry refresh) — the only time another attempt is worthwhile.
-const forbiddenRecoveredSessions = new WeakSet<AdminSession>();
 const tokenExpirySkewMs = 30_000;
 
 function updateSession(session: AdminSession | null) {
@@ -1326,35 +1322,28 @@ async function request<T>(
     response.status === 403 &&
     authRequired &&
     retryOnUnauthorized &&
-    currentSession != null &&
-    !forbiddenRecoveredSessions.has(currentSession)
+    !forbiddenRecoveryIsOnCooldown()
   ) {
     // A 403 can mean the access token is still valid but was minted before a
     // permission-model change (e.g. an admin grants a school_admin membership
     // out of band while the dashboard is open) — a refresh re-mints it from
-    // current account state so the newly-accessible data loads.
+    // current account state so the newly-accessible data loads. This applies
+    // to reads too, not just mutations.
     //
-    // refreshSession() republishes the session through the observer, which
-    // reruns every effect that depends on `session` — including whatever
-    // fired this request. If the 403 is a genuine denial, that effect refires
-    // and 403s again. So recover AT MOST ONCE per session (tracked by session
-    // identity): the retry either succeeds or throws normally and stops — no
-    // refresh loop. Reads take this path too; the earlier "GETs never
-    // recover" rule left genuinely-new access stuck until a full reload.
-    const sessionBeingRecovered = currentSession;
-    forbiddenRecoveredSessions.add(sessionBeingRecovered);
+    // But refreshSession() republishes the session through the observer,
+    // which reruns every effect that depends on `session` — including
+    // whatever fired this request. If the 403 is a genuine denial that effect
+    // refires and 403s again, so the recovery is rate-limited: at most one
+    // 403-triggered refresh per `forbiddenRecoveryCooldownMs`. That bounds
+    // the loop while still letting a later, real permission change recover
+    // once the window passes. A failed refresh clears the cooldown so it can
+    // be retried sooner than the full window.
     lastForbiddenRecoveryAt = Date.now();
     try {
       await refreshSession();
     } catch (refreshError) {
-      // The refresh itself failed transiently (network / parse / token
-      // inspection). Release the guard for this session so a later 403 can
-      // try again, instead of locking recovery out until a full reload.
-      forbiddenRecoveredSessions.delete(sessionBeingRecovered);
+      lastForbiddenRecoveryAt = 0;
       throw refreshError;
-    }
-    if (currentSession != null) {
-      forbiddenRecoveredSessions.add(currentSession);
     }
     return request<T>(service, path, {
       ...options,
