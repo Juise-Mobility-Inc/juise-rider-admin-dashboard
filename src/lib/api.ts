@@ -1109,6 +1109,10 @@ const forbiddenRecoveryCooldownMs = 5_000;
 function forbiddenRecoveryIsOnCooldown(): boolean {
   return Date.now() - lastForbiddenRecoveryAt < forbiddenRecoveryCooldownMs;
 }
+// Sessions we've already tried a 403 claim-refresh for. A WeakSet so it
+// resets itself when the session object is replaced (a real re-login or an
+// expiry refresh) — the only time another attempt is worthwhile.
+const forbiddenRecoveredSessions = new WeakSet<AdminSession>();
 const tokenExpirySkewMs = 30_000;
 
 function updateSession(session: AdminSession | null) {
@@ -1322,21 +1326,29 @@ async function request<T>(
     response.status === 403 &&
     authRequired &&
     retryOnUnauthorized &&
-    !forbiddenRecoveryIsOnCooldown()
+    method !== "GET" &&
+    currentSession != null &&
+    !forbiddenRecoveredSessions.has(currentSession)
   ) {
-    // A 403 here can mean the access token is still technically valid but
-    // was minted before a permission model change (e.g. a new claim like
-    // school_admin) — refreshing re-mints the token from current account
-    // state, which picks up the change.
+    // A 403 on a mutation can mean the access token is still valid but was
+    // minted before a permission-model change (e.g. a new claim like
+    // school_admin) — a refresh re-mints it from current account state.
     //
-    // But refreshSession() publishes the new session through the observer,
+    // But refreshSession() republishes the session through the observer,
     // which reruns every effect that depends on `session` — including
-    // whatever effect fired this very request. If the 403 is genuine (the
-    // caller actually lacks permission), that effect refires, gets the
-    // same 403, and would retry-refresh again forever. The cooldown bounds
-    // the rate of recovery attempts globally, so this can't loop.
+    // whatever fired this request. So:
+    //   - GETs never take this path: a GET that 403s is a genuine "you
+    //     can't see this", and the read is almost always effect-driven, so
+    //     refreshing just re-fires it → a storm. Let it throw.
+    //   - Even for a mutation, try the re-mint at most once per session, so
+    //     a genuinely forbidden action can't refresh-loop while the user
+    //     sits on the error.
+    forbiddenRecoveredSessions.add(currentSession);
     lastForbiddenRecoveryAt = Date.now();
     await refreshSession();
+    if (currentSession != null) {
+      forbiddenRecoveredSessions.add(currentSession);
+    }
     return request<T>(service, path, {
       ...options,
       retryOnUnauthorized: false,
