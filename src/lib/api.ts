@@ -2758,6 +2758,12 @@ export async function fetchStudentRouteHistory(
 // dashboard's aggregate views. The server strips the GPS trail from each row
 // (the dashboard only aggregates summary fields / visited POIs / penalty
 // events), so this stays small even for large schools.
+//
+// Runaway guard only — not a data cap. At pageSize 500 this is 5,000,000
+// sessions, and it throws rather than silently returning a truncated result,
+// because the dashboard's totals/leaderboards would otherwise be wrong.
+const SCHOOL_ROUTE_HISTORY_MAX_PAGES = 10_000;
+
 export async function fetchSchoolRouteHistory(
   managedAppId: string,
   schoolId: string,
@@ -2765,16 +2771,20 @@ export async function fetchSchoolRouteHistory(
     from?: number;
     to?: number;
     pageSize?: number;
-    maxPages?: number;
     onPage?: (loaded: number) => void;
   } = {},
 ): Promise<StudentRouteHistorySession[]> {
   const pageSize = Math.max(1, Math.min(1000, options.pageSize ?? 500));
-  const maxPages = Math.max(1, options.maxPages ?? 20);
   const collected: StudentRouteHistorySession[] = [];
   let offset = 0;
 
-  for (let page = 0; page < maxPages; page += 1) {
+  for (let page = 0; ; page += 1) {
+    if (page >= SCHOOL_ROUTE_HISTORY_MAX_PAGES) {
+      throw new Error(
+        "School route history did not finish paginating; aborting to avoid a runaway request.",
+      );
+    }
+
     const search = new URLSearchParams({
       limit: String(pageSize),
       offset: String(offset),
