@@ -1493,6 +1493,12 @@ export function DashboardScreen({
                 }
         }, [activeSchoolId, managedAppId]);
 
+        // Bumped at the start of every load. Any straggler from a superseded
+        // load (a still-running route-history sweep after the roster rejected,
+        // or the previous school's load after a switch) checks this before it
+        // touches state, so it can't overwrite a newer load's result.
+        const dashboardLoadGenerationRef = useRef(0);
+
         const loadDashboardData = useCallback(
                 async (force = false) => {
                         if (!activeSchoolId || !managedAppId) {
@@ -1533,16 +1539,29 @@ export function DashboardScreen({
                                 total: 0,
                         });
 
+                        const generation = (dashboardLoadGenerationRef.current += 1);
+                        const isCurrent = () =>
+                                generation === dashboardLoadGenerationRef.current;
+
                         try {
+                                // Roster first: if it fails we never start the multi-page
+                                // route-history sweep, so a stray progress callback can't
+                                // clobber the error state after Promise.all rejects.
+                                const roster = await fetchSchoolStudentRoster(
+                                        managedAppId,
+                                        activeSchoolId,
+                                );
+                                if (!isCurrent()) {
+                                        return;
+                                }
+
                                 const [
-                                        roster,
                                         pois,
                                         pendingReservations,
                                         parkingIncidentReports,
                                         routeHistoryResult,
                                         parkingViolationsResult,
                                 ] = await Promise.all([
-                                        fetchSchoolStudentRoster(managedAppId, activeSchoolId),
                                         fetchSchoolPOIs(managedAppId, activeSchoolId).catch(
                                                 () => [] as SchoolPOI[],
                                         ),
@@ -1565,6 +1584,9 @@ export function DashboardScreen({
                                         // request per student.
                                         fetchSchoolRouteHistory(managedAppId, activeSchoolId, {
                                                 onPage: (loaded) => {
+                                                        if (!isCurrent()) {
+                                                                return;
+                                                        }
                                                         setLoadState({
                                                                 status: "loading",
                                                                 message: "Syncing student rides…",
@@ -1593,6 +1615,10 @@ export function DashboardScreen({
                                                         violations: [] as StudentParkingViolation[],
                                                 })),
                                 ]);
+
+                                if (!isCurrent()) {
+                                        return;
+                                }
 
                                 onParkingReportCountLoaded?.(
                                         countOpenParkingIncidentReports(parkingIncidentReports),
@@ -1665,6 +1691,9 @@ export function DashboardScreen({
                                 });
                                 onHeaderCountsLoaded?.(headerCounts);
                         } catch (error) {
+                                if (!isCurrent()) {
+                                        return;
+                                }
                                 setDataset(null);
                                 setLoadState({
                                         status: "error",
