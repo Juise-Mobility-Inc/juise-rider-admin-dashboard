@@ -471,13 +471,6 @@
         letter-spacing: 0.04em;
 }
 
-.mfa-panel-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-}
-
 .mfa-chip-button {
         flex-shrink: 0;
         padding: 5px 12px;
@@ -519,6 +512,20 @@
         border: 1px solid rgba(3, 32, 13, 0.12);
         border-radius: 16px;
         background: #fff;
+}
+
+.mfa-enroll-layout .mfa-secret {
+        grid-column: 1 / -1;
+        justify-self: center;
+        width: 100%;
+        max-width: 360px;
+        margin-top: 4px;
+        justify-items: center;
+        text-align: center;
+}
+
+.mfa-enroll-layout .mfa-secret .mfa-panel-actions {
+        justify-content: center;
 }
 
 .mfa-enroll-qr {
@@ -626,6 +633,34 @@
         flex-wrap: wrap;
         gap: 8px;
         margin-top: 6px;
+}
+
+.mfa-recovery-codes summary {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        cursor: pointer;
+        list-style: none;
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: #14532d;
+}
+
+.mfa-recovery-codes summary::-webkit-details-marker {
+        display: none;
+}
+
+.mfa-recovery-codes summary::before {
+        content: "";
+        flex-shrink: 0;
+        border: 5px solid transparent;
+        border-left-color: currentColor;
+        transform: translateY(1px);
+        transition: transform 0.15s ease;
+}
+
+.mfa-recovery-codes[open] summary::before {
+        transform: rotate(90deg) translateX(1px);
 }
 
 @media (max-width: 420px) {

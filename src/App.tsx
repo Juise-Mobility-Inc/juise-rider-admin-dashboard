@@ -5206,18 +5206,9 @@ function App() {
                           </ol>
                         </div>
                       </div>
-                    </div>
-                    <p className="mfa-enroll-hint">
-                      Enter the 6-digit code from your app below, and save your
-                      recovery codes before you finish.
-                    </p>
-                  </>
-                ) : null}
-                {mfaEnrollment ? (
-                  <>
-                    <div className="mfa-secret">
-                      <div className="mfa-panel-header">
-                        <span>Can&rsquo;t scan? Add it manually</span>
+                      <div className="mfa-secret">
+                        <span>Can&rsquo;t scan? Add the key manually</span>
+                        <code>{mfaEnrollment.secret}</code>
                         <div className="mfa-panel-actions">
                           <button
                             type="button"
@@ -5232,28 +5223,29 @@ function App() {
                             type="button"
                             className="mfa-chip-button"
                             onClick={() =>
-                              void copyMfaText(
-                                mfaEnrollment.otpauth_uri,
-                                "uri",
-                              )
+                              void copyMfaText(mfaEnrollment.otpauth_uri, "uri")
                             }
                           >
                             {mfaCopied === "uri" ? "Copied!" : "Copy setup link"}
                           </button>
                         </div>
+                        <p className="mfa-panel-hint">
+                          Use this if your app asks for a key instead of
+                          scanning. On iPhone: Passwords app &rarr;{" "}
+                          <strong>+</strong> &rarr; New Password &rarr; Set Up
+                          Verification Code &rarr; Enter Setup Key.
+                        </p>
                       </div>
-                      <code>{mfaEnrollment.secret}</code>
-                      <p className="mfa-panel-hint">
-                        Use this key if your app asks for one instead of
-                        scanning. On iPhone: Passwords app &rarr;{" "}
-                        <strong>+</strong> &rarr; New Password &rarr; Set Up
-                        Verification Code &rarr; Enter Setup Key.
-                      </p>
                     </div>
-                    <div className="mfa-recovery-codes">
-                      <div className="mfa-panel-header">
-                        <strong>Save these one-time recovery codes now</strong>
-                      </div>
+                    <p className="mfa-enroll-hint">
+                      Enter the 6-digit code from your app below. Save your
+                      recovery codes first &mdash; open the section beneath it.
+                    </p>
+                    <details className="mfa-recovery-codes">
+                      <summary>
+                        Recovery codes ({mfaEnrollment.recovery_codes.length})
+                        &mdash; save these before you finish
+                      </summary>
                       <p>
                         They will not be shown again. Each code can be used once
                         if you lose access to your authenticator app.
@@ -5288,7 +5280,7 @@ function App() {
                           Download .txt
                         </button>
                       </div>
-                    </div>
+                    </details>
                   </>
                 ) : null}
                 {!mfaChallenge.enrollment_required || mfaEnrollment ? (
