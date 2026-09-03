@@ -1545,6 +1545,13 @@ function App() {
   >(null);
   const [membershipsResolved, setMembershipsResolved] = useState(false);
   const [membershipsReloadKey, setMembershipsReloadKey] = useState(0);
+  // Mirrors the membership-lookup lifecycle synchronously so async handlers
+  // (handleJoinSchool / confirmLeaveSchool) can check it *after* their await
+  // rather than reading a stale closure snapshot from when they started.
+  const membershipsLookupRef = useRef<{ inFlight: boolean; resolved: boolean }>({
+    inFlight: false,
+    resolved: false,
+  });
   const [selectedSchoolId, setSelectedSchoolIdState] = useState<string>(() => {
     try {
       return localStorage.getItem("selectedSchoolId") ?? "";
@@ -1800,9 +1807,11 @@ function App() {
       setSchoolMemberships([]);
       setSchoolMembershipsError(null);
       setMembershipsResolved(false);
+      membershipsLookupRef.current = { inFlight: false, resolved: false };
       return;
     }
     let cancelled = false;
+    membershipsLookupRef.current.inFlight = true;
     setSchoolMembershipsLoading(true);
     setSchoolMembershipsError(null);
     fetchMySchoolMemberships(session.authAppId)
@@ -1839,6 +1848,7 @@ function App() {
       })
       .finally(() => {
         if (!cancelled) {
+          membershipsLookupRef.current = { inFlight: false, resolved: true };
           setSchoolMembershipsLoading(false);
           setMembershipsResolved(true);
         }
@@ -1902,12 +1912,14 @@ function App() {
       setSession(refreshedSession);
       // Only refetch the membership list if a lookup is still in flight (or
       // never settled) — that's the case where a stale in-flight GET could
-      // clobber the merge below. Once the initial lookup has settled, the
+      // clobber the merge below. Once the lookup has settled, the
       // backend-returned `membership` merged into current state is
       // authoritative, and an extra refetch would just re-run every
-      // school-scoped effect (flicker + duplicate API burst).
-      const shouldRefetchMemberships =
-        !membershipsResolved || schoolMembershipsLoading;
+      // school-scoped effect (flicker + duplicate API burst). Read the ref,
+      // not closure state: the lookup may have settled while joinSchool()
+      // was awaiting.
+      const { inFlight, resolved } = membershipsLookupRef.current;
+      const shouldRefetchMemberships = !resolved || inFlight;
       setSchoolMemberships((current) => [
         ...current.filter((m) => m.school_id !== membership.school_id),
         membership,
@@ -1984,6 +1996,11 @@ function App() {
       );
       if (selectedSchoolId === membership.school_id) {
         setSelectedSchoolId("");
+      }
+      if (membershipsLookupRef.current.inFlight) {
+        // A lookup started before this leave would return the pre-leave list
+        // and re-add the school. Cancel + refetch authoritatively.
+        setMembershipsReloadKey((key) => key + 1);
       }
     } catch (error) {
       setBanner({ tone: "error", message: getErrorMessage(error) });
