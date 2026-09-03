@@ -1335,16 +1335,13 @@ async function request<T>(
     // whatever fired this request. If the 403 is a genuine denial that effect
     // refires and 403s again, so the recovery is rate-limited: at most one
     // 403-triggered refresh per `forbiddenRecoveryCooldownMs`. That bounds
-    // the loop while still letting a later, real permission change recover
-    // once the window passes. A failed refresh clears the cooldown so it can
-    // be retried sooner than the full window.
+    // the loop, still lets a later real permission change recover once the
+    // window passes, and (unlike a per-session flag) can't permanently lock
+    // a session out. The timestamp is set before the call, so a transiently
+    // failing refresh propagates and the next attempt simply waits out the
+    // same window rather than hammering.
     lastForbiddenRecoveryAt = Date.now();
-    try {
-      await refreshSession();
-    } catch (refreshError) {
-      lastForbiddenRecoveryAt = 0;
-      throw refreshError;
-    }
+    await refreshSession();
     return request<T>(service, path, {
       ...options,
       retryOnUnauthorized: false,
