@@ -1943,6 +1943,15 @@ function App() {
       // lookup may have settled while joinSchool() was awaiting.
       const { inFlight, loadedOk } = membershipsLookupRef.current;
       const shouldRefetchMemberships = !loadedOk || inFlight;
+      if (shouldRefetchMemberships) {
+        // Enter the loading state synchronously, before the optimistic
+        // selection is exposed below. Otherwise activeSchoolId resolves for
+        // one render on the optimistic membership and every school-scoped
+        // effect fires, then fires again after the refetch. The picker gate
+        // already ignores this loading window (5af8816), so no flicker.
+        membershipsLookupRef.current.inFlight = true;
+        setSchoolMembershipsLoading(true);
+      }
       setSchoolMemberships((current) => [
         ...current.filter((m) => m.school_id !== membership.school_id),
         membership,
