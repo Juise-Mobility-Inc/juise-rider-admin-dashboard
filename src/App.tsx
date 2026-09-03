@@ -3277,7 +3277,16 @@ function App() {
     }
 
     if (!selectedChallenge) {
-      setSelectedChallengeId(visibleSchoolChallenges[0]?.challenge_uuid ?? "");
+      // An empty id is the intentional "show the table" state (set by delete,
+      // by saving an edit, and by the back button) — leave it alone. Only a
+      // non-empty id that no longer resolves (its challenge was deleted or
+      // filtered out from under the selection) needs recovery, and that also
+      // returns to the table rather than snapping to an unrelated challenge.
+      if (selectedChallengeId) {
+        setSelectedChallengeId("");
+        setChallengeDraft(createEmptyChallengeDraft());
+        setChallengeParticipants([]);
+      }
       return;
     }
 
@@ -4843,6 +4852,7 @@ function App() {
             ),
           );
       const savedChallenge = savedChallenges[0];
+      const wasEditingExisting = Boolean(challengeDraft.challenge_uuid);
 
       setSchoolChallenges((current) =>
         sortChallengesForDisplay([
@@ -4855,9 +4865,17 @@ function App() {
           ),
         ]),
       );
-      setSelectedChallengeId(savedChallenge.challenge_uuid);
-      setChallengeDraft(challengeToDraft(savedChallenge));
-      await refreshChallengeParticipants(savedChallenge.challenge_uuid);
+      if (wasEditingExisting) {
+        // Editing an existing challenge returns to the table, the same way
+        // deleting one does.
+        setSelectedChallengeId("");
+        setChallengeDraft(createEmptyChallengeDraft());
+        setChallengeParticipants([]);
+      } else {
+        setSelectedChallengeId(savedChallenge.challenge_uuid);
+        setChallengeDraft(challengeToDraft(savedChallenge));
+        await refreshChallengeParticipants(savedChallenge.challenge_uuid);
+      }
       const savedKind = isScavengerHunt ? "game" : "challenge";
       setBanner({
         tone: "success",
