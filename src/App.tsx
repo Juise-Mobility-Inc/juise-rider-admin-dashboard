@@ -1547,10 +1547,11 @@ function App() {
   const [membershipsReloadKey, setMembershipsReloadKey] = useState(0);
   // Mirrors the membership-lookup lifecycle synchronously so async handlers
   // (handleJoinSchool / confirmLeaveSchool) can check it *after* their await
-  // rather than reading a stale closure snapshot from when they started.
-  const membershipsLookupRef = useRef<{ inFlight: boolean; resolved: boolean }>({
+  // rather than reading a stale closure snapshot. `loadedOk` is true only
+  // after a lookup has *succeeded* at least once (not merely settled).
+  const membershipsLookupRef = useRef<{ inFlight: boolean; loadedOk: boolean }>({
     inFlight: false,
-    resolved: false,
+    loadedOk: false,
   });
   // school_ids joined during this session. A membership lookup that raced the
   // join (or ran before the write replicated) can come back without them; we
@@ -1811,7 +1812,7 @@ function App() {
       setSchoolMemberships([]);
       setSchoolMembershipsError(null);
       setMembershipsResolved(false);
-      membershipsLookupRef.current = { inFlight: false, resolved: false };
+      membershipsLookupRef.current = { inFlight: false, loadedOk: false };
       return;
     }
     let cancelled = false;
@@ -1823,20 +1824,22 @@ function App() {
         if (cancelled) {
           return;
         }
-        // Server list is authoritative, except keep any school we joined this
-        // session that it hasn't caught up to yet (replication lag / a lookup
-        // that started before the join).
-        const serverSchoolIds = new Set(
-          serverMemberships.map((m) => m.school_id.trim().toLowerCase()),
+        membershipsLookupRef.current.loadedOk = true;
+        // Server list is authoritative, except for a school we joined this
+        // session: a lookup that started before the join (or a lagging read)
+        // can return that row missing OR still inactive, so drop the server's
+        // copy and use our optimistic active membership.
+        const joinedActiveLocal = schoolMemberships.filter(
+          (m) => m.active && sessionJoinedSchoolIdsRef.current.has(m.school_id),
+        );
+        const joinedActiveIds = new Set(
+          joinedActiveLocal.map((m) => m.school_id.trim().toLowerCase()),
         );
         const memberships = [
-          ...serverMemberships,
-          ...schoolMemberships.filter(
-            (m) =>
-              m.active &&
-              sessionJoinedSchoolIdsRef.current.has(m.school_id) &&
-              !serverSchoolIds.has(m.school_id.trim().toLowerCase()),
+          ...serverMemberships.filter(
+            (m) => !joinedActiveIds.has(m.school_id.trim().toLowerCase()),
           ),
+          ...joinedActiveLocal,
         ];
         setSchoolMemberships(memberships);
         setSchoolMembershipsError(null);
@@ -1867,7 +1870,10 @@ function App() {
       })
       .finally(() => {
         if (!cancelled) {
-          membershipsLookupRef.current = { inFlight: false, resolved: true };
+          // inFlight clears on both paths; loadedOk was set only on success
+          // above. membershipsResolved (state) means "settled" and drives
+          // the picker/error gate, so it's set on both paths.
+          membershipsLookupRef.current.inFlight = false;
           setSchoolMembershipsLoading(false);
           setMembershipsResolved(true);
         }
@@ -1929,16 +1935,14 @@ function App() {
       // new membership's school_admin claim — apply them now so the
       // dashboard we're about to render doesn't 401/403 on a stale token.
       setSession(refreshedSession);
-      // Only refetch the membership list if a lookup is still in flight (or
-      // never settled) — that's the case where a stale in-flight GET could
-      // clobber the merge below. Once the lookup has settled, the
-      // backend-returned `membership` merged into current state is
-      // authoritative, and an extra refetch would just re-run every
-      // school-scoped effect (flicker + duplicate API burst). Read the ref,
-      // not closure state: the lookup may have settled while joinSchool()
-      // was awaiting.
-      const { inFlight, resolved } = membershipsLookupRef.current;
-      const shouldRefetchMemberships = !resolved || inFlight;
+      // Refetch the membership list unless a lookup has already succeeded and
+      // none is in flight — i.e. we have an authoritative list to merge the
+      // backend-returned `membership` into. If the initial lookup failed or
+      // is still running, refetch so the admin's other memberships load too
+      // (not just the one they joined). Read the ref, not closure state: the
+      // lookup may have settled while joinSchool() was awaiting.
+      const { inFlight, loadedOk } = membershipsLookupRef.current;
+      const shouldRefetchMemberships = !loadedOk || inFlight;
       setSchoolMemberships((current) => [
         ...current.filter((m) => m.school_id !== membership.school_id),
         membership,
