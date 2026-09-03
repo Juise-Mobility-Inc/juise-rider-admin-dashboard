@@ -1521,7 +1521,10 @@ export function DashboardScreen({
                                 return;
                         }
 
-                        const cacheKey = `${managedAppId}:${activeSchoolId}`;
+                        // Include the admin uuid so a different account signing in
+                        // on the same browser can't hit another admin's cached
+                        // school snapshot.
+                        const cacheKey = `${adminUserUUID}:${managedAppId}:${activeSchoolId}`;
                         if (
                                 !force &&
                                 dashboardDatasetCache &&
