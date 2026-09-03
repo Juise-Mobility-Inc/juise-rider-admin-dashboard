@@ -1501,6 +1501,14 @@ export function DashboardScreen({
 
         const loadDashboardData = useCallback(
                 async (force = false) => {
+                        // Bump first, before every early return, so switching back to an
+                        // already-cached school also supersedes a still-running load of a
+                        // different school (that load's isCurrent() then reads false and
+                        // its onPage / completion can't touch state).
+                        const generation = (dashboardLoadGenerationRef.current += 1);
+                        const isCurrent = () =>
+                                generation === dashboardLoadGenerationRef.current;
+
                         if (!activeSchoolId || !managedAppId) {
                                 setDataset(null);
                                 setLoadState({
@@ -1538,10 +1546,6 @@ export function DashboardScreen({
                                 completed: 0,
                                 total: 0,
                         });
-
-                        const generation = (dashboardLoadGenerationRef.current += 1);
-                        const isCurrent = () =>
-                                generation === dashboardLoadGenerationRef.current;
 
                         try {
                                 // Roster first: if it fails we never start the multi-page
