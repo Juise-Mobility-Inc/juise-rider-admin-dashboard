@@ -1552,6 +1552,10 @@ function App() {
     inFlight: false,
     resolved: false,
   });
+  // school_ids joined during this session. A membership lookup that raced the
+  // join (or ran before the write replicated) can come back without them; we
+  // keep those rows and don't treat the selection as "revoked".
+  const sessionJoinedSchoolIdsRef = useRef<Set<string>>(new Set());
   const [selectedSchoolId, setSelectedSchoolIdState] = useState<string>(() => {
     try {
       return localStorage.getItem("selectedSchoolId") ?? "";
@@ -1815,10 +1819,25 @@ function App() {
     setSchoolMembershipsLoading(true);
     setSchoolMembershipsError(null);
     fetchMySchoolMemberships(session.authAppId)
-      .then((memberships) => {
+      .then((serverMemberships) => {
         if (cancelled) {
           return;
         }
+        // Server list is authoritative, except keep any school we joined this
+        // session that it hasn't caught up to yet (replication lag / a lookup
+        // that started before the join).
+        const serverSchoolIds = new Set(
+          serverMemberships.map((m) => m.school_id.trim().toLowerCase()),
+        );
+        const memberships = [
+          ...serverMemberships,
+          ...schoolMemberships.filter(
+            (m) =>
+              m.active &&
+              sessionJoinedSchoolIdsRef.current.has(m.school_id) &&
+              !serverSchoolIds.has(m.school_id.trim().toLowerCase()),
+          ),
+        ];
         setSchoolMemberships(memberships);
         setSchoolMembershipsError(null);
         const normalizedSelected = selectedSchoolId.trim().toLowerCase();
@@ -1947,6 +1966,7 @@ function App() {
       setJoinSchoolId("");
       setJoinSchoolCode("");
       setJoinNewSchoolName("");
+      sessionJoinedSchoolIdsRef.current.add(membership.school_id);
       setSelectedSchoolId(membership.school_id);
       if (shouldRefetchMemberships) {
         // Cancel the in-flight lookup (its .then bails on the effect's
@@ -1991,6 +2011,7 @@ function App() {
         membership.membership_uuid,
       );
       setSession(refreshedSession);
+      sessionJoinedSchoolIdsRef.current.delete(membership.school_id);
       setSchoolMemberships((current) =>
         current.filter((m) => m.membership_uuid !== membership.membership_uuid),
       );
@@ -5572,8 +5593,13 @@ function App() {
   // Show the picker when there's no selection, or when a persisted selection
   // could not be confirmed as an active membership once the lookup settled
   // (revoked, or the lookup failed). Otherwise the retry / error UI below is
-  // unreachable and the user lands in an unscoped dashboard.
-  if (!selectedSchoolId || (membershipsResolved && !activeSchoolId)) {
+  // unreachable and the user lands in an unscoped dashboard. The
+  // `!schoolMembershipsLoading` guard keeps a re-lookup (e.g. after a join,
+  // or a "Try again") from briefly dropping the picker while it runs.
+  if (
+    !selectedSchoolId ||
+    (membershipsResolved && !schoolMembershipsLoading && !activeSchoolId)
+  ) {
     return (
       <div className="login-shell">
         <div className="login-center-card school-selection-card">
