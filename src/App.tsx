@@ -1540,6 +1540,23 @@ function App() {
   >([]);
   const [schoolMembershipsLoading, setSchoolMembershipsLoading] =
     useState(false);
+  const [schoolMembershipsError, setSchoolMembershipsError] = useState<
+    string | null
+  >(null);
+  const [membershipsResolved, setMembershipsResolved] = useState(false);
+  const [membershipsReloadKey, setMembershipsReloadKey] = useState(0);
+  // Mirrors the membership-lookup lifecycle synchronously so async handlers
+  // (handleJoinSchool / confirmLeaveSchool) can check it *after* their await
+  // rather than reading a stale closure snapshot. `loadedOk` is true only
+  // after a lookup has *succeeded* at least once (not merely settled).
+  const membershipsLookupRef = useRef<{ inFlight: boolean; loadedOk: boolean }>({
+    inFlight: false,
+    loadedOk: false,
+  });
+  // school_ids joined during this session. A membership lookup that raced the
+  // join (or ran before the write replicated) can come back without them; we
+  // keep those rows and don't treat the selection as "revoked".
+  const sessionJoinedSchoolIdsRef = useRef<Set<string>>(new Set());
   const [selectedSchoolId, setSelectedSchoolIdState] = useState<string>(() => {
     try {
       return localStorage.getItem("selectedSchoolId") ?? "";
@@ -1768,44 +1785,104 @@ function App() {
   const [reservationStudentBusy, setReservationStudentBusy] = useState(false);
   const [reservationStudentError, setReservationStudentError] = useState("");
   const [studentRosterSearch, setStudentRosterSearch] = useState("");
-  const activeSchoolId = session ? selectedSchoolId : "";
+
+  const activeMemberships = useMemo(
+    () => schoolMemberships.filter((membership) => membership.active),
+    [schoolMemberships],
+  );
+
+  // Only scope requests to a school once it's confirmed as a current, active
+  // membership for this account. A stale localStorage value, or a revoked /
+  // inactive membership, would otherwise make every per-school fetch (zones,
+  // POIs, violations, roster, ...) 403 — repeatedly, because the effects
+  // re-run. While memberships are still loading we also hold at "".
+  const activeSchoolId = useMemo(() => {
+    if (!session || !selectedSchoolId || schoolMembershipsLoading) {
+      return "";
+    }
+    const target = selectedSchoolId.trim().toLowerCase();
+    const isActiveMember = activeMemberships.some(
+      (membership) => membership.school_id.trim().toLowerCase() === target,
+    );
+    return isActiveMember ? selectedSchoolId : "";
+  }, [session, selectedSchoolId, schoolMembershipsLoading, activeMemberships]);
 
   useEffect(() => {
     if (!session) {
       setSchoolMemberships([]);
+      setSchoolMembershipsError(null);
+      setMembershipsResolved(false);
+      membershipsLookupRef.current = { inFlight: false, loadedOk: false };
       return;
     }
     let cancelled = false;
+    membershipsLookupRef.current.inFlight = true;
     setSchoolMembershipsLoading(true);
+    setSchoolMembershipsError(null);
     fetchMySchoolMemberships(session.authAppId)
-      .then((memberships) => {
-        if (!cancelled) {
-          setSchoolMemberships(memberships);
-          const normalizedSelected = selectedSchoolId.trim().toLowerCase();
-          if (
-            normalizedSelected &&
-            !memberships.some(
-              (m) => m.school_id.trim().toLowerCase() === normalizedSelected,
-            )
-          ) {
-            // Previously-selected school is no longer a valid membership
-            // (revoked, or leftover from a different account) — clear it
-            // so the picker shows instead of silently scoping to nothing.
-            setSelectedSchoolId("");
-          }
+      .then((serverMemberships) => {
+        if (cancelled) {
+          return;
+        }
+        membershipsLookupRef.current.loadedOk = true;
+        // Server list is authoritative, except for a school we joined this
+        // session: a lookup that started before the join (or a lagging read)
+        // can return that row missing OR still inactive, so drop the server's
+        // copy and use our optimistic active membership.
+        const joinedActiveLocal = schoolMemberships.filter(
+          (m) => m.active && sessionJoinedSchoolIdsRef.current.has(m.school_id),
+        );
+        const joinedActiveIds = new Set(
+          joinedActiveLocal.map((m) => m.school_id.trim().toLowerCase()),
+        );
+        const memberships = [
+          ...serverMemberships.filter(
+            (m) => !joinedActiveIds.has(m.school_id.trim().toLowerCase()),
+          ),
+          ...joinedActiveLocal,
+        ];
+        setSchoolMemberships(memberships);
+        setSchoolMembershipsError(null);
+        const normalizedSelected = selectedSchoolId.trim().toLowerCase();
+        if (
+          normalizedSelected &&
+          !memberships.some(
+            (m) =>
+              m.active &&
+              m.school_id.trim().toLowerCase() === normalizedSelected,
+          )
+        ) {
+          // Previously-selected school is no longer an active membership
+          // (revoked, inactive, or leftover from a different account) —
+          // clear it so the picker shows instead of silently scoping to a
+          // school every request will 403 on.
+          setSelectedSchoolId("");
         }
       })
-      .catch(() => {
-        if (!cancelled) setSchoolMemberships([]);
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        // Transient lookup failure — keep whatever memberships and persisted
+        // selection we already had, and surface a retry. Clearing here would
+        // strand the user in an access-less picker with no way back.
+        setSchoolMembershipsError(getErrorMessage(error));
       })
       .finally(() => {
-        if (!cancelled) setSchoolMembershipsLoading(false);
+        if (!cancelled) {
+          // inFlight clears on both paths; loadedOk was set only on success
+          // above. membershipsResolved (state) means "settled" and drives
+          // the picker/error gate, so it's set on both paths.
+          membershipsLookupRef.current.inFlight = false;
+          setSchoolMembershipsLoading(false);
+          setMembershipsResolved(true);
+        }
       });
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.claims.user_uuid]);
+  }, [session?.claims.user_uuid, membershipsReloadKey]);
 
   useEffect(() => {
     // Public endpoint — fetched once on mount so both the pre-login
@@ -1858,6 +1935,23 @@ function App() {
       // new membership's school_admin claim — apply them now so the
       // dashboard we're about to render doesn't 401/403 on a stale token.
       setSession(refreshedSession);
+      // Refetch the membership list unless a lookup has already succeeded and
+      // none is in flight — i.e. we have an authoritative list to merge the
+      // backend-returned `membership` into. If the initial lookup failed or
+      // is still running, refetch so the admin's other memberships load too
+      // (not just the one they joined). Read the ref, not closure state: the
+      // lookup may have settled while joinSchool() was awaiting.
+      const { inFlight, loadedOk } = membershipsLookupRef.current;
+      const shouldRefetchMemberships = !loadedOk || inFlight;
+      if (shouldRefetchMemberships) {
+        // Enter the loading state synchronously, before the optimistic
+        // selection is exposed below. Otherwise activeSchoolId resolves for
+        // one render on the optimistic membership and every school-scoped
+        // effect fires, then fires again after the refetch. The picker gate
+        // already ignores this loading window (5af8816), so no flicker.
+        membershipsLookupRef.current.inFlight = true;
+        setSchoolMembershipsLoading(true);
+      }
       setSchoolMemberships((current) => [
         ...current.filter((m) => m.school_id !== membership.school_id),
         membership,
@@ -1885,7 +1979,14 @@ function App() {
       setJoinSchoolId("");
       setJoinSchoolCode("");
       setJoinNewSchoolName("");
+      sessionJoinedSchoolIdsRef.current.add(membership.school_id);
       setSelectedSchoolId(membership.school_id);
+      if (shouldRefetchMemberships) {
+        // Cancel the in-flight lookup (its .then bails on the effect's
+        // cancelled flag) and refetch an authoritative list that includes
+        // the new membership.
+        setMembershipsReloadKey((key) => key + 1);
+      }
       // The URL may still be pointing at whatever section a previous
       // session (or a previous account, after signing out) left it on —
       // land somewhere that's guaranteed to make sense for a school this
@@ -1923,11 +2024,17 @@ function App() {
         membership.membership_uuid,
       );
       setSession(refreshedSession);
+      sessionJoinedSchoolIdsRef.current.delete(membership.school_id);
       setSchoolMemberships((current) =>
         current.filter((m) => m.membership_uuid !== membership.membership_uuid),
       );
       if (selectedSchoolId === membership.school_id) {
         setSelectedSchoolId("");
+      }
+      if (membershipsLookupRef.current.inFlight) {
+        // A lookup started before this leave would return the pre-leave list
+        // and re-add the school. Cancel + refetch authoritatively.
+        setMembershipsReloadKey((key) => key + 1);
       }
     } catch (error) {
       setBanner({ tone: "error", message: getErrorMessage(error) });
@@ -5496,7 +5603,16 @@ function App() {
     );
   }
 
-  if (!selectedSchoolId) {
+  // Show the picker when there's no selection, or when a persisted selection
+  // could not be confirmed as an active membership once the lookup settled
+  // (revoked, or the lookup failed). Otherwise the retry / error UI below is
+  // unreachable and the user lands in an unscoped dashboard. The
+  // `!schoolMembershipsLoading` guard keeps a re-lookup (e.g. after a join,
+  // or a "Try again") from briefly dropping the picker while it runs.
+  if (
+    !selectedSchoolId ||
+    (membershipsResolved && !schoolMembershipsLoading && !activeSchoolId)
+  ) {
     return (
       <div className="login-shell">
         <div className="login-center-card school-selection-card">
@@ -5522,14 +5638,27 @@ function App() {
                   <h3>Choose a school to manage</h3>
                 </div>
                 <span className="school-selection-count">
-                  {schoolMemberships.length}
+                  {activeMemberships.length}
                 </span>
               </div>
               {schoolMembershipsLoading ? (
                 <p className="login-initializing-text">Loading your schools…</p>
-              ) : schoolMemberships.length > 0 ? (
+              ) : schoolMembershipsError && activeMemberships.length === 0 ? (
+                <div className="school-selection-load-error">
+                  <p className="mfa-help">
+                    We couldn&rsquo;t load your schools. {schoolMembershipsError}
+                  </p>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setMembershipsReloadKey((key) => key + 1)}
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : activeMemberships.length > 0 ? (
                 <div className="school-option-list" role="list">
-                  {schoolMemberships.map((membership) => {
+                  {activeMemberships.map((membership) => {
                     const school = findPickerSchool(membership.school_id);
                     return (
                       <div
@@ -5661,7 +5790,11 @@ function App() {
                     {pickerSchools
                       .filter(
                         (school) =>
-                          !schoolMemberships.some(
+                          // Exclude only schools you're actively in — a school
+                          // with an inactive membership should still appear
+                          // here so it can be rejoined without the manual-ID
+                          // path.
+                          !activeMemberships.some(
                             (m) => m.school_id === school.school_id,
                           ),
                       )

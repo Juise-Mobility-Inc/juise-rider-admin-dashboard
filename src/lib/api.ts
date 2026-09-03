@@ -1,3 +1,5 @@
+import { BEACONS_ENABLED } from "./flags";
+
 export interface TokenPair {
   token: string;
   exp: number;
@@ -3755,6 +3757,12 @@ export async function fetchSchoolBeaconLocations(
     limit?: number;
   } = {},
 ): Promise<SchoolRegisteredDeviceBeaconLocation[]> {
+  // Temporarily disabled — see src/lib/flags.ts. Resolve empty so the Map
+  // Overview / Campus Devices screens render without the beacon layer and
+  // without hitting the endpoint.
+  if (!BEACONS_ENABLED) {
+    return [];
+  }
   const search = buildManagedSchoolSearch(managedAppId, {
     max_age_seconds: options.maxAgeSeconds?.toString(),
     stale_after_seconds: options.staleAfterSeconds?.toString(),

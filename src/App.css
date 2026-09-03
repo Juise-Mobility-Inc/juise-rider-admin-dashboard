@@ -153,6 +153,12 @@
         box-shadow: 0 12px 30px rgba(3, 32, 13, 0.08);
 }
 
+.school-selection-load-error {
+        display: grid;
+        gap: 10px;
+        justify-items: start;
+}
+
 .school-selection-panel-header {
         display: flex;
         align-items: flex-start;
