@@ -1900,6 +1900,14 @@ function App() {
       // new membership's school_admin claim — apply them now so the
       // dashboard we're about to render doesn't 401/403 on a stale token.
       setSession(refreshedSession);
+      // Only refetch the membership list if a lookup is still in flight (or
+      // never settled) — that's the case where a stale in-flight GET could
+      // clobber the merge below. Once the initial lookup has settled, the
+      // backend-returned `membership` merged into current state is
+      // authoritative, and an extra refetch would just re-run every
+      // school-scoped effect (flicker + duplicate API burst).
+      const shouldRefetchMemberships =
+        !membershipsResolved || schoolMembershipsLoading;
       setSchoolMemberships((current) => [
         ...current.filter((m) => m.school_id !== membership.school_id),
         membership,
@@ -1928,11 +1936,12 @@ function App() {
       setJoinSchoolCode("");
       setJoinNewSchoolName("");
       setSelectedSchoolId(membership.school_id);
-      // A membership lookup kicked off on mount may still be in flight; its
-      // stale (pre-join) list would otherwise replace the merge above and
-      // leave activeSchoolId unable to confirm the just-joined school.
-      // Bumping this cancels that in-flight run and refetches authoritatively.
-      setMembershipsReloadKey((key) => key + 1);
+      if (shouldRefetchMemberships) {
+        // Cancel the in-flight lookup (its .then bails on the effect's
+        // cancelled flag) and refetch an authoritative list that includes
+        // the new membership.
+        setMembershipsReloadKey((key) => key + 1);
+      }
       // The URL may still be pointing at whatever section a previous
       // session (or a previous account, after signing out) left it on —
       // land somewhere that's guaranteed to make sense for a school this
