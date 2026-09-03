@@ -181,6 +181,11 @@ let dashboardDatasetCache: {
         parkingReportCount: number;
 } | null = null;
 
+// Module-level (not a per-instance ref) so a load started by an unmounted
+// DashboardScreen instance can't still pass isCurrent() and write a stale
+// snapshot into dashboardDatasetCache after a newer load finishes.
+let dashboardLoadGeneration = 0;
+
 function groupByUserUUID<T>(items: T[], getUUID: (item: T) => string) {
         const map = new Map<string, T[]>();
         for (const item of items) {
@@ -1493,21 +1498,17 @@ export function DashboardScreen({
                 }
         }, [activeSchoolId, managedAppId]);
 
-        // Bumped at the start of every load. Any straggler from a superseded
-        // load (a still-running route-history sweep after the roster rejected,
-        // or the previous school's load after a switch) checks this before it
-        // touches state, so it can't overwrite a newer load's result.
-        const dashboardLoadGenerationRef = useRef(0);
-
         const loadDashboardData = useCallback(
                 async (force = false) => {
-                        // Bump first, before every early return, so switching back to an
-                        // already-cached school also supersedes a still-running load of a
-                        // different school (that load's isCurrent() then reads false and
-                        // its onPage / completion can't touch state).
-                        const generation = (dashboardLoadGenerationRef.current += 1);
-                        const isCurrent = () =>
-                                generation === dashboardLoadGenerationRef.current;
+                        // Bump the module-level generation first, before every early
+                        // return, so any newer load — even one from a different
+                        // component instance, or a switch back to an already-cached
+                        // school — supersedes this one. A straggler from a superseded
+                        // load (a running route-history sweep after the roster
+                        // rejected, or a prior school's load) then reads isCurrent()
+                        // as false and can't touch state or the cache.
+                        const generation = ++dashboardLoadGeneration;
+                        const isCurrent = () => generation === dashboardLoadGeneration;
 
                         if (!activeSchoolId || !managedAppId) {
                                 setDataset(null);
