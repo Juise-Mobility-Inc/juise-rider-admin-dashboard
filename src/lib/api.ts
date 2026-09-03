@@ -2762,6 +2762,70 @@ export async function fetchStudentRouteHistory(
   return normalizeStudentRouteHistorySessions(sessions);
 }
 
+// Every student's route history for a school in one paginated sweep, for the
+// dashboard's aggregate views. The server strips the GPS trail from each row
+// (the dashboard only aggregates summary fields / visited POIs / penalty
+// events), so this stays small even for large schools.
+//
+// Runaway guard only — not a data cap. At pageSize 500 this is 5,000,000
+// sessions, and it throws rather than silently returning a truncated result,
+// because the dashboard's totals/leaderboards would otherwise be wrong.
+const SCHOOL_ROUTE_HISTORY_MAX_PAGES = 10_000;
+
+export async function fetchSchoolRouteHistory(
+  managedAppId: string,
+  schoolId: string,
+  options: {
+    from?: number;
+    to?: number;
+    pageSize?: number;
+    onPage?: (loaded: number) => void;
+  } = {},
+): Promise<StudentRouteHistorySession[]> {
+  const pageSize = Math.max(1, Math.min(1000, options.pageSize ?? 500));
+  const collected: StudentRouteHistorySession[] = [];
+  let offset = 0;
+
+  for (let page = 0; ; page += 1) {
+    if (page >= SCHOOL_ROUTE_HISTORY_MAX_PAGES) {
+      throw new Error(
+        "School route history did not finish paginating; aborting to avoid a runaway request.",
+      );
+    }
+
+    const search = new URLSearchParams({
+      limit: String(pageSize),
+      offset: String(offset),
+    });
+    if (typeof options.from === "number") {
+      search.set("from", String(Math.trunc(options.from)));
+    }
+    if (typeof options.to === "number") {
+      search.set("to", String(Math.trunc(options.to)));
+    }
+
+    const payload = await request<{
+      items?: StudentRouteHistorySession[];
+      has_more?: boolean;
+    }>(
+      "nebula",
+      `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/route-history?${search.toString()}`,
+      { appIdHeader: managedAppId },
+    );
+
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    collected.push(...items);
+    options.onPage?.(collected.length);
+
+    if (!payload?.has_more || items.length === 0) {
+      break;
+    }
+    offset += items.length;
+  }
+
+  return normalizeStudentRouteHistorySessions(collected);
+}
+
 export async function fetchRouteHistoryPenaltyReviews(
   managedAppId: string,
   schoolId: string,

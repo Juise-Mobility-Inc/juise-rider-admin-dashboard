@@ -12,11 +12,11 @@ import {
         fetchPendingReservations,
         fetchSchoolIncomeSummary,
         fetchSchoolParkingIncidentReports,
+        fetchSchoolParkingViolations,
         fetchSchoolPOIs,
         fetchSchoolRegisteredDevices,
+        fetchSchoolRouteHistory,
         fetchSchoolStudentRoster,
-        fetchStudentParkingViolations,
-        fetchStudentRouteHistory,
         type SchoolPOI,
         type SchoolIncomeSummary,
         type SchoolIncomeWindow,
@@ -166,7 +166,42 @@ type Props = {
         onParkingReportCountLoaded?: (count: number) => void;
 };
 
-const DASHBOARD_CONCURRENCY = 5;
+// The assembled dashboard dataset is cached per (managedAppId, schoolId) so
+// switching away and back doesn't re-sweep every student's activity. The
+// "Refresh Dashboard" button bypasses it.
+const DASHBOARD_CACHE_TTL_MS = 120_000;
+let dashboardDatasetCache: {
+        key: string;
+        dataset: DashboardDataset;
+        at: number;
+        headerCounts: {
+                studentCount: number;
+                pendingReservationCount: number;
+        };
+        parkingReportCount: number;
+} | null = null;
+
+// Module-level (not a per-instance ref) so a load started by an unmounted
+// DashboardScreen instance can't still pass isCurrent() and write a stale
+// snapshot into dashboardDatasetCache after a newer load finishes.
+let dashboardLoadGeneration = 0;
+
+function groupByUserUUID<T>(items: T[], getUUID: (item: T) => string) {
+        const map = new Map<string, T[]>();
+        for (const item of items) {
+                const uuid = getUUID(item).trim();
+                if (!uuid) {
+                        continue;
+                }
+                const bucket = map.get(uuid);
+                if (bucket) {
+                        bucket.push(item);
+                } else {
+                        map.set(uuid, [item]);
+                }
+        }
+        return map;
+}
 
 function getErrorMessage(error: unknown): string {
         if (error instanceof Error) {
@@ -535,32 +570,6 @@ function buildLeaderboard(
                         return left.name.localeCompare(right.name);
                 })
                 .slice(0, 10);
-}
-
-async function mapWithConcurrency<T, R>(
-        items: T[],
-        limit: number,
-        worker: (item: T, index: number) => Promise<R>,
-        onProgress: (completed: number) => void,
-): Promise<R[]> {
-        const results = new Array<R>(items.length);
-        let nextIndex = 0;
-        let completed = 0;
-        const workerCount = Math.min(limit, items.length);
-
-        await Promise.all(
-                Array.from({ length: workerCount }, async () => {
-                        while (nextIndex < items.length) {
-                                const index = nextIndex;
-                                nextIndex += 1;
-                                results[index] = await worker(items[index], index);
-                                completed += 1;
-                                onProgress(completed);
-                        }
-                }),
-        );
-
-        return results;
 }
 
 function buildPoiRankings(
@@ -1489,29 +1498,78 @@ export function DashboardScreen({
                 }
         }, [activeSchoolId, managedAppId]);
 
-        const loadDashboardData = useCallback(async () => {
-                if (!activeSchoolId || !managedAppId) {
-                        setDataset(null);
+        const loadDashboardData = useCallback(
+                async (force = false) => {
+                        // Bump the module-level generation first, before every early
+                        // return, so any newer load — even one from a different
+                        // component instance, or a switch back to an already-cached
+                        // school — supersedes this one. A straggler from a superseded
+                        // load (a running route-history sweep after the roster
+                        // rejected, or a prior school's load) then reads isCurrent()
+                        // as false and can't touch state or the cache.
+                        const generation = ++dashboardLoadGeneration;
+                        const isCurrent = () => generation === dashboardLoadGeneration;
+
+                        if (!activeSchoolId || !managedAppId) {
+                                setDataset(null);
+                                setLoadState({
+                                        status: "error",
+                                        message: "A school-scoped admin session is required.",
+                                        completed: 0,
+                                        total: 0,
+                                });
+                                return;
+                        }
+
+                        // Include the admin uuid so a different account signing in
+                        // on the same browser can't hit another admin's cached
+                        // school snapshot.
+                        const cacheKey = `${adminUserUUID}:${managedAppId}:${activeSchoolId}`;
+                        if (
+                                !force &&
+                                dashboardDatasetCache &&
+                                dashboardDatasetCache.key === cacheKey &&
+                                Date.now() - dashboardDatasetCache.at < DASHBOARD_CACHE_TTL_MS
+                        ) {
+                                const cached = dashboardDatasetCache;
+                                setDataset(cached.dataset);
+                                setLoadState({
+                                        status: "idle",
+                                        message: "",
+                                        completed: 0,
+                                        total: 0,
+                                });
+                                onHeaderCountsLoaded?.(cached.headerCounts);
+                                onParkingReportCountLoaded?.(cached.parkingReportCount);
+                                return;
+                        }
+
                         setLoadState({
-                                status: "error",
-                                message: "A school-scoped admin session is required.",
+                                status: "loading",
+                                message: "Loading school activity...",
                                 completed: 0,
                                 total: 0,
                         });
-                        return;
-                }
 
-                setLoadState({
-                        status: "loading",
-                        message: "Loading school activity...",
-                        completed: 0,
-                        total: 0,
-                });
+                        try {
+                                // Roster first: if it fails we never start the multi-page
+                                // route-history sweep, so a stray progress callback can't
+                                // clobber the error state after Promise.all rejects.
+                                const roster = await fetchSchoolStudentRoster(
+                                        managedAppId,
+                                        activeSchoolId,
+                                );
+                                if (!isCurrent()) {
+                                        return;
+                                }
 
-                try {
-                        const [roster, pois, pendingReservations, parkingIncidentReports] =
-                                await Promise.all([
-                                        fetchSchoolStudentRoster(managedAppId, activeSchoolId),
+                                const [
+                                        pois,
+                                        pendingReservations,
+                                        parkingIncidentReports,
+                                        routeHistoryResult,
+                                        parkingViolationsResult,
+                                ] = await Promise.all([
                                         fetchSchoolPOIs(managedAppId, activeSchoolId).catch(
                                                 () => [] as SchoolPOI[],
                                         ),
@@ -1530,103 +1588,137 @@ export function DashboardScreen({
                                                         limit: 100,
                                                 },
                                         ).catch(() => [] as StudentParkingIncidentReport[]),
+                                        // One paginated sweep for the whole school instead of a
+                                        // request per student.
+                                        fetchSchoolRouteHistory(managedAppId, activeSchoolId, {
+                                                onPage: (loaded) => {
+                                                        if (!isCurrent()) {
+                                                                return;
+                                                        }
+                                                        setLoadState({
+                                                                status: "loading",
+                                                                message: "Syncing student rides…",
+                                                                completed: loaded,
+                                                                total: 0,
+                                                        });
+                                                },
+                                        })
+                                                .then((sessions) => ({
+                                                        ok: true as const,
+                                                        sessions,
+                                                }))
+                                                .catch((error) => ({
+                                                        ok: false as const,
+                                                        error: getErrorMessage(error),
+                                                        sessions: [] as StudentRouteHistorySession[],
+                                                })),
+                                        fetchSchoolParkingViolations(managedAppId, activeSchoolId)
+                                                .then((violations) => ({
+                                                        ok: true as const,
+                                                        violations,
+                                                }))
+                                                .catch((error) => ({
+                                                        ok: false as const,
+                                                        error: getErrorMessage(error),
+                                                        violations: [] as StudentParkingViolation[],
+                                                })),
                                 ]);
 
-                        onParkingReportCountLoaded?.(
-                                countOpenParkingIncidentReports(parkingIncidentReports),
-                        );
+                                if (!isCurrent()) {
+                                        return;
+                                }
 
-                        setLoadState({
-                                status: "loading",
-                                message: "Syncing student rides and reports...",
-                                completed: 0,
-                                total: roster.length,
-                        });
+                                onParkingReportCountLoaded?.(
+                                        countOpenParkingIncidentReports(parkingIncidentReports),
+                                );
 
-                        const students = await mapWithConcurrency(
-                                roster,
-                                DASHBOARD_CONCURRENCY,
-                                async (entry) => {
+                                // Route history and violations are the core of every
+                                // dashboard total / leaderboard. If either failed (a page
+                                // request, or the pagination runaway guard), fail the whole
+                                // load rather than caching a dataset that silently
+                                // under-counts. Secondary data (POIs, reservations, incident
+                                // reports) stays best-effort.
+                                if (!routeHistoryResult.ok) {
+                                        throw new Error(
+                                                `Couldn't load ride history for this school. ${routeHistoryResult.error}`,
+                                        );
+                                }
+                                if (!parkingViolationsResult.ok) {
+                                        throw new Error(
+                                                `Couldn't load parking violations for this school. ${parkingViolationsResult.error}`,
+                                        );
+                                }
+
+                                const historyByUser = groupByUserUUID(
+                                        routeHistoryResult.sessions,
+                                        (session) => session.user_uuid,
+                                );
+                                const violationsByUser = groupByUserUUID(
+                                        parkingViolationsResult.violations,
+                                        (violation) => violation.user_uuid,
+                                );
+
+                                const students: StudentActivityBundle[] = roster.map((entry) => {
                                         const studentUserUUID = resolveStudentUserUUID(entry);
-                                        const [routeHistoryResult, parkingViolationsResult] =
-                                                await Promise.allSettled([
-                                                        fetchStudentRouteHistory(
-                                                                managedAppId,
-                                                                activeSchoolId,
-                                                                studentUserUUID,
-                                                        ),
-                                                        fetchStudentParkingViolations(
-                                                                managedAppId,
-                                                                activeSchoolId,
-                                                                studentUserUUID,
-                                                        ),
-                                                ]);
-                                        const errors = [
-                                                routeHistoryResult.status === "rejected"
-                                                        ? `Route history: ${getErrorMessage(routeHistoryResult.reason)}`
-                                                        : "",
-                                                parkingViolationsResult.status === "rejected"
-                                                        ? `Penalty reports: ${getErrorMessage(
-                                                                        parkingViolationsResult.reason,
-                                                                )}`
-                                                        : "",
-                                        ].filter(Boolean);
-
                                         return {
                                                 entry,
-                                                routeHistory:
-                                                        routeHistoryResult.status === "fulfilled"
-                                                                ? routeHistoryResult.value
-                                                                : [],
+                                                routeHistory: historyByUser.get(studentUserUUID) ?? [],
                                                 parkingViolations:
-                                                        parkingViolationsResult.status === "fulfilled"
-                                                                ? parkingViolationsResult.value
-                                                                : [],
-                                                error: errors.join("; "),
+                                                        violationsByUser.get(studentUserUUID) ?? [],
+                                                error: "",
                                         } satisfies StudentActivityBundle;
-                                },
-                                (completed) => {
-                                        setLoadState({
-                                                status: "loading",
-                                                message: "Syncing student rides and reports...",
-                                                completed,
-                                                total: roster.length,
-                                        });
-                                },
-                        );
+                                });
 
-                        setDataset({
-                                generatedAt: Math.floor(Date.now() / 1000),
-                                roster,
-                                pois,
-                                students,
-                        });
-                        setLoadState({
-                                status: "idle",
-                                message: "",
-                                completed: 0,
-                                total: 0,
-                        });
-                        onHeaderCountsLoaded?.({
-                                studentCount: roster.length,
-                                pendingReservationCount: pendingReservations.length,
-                        });
-                } catch (error) {
-                        setDataset(null);
-                        setLoadState({
-                                status: "error",
-                                message: getErrorMessage(error),
-                                completed: 0,
-                                total: 0,
-                        });
-                }
-        }, [
-                activeSchoolId,
-                adminUserUUID,
-                managedAppId,
-                onHeaderCountsLoaded,
-                onParkingReportCountLoaded,
-        ]);
+                                const dataset: DashboardDataset = {
+                                        generatedAt: Math.floor(Date.now() / 1000),
+                                        roster,
+                                        pois,
+                                        students,
+                                };
+                                const headerCounts = {
+                                        studentCount: roster.length,
+                                        pendingReservationCount: pendingReservations.length,
+                                };
+                                const parkingReportCount =
+                                        countOpenParkingIncidentReports(parkingIncidentReports);
+
+                                dashboardDatasetCache = {
+                                        key: cacheKey,
+                                        dataset,
+                                        at: Date.now(),
+                                        headerCounts,
+                                        parkingReportCount,
+                                };
+
+                                setDataset(dataset);
+                                setLoadState({
+                                        status: "idle",
+                                        message: "",
+                                        completed: 0,
+                                        total: 0,
+                                });
+                                onHeaderCountsLoaded?.(headerCounts);
+                        } catch (error) {
+                                if (!isCurrent()) {
+                                        return;
+                                }
+                                setDataset(null);
+                                setLoadState({
+                                        status: "error",
+                                        message: getErrorMessage(error),
+                                        completed: 0,
+                                        total: 0,
+                                });
+                        }
+                },
+                [
+                        activeSchoolId,
+                        adminUserUUID,
+                        managedAppId,
+                        onHeaderCountsLoaded,
+                        onParkingReportCountLoaded,
+                ],
+        );
 
         useEffect(() => {
                 const timer = window.setTimeout(() => {
@@ -1650,7 +1742,7 @@ export function DashboardScreen({
                                         className="primary-button"
                                         type="button"
                                         onClick={() => {
-                                                void loadDashboardData();
+                                                void loadDashboardData(true);
                                                 void loadIncomeSummary();
                                         }}
                                         disabled={loadState.status === "loading" || !activeSchoolId}>
