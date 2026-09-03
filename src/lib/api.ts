@@ -219,17 +219,7 @@ export interface SchoolChallengeCreateResponse {
   repeated_challenges: SchoolChallenge[];
 }
 
-export interface SchoolChallengeImageUploadInitResponse {
-  school_id: string;
-  object_key: string;
-  public_url: string;
-  put_url: string;
-  content_type: string;
-  expires_in: number;
-}
-
 export interface SchoolChallengeImageUploadResponse {
-  school_id: string;
   object_key: string;
   public_url: string;
   content_type: string;
@@ -1965,74 +1955,39 @@ export async function fetchSchoolChallengeParticipants(
   );
 }
 
-export async function initSchoolChallengeImageUpload(
-  managedAppId: string,
-  schoolId: string,
-  input: {
-    file_ext?: string;
-    content_type?: string;
-  },
-): Promise<SchoolChallengeImageUploadInitResponse> {
-  return request<SchoolChallengeImageUploadInitResponse>(
-    "nebula",
-    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/challenges/media/upload/init`,
-    {
-      method: "POST",
-      body: input,
-      appIdHeader: managedAppId,
-    },
-  );
-}
-
 export async function uploadSchoolChallengeImage(
   managedAppId: string,
   schoolId: string,
   file: File,
-  retryOnUnauthorized = true,
 ): Promise<SchoolChallengeImageUploadResponse> {
-  const bearerToken = currentSession?.tokens.access_token.token;
-  if (!bearerToken) {
-    throw new Error("Login required");
-  }
-
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("file_ext", file.name.split(".").pop()?.trim() ?? "");
-  if (file.type) {
-    formData.append("content_type", file.type);
-  }
-
-  const response = await fetch(
-    `${serviceBase.nebula}/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/challenges/media/upload`,
+  // Challenge and scavenger-hunt-stop images share the same public
+  // campaign_group storage path as school logos and notification images,
+  // so they go through the shared KCA proxy's Cloud Storage helper. The
+  // browser uploads once to KCA, which streams straight to the public
+  // bucket — no second hop through nebula, and no DigitalOcean Spaces.
+  const uploaded = await uploadUserEntityMediaViaProxy(
+    managedAppId,
     {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${bearerToken}`,
-        "X-App-Id": managedAppId,
-      },
-      body: formData,
+      entityType: "campaign_group",
+      entityUUID: buildSchoolChallengeEntityUUID(managedAppId, schoolId),
+      slot: "challenge_image",
+      file,
     },
+    currentSession?.authAppId ?? managedAppId,
   );
 
-  if (response.status === 401 && retryOnUnauthorized) {
-    await refreshSession();
-    return uploadSchoolChallengeImage(managedAppId, schoolId, file, false);
-  }
-  if (
-    response.status === 403 &&
-    retryOnUnauthorized &&
-    !forbiddenRecoveryIsOnCooldown()
-  ) {
-    lastForbiddenRecoveryAt = Date.now();
-    await refreshSession();
-    return uploadSchoolChallengeImage(managedAppId, schoolId, file, false);
+  const publicUrl =
+    uploaded.public_url?.trim() || uploaded.media.public_url?.trim() || "";
+  if (!publicUrl) {
+    throw new Error("Challenge image upload did not return a public URL.");
   }
 
-  if (!response.ok) {
-    throw new Error(await parseErrorMessage(response));
-  }
-
-  return parseResponse<SchoolChallengeImageUploadResponse>(response);
+  return {
+    object_key: uploaded.media.object_key,
+    public_url: publicUrl,
+    content_type: uploaded.media.content_type,
+    size: uploaded.media.size,
+  };
 }
 
 function normalizeEntityMediaSegment(value: string, fallback: string): string {
@@ -2059,6 +2014,15 @@ function buildSchoolNotificationEntityUUID(
   const appSegment = normalizeEntityMediaSegment(managedAppId, "app");
   const schoolSegment = normalizeEntityMediaSegment(schoolId, "school");
   return `school_notification.${appSegment}.${schoolSegment}`.slice(0, 128);
+}
+
+function buildSchoolChallengeEntityUUID(
+  managedAppId: string,
+  schoolId: string,
+): string {
+  const appSegment = normalizeEntityMediaSegment(managedAppId, "app");
+  const schoolSegment = normalizeEntityMediaSegment(schoolId, "school");
+  return `school_challenge.${appSegment}.${schoolSegment}`.slice(0, 128);
 }
 
 export async function initUserEntityMediaUpload(
