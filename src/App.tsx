@@ -4856,7 +4856,15 @@ function App() {
 
     // Editing a challenge that belongs to a repeat series: ask which scope
     // the edit applies to (Google Calendar-style) before actually saving.
-    if (challengeDraft.challenge_uuid && selectedChallenge?.series_uuid) {
+    // Only offered when the occurrence being edited is itself active -
+    // apply_to_series only touches active siblings server-side, so
+    // "All N" from an inactive occurrence would silently leave the one
+    // actually being edited untouched while updating everything else.
+    if (
+      challengeDraft.challenge_uuid &&
+      selectedChallenge?.active &&
+      selectedChallenge?.series_uuid
+    ) {
       const seriesCount = schoolChallenges.filter(
         (existing) =>
           existing.active &&

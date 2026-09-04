@@ -1095,7 +1095,7 @@ export function ChallengesScreen(props: Props) {
                                                                                                 Inactive
                                                                                         </span>
                                                                                 ) : null}
-                                                                                {selectedChallenge.series_uuid
+                                                                                {selectedChallenge.active && selectedChallenge.series_uuid
                                                                                 	? (() => {
                                                                                 			const seriesCount = schoolChallenges.filter(
                                                                                 				(ch) =>
