@@ -1095,6 +1095,22 @@ export function ChallengesScreen(props: Props) {
                                                                                                 Inactive
                                                                                         </span>
                                                                                 ) : null}
+                                                                                {selectedChallenge.series_uuid
+                                                                                	? (() => {
+                                                                                			const seriesCount = schoolChallenges.filter(
+                                                                                				(ch) =>
+                                                                                					ch.series_uuid &&
+                                                                                					ch.series_uuid === selectedChallenge.series_uuid,
+                                                                                			).length;
+                                                                                			return seriesCount > 1 ? (
+                                                                                				<span
+                                                                                					className="challenge-status-badge challenge-status-series"
+                                                                                					title="Editing offers the choice to update just this one or all challenges in this series.">
+                                                                                					Repeats &middot; {seriesCount}
+                                                                                				</span>
+                                                                                			) : null;
+                                                                                		})()
+                                                                                	: null}
                                                                         </div>
                                                                 ) : null}
                                                         </div>

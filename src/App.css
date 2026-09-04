@@ -2768,6 +2768,12 @@
         border: 1px solid rgba(17, 45, 78, 0.1);
 }
 
+.challenge-status-series {
+        background: rgba(124, 58, 237, 0.1);
+        color: #6d28d9;
+        border: 1px solid rgba(124, 58, 237, 0.2);
+}
+
 /* ── RIGHT: DETAIL PANEL ─────────────── */
 .challenge-detail-panel {
         display: grid;
@@ -7705,6 +7711,18 @@
 .poi-editor-modal {
         width: min(1480px, calc(100vw - 32px));
         max-height: min(94vh, 1040px);
+}
+
+.series-edit-modal {
+        width: min(480px, 100%);
+}
+
+.series-edit-modal-copy {
+        margin: 0;
+}
+
+.series-edit-modal-actions {
+        justify-content: flex-end;
 }
 
 .management-modal-header {

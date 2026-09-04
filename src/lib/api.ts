@@ -190,6 +190,10 @@ export interface SchoolChallenge {
   start_time: number;
   end_time: number;
   active: boolean;
+  // Shared across every occurrence created by one "repeat for N weeks"
+  // submission; absent/empty for a challenge created on its own (including
+  // everything created before this existed).
+  series_uuid?: string;
   created_at: number;
   updated_at: number;
 }
@@ -212,11 +216,28 @@ export interface SchoolChallengeWriteInput {
     interval_unit: "days" | "weeks";
     count: number;
   };
+  // Update-only: when true and the challenge being edited belongs to a
+  // series, applies the edit to every active occurrence in that series
+  // instead of just this one. No-op on create, and no-op (falls back to a
+  // single-challenge update) when the challenge has no series.
+  apply_to_series?: boolean;
 }
 
 export interface SchoolChallengeCreateResponse {
   challenge: SchoolChallenge;
   repeated_challenges: SchoolChallenge[];
+}
+
+export interface SchoolChallengeUpdateResponse {
+  challenge: SchoolChallenge;
+  series_challenges?: SchoolChallenge[];
+}
+
+/** Normalized shape updateSchoolChallenge() always returns, regardless of
+ * whether the server replied with a bare challenge or the series wrapper. */
+export interface SchoolChallengeUpdateResult {
+  challenge: SchoolChallenge;
+  seriesChallenges?: SchoolChallenge[];
 }
 
 export interface SchoolChallengeImageUploadResponse {
@@ -1909,13 +1930,22 @@ export async function createSchoolChallenge(
   );
 }
 
+function isSchoolChallengeUpdateResponse(
+  value: SchoolChallenge | SchoolChallengeUpdateResponse,
+): value is SchoolChallengeUpdateResponse {
+  return (
+    typeof (value as SchoolChallengeUpdateResponse).challenge === "object" &&
+    (value as SchoolChallengeUpdateResponse).challenge !== null
+  );
+}
+
 export async function updateSchoolChallenge(
   managedAppId: string,
   schoolId: string,
   challengeUUID: string,
   input: SchoolChallengeWriteInput,
-): Promise<SchoolChallenge> {
-  return request<SchoolChallenge>(
+): Promise<SchoolChallengeUpdateResult> {
+  const response = await request<SchoolChallenge | SchoolChallengeUpdateResponse>(
     "nebula",
     `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/challenges/${encodeURIComponent(challengeUUID)}`,
     {
@@ -1924,6 +1954,14 @@ export async function updateSchoolChallenge(
       appIdHeader: managedAppId,
     },
   );
+
+  if (isSchoolChallengeUpdateResponse(response)) {
+    return {
+      challenge: response.challenge,
+      seriesChallenges: response.series_challenges,
+    };
+  }
+  return { challenge: response };
 }
 
 export async function deleteSchoolChallenge(
