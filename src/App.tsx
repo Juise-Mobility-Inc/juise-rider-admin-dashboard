@@ -1729,6 +1729,10 @@ function App() {
   const [challengeImageUploadBusy, setChallengeImageUploadBusy] =
     useState(false);
   const [selectedChallengeId, setSelectedChallengeId] = useState("");
+  // Tracks which challenge's data is currently loaded into challengeDraft, so
+  // the selection→draft sync effect runs once per selection instead of on
+  // every render.
+  const syncedChallengeDraftIdRef = useRef<string | null>(null);
   const [challengeParticipants, setChallengeParticipants] = useState<
     SchoolChallengeParticipantProgress[]
   >([]);
@@ -3249,55 +3253,64 @@ function App() {
 
   useEffect(() => {
     if (!isChallengeManagementSection(currentSection)) {
+      syncedChallengeDraftIdRef.current = null;
       return;
     }
+
+    // Every branch below is written to be idempotent: it only calls a setter
+    // when the value actually needs to change. Firing setChallengeDraft with a
+    // fresh object (or setChallengeParticipants with a fresh []) on every
+    // render is what made the table flicker and refetch in a loop.
+    const clearParticipants = () =>
+      setChallengeParticipants((current) => (current.length ? [] : current));
 
     if (selectedChallengeId === newChallengeSelectionId) {
-      if (
-        isChallengeGamesSection &&
-        challengeDraft.challenge_type !== "scavenger_hunt"
-      ) {
-        setChallengeDraft(createEmptyScavengerHuntDraft());
+      const wantType = isChallengeGamesSection
+        ? "scavenger_hunt"
+        : "route_metric";
+      if (challengeDraft.challenge_type !== wantType) {
+        setChallengeDraft(
+          isChallengeGamesSection
+            ? createEmptyScavengerHuntDraft()
+            : createEmptyChallengeDraft(),
+        );
       }
-      if (
-        !isChallengeGamesSection &&
-        challengeDraft.challenge_type !== "route_metric"
-      ) {
-        setChallengeDraft(createEmptyChallengeDraft());
-      }
-      setChallengeParticipants([]);
-      return;
-    }
-
-    if (visibleSchoolChallenges.length === 0) {
-      setSelectedChallengeId("");
-      setChallengeDraft(createEmptyChallengeDraft());
-      setChallengeParticipants([]);
+      clearParticipants();
+      syncedChallengeDraftIdRef.current = newChallengeSelectionId;
       return;
     }
 
     if (!selectedChallenge) {
       // An empty id is the intentional "show the table" state (set by delete,
-      // by saving an edit, and by the back button) — leave it alone. Only a
+      // by saving an edit, and by the back button) — leave it alone. A
       // non-empty id that no longer resolves (its challenge was deleted or
-      // filtered out from under the selection) needs recovery, and that also
-      // returns to the table rather than snapping to an unrelated challenge.
+      // filtered out from under the selection) also returns to the table
+      // rather than snapping to an unrelated challenge.
       if (selectedChallengeId) {
         setSelectedChallengeId("");
-        setChallengeDraft(createEmptyChallengeDraft());
-        setChallengeParticipants([]);
       }
+      if (challengeDraft.challenge_uuid) {
+        setChallengeDraft(createEmptyChallengeDraft());
+      }
+      clearParticipants();
+      syncedChallengeDraftIdRef.current = null;
       return;
     }
 
-    setChallengeDraft(challengeToDraft(selectedChallenge));
+    // Load the selected challenge into the draft once per selection change, not
+    // on every render — otherwise challengeToDraft's fresh object retriggers
+    // this effect and clobbers in-progress edits.
+    if (syncedChallengeDraftIdRef.current !== selectedChallenge.challenge_uuid) {
+      setChallengeDraft(challengeToDraft(selectedChallenge));
+      syncedChallengeDraftIdRef.current = selectedChallenge.challenge_uuid;
+    }
   }, [
     currentSection,
     challengeDraft.challenge_type,
+    challengeDraft.challenge_uuid,
     isChallengeGamesSection,
     selectedChallenge,
     selectedChallengeId,
-    visibleSchoolChallenges,
   ]);
 
   useEffect(() => {
@@ -3568,7 +3581,7 @@ function App() {
       !selectedChallenge ||
       selectedChallengeId === newChallengeSelectionId
     ) {
-      setChallengeParticipants([]);
+      setChallengeParticipants((current) => (current.length ? [] : current));
       return;
     }
 
