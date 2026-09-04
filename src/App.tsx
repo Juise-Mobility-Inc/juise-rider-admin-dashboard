@@ -1736,6 +1736,13 @@ function App() {
   const [challengeParticipants, setChallengeParticipants] = useState<
     SchoolChallengeParticipantProgress[]
   >([]);
+  // Set only when editing a challenge that belongs to a repeat series -
+  // gates the "just this one / all N" confirm modal before the save
+  // actually goes out. null the rest of the time.
+  const [seriesEditPrompt, setSeriesEditPrompt] = useState<{
+    payload: SchoolChallengeWriteInput;
+    seriesCount: number;
+  } | null>(null);
   const [imagePreview, setImagePreview] = useState<{
     imageUrl: string;
     alt: string;
@@ -4812,60 +4819,107 @@ function App() {
       return;
     }
 
+    const payload: SchoolChallengeWriteInput = {
+      challenge_type: challengeDraft.challenge_type,
+      audience_type: isScavengerHunt ? "user" : challengeDraft.audience_type,
+      title: challengeDraft.title.trim(),
+      description: challengeDraft.description.trim(),
+      image_url: challengeDraft.image_url.trim(),
+      metric_type: isScavengerHunt ? "points" : challengeDraft.metric_type,
+      target_value: targetValue,
+      game_config: isScavengerHunt
+        ? {
+            sequential_unlock: true,
+            min_accuracy_meters: minAccuracyMeters,
+            required_dwell_seconds: requiredDwellSeconds,
+            grand_prize_points: grandPrizePoints,
+            dwell_sample_interval_seconds: 5,
+          }
+        : {},
+      checkpoints: isScavengerHunt ? checkpointInputs : [],
+      start_time: startTime,
+      end_time: endTime,
+      active: challengeDraft.active,
+      ...(!challengeDraft.challenge_uuid &&
+      !isScavengerHunt &&
+      challengeDraft.repeat_enabled &&
+      repeatCount > 1
+        ? {
+            repeat: {
+              interval_value: repeatIntervalValue,
+              interval_unit: challengeDraft.repeat_interval_unit,
+              count: repeatCount,
+            },
+          }
+        : {}),
+    };
+
+    // Editing a challenge that belongs to a repeat series: ask which scope
+    // the edit applies to (Google Calendar-style) before actually saving.
+    // Only offered when the occurrence being edited is itself active -
+    // apply_to_series only touches active siblings server-side, so
+    // "All N" from an inactive occurrence would silently leave the one
+    // actually being edited untouched while updating everything else.
+    if (
+      challengeDraft.challenge_uuid &&
+      selectedChallenge?.active &&
+      selectedChallenge?.series_uuid
+    ) {
+      const seriesCount = schoolChallenges.filter(
+        (existing) =>
+          existing.active &&
+          existing.series_uuid &&
+          existing.series_uuid === selectedChallenge.series_uuid,
+      ).length;
+      if (seriesCount > 1) {
+        setSeriesEditPrompt({ payload, seriesCount });
+        return;
+      }
+    }
+
+    await performSaveChallenge(payload, false);
+  }
+
+  async function performSaveChallenge(
+    payload: SchoolChallengeWriteInput,
+    applyToSeries: boolean,
+  ) {
+    if (!activeSchoolId) {
+      return;
+    }
+
+    const isEditingExisting = Boolean(challengeDraft.challenge_uuid);
+    const isScavengerHunt = payload.challenge_type === "scavenger_hunt";
+
     setChallengeBusy(true);
     try {
-      const payload: SchoolChallengeWriteInput = {
-        challenge_type: challengeDraft.challenge_type,
-        audience_type: isScavengerHunt ? "user" : challengeDraft.audience_type,
-        title: challengeDraft.title.trim(),
-        description: challengeDraft.description.trim(),
-        image_url: challengeDraft.image_url.trim(),
-        metric_type: isScavengerHunt ? "points" : challengeDraft.metric_type,
-        target_value: targetValue,
-        game_config: isScavengerHunt
-          ? {
-              sequential_unlock: true,
-              min_accuracy_meters: minAccuracyMeters,
-              required_dwell_seconds: requiredDwellSeconds,
-              grand_prize_points: grandPrizePoints,
-              dwell_sample_interval_seconds: 5,
-            }
-          : {},
-        checkpoints: isScavengerHunt ? checkpointInputs : [],
-        start_time: startTime,
-        end_time: endTime,
-        active: challengeDraft.active,
-      };
+      let savedChallenges: SchoolChallenge[];
+      let updatedSeriesCount = 0;
 
-      const savedChallenges = challengeDraft.challenge_uuid
-        ? [
-            await updateSchoolChallenge(
-              context.managedAppId,
-              activeSchoolId,
-              challengeDraft.challenge_uuid,
-              payload,
-            ),
-          ]
-        : getCreatedChallenges(
-            await createSchoolChallenge(
-              context.managedAppId,
-              activeSchoolId,
-              !isScavengerHunt &&
-                challengeDraft.repeat_enabled &&
-                repeatCount > 1
-                ? {
-                    ...payload,
-                    repeat: {
-                      interval_value: repeatIntervalValue,
-                      interval_unit: challengeDraft.repeat_interval_unit,
-                      count: repeatCount,
-                    },
-                  }
-                : payload,
-            ),
-          );
+      if (isEditingExisting) {
+        const result = await updateSchoolChallenge(
+          context.managedAppId,
+          activeSchoolId,
+          challengeDraft.challenge_uuid,
+          { ...payload, apply_to_series: applyToSeries },
+        );
+        if (result.seriesChallenges && result.seriesChallenges.length > 1) {
+          savedChallenges = result.seriesChallenges;
+          updatedSeriesCount = result.seriesChallenges.length;
+        } else {
+          savedChallenges = [result.challenge];
+        }
+      } else {
+        savedChallenges = getCreatedChallenges(
+          await createSchoolChallenge(
+            context.managedAppId,
+            activeSchoolId,
+            payload,
+          ),
+        );
+      }
+
       const savedChallenge = savedChallenges[0];
-      const wasEditingExisting = Boolean(challengeDraft.challenge_uuid);
 
       setSchoolChallenges((current) =>
         sortChallengesForDisplay([
@@ -4878,7 +4932,7 @@ function App() {
           ),
         ]),
       );
-      if (wasEditingExisting) {
+      if (isEditingExisting) {
         // Editing an existing challenge returns to the table, the same way
         // deleting one does.
         setSelectedChallengeId("");
@@ -4893,9 +4947,11 @@ function App() {
       setBanner({
         tone: "success",
         message:
-          savedChallenges.length > 1
-            ? `Created ${savedChallenges.length} repeated challenges from ${savedChallenge.title}.`
-            : `${challengeDraft.challenge_uuid ? "Updated" : "Created"} ${savedKind} ${savedChallenge.title}.`,
+          updatedSeriesCount > 1
+            ? `Updated ${updatedSeriesCount} challenges in this series.`
+            : savedChallenges.length > 1
+              ? `Created ${savedChallenges.length} repeated challenges from ${savedChallenge.title}.`
+              : `${isEditingExisting ? "Updated" : "Created"} ${savedKind} ${savedChallenge.title}.`,
       });
     } catch (error) {
       setBanner({
@@ -4905,6 +4961,15 @@ function App() {
     } finally {
       setChallengeBusy(false);
     }
+  }
+
+  function handleConfirmSeriesEdit(applyToSeries: boolean) {
+    if (!seriesEditPrompt) {
+      return;
+    }
+    const { payload } = seriesEditPrompt;
+    setSeriesEditPrompt(null);
+    void performSaveChallenge(payload, applyToSeries);
   }
 
   function handleCopyChallengeForResubmit(challenge: SchoolChallenge) {
@@ -7014,6 +7079,60 @@ function App() {
 
         {sectionContent}
       </main>
+      {seriesEditPrompt ? (
+        <div
+          className="management-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Update repeating challenge"
+          onClick={() => setSeriesEditPrompt(null)}
+        >
+          <div
+            className="management-modal-sheet series-edit-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="management-modal-header">
+              <div>
+                <p className="eyebrow">Repeating challenge</p>
+                <h3>Update just this one, or all {seriesEditPrompt.seriesCount}?</h3>
+              </div>
+              <button
+                className="text-button management-modal-close"
+                type="button"
+                onClick={() => setSeriesEditPrompt(null)}
+                aria-label="Cancel"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="muted-text series-edit-modal-copy">
+              This challenge repeats as {seriesEditPrompt.seriesCount}{" "}
+              separate challenges. Students still join each one on its own —
+              choose whether these changes apply to just this challenge, or
+              to all of them (each keeps its own dates, shifted the same way
+              this one moved).
+            </p>
+            <div className="form-actions series-edit-modal-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={challengeBusy}
+                onClick={() => handleConfirmSeriesEdit(false)}
+              >
+                Just this challenge
+              </button>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={challengeBusy}
+                onClick={() => handleConfirmSeriesEdit(true)}
+              >
+                All {seriesEditPrompt.seriesCount} challenges
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {imagePreview ? (
         <div
           className="image-lightbox"
