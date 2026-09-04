@@ -4859,6 +4859,7 @@ function App() {
     if (challengeDraft.challenge_uuid && selectedChallenge?.series_uuid) {
       const seriesCount = schoolChallenges.filter(
         (existing) =>
+          existing.active &&
           existing.series_uuid &&
           existing.series_uuid === selectedChallenge.series_uuid,
       ).length;
