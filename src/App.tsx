@@ -1726,6 +1726,10 @@ function App() {
   );
   const [challengeBusy, setChallengeBusy] = useState(false);
   const [challengeListBusy, setChallengeListBusy] = useState(false);
+  // Flips true once the challenge list has been fetched at least once for
+  // the active school. Gates ChallengesScreen's ?challenge= URL sync so a
+  // deep link isn't dropped while the list is still empty/loading.
+  const [challengesLoadedOnce, setChallengesLoadedOnce] = useState(false);
   const [challengeImageUploadBusy, setChallengeImageUploadBusy] =
     useState(false);
   const [selectedChallengeId, setSelectedChallengeId] = useState("");
@@ -2828,6 +2832,7 @@ function App() {
     setChallengeParticipants([]);
     setChallengeDraft(createEmptyChallengeDraft());
     setSelectedChallengeId("");
+    setChallengesLoadedOnce(false);
   }, [activeSchoolId]);
 
   useEffect(() => {
@@ -3573,6 +3578,7 @@ function App() {
       } finally {
         if (!cancelled) {
           setChallengeListBusy(false);
+          setChallengesLoadedOnce(true);
         }
       }
     }
@@ -6207,6 +6213,7 @@ function App() {
             activeSchoolId={activeSchoolId}
             challengeBusy={challengeBusy}
             challengeListBusy={challengeListBusy}
+            challengesLoadedOnce={challengesLoadedOnce}
             challengeParticipantsBusy={challengeParticipantsBusy}
             challengeImageUploadBusy={challengeImageUploadBusy}
             selectedChallengeId={selectedChallengeId}
@@ -6257,6 +6264,7 @@ function App() {
             activeSchoolId={activeSchoolId}
             challengeBusy={challengeBusy}
             challengeListBusy={challengeListBusy}
+            challengesLoadedOnce={challengesLoadedOnce}
             challengeParticipantsBusy={challengeParticipantsBusy}
             challengeImageUploadBusy={challengeImageUploadBusy}
             selectedChallengeId={selectedChallengeId}

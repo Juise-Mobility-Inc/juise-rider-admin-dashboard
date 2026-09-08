@@ -351,6 +351,7 @@ type Props = {
         activeSchoolId: string;
         challengeBusy: boolean;
         challengeListBusy: boolean;
+        challengesLoadedOnce: boolean;
         challengeParticipantsBusy: boolean;
         challengeImageUploadBusy: boolean;
         selectedChallengeId: string;
@@ -682,6 +683,7 @@ export function ChallengesScreen(props: Props) {
                 activeSchoolId,
                 challengeBusy,
                 challengeListBusy,
+                challengesLoadedOnce,
                 challengeParticipantsBusy,
                 challengeImageUploadBusy,
                 selectedChallengeId,
@@ -907,6 +909,7 @@ export function ChallengesScreen(props: Props) {
                                 setScreenTab("list");
                         }
                 },
+                challengesLoadedOnce,
         );
         const [dragIndex, setDragIndex] = useState<number | null>(null);
         const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);

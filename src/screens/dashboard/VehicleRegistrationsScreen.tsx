@@ -229,8 +229,17 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
   const [filter, setFilter] = useState("pending");
   const [search, setSearch] = useState("");
   const [selectedUUID, setSelectedUUID] = useState("");
+  // Gates the URL<->selection sync until the first fetch lands, so the
+  // "clear a selection that isn't in the (still-empty) list" effect below
+  // can't wipe a valid ?registration= deep link before its data arrives.
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
-  useDetailParamSync("registration", selectedUUID, setSelectedUUID);
+  useDetailParamSync(
+    "registration",
+    selectedUUID,
+    setSelectedUUID,
+    hasLoadedOnce,
+  );
   const [manualAmounts, setManualAmounts] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState("");
@@ -323,6 +332,7 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
       setError(getErrorMessage(nextError));
     } finally {
       setBusy(false);
+      setHasLoadedOnce(true);
     }
   }, [activeSchoolId, filter, managedAppId]);
 

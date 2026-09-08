@@ -10,25 +10,34 @@ import { useSearchParams } from "react-router-dom";
  * - When the param changes (back/forward navigation or a deep link),
  *   `applyFromUrl` is called so the screen can open/close the detail view.
  *
- * Two guards keep this from oscillating when the selection is cleared out
- * from under a still-present param (deleting the row you were viewing):
+ * `ready` guards the load race. Screens routinely clear an out-of-range
+ * selection while their list is still loading (`!list.some(...) -> setSel("")`).
+ * If the hook trusted that transient empty `value`, it would delete a
+ * perfectly valid `?key=<id>` deep link before the data that backs it
+ * arrives, and the linked row would never open. While `ready` is false the
+ * hook does nothing in either direction; it starts syncing once the screen
+ * reports its first load is done. Screens with no async load leave `ready`
+ * at its default (`true`).
+ *
+ * Two more guards keep it from oscillating once `ready`:
  *
  * - `setSearchParams` doesn't flush synchronously, so for a render or two
  *   after we write the URL, `param` still reads the pre-write value. That
  *   stale read looks exactly like a back/forward navigation, and applying
- *   it would re-open the selection the parent just cleared — which clears
- *   again, which rewrites the URL, forever. `pendingParamWriteRef` holds
- *   the value we last wrote and suppresses `applyFromUrl` until `param`
- *   actually catches up to it.
+ *   it would re-open a selection that was just cleared (deleting the row you
+ *   were viewing) — which clears again, rewrites the URL, forever.
+ *   `pendingParamWriteRef` holds the value we last wrote and suppresses
+ *   `applyFromUrl` until `param` catches up to it.
  * - A genuine deep link to an id that no longer exists (deleted row) would
- *   otherwise be handed to `applyFromUrl` on every render, since the parent
+ *   otherwise be handed to `applyFromUrl` on every render, since the screen
  *   never adopts it. `lastAppliedParamRef` makes us offer each distinct
- *   param to the parent at most once.
+ *   param to the screen at most once.
  */
 export function useDetailParamSync(
   key: string,
   value: string,
   applyFromUrl: (value: string) => void,
+  ready = true,
 ) {
   const [searchParams, setSearchParams] = useSearchParams();
   const param = (searchParams.get(key) ?? "").trim();
@@ -52,6 +61,12 @@ export function useDetailParamSync(
 
     if (param === value) {
       lastAppliedParamRef.current = param;
+      return;
+    }
+
+    // Screen's initial load hasn't finished: neither direction is
+    // trustworthy yet. Hold until it reports ready, then reconcile.
+    if (!ready) {
       return;
     }
 
