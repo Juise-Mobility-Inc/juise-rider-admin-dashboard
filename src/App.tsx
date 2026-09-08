@@ -4277,9 +4277,12 @@ function App() {
 
     setSchoolBusy(true);
     try {
+      const schoolName = schoolDraft.name.trim();
       const savedSchool = await saveSchool(context.managedAppId, schoolId, {
-        name: schoolDraft.name.trim(),
-        title: schoolDraft.title.trim(),
+        name: schoolName,
+        // The profile screen exposes one "School name"; the backend's
+        // separate title column has no behavioural use, so keep it in sync.
+        title: schoolName,
         logo_url: schoolDraft.logo_url.trim(),
         default_campus_id: schoolDraft.default_campus_id.trim(),
         color_scheme: sanitizeSchoolColorScheme(schoolDraft.color_scheme),

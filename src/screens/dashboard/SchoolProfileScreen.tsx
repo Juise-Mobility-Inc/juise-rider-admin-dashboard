@@ -120,9 +120,11 @@ export function SchoolProfileScreen(props: Props) {
     SchoolLogoPreview,
   } = props;
 
+  // `name` and `title` are kept identical from this screen (the backend has
+  // no behavioural use for two), so name wins here.
   const schoolLabel =
-    schoolDraft.title.trim() ||
     schoolDraft.name.trim() ||
+    schoolDraft.title.trim() ||
     activeSchoolId ||
     "School profile";
   const busy = schoolBusy || schoolLogoUploadBusy;
@@ -239,38 +241,25 @@ export function SchoolProfileScreen(props: Props) {
                         Remove logo
                       </button>
                     ) : null}
-                    <p className="helper-text">PNG or JPG.</p>
                   </div>
                 </div>
 
-                <div className="form-grid">
-                  <label className="field">
-                    <span>School name</span>
-                    <input
-                      value={schoolDraft.name}
-                      onChange={(event) =>
-                        setSchoolDraft((current) => ({
-                          ...current,
-                          name: event.target.value,
-                        }))
-                      }
-                      placeholder="University Name"
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Display title</span>
-                    <input
-                      value={schoolDraft.title}
-                      onChange={(event) =>
-                        setSchoolDraft((current) => ({
-                          ...current,
-                          title: event.target.value,
-                        }))
-                      }
-                      placeholder="University Name"
-                    />
-                  </label>
-                </div>
+                <label className="field">
+                  <span>School name</span>
+                  <input
+                    value={schoolDraft.name}
+                    onChange={(event) =>
+                      setSchoolDraft((current) => ({
+                        ...current,
+                        // One name, stored to both columns.
+                        name: event.target.value,
+                        title: event.target.value,
+                      }))
+                    }
+                    placeholder="University Name"
+                  />
+                  <small>Shown to students in the app and on their passes.</small>
+                </label>
 
                 <label className="field checkbox-field sp-active-field">
                   <div className="sp-checkbox-row">
@@ -448,9 +437,7 @@ export function SchoolProfileScreen(props: Props) {
                 <div className="sp-phone">
                   <div className="sp-phone-header">
                     <GlyphIcon path={ICON.menu} />
-                    <span className="sp-phone-title">
-                      {schoolDraft.title.trim() || schoolLabel}
-                    </span>
+                    <span className="sp-phone-title">{schoolLabel}</span>
                     <span className="sp-phone-badge" aria-hidden="true" />
                   </div>
 
@@ -489,7 +476,10 @@ export function SchoolProfileScreen(props: Props) {
                       </div>
                       <div className="sp-today-action">
                         <span>Start a ride to earn more points</span>
-                        <span className="sp-today-action-btn" aria-hidden="true">
+                        <span
+                          className="sp-today-action-btn"
+                          aria-hidden="true"
+                        >
                           <GlyphIcon path={ICON.arrow} />
                         </span>
                       </div>
@@ -529,7 +519,7 @@ export function SchoolProfileScreen(props: Props) {
 
           <div className="sp-save-bar">
             <span className="muted-text">
-              {busyLabel || "Saves branding, colors, and terms together."}
+              {busyLabel || "Save your changes to update the school profile."}
             </span>
             <div className="form-actions">
               <button
