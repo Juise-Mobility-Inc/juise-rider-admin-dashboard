@@ -362,7 +362,7 @@ type Props = {
         handleSaveChallenge: (
                 event: FormEvent<HTMLFormElement>,
         ) => void | Promise<void>;
-        handleDeleteSelectedChallenge: () => Promise<void>;
+        handleDeleteSelectedChallenge: () => void;
         handleCopyChallengeForResubmit: (challenge: SchoolChallenge) => void;
         handleChallengeImageFileChange: (
                 event: ChangeEvent<HTMLInputElement>,
