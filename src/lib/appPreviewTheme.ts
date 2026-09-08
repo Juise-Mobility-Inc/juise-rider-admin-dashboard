@@ -47,6 +47,7 @@ function readableOn(background: string, light: string, dark: string): string {
 
 export type AppPreviewTheme = {
   primary: string;
+  primaryTint: string;
   background: string;
   text: string;
   accent: string;
@@ -72,6 +73,9 @@ export function resolveAppPreviewTheme(
 
   return {
     primary,
+    // ~7% primary over the background — the app draws this with an alpha
+    // hex (`${green}0D`); an opaque mix reads the same on the opaque phone.
+    primaryTint: mixHexColors(background, primary, 0.07),
     background,
     text,
     accent,

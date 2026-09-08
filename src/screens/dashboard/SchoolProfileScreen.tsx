@@ -24,6 +24,8 @@ const ICON = {
     "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20c0-3 2.7-5 6-5s6 2 6 5M17 13a3 3 0 1 0 0-6M15.5 20c0-2.4 1.6-4.3 4-4.6",
   bell: "M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6M10 20a2 2 0 0 0 4 0",
   play: "M8 5v14l11-7z",
+  sun: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v2M12 20v2M4 12H2M22 12h-2M5.6 5.6 4.2 4.2M19.8 19.8l-1.4-1.4M18.4 5.6l1.4-1.4M4.2 19.8l1.4-1.4",
+  arrow: "M5 12h13M13 6l6 6-6 6",
 };
 
 function GlyphIcon({ path, filled }: { path: string; filled?: boolean }) {
@@ -142,6 +144,7 @@ export function SchoolProfileScreen(props: Props) {
   };
   const previewStyle: SchoolPreviewStyle = {
     "--app-primary": appTheme.primary,
+    "--app-primary-tint": appTheme.primaryTint,
     "--app-on-primary": appTheme.onPrimary,
     "--app-bg": appTheme.background,
     "--app-text": appTheme.text,
@@ -301,37 +304,45 @@ export function SchoolProfileScreen(props: Props) {
 
                 <div className="sp-color-list">
                   {schoolColorFields.map((field) => (
-                    <div className="sp-color-row" key={field.key}>
-                      <span
-                        className="sp-color-swatch"
-                        style={{ background: swatchColors[field.key] }}
-                        aria-hidden="true"
-                      />
-                      <div className="sp-color-meta">
-                        <strong>{field.label}</strong>
-                        <code>{field.key}</code>
+                    <label className="field sp-color-field" key={field.key}>
+                      <span>{field.label}</span>
+                      <div className="sp-color-control">
+                        <span
+                          className="sp-color-dot"
+                          style={{ background: swatchColors[field.key] }}
+                          aria-hidden="true"
+                        />
+                        <input
+                          type="text"
+                          className="sp-color-hex"
+                          value={schoolDraft.color_scheme[field.key] ?? ""}
+                          onChange={(event) =>
+                            handleSchoolColorChange(
+                              field.key,
+                              event.target.value,
+                            )
+                          }
+                          placeholder={field.fallback}
+                          spellCheck={false}
+                          aria-label={`${field.label} colour hex`}
+                        />
+                        <input
+                          type="color"
+                          className="sp-color-picker"
+                          value={getColorPickerValue(
+                            schoolDraft.color_scheme[field.key],
+                            field.key as keyof Required<SchoolColorScheme>,
+                          )}
+                          onChange={(event) =>
+                            handleSchoolColorChange(
+                              field.key,
+                              event.target.value,
+                            )
+                          }
+                          aria-label={`${field.label} colour`}
+                        />
                       </div>
-                      <input
-                        type="text"
-                        value={schoolDraft.color_scheme[field.key] ?? ""}
-                        onChange={(event) =>
-                          handleSchoolColorChange(field.key, event.target.value)
-                        }
-                        placeholder={field.fallback}
-                      />
-                      <input
-                        type="color"
-                        className="sp-color-picker"
-                        value={getColorPickerValue(
-                          schoolDraft.color_scheme[field.key],
-                          field.key as keyof Required<SchoolColorScheme>,
-                        )}
-                        onChange={(event) =>
-                          handleSchoolColorChange(field.key, event.target.value)
-                        }
-                        aria-label={`${field.label} color`}
-                      />
-                    </div>
+                    </label>
                   ))}
                 </div>
               </section>
@@ -457,13 +468,30 @@ export function SchoolProfileScreen(props: Props) {
                         </strong>
                       </div>
                     </div>
-                    <span className="sp-phone-cta">
-                      <GlyphIcon path={ICON.play} filled />
-                      Start a ride
-                    </span>
-                    <div className="sp-phone-strip" aria-hidden="true">
-                      <span />
-                      <span />
+
+                    <div className="sp-today">
+                      <span className="sp-today-bar" aria-hidden="true" />
+                      <div className="sp-today-head">
+                        <div className="sp-today-copy">
+                          <span className="sp-today-eyebrow">
+                            <GlyphIcon path={ICON.sun} />
+                            Today&apos;s points
+                          </span>
+                          <span className="sp-today-desc">
+                            Rides at {schoolDraft.name.trim() || schoolLabel}
+                          </span>
+                        </div>
+                        <div className="sp-today-value">
+                          <strong>+50</strong>
+                          <span>points today</span>
+                        </div>
+                      </div>
+                      <div className="sp-today-action">
+                        <span>Start a ride to earn more points</span>
+                        <span className="sp-today-action-btn" aria-hidden="true">
+                          <GlyphIcon path={ICON.arrow} />
+                        </span>
+                      </div>
                     </div>
                   </div>
 
