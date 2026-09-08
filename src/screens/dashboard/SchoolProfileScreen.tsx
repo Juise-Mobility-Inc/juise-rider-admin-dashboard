@@ -165,11 +165,12 @@ export function SchoolProfileScreen(props: Props) {
   return (
     <section className="sp-screen">
       <header className="panel sp-header">
-        <div>
+        <div className="sp-header-main">
           <p className="eyebrow">School profile</p>
           <h2>{schoolLabel}</h2>
           <p className="muted-text sp-header-copy">
-            {`Configure your school details, including branding, academic term limits, and visibility in the app.`}
+            Configure your school details, including branding, academic term
+            limits, and visibility in the app.
           </p>
         </div>
         <span

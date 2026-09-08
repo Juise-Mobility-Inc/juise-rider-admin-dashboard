@@ -1966,13 +1966,20 @@
         gap: 16px;
 }
 
+.sp-header-main {
+        flex: 1;
+        min-width: 0;
+}
+
 .sp-header h2 {
         margin: 4px 0 0;
 }
 
 .sp-header-copy {
         margin: 6px 0 0;
-        max-width: 46ch;
+        /* No character cap — a 46ch measure split this one sentence in
+           half. It now runs on one line and only wraps at the header's
+           own width on narrow screens. */
 }
 
 .sp-status {
