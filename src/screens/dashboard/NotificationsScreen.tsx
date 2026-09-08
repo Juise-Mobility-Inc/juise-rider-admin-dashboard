@@ -18,6 +18,8 @@ import {
 	type SchoolStudentRosterEntry,
 	uploadSchoolNotificationImage,
 } from "../../lib/api";
+import { useImageCropper } from "../../components/useImageCropper";
+import { IMAGE_ASPECT } from "../../lib/imageCrop";
 
 type NotificationAudienceMode = Extract<
 	CustomNotificationAudience,
@@ -487,6 +489,7 @@ export function NotificationsScreen({
 	const [imageUrl, setImageUrl] = useState("");
 	const [imageUploadBusy, setImageUploadBusy] = useState(false);
 	const [imageUploadName, setImageUploadName] = useState("");
+	const { beginCrop, cropModal } = useImageCropper();
 	const [largeIconChoice, setLargeIconChoice] = useState<NotificationImageChoice>("default");
 	const [customLargeIcon, setCustomLargeIcon] = useState("");
 	const [smallIconChoice, setSmallIconChoice] = useState<NotificationImageChoice>("default");
@@ -758,7 +761,7 @@ export function NotificationsScreen({
 		setDeliveryDetails(null);
 	};
 
-	const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+	const handleImageUpload = (event: ChangeEvent<HTMLInputElement>) => {
 		const file = event.target.files?.[0];
 		event.target.value = "";
 		if (!file) {
@@ -775,6 +778,18 @@ export function NotificationsScreen({
 			return;
 		}
 
+		beginCrop(
+			file,
+			IMAGE_ASPECT.square,
+			"Crop notification image",
+			(cropped) => void uploadCroppedNotificationImage(cropped),
+		);
+	};
+
+	const uploadCroppedNotificationImage = async (file: File) => {
+		if (!activeSchoolId || !managedAppId) {
+			return;
+		}
 		setImageUploadBusy(true);
 		try {
 			const uploaded = await uploadSchoolNotificationImage(
@@ -1023,6 +1038,7 @@ export function NotificationsScreen({
 
 	return (
 		<section className="management-page notifications-page">
+			{cropModal}
 			<section className="panel">
 				<div className="panel-header">
 					<div>

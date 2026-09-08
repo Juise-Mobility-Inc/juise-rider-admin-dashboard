@@ -32,6 +32,8 @@ import {
         type CsvCell,
 } from "../../lib/csv";
 import { useDetailParamSync } from "../../lib/useDetailParamSync";
+import { useImageCropper } from "../../components/useImageCropper";
+import { IMAGE_ASPECT } from "../../lib/imageCrop";
 
 type ChallengeDraft = {
         challenge_uuid: string;
@@ -712,6 +714,8 @@ export function ChallengesScreen(props: Props) {
                 uploadStopImage,
         } = props;
 
+        const { beginCrop: beginStopImageCrop, cropModal: stopImageCropModal } =
+                useImageCropper();
         const [editMode, setEditMode] = useState(false);
         const isCreating =
                 selectedChallengeId === newChallengeSelectionId &&
@@ -953,10 +957,20 @@ export function ChallengesScreen(props: Props) {
                 // Don't auto-navigate when a challenge is (re)selected — user controls the view
         }, [selectedChallengeId, newChallengeSelectionId]);
 
-        async function handleStopImageUpload(e: ChangeEvent<HTMLInputElement>) {
+        function handleStopImageUpload(e: ChangeEvent<HTMLInputElement>) {
                 const file = e.target.files?.[0];
                 e.target.value = "";
                 if (!file || !uploadStopImage) return;
+                beginStopImageCrop(
+                        file,
+                        IMAGE_ASPECT.square,
+                        "Crop game stop photo",
+                        (cropped) => void uploadCroppedStopImage(cropped),
+                );
+        }
+
+        async function uploadCroppedStopImage(file: File) {
+                if (!uploadStopImage) return;
                 setStopImageBusy(true);
                 try {
                         const url = await uploadStopImage(file);
@@ -1000,6 +1014,8 @@ export function ChallengesScreen(props: Props) {
         }
 
         return (
+                <>
+                {stopImageCropModal}
                 <section
                         className={`panel challenge-master-panel ${isGamesMode ? "challenge-master-panel-games" : ""}`}>
                         {/* ── Page header ── */}
@@ -2977,5 +2993,6 @@ export function ChallengesScreen(props: Props) {
                                         })()
                                 : null}
                 </section>
+                </>
         );
 }
