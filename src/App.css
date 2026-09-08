@@ -2173,7 +2173,9 @@
         gap: 12px;
 }
 
-/* Compact app-styled preview — mirrors the customer app's school card. */
+/* App preview — a mini render of the customer app (home + bottom tabs),
+   themed with the palette resolveAppPreviewTheme() derives, matching
+   juise-customer-app's resolveJuiseColors / useJuiseTheme. */
 .sp-side {
         position: sticky;
         top: 16px;
@@ -2181,87 +2183,203 @@
 
 .sp-preview {
         display: grid;
-        gap: 12px;
+        gap: 10px;
+        justify-items: center;
         padding: 16px;
         border-radius: 16px;
         border: 1px solid var(--panel-border);
-        background: #010c05;
-        color: #f9f9f9;
+        background: var(--panel-bg-elevated, rgba(255, 255, 255, 0.5));
 }
 
 .sp-preview-label {
+        justify-self: start;
         font-size: 0.72rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        color: rgba(249, 249, 249, 0.55);
+        color: var(--muted);
 }
 
-.sp-preview-card {
+.sp-preview-note {
+        margin: 2px 0 0;
+        font-size: 0.78rem;
+        color: var(--muted);
+        text-align: center;
+}
+
+.sp-phone {
+        width: 100%;
+        max-width: 248px;
+        display: flex;
+        flex-direction: column;
+        border-radius: 22px;
+        overflow: hidden;
+        border: 1px solid var(--app-border-muted, #333);
+        background: var(--app-bg, #010c05);
+        color: var(--app-text, #e6eae8);
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+.sp-phone-header {
         display: flex;
         align-items: center;
-        gap: 12px;
-        padding: 14px;
-        border-radius: 12px;
-        border: 1px solid rgba(249, 249, 249, 0.12);
-        background: rgba(249, 249, 249, 0.05);
+        gap: 8px;
+        padding: 12px 14px;
+        background: var(--app-primary, #27cc5e);
+        color: var(--app-on-primary, #010c05);
 }
 
-.sp-preview-card .school-logo {
-        width: 44px;
-        height: 44px;
+.sp-phone-title {
+        flex: 1;
+        text-align: center;
+        font-size: 0.82rem;
+        font-weight: 700;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+}
+
+.sp-phone-badge {
+        width: 15px;
+        height: 15px;
+        border-radius: 999px;
+        border: 1.8px solid currentColor;
+}
+
+.sp-phone-body {
+        display: grid;
+        gap: 10px;
+        padding: 14px;
+}
+
+.sp-phone-card {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+        border-radius: 12px;
+        border: 1px solid var(--app-border-accent, #1c5b33);
+        background: var(--app-surface-elevated, #10201a);
+}
+
+.sp-phone-card .school-logo {
+        width: 34px;
+        height: 34px;
         border-radius: 999px;
         overflow: hidden;
         flex-shrink: 0;
 }
 
-.sp-preview-card .school-logo-image {
+.sp-phone-card .school-logo-image {
         width: 100%;
         height: 100%;
         object-fit: cover;
 }
 
-.sp-preview-card .school-logo-fallback {
+.sp-phone-card .school-logo-fallback {
         width: 100%;
         height: 100%;
         display: flex;
         align-items: center;
         justify-content: center;
+        font-size: 0.8rem;
         font-weight: 700;
-        background: rgba(249, 249, 249, 0.12);
+        background: var(--app-primary, #27cc5e);
+        color: var(--app-on-primary, #010c05);
 }
 
-.sp-preview-text {
+.sp-phone-card-text {
         display: grid;
-        gap: 2px;
+        gap: 1px;
         min-width: 0;
 }
 
-.sp-preview-title {
-        font-size: 0.75rem;
-        color: rgba(249, 249, 249, 0.7);
+.sp-phone-card-text span {
+        font-size: 0.66rem;
+        color: var(--app-faded, #9aa39d);
+}
+
+.sp-phone-card-text strong {
+        font-size: 0.82rem;
+        color: var(--app-primary, #27cc5e);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
 }
 
-.sp-preview-name {
-        font-size: 1.05rem;
-        font-weight: 700;
-        color: var(--school-preview-primary, #27cc5e);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-}
-
-.sp-preview-cta {
-        justify-self: start;
-        font-size: 0.85rem;
-        font-weight: 700;
-        padding: 9px 16px;
+.sp-phone-cta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 9px 12px;
         border-radius: 999px;
-        background: var(--school-preview-primary, #27cc5e);
-        color: var(--school-preview-background, #010c05);
+        font-size: 0.76rem;
+        font-weight: 700;
+        background: var(--app-primary, #27cc5e);
+        color: var(--app-on-primary, #010c05);
+}
+
+.sp-phone-strip {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+}
+
+.sp-phone-strip span {
+        height: 26px;
+        border-radius: 8px;
+        border: 1px solid var(--app-border-muted, #333);
+        background: var(--app-surface, #0a150f);
+}
+
+.sp-phone-tabs {
+        position: relative;
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        padding: 6px 8px 8px;
+        background: var(--app-bg, #010c05);
+        border-top: 1px solid var(--app-border-muted, #333);
+}
+
+.sp-phone-tab {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        color: var(--app-faded, #9aa39d);
+}
+
+.sp-phone-tab.is-active {
+        color: var(--app-primary, #27cc5e);
+}
+
+.sp-phone-tab em {
+        font-style: normal;
+        font-size: 0.56rem;
+        font-weight: 600;
+}
+
+.sp-phone-tab-center {
+        position: relative;
+        min-height: 34px;
+}
+
+.sp-phone-play {
+        position: absolute;
+        bottom: 4px;
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--app-primary, #27cc5e);
+        color: var(--app-on-primary, #010c05);
+        border: 3px solid var(--app-bg, #010c05);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
 }
 
 .sp-save-bar {
@@ -2293,10 +2411,11 @@
         .sp-side {
                 position: static;
                 order: -1;
+                justify-self: center;
         }
 
         .sp-preview {
-                max-width: 340px;
+                max-width: 320px;
         }
 
         .sp-term-fields {

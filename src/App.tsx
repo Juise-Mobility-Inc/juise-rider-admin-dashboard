@@ -6141,8 +6141,6 @@ function App() {
       handleSchoolColorChange={handleSchoolColorChange}
       handleSchoolLogoFileChange={handleSchoolLogoFileChange}
       getColorPickerValue={getColorPickerValue}
-      defaultSchoolColorScheme={defaultSchoolColorScheme}
-      resolvedSchoolColors={resolvedSchoolColors}
       resolvedSchoolLogoUrl={resolvedSchoolLogoUrl}
       termDrafts={termDrafts}
       setTermDrafts={setTermDrafts}

@@ -8,12 +8,41 @@ import type {
 } from "react";
 
 import type { SchoolColorScheme } from "../../lib/api";
+import { resolveAppPreviewTheme } from "../../lib/appPreviewTheme";
 
 type SchoolColorField = {
   key: keyof SchoolColorScheme;
   label: string;
   fallback: string;
 };
+
+const ICON = {
+  menu: "M4 7h16M4 12h16M4 17h16",
+  home: "M4 11 12 4l8 7M6 10v9h12v-9",
+  flag: "M6 3v18M6 4h11l-2 4 2 4H6",
+  people:
+    "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20c0-3 2.7-5 6-5s6 2 6 5M17 13a3 3 0 1 0 0-6M15.5 20c0-2.4 1.6-4.3 4-4.6",
+  bell: "M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6M10 20a2 2 0 0 0 4 0",
+  play: "M8 5v14l11-7z",
+};
+
+function GlyphIcon({ path, filled }: { path: string; filled?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      aria-hidden="true"
+      fill={filled ? "currentColor" : "none"}
+      stroke={filled ? "none" : "currentColor"}
+      strokeWidth={filled ? 0 : 1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d={path} />
+    </svg>
+  );
+}
 
 type SchoolLogoPreviewProps = {
   logoUrl?: string;
@@ -62,8 +91,6 @@ type Props = {
     value: string | undefined,
     fallback: keyof Required<SchoolColorScheme>,
   ) => string;
-  defaultSchoolColorScheme: Required<SchoolColorScheme>;
-  resolvedSchoolColors: SchoolColorScheme;
   resolvedSchoolLogoUrl: string;
   termDrafts: TermDraft[];
   setTermDrafts: Dispatch<SetStateAction<TermDraft[]>>;
@@ -84,8 +111,6 @@ export function SchoolProfileScreen(props: Props) {
     handleSchoolColorChange,
     handleSchoolLogoFileChange,
     getColorPickerValue,
-    defaultSchoolColorScheme,
-    resolvedSchoolColors,
     resolvedSchoolLogoUrl,
     termDrafts,
     setTermDrafts,
@@ -105,21 +130,27 @@ export function SchoolProfileScreen(props: Props) {
       ? "Saving changes…"
       : "";
   const previewLogoUrl = resolvedSchoolLogoUrl || schoolDraft.logo_url;
-  const previewColors: Required<SchoolColorScheme> = {
-    primary: resolvedSchoolColors.primary || defaultSchoolColorScheme.primary,
-    secondary:
-      resolvedSchoolColors.secondary || defaultSchoolColorScheme.secondary,
-    accent: resolvedSchoolColors.accent || defaultSchoolColorScheme.accent,
-    background:
-      resolvedSchoolColors.background || defaultSchoolColorScheme.background,
-    text: resolvedSchoolColors.text || defaultSchoolColorScheme.text,
+  // Derive the full app palette (surfaces, text, borders) from the five brand
+  // colors exactly the way the customer app does, so the preview is honest.
+  const appTheme = resolveAppPreviewTheme(schoolDraft.color_scheme);
+  const swatchColors: Required<SchoolColorScheme> = {
+    primary: appTheme.primary,
+    secondary: appTheme.secondary,
+    accent: appTheme.accent,
+    background: appTheme.background,
+    text: appTheme.text,
   };
   const previewStyle: SchoolPreviewStyle = {
-    "--school-preview-primary": previewColors.primary,
-    "--school-preview-secondary": previewColors.secondary,
-    "--school-preview-accent": previewColors.accent,
-    "--school-preview-background": previewColors.background,
-    "--school-preview-text": previewColors.text,
+    "--app-primary": appTheme.primary,
+    "--app-on-primary": appTheme.onPrimary,
+    "--app-bg": appTheme.background,
+    "--app-text": appTheme.text,
+    "--app-faded": appTheme.fadedText,
+    "--app-surface": appTheme.surface,
+    "--app-surface-elevated": appTheme.surfaceElevated,
+    "--app-border-muted": appTheme.borderMuted,
+    "--app-border-accent": appTheme.borderAccent,
+    "--app-accent": appTheme.accent,
   };
 
   function updateTerm(id: string, patch: Partial<TermDraft>) {
@@ -289,7 +320,7 @@ export function SchoolProfileScreen(props: Props) {
                     <div className="sp-color-row" key={field.key}>
                       <span
                         className="sp-color-swatch"
-                        style={{ background: previewColors[field.key] }}
+                        style={{ background: swatchColors[field.key] }}
                         aria-hidden="true"
                       />
                       <div className="sp-color-meta">
@@ -416,23 +447,67 @@ export function SchoolProfileScreen(props: Props) {
             <aside className="sp-side">
               <div className="sp-preview" style={previewStyle}>
                 <span className="sp-preview-label">App preview</span>
-                <div className="sp-preview-card">
-                  <SchoolLogoPreview
-                    key={`preview-${previewLogoUrl || "fallback"}`}
-                    logoUrl={previewLogoUrl}
-                    label={schoolLabel}
-                    size="tiny"
-                  />
-                  <div className="sp-preview-text">
-                    <span className="sp-preview-title">
+                <div className="sp-phone">
+                  <div className="sp-phone-header">
+                    <GlyphIcon path={ICON.menu} />
+                    <span className="sp-phone-title">
                       {schoolDraft.title.trim() || schoolLabel}
                     </span>
-                    <strong className="sp-preview-name">
-                      {schoolDraft.name.trim() || "School name"}
-                    </strong>
+                    <span className="sp-phone-badge" aria-hidden="true" />
+                  </div>
+
+                  <div className="sp-phone-body">
+                    <div className="sp-phone-card">
+                      <SchoolLogoPreview
+                        key={`preview-${previewLogoUrl || "fallback"}`}
+                        logoUrl={previewLogoUrl}
+                        label={schoolLabel}
+                        size="tiny"
+                      />
+                      <div className="sp-phone-card-text">
+                        <span>Your school</span>
+                        <strong>
+                          {schoolDraft.name.trim() || "School name"}
+                        </strong>
+                      </div>
+                    </div>
+                    <span className="sp-phone-cta">
+                      <GlyphIcon path={ICON.play} filled />
+                      Start a ride
+                    </span>
+                    <div className="sp-phone-strip" aria-hidden="true">
+                      <span />
+                      <span />
+                    </div>
+                  </div>
+
+                  <div className="sp-phone-tabs">
+                    <span className="sp-phone-tab is-active">
+                      <GlyphIcon path={ICON.home} />
+                      <em>Home</em>
+                    </span>
+                    <span className="sp-phone-tab">
+                      <GlyphIcon path={ICON.flag} />
+                      <em>Challenges</em>
+                    </span>
+                    <span className="sp-phone-tab sp-phone-tab-center">
+                      <span className="sp-phone-play">
+                        <GlyphIcon path={ICON.play} filled />
+                      </span>
+                    </span>
+                    <span className="sp-phone-tab">
+                      <GlyphIcon path={ICON.people} />
+                      <em>Social</em>
+                    </span>
+                    <span className="sp-phone-tab">
+                      <GlyphIcon path={ICON.bell} />
+                      <em>Alerts</em>
+                    </span>
                   </div>
                 </div>
-                <span className="sp-preview-cta">Get started</span>
+                <p className="sp-preview-note">
+                  Themed the way {schoolLabel} looks in the Juise app.
+                </p>
               </div>
             </aside>
           </div>
