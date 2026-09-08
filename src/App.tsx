@@ -98,6 +98,8 @@ import {
   type PackMapPoint,
 } from "./components/PackLocationPicker";
 import { type SchoolZoneMapPolygon } from "./components/SchoolZoneMapEditor";
+import { useImageCropper } from "./components/useImageCropper";
+import { IMAGE_ASPECT } from "./lib/imageCrop";
 import {
   clearDashboardSession,
   readDashboardContext,
@@ -1732,6 +1734,10 @@ function App() {
   const [challengesLoadedOnce, setChallengesLoadedOnce] = useState(false);
   const [challengeImageUploadBusy, setChallengeImageUploadBusy] =
     useState(false);
+  // One cropper for every App-level image upload (challenge photo, school
+  // logo, notification image); only one crop is ever in progress at a time.
+  const { beginCrop: beginImageCrop, cropModal: appImageCropModal } =
+    useImageCropper();
   const [selectedChallengeId, setSelectedChallengeId] = useState("");
   // Tracks which challenge's data is currently loaded into challengeDraft, so
   // the selection→draft sync effect runs once per selection instead of on
@@ -4200,9 +4206,7 @@ function App() {
     }));
   }
 
-  async function handleSchoolLogoFileChange(
-    event: ChangeEvent<HTMLInputElement>,
-  ) {
+  function handleSchoolLogoFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
 
@@ -4217,6 +4221,18 @@ function App() {
       return;
     }
 
+    beginImageCrop(
+      file,
+      IMAGE_ASPECT.square,
+      "Crop school logo",
+      (cropped) => void uploadCroppedSchoolLogo(cropped),
+    );
+  }
+
+  async function uploadCroppedSchoolLogo(file: File) {
+    if (!activeSchoolId) {
+      return;
+    }
     setSchoolLogoUploadBusy(true);
     try {
       const upload = await uploadSchoolLogoImage(
@@ -4336,9 +4352,7 @@ function App() {
     setPackPhotoPreviewUrl("");
   }
 
-  async function handlePackPhotoFileChange(
-    event: ChangeEvent<HTMLInputElement>,
-  ) {
+  function handlePackPhotoFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
 
@@ -4346,6 +4360,12 @@ function App() {
       return;
     }
 
+    beginImageCrop(file, IMAGE_ASPECT.wide, "Crop pack photo", (cropped) => {
+      void stagePackPhoto(cropped);
+    });
+  }
+
+  async function stagePackPhoto(file: File) {
     try {
       const previewUrl = await readFileAsDataUrl(file);
       setPackPhotoFile(file);
@@ -4372,9 +4392,7 @@ function App() {
     setPackEditPhotoPreviewUrl("");
   }
 
-  async function handlePackEditPhotoFileChange(
-    event: ChangeEvent<HTMLInputElement>,
-  ) {
+  function handlePackEditPhotoFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
 
@@ -4382,6 +4400,12 @@ function App() {
       return;
     }
 
+    beginImageCrop(file, IMAGE_ASPECT.wide, "Crop pack photo", (cropped) => {
+      void stagePackEditPhoto(cropped);
+    });
+  }
+
+  async function stagePackEditPhoto(file: File) {
     try {
       const previewUrl = await readFileAsDataUrl(file);
       setPackEditPhotoFile(file);
@@ -4684,9 +4708,7 @@ function App() {
     }
   }
 
-  async function handleChallengeImageFileChange(
-    event: ChangeEvent<HTMLInputElement>,
-  ) {
+  function handleChallengeImageFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
 
@@ -4702,6 +4724,18 @@ function App() {
       return;
     }
 
+    beginImageCrop(
+      file,
+      IMAGE_ASPECT.square,
+      "Crop challenge photo",
+      (cropped) => void uploadCroppedChallengeImage(cropped),
+    );
+  }
+
+  async function uploadCroppedChallengeImage(file: File) {
+    if (!activeSchoolId) {
+      return;
+    }
     setChallengeImageUploadBusy(true);
     try {
       const upload = await uploadSchoolChallengeImage(
@@ -7154,6 +7188,7 @@ function App() {
 
         {sectionContent}
       </main>
+      {appImageCropModal}
       {seriesEditPrompt ? (
         <div
           className="management-modal-backdrop"

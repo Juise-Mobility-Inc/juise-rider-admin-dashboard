@@ -7725,6 +7725,50 @@
         justify-content: flex-end;
 }
 
+.image-crop-modal {
+        width: min(560px, 100%);
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+}
+
+.image-crop-ratio-label {
+        margin: 0;
+}
+
+.image-crop-stage {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        max-height: 60vh;
+        background: #10141b;
+        border-radius: 10px;
+        overflow: hidden;
+}
+
+.image-crop-zoom-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+}
+
+.image-crop-zoom-row label {
+        font-size: 0.85rem;
+        color: var(--muted-text-color, #6b7280);
+}
+
+.image-crop-zoom-row input[type="range"] {
+        flex: 1;
+}
+
+.image-crop-error {
+        margin: 0;
+}
+
+.image-crop-actions {
+        justify-content: flex-end;
+}
+
 .management-modal-header {
         display: flex;
         align-items: flex-start;

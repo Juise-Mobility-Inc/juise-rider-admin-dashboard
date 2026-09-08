@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { StudentEventMiniMap } from "../../components/StudentEventMiniMap";
+import { useImageCropper } from "../../components/useImageCropper";
+import { IMAGE_ASPECT } from "../../lib/imageCrop";
 import {
 	fetchSchoolParkingViolationMedia,
 	fetchParkingViolationFeeRules,
@@ -420,6 +422,7 @@ export function PenaltyReportsScreen({
 	const [loadBusy, setLoadBusy] = useState(false);
 	const [saveBusy, setSaveBusy] = useState(false);
 	const [uploadBusy, setUploadBusy] = useState(false);
+	const { beginCrop, cropModal } = useImageCropper();
 	const [deviceBusy, setDeviceBusy] = useState(false);
 	const [selectedDevice, setSelectedDevice] = useState<RegisteredDevice | null>(null);
 	const [selectedDevicePhotoUrl, setSelectedDevicePhotoUrl] = useState("");
@@ -844,12 +847,23 @@ export function PenaltyReportsScreen({
 		}
 	}
 
-	async function handleFileSelected(fileList: FileList | null) {
+	function handleFileSelected(fileList: FileList | null) {
 		const file = fileList?.[0];
 		if (!file || !selectedReport) {
 			return;
 		}
+		beginCrop(
+			file,
+			IMAGE_ASPECT.tall,
+			"Crop parking-report photo",
+			(cropped) => void uploadCroppedReportPhoto(cropped),
+		);
+	}
 
+	async function uploadCroppedReportPhoto(file: File) {
+		if (!selectedReport) {
+			return;
+		}
 		setUploadBusy(true);
 		setError("");
 		setSuccess("");
@@ -873,6 +887,7 @@ export function PenaltyReportsScreen({
 
 	return (
 		<section className="panel penalty-reports-section">
+			{cropModal}
 			<div className="panel-header">
 				<div>
 					<p className="eyebrow">Penalty Reports</p>
@@ -1486,9 +1501,10 @@ export function PenaltyReportsScreen({
 											type="file"
 											accept="image/*"
 											disabled={uploadBusy}
-											onChange={(event) =>
-												void handleFileSelected(event.target.files)
-											}
+											onChange={(event) => {
+												handleFileSelected(event.target.files);
+												event.target.value = "";
+											}}
 										/>
 									</label>
 								</div>
