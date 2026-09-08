@@ -4283,36 +4283,10 @@ function App() {
         active: schoolDraft.active,
       });
 
-      setSchoolDraft(schoolToDraft(savedSchool));
-      setTermDrafts(savedSchool.terms.map(termToDraft));
-      setBanner({
-        tone: "success",
-        message: `Saved school ${savedSchool.school_id}.`,
-      });
-    } catch (error) {
-      setBanner({
-        tone: "error",
-        message: getErrorMessage(error),
-      });
-    } finally {
-      setSchoolBusy(false);
-    }
-  }
-
-  async function handleSaveTerms() {
-    if (!activeSchoolId) {
-      setBanner({
-        tone: "error",
-        message: "Save the school profile first before managing terms.",
-      });
-      return;
-    }
-
-    setSchoolBusy(true);
-    try {
+      // Terms are edited on the same screen and saved by the same button.
       const savedTerms = await saveSchoolTerms(
         context.managedAppId,
-        activeSchoolId,
+        schoolId,
         termDrafts.map((term) => ({
           term_uuid: term.term_uuid.trim() || undefined,
           name: term.name.trim(),
@@ -4321,10 +4295,11 @@ function App() {
         })),
       );
 
+      setSchoolDraft(schoolToDraft(savedSchool));
       setTermDrafts(savedTerms.map(termToDraft));
       setBanner({
         tone: "success",
-        message: `Updated ${savedTerms.length} school terms.`,
+        message: `Saved school ${savedSchool.school_id}.`,
       });
     } catch (error) {
       setBanner({
@@ -6172,7 +6147,6 @@ function App() {
       termDrafts={termDrafts}
       setTermDrafts={setTermDrafts}
       createEmptyTermDraft={createEmptyTermDraft}
-      handleSaveTerms={handleSaveTerms}
       SchoolLogoPreview={(props: Parameters<typeof SchoolLogoPreview>[0]) => (
         <SchoolLogoPreview {...props} onPreview={handleOpenImagePreview} />
       )}
