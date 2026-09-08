@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Cropper, { type Area } from "react-easy-crop";
 // react-easy-crop v6 ships its layout CSS as a separate file and does not
 // inject it — without this the crop container collapses and its dimming
@@ -30,11 +30,17 @@ export function ImageCropModal({
   onCancel,
   onComplete,
 }: ImageCropModalProps) {
-  // The modal is always mounted fresh for a given file (the useImageCropper
-  // hook routes every open through a null state first), so plain initial
-  // state is enough — no reset effect needed.
-  const imageUrl = useMemo(() => URL.createObjectURL(file), [file]);
-  useEffect(() => () => URL.revokeObjectURL(imageUrl), [imageUrl]);
+  // Create AND revoke the object URL in one effect keyed on `file`. Doing
+  // the revoke in a separate effect (or splitting create into a useMemo)
+  // means StrictMode's mount→unmount→remount revokes the URL that the
+  // still-memoised value points at, and the <img> loads a dead blob —
+  // which rendered as a solid black cropper.
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    setImageUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -112,20 +118,22 @@ export function ImageCropModal({
         ) : null}
 
         <div className="image-crop-stage">
-          <Cropper
-            image={imageUrl}
-            crop={crop}
-            zoom={zoom}
-            aspect={aspect}
-            minZoom={1}
-            maxZoom={5}
-            zoomSpeed={0.2}
-            restrictPosition
-            showGrid
-            onCropChange={setCrop}
-            onZoomChange={setZoom}
-            onCropComplete={onCropComplete}
-          />
+          {imageUrl ? (
+            <Cropper
+              image={imageUrl}
+              crop={crop}
+              zoom={zoom}
+              aspect={aspect}
+              minZoom={1}
+              maxZoom={5}
+              zoomSpeed={0.2}
+              restrictPosition
+              showGrid
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onCropComplete={onCropComplete}
+            />
+          ) : null}
         </div>
 
         <div className="image-crop-zoom-row">
