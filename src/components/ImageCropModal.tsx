@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Cropper, { type Area } from "react-easy-crop";
+// react-easy-crop v6 ships its layout CSS as a separate file and does not
+// inject it — without this the crop container collapses and its dimming
+// box-shadow blacks out the whole stage.
+import "react-easy-crop/react-easy-crop.css";
 
 import {
   CropTooSmallError,
