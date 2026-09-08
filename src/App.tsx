@@ -1726,6 +1726,10 @@ function App() {
   );
   const [challengeBusy, setChallengeBusy] = useState(false);
   const [challengeListBusy, setChallengeListBusy] = useState(false);
+  // Flips true once the challenge list has been fetched at least once for
+  // the active school. Gates ChallengesScreen's ?challenge= URL sync so a
+  // deep link isn't dropped while the list is still empty/loading.
+  const [challengesLoadedOnce, setChallengesLoadedOnce] = useState(false);
   const [challengeImageUploadBusy, setChallengeImageUploadBusy] =
     useState(false);
   const [selectedChallengeId, setSelectedChallengeId] = useState("");
@@ -1741,6 +1745,16 @@ function App() {
   // actually goes out. null the rest of the time.
   const [seriesEditPrompt, setSeriesEditPrompt] = useState<{
     payload: SchoolChallengeWriteInput;
+    seriesCount: number;
+  } | null>(null);
+  // Set only when deleting a challenge that belongs to a repeat series -
+  // gates the "just this one / all N" confirm modal (which also stands in
+  // for the plain window.confirm) before the delete actually goes out.
+  const [seriesDeletePrompt, setSeriesDeletePrompt] = useState<{
+    challengeUUID: string;
+    seriesUUID: string;
+    title: string;
+    isGame: boolean;
     seriesCount: number;
   } | null>(null);
   const [imagePreview, setImagePreview] = useState<{
@@ -2818,6 +2832,7 @@ function App() {
     setChallengeParticipants([]);
     setChallengeDraft(createEmptyChallengeDraft());
     setSelectedChallengeId("");
+    setChallengesLoadedOnce(false);
   }, [activeSchoolId]);
 
   useEffect(() => {
@@ -3563,6 +3578,7 @@ function App() {
       } finally {
         if (!cancelled) {
           setChallengeListBusy(false);
+          setChallengesLoadedOnce(true);
         }
       }
     }
@@ -4982,31 +4998,80 @@ function App() {
     });
   }
 
-  async function handleDeleteSelectedChallenge() {
+  function handleDeleteSelectedChallenge() {
     if (!selectedChallenge || !activeSchoolId) {
       return;
     }
 
+    const isGame = isScavengerHuntChallengeRecord(selectedChallenge);
+
+    // A challenge in a live repeat series gets the "just this one / all N"
+    // modal (which is its own confirmation) instead of window.confirm.
+    // apply_to_series only touches active siblings server-side, and an
+    // already-inactive occurrence isn't really "in" the series any more, so
+    // gate on active — same rule as the edit prompt.
+    if (selectedChallenge.active && selectedChallenge.series_uuid) {
+      const seriesCount = schoolChallenges.filter(
+        (existing) =>
+          existing.active &&
+          existing.series_uuid &&
+          existing.series_uuid === selectedChallenge.series_uuid,
+      ).length;
+      if (seriesCount > 1) {
+        setSeriesDeletePrompt({
+          challengeUUID: selectedChallenge.challenge_uuid,
+          seriesUUID: selectedChallenge.series_uuid,
+          title: selectedChallenge.title,
+          isGame,
+          seriesCount,
+        });
+        return;
+      }
+    }
+
     const shouldContinue = window.confirm(
-      `Delete ${
-        isScavengerHuntChallengeRecord(selectedChallenge) ? "game" : "challenge"
-      } "${selectedChallenge.title}"? Riders will no longer be able to join it.`,
+      `Delete ${isGame ? "game" : "challenge"} "${
+        selectedChallenge.title
+      }"? Riders will no longer be able to join it.`,
     );
     if (!shouldContinue) {
       return;
     }
 
+    void performDeleteChallenge(
+      {
+        challengeUUID: selectedChallenge.challenge_uuid,
+        title: selectedChallenge.title,
+        isGame,
+      },
+      false,
+    );
+  }
+
+  async function performDeleteChallenge(
+    target: { challengeUUID: string; title: string; isGame: boolean },
+    applyToSeries: boolean,
+  ) {
+    if (!activeSchoolId) {
+      return;
+    }
+
     setChallengeBusy(true);
     try {
-      await deleteSchoolChallenge(
+      const deletedChallengeUUIDs = await deleteSchoolChallenge(
         context.managedAppId,
         activeSchoolId,
-        selectedChallenge.challenge_uuid,
+        target.challengeUUID,
+        applyToSeries,
+      );
+      const removed = new Set(
+        deletedChallengeUUIDs.length > 0
+          ? deletedChallengeUUIDs
+          : [target.challengeUUID],
       );
       setSchoolChallenges((current) =>
         current.filter(
-          (challenge) =>
-            challenge.challenge_uuid !== selectedChallenge.challenge_uuid,
+          (challenge) => !removed.has(challenge.challenge_uuid),
         ),
       );
       setChallengeParticipants([]);
@@ -5014,11 +5079,10 @@ function App() {
       setChallengeDraft(createEmptyChallengeDraft());
       setBanner({
         tone: "success",
-        message: `Deleted ${
-          isScavengerHuntChallengeRecord(selectedChallenge)
-            ? "game"
-            : "challenge"
-        } ${selectedChallenge.title}.`,
+        message:
+          applyToSeries && removed.size > 1
+            ? `Deleted ${removed.size} challenges in this series.`
+            : `Deleted ${target.isGame ? "game" : "challenge"} ${target.title}.`,
       });
     } catch (error) {
       setBanner({
@@ -5028,6 +5092,15 @@ function App() {
     } finally {
       setChallengeBusy(false);
     }
+  }
+
+  function handleConfirmSeriesDelete(applyToSeries: boolean) {
+    if (!seriesDeletePrompt) {
+      return;
+    }
+    const { challengeUUID, title, isGame } = seriesDeletePrompt;
+    setSeriesDeletePrompt(null);
+    void performDeleteChallenge({ challengeUUID, title, isGame }, applyToSeries);
   }
 
   async function createPackFromDraft(
@@ -6140,6 +6213,7 @@ function App() {
             activeSchoolId={activeSchoolId}
             challengeBusy={challengeBusy}
             challengeListBusy={challengeListBusy}
+            challengesLoadedOnce={challengesLoadedOnce}
             challengeParticipantsBusy={challengeParticipantsBusy}
             challengeImageUploadBusy={challengeImageUploadBusy}
             selectedChallengeId={selectedChallengeId}
@@ -6190,6 +6264,7 @@ function App() {
             activeSchoolId={activeSchoolId}
             challengeBusy={challengeBusy}
             challengeListBusy={challengeListBusy}
+            challengesLoadedOnce={challengesLoadedOnce}
             challengeParticipantsBusy={challengeParticipantsBusy}
             challengeImageUploadBusy={challengeImageUploadBusy}
             selectedChallengeId={selectedChallengeId}
@@ -7133,6 +7208,65 @@ function App() {
           </div>
         </div>
       ) : null}
+
+      {seriesDeletePrompt ? (
+        <div
+          className="management-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Delete repeating challenge"
+          onClick={() => setSeriesDeletePrompt(null)}
+        >
+          <div
+            className="management-modal-sheet series-edit-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="management-modal-header">
+              <div>
+                <p className="eyebrow">Repeating challenge</p>
+                <h3>
+                  Delete just this one, or all {seriesDeletePrompt.seriesCount}?
+                </h3>
+              </div>
+              <button
+                className="text-button management-modal-close"
+                type="button"
+                onClick={() => setSeriesDeletePrompt(null)}
+                aria-label="Cancel"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="muted-text series-edit-modal-copy">
+              “{seriesDeletePrompt.title}” repeats as{" "}
+              {seriesDeletePrompt.seriesCount} separate{" "}
+              {seriesDeletePrompt.isGame ? "games" : "challenges"}. Deleting
+              stops riders from joining — choose whether to remove just this
+              one or every occurrence in the series.
+            </p>
+            <div className="form-actions series-edit-modal-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={challengeBusy}
+                onClick={() => handleConfirmSeriesDelete(false)}
+              >
+                Just this {seriesDeletePrompt.isGame ? "game" : "challenge"}
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                disabled={challengeBusy}
+                onClick={() => handleConfirmSeriesDelete(true)}
+              >
+                All {seriesDeletePrompt.seriesCount}{" "}
+                {seriesDeletePrompt.isGame ? "games" : "challenges"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {imagePreview ? (
         <div
           className="image-lightbox"

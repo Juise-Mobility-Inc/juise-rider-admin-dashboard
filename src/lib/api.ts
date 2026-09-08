@@ -1964,19 +1964,31 @@ export async function updateSchoolChallenge(
   return { challenge: response };
 }
 
+/** Always returns the challenge_uuids that were deactivated. For a plain
+ * delete that's just `[challengeUUID]`; with `applyToSeries` the server
+ * responds with the full list of occurrences it removed. */
 export async function deleteSchoolChallenge(
   managedAppId: string,
   schoolId: string,
   challengeUUID: string,
-): Promise<void> {
-  return request<void>(
+  applyToSeries = false,
+): Promise<string[]> {
+  const query = applyToSeries ? "?apply_to_series=true" : "";
+  const response = await request<
+    { deleted_challenge_uuids?: string[] } | undefined
+  >(
     "nebula",
-    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/challenges/${encodeURIComponent(challengeUUID)}`,
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/challenges/${encodeURIComponent(challengeUUID)}${query}`,
     {
       method: "DELETE",
       appIdHeader: managedAppId,
     },
   );
+
+  if (response && Array.isArray(response.deleted_challenge_uuids)) {
+    return response.deleted_challenge_uuids;
+  }
+  return [challengeUUID];
 }
 
 export async function fetchSchoolChallengeParticipants(
