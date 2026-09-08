@@ -166,8 +166,7 @@ export function SchoolProfileScreen(props: Props) {
           <p className="eyebrow">School profile</p>
           <h2>{schoolLabel}</h2>
           <p className="muted-text sp-header-copy">
-            How your school looks to students in the Juise app — branding,
-            colors, and terms.
+            {`Configure your school details, including branding, academic term limits, and visibility in the app.`}
           </p>
         </div>
         <span
@@ -236,9 +235,7 @@ export function SchoolProfileScreen(props: Props) {
                         Remove logo
                       </button>
                     ) : null}
-                    <p className="helper-text">
-                      PNG or JPG. You&apos;ll crop it to a square.
-                    </p>
+                    <p className="helper-text">PNG or JPG.</p>
                   </div>
                 </div>
 
@@ -253,7 +250,7 @@ export function SchoolProfileScreen(props: Props) {
                           name: event.target.value,
                         }))
                       }
-                      placeholder="Oakland University"
+                      placeholder="University Name"
                     />
                   </label>
                   <label className="field">
@@ -266,20 +263,7 @@ export function SchoolProfileScreen(props: Props) {
                           title: event.target.value,
                         }))
                       }
-                      placeholder="Oakland University"
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Default campus ID</span>
-                    <input
-                      value={schoolDraft.default_campus_id}
-                      onChange={(event) =>
-                        setSchoolDraft((current) => ({
-                          ...current,
-                          default_campus_id: event.target.value,
-                        }))
-                      }
-                      placeholder="Optional"
+                      placeholder="University Name"
                     />
                   </label>
                 </div>
@@ -407,7 +391,9 @@ export function SchoolProfileScreen(props: Props) {
                             <input
                               value={term.name}
                               onChange={(event) =>
-                                updateTerm(term.id, { name: event.target.value })
+                                updateTerm(term.id, {
+                                  name: event.target.value,
+                                })
                               }
                               placeholder={`Term ${index + 1}`}
                             />
@@ -506,7 +492,7 @@ export function SchoolProfileScreen(props: Props) {
                   </div>
                 </div>
                 <p className="sp-preview-note">
-                  Themed the way {schoolLabel} looks in the Juise app.
+                  This is how {schoolLabel} looks in the Juise Rider App.
                 </p>
               </div>
             </aside>

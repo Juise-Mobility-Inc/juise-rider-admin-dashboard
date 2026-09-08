@@ -1551,10 +1551,12 @@ function App() {
   // (handleJoinSchool / confirmLeaveSchool) can check it *after* their await
   // rather than reading a stale closure snapshot. `loadedOk` is true only
   // after a lookup has *succeeded* at least once (not merely settled).
-  const membershipsLookupRef = useRef<{ inFlight: boolean; loadedOk: boolean }>({
-    inFlight: false,
-    loadedOk: false,
-  });
+  const membershipsLookupRef = useRef<{ inFlight: boolean; loadedOk: boolean }>(
+    {
+      inFlight: false,
+      loadedOk: false,
+    },
+  );
   // school_ids joined during this session. A membership lookup that raced the
   // join (or ran before the write replicated) can come back without them; we
   // keep those rows and don't treat the selection as "revoked".
@@ -3328,7 +3330,9 @@ function App() {
     // Load the selected challenge into the draft once per selection change, not
     // on every render — otherwise challengeToDraft's fresh object retriggers
     // this effect and clobbers in-progress edits.
-    if (syncedChallengeDraftIdRef.current !== selectedChallenge.challenge_uuid) {
+    if (
+      syncedChallengeDraftIdRef.current !== selectedChallenge.challenge_uuid
+    ) {
       setChallengeDraft(challengeToDraft(selectedChallenge));
       syncedChallengeDraftIdRef.current = selectedChallenge.challenge_uuid;
     }
@@ -4683,7 +4687,9 @@ function App() {
     }
   }
 
-  function handleChallengeImageFileChange(event: ChangeEvent<HTMLInputElement>) {
+  function handleChallengeImageFileChange(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
     const file = event.target.files?.[0];
     event.target.value = "";
 
@@ -5079,9 +5085,7 @@ function App() {
           : [target.challengeUUID],
       );
       setSchoolChallenges((current) =>
-        current.filter(
-          (challenge) => !removed.has(challenge.challenge_uuid),
-        ),
+        current.filter((challenge) => !removed.has(challenge.challenge_uuid)),
       );
       setChallengeParticipants([]);
       setSelectedChallengeId("");
@@ -5109,7 +5113,10 @@ function App() {
     }
     const { challengeUUID, title, isGame } = seriesDeletePrompt;
     setSeriesDeletePrompt(null);
-    void performDeleteChallenge({ challengeUUID, title, isGame }, applyToSeries);
+    void performDeleteChallenge(
+      { challengeUUID, title, isGame },
+      applyToSeries,
+    );
   }
 
   async function createPackFromDraft(
@@ -5404,7 +5411,9 @@ function App() {
                               void copyMfaText(mfaEnrollment.otpauth_uri, "uri")
                             }
                           >
-                            {mfaCopied === "uri" ? "Copied!" : "Copy setup link"}
+                            {mfaCopied === "uri"
+                              ? "Copied!"
+                              : "Copy setup link"}
                           </button>
                         </div>
                         <p className="mfa-panel-hint">
@@ -5629,7 +5638,7 @@ function App() {
                             username: event.target.value,
                           }))
                         }
-                        placeholder="ou.parking"
+                        placeholder="SchoolUser"
                         required
                       />
                     </label>
@@ -5816,7 +5825,8 @@ function App() {
               ) : schoolMembershipsError && activeMemberships.length === 0 ? (
                 <div className="school-selection-load-error">
                   <p className="mfa-help">
-                    We couldn&rsquo;t load your schools. {schoolMembershipsError}
+                    We couldn&rsquo;t load your schools.{" "}
+                    {schoolMembershipsError}
                   </p>
                   <button
                     type="button"
@@ -6049,7 +6059,7 @@ function App() {
                           sanitizeSchoolIdOnBlur(event.target.value),
                         )
                       }
-                      placeholder="ou"
+                      placeholder="ID"
                       disabled={joinSchoolBusy}
                       autoFocus
                     />
@@ -6061,7 +6071,7 @@ function App() {
                       onChange={(event) =>
                         setJoinNewSchoolName(event.target.value)
                       }
-                      placeholder="Oakland University"
+                      placeholder="University Name"
                       disabled={joinSchoolBusy}
                     />
                   </label>
@@ -7176,7 +7186,9 @@ function App() {
             <div className="management-modal-header">
               <div>
                 <p className="eyebrow">Repeating challenge</p>
-                <h3>Update just this one, or all {seriesEditPrompt.seriesCount}?</h3>
+                <h3>
+                  Update just this one, or all {seriesEditPrompt.seriesCount}?
+                </h3>
               </div>
               <button
                 className="text-button management-modal-close"
@@ -7188,11 +7200,11 @@ function App() {
               </button>
             </div>
             <p className="muted-text series-edit-modal-copy">
-              This challenge repeats as {seriesEditPrompt.seriesCount}{" "}
-              separate challenges. Students still join each one on its own —
-              choose whether these changes apply to just this challenge, or
-              to all of them (each keeps its own dates, shifted the same way
-              this one moved).
+              This challenge repeats as {seriesEditPrompt.seriesCount} separate
+              challenges. Students still join each one on its own — choose
+              whether these changes apply to just this challenge, or to all of
+              them (each keeps its own dates, shifted the same way this one
+              moved).
             </p>
             <div className="form-actions series-edit-modal-actions">
               <button
@@ -7248,8 +7260,8 @@ function App() {
               “{seriesDeletePrompt.title}” repeats as{" "}
               {seriesDeletePrompt.seriesCount} separate{" "}
               {seriesDeletePrompt.isGame ? "games" : "challenges"}. Deleting
-              stops riders from joining — choose whether to remove just this
-              one or every occurrence in the series.
+              stops riders from joining — choose whether to remove just this one
+              or every occurrence in the series.
             </p>
             <div className="form-actions series-edit-modal-actions">
               <button
