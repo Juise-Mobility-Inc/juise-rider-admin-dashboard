@@ -110,6 +110,13 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     void refreshList();
   }, [refreshList]);
 
+  // Always call the latest refreshList (bound to the current tab/school), even
+  // from an async action started under a previous tab.
+  const refreshListRef = useRef(refreshList);
+  useEffect(() => {
+    refreshListRef.current = refreshList;
+  }, [refreshList]);
+
   const selectedSummary = useMemo(
     () =>
       summaries.find((row) => row.report.activity_uuid === selectedActivityUUID) ??
@@ -168,6 +175,9 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     if (!window.confirm(confirmCopy)) {
       return;
     }
+    // Pin the detail request this action belongs to; if the moderator selects a
+    // different report before the response lands, don't clobber the new view.
+    const reqId = detailReqRef.current;
     setActionBusy(true);
     try {
       const updated = await resolveSchoolSocialPostReport(
@@ -176,6 +186,9 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
         anchor.report_uuid,
         action,
       );
+      if (reqId !== detailReqRef.current) {
+        return;
+      }
       setDetail(updated);
       setNotice(
         action === "dismiss"
@@ -184,11 +197,16 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
             ? "Post removed and rider banned from Social."
             : "Post removed.",
       );
-      await refreshList();
+      await refreshListRef.current();
     } catch (nextError) {
+      if (reqId !== detailReqRef.current) {
+        return;
+      }
       setError(getErrorMessage(nextError));
     } finally {
-      setActionBusy(false);
+      if (reqId === detailReqRef.current) {
+        setActionBusy(false);
+      }
     }
   }
 
