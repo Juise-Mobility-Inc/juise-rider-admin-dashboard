@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   fetchSchoolSocialPostReport,
@@ -65,29 +65,44 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
   const [detailBusy, setDetailBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  // Monotonic request ids so a slow response for a stale tab/school/report
+  // can't overwrite the current view.
+  const listReqRef = useRef(0);
+  const detailReqRef = useRef(0);
 
   const refreshList = useCallback(async () => {
     if (!activeSchoolId) {
       setSummaries([]);
       return;
     }
+    const reqId = ++listReqRef.current;
+    const reqTab = tab;
+    const reqSchool = activeSchoolId;
     setListBusy(true);
     setError("");
     try {
-      const status = tab === "open" ? "open" : "";
-      const rows = await fetchSchoolSocialPostReports(managedAppId, activeSchoolId, {
+      const status = reqTab === "open" ? "open" : "";
+      const rows = await fetchSchoolSocialPostReports(managedAppId, reqSchool, {
         status,
       });
+      if (reqId !== listReqRef.current) {
+        return;
+      }
       const filtered =
-        tab === "resolved"
+        reqTab === "resolved"
           ? rows.filter((row) => row.report.status !== "open")
           : rows;
       setSummaries(filtered);
     } catch (nextError) {
+      if (reqId !== listReqRef.current) {
+        return;
+      }
       setError(getErrorMessage(nextError));
       setSummaries([]);
     } finally {
-      setListBusy(false);
+      if (reqId === listReqRef.current) {
+        setListBusy(false);
+      }
     }
   }, [activeSchoolId, managedAppId, tab]);
 
@@ -104,7 +119,11 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
 
   const loadDetail = useCallback(
     async (reportUUID: string, activityUUID: string) => {
+      const reqId = ++detailReqRef.current;
       setSelectedActivityUUID(activityUUID);
+      // Drop the previous report's detail immediately so its Remove / Ban
+      // buttons can't be fired against the wrong post while this loads.
+      setDetail(null);
       setDetailBusy(true);
       setNotice("");
       try {
@@ -113,12 +132,20 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
           activeSchoolId,
           reportUUID,
         );
+        if (reqId !== detailReqRef.current) {
+          return;
+        }
         setDetail(next);
       } catch (nextError) {
+        if (reqId !== detailReqRef.current) {
+          return;
+        }
         setError(getErrorMessage(nextError));
         setDetail(null);
       } finally {
-        setDetailBusy(false);
+        if (reqId === detailReqRef.current) {
+          setDetailBusy(false);
+        }
       }
     },
     [managedAppId, activeSchoolId],
