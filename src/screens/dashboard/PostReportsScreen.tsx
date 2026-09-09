@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import {
   fetchSchoolSocialPostReport,
@@ -57,7 +58,31 @@ function getErrorMessage(error: unknown): string {
 }
 
 export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
-  const [tab, setTab] = useState<StatusTab>("open");
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Keep the tab in the URL so a link to a report opened under "Resolved"
+  // reloads on that tab — otherwise the default "open" query never contains
+  // the linked row and the detail can't be restored.
+  const [tab, setTab] = useState<StatusTab>(() =>
+    searchParams.get("tab") === "resolved" ? "resolved" : "open",
+  );
+  const changeTab = useCallback(
+    (next: StatusTab) => {
+      setTab(next);
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          if (next === "resolved") {
+            params.set("tab", "resolved");
+          } else {
+            params.delete("tab");
+          }
+          return params;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
   const [summaries, setSummaries] = useState<SocialPostReportSummary[]>([]);
   const [listBusy, setListBusy] = useState(false);
   const [error, setError] = useState("");
@@ -303,7 +328,7 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
               key={value}
               type="button"
               className={`challenge-screen-tab ${tab === value ? "challenge-screen-tab-active" : ""}`}
-              onClick={() => setTab(value)}
+              onClick={() => changeTab(value)}
             >
               {value === "open" ? "Open" : "Resolved"}
             </button>
