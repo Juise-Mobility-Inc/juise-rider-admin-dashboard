@@ -19369,6 +19369,17 @@
         white-space: pre-wrap;
 }
 
+.post-reports-snapshot {
+        display: grid;
+        gap: 4px;
+        margin: -4px 0 4px;
+}
+
+.post-reports-post-text-snapshot {
+        border-left-color: var(--danger, #d9534f);
+        background: var(--danger-bg, rgba(217, 83, 79, 0.08));
+}
+
 .post-reports-state-row {
         display: flex;
         flex-wrap: wrap;

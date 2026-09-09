@@ -118,11 +118,12 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
   }, [refreshList]);
 
   // Changing the scope (tab or school) means the current list no longer
-  // contains the selected report — drop its stale detail and invalidate any
-  // in-flight detail load so its Remove / Ban buttons can't fire against a
-  // post that isn't in view.
+  // contains the selected report — drop the stale rows and detail and
+  // invalidate any in-flight detail load so nothing from the old scope stays
+  // clickable (and actionable) while the new list loads.
   useEffect(() => {
     detailReqRef.current += 1;
+    setSummaries([]);
     setSelectedActivityUUID("");
     setDetail(null);
     setDetailBusy(false);
@@ -357,6 +358,16 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
                 <blockquote className="post-reports-post-text">
                   {detail.post_text.trim() || "(no text)"}
                 </blockquote>
+
+                {detail.reported_post_text !== undefined &&
+                detail.reported_post_text.trim() !== detail.post_text.trim() ? (
+                  <div className="post-reports-snapshot">
+                    <p className="eyebrow">Text when first reported (edited since)</p>
+                    <blockquote className="post-reports-post-text post-reports-post-text-snapshot">
+                      {detail.reported_post_text.trim() || "(no text)"}
+                    </blockquote>
+                  </div>
+                ) : null}
 
                 <div className="post-reports-state-row">
                   <span

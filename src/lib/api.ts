@@ -3539,6 +3539,8 @@ export interface SocialPostReport {
   reporter_user_uuid: string;
   reason: string;
   details?: string;
+  /** Post text captured when this report was filed (edit-proof evidence). */
+  reported_post_text?: string;
   status: "open" | "actioned" | "dismissed";
   resolution?: "" | "post_removed" | "user_banned" | "dismissed";
   resolved_by_user_uuid?: string;
@@ -3562,6 +3564,8 @@ export interface SocialPostReportDetail {
   activity_uuid: string;
   school_id: string;
   post_text: string;
+  /** Post text as it read when the anchor report was filed. */
+  reported_post_text?: string;
   post_active: boolean;
   post_hidden: boolean;
   post_created_at: number;
