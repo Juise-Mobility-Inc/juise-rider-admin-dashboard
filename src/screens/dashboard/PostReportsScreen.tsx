@@ -117,6 +117,18 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     refreshListRef.current = refreshList;
   }, [refreshList]);
 
+  // Changing the scope (tab or school) means the current list no longer
+  // contains the selected report — drop its stale detail and invalidate any
+  // in-flight detail load so its Remove / Ban buttons can't fire against a
+  // post that isn't in view.
+  useEffect(() => {
+    detailReqRef.current += 1;
+    setSelectedActivityUUID("");
+    setDetail(null);
+    setDetailBusy(false);
+    setNotice("");
+  }, [activeSchoolId, tab]);
+
   const selectedSummary = useMemo(
     () =>
       summaries.find((row) => row.report.activity_uuid === selectedActivityUUID) ??
@@ -176,7 +188,9 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
       return;
     }
     // Pin the detail request this action belongs to; if the moderator selects a
-    // different report before the response lands, don't clobber the new view.
+    // different report before the response lands, don't clobber the new view —
+    // but the server change still happened, so always refresh the list and
+    // always release the busy state.
     const reqId = detailReqRef.current;
     setActionBusy(true);
     try {
@@ -186,27 +200,23 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
         anchor.report_uuid,
         action,
       );
-      if (reqId !== detailReqRef.current) {
-        return;
+      if (reqId === detailReqRef.current) {
+        setDetail(updated);
+        setNotice(
+          action === "dismiss"
+            ? "Reports dismissed. Post restored."
+            : action === "ban_user"
+              ? "Post removed and rider banned from Social."
+              : "Post removed.",
+        );
       }
-      setDetail(updated);
-      setNotice(
-        action === "dismiss"
-          ? "Reports dismissed. Post restored."
-          : action === "ban_user"
-            ? "Post removed and rider banned from Social."
-            : "Post removed.",
-      );
       await refreshListRef.current();
     } catch (nextError) {
-      if (reqId !== detailReqRef.current) {
-        return;
-      }
-      setError(getErrorMessage(nextError));
-    } finally {
       if (reqId === detailReqRef.current) {
-        setActionBusy(false);
+        setError(getErrorMessage(nextError));
       }
+    } finally {
+      setActionBusy(false);
     }
   }
 
