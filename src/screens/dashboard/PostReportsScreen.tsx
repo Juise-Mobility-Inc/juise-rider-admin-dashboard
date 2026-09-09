@@ -72,18 +72,19 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
   }, [urlTab]);
   const changeTab = useCallback(
     (next: StatusTab) => {
-      setSearchParams(
-        (prev) => {
-          const params = new URLSearchParams(prev);
-          if (next === "resolved") {
-            params.set("tab", "resolved");
-          } else {
-            params.delete("tab");
-          }
-          return params;
-        },
-        { replace: true },
-      );
+      // Drop any open report from the URL rather than carrying an id from the
+      // other tab into it, and push a new entry so Back returns to the
+      // still-valid detail view instead of a tab/report mismatch.
+      setSearchParams((prev) => {
+        const params = new URLSearchParams(prev);
+        params.delete("report");
+        if (next === "resolved") {
+          params.set("tab", "resolved");
+        } else {
+          params.delete("tab");
+        }
+        return params;
+      });
     },
     [setSearchParams],
   );
@@ -157,9 +158,12 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
   // Changing the scope (tab or school) means the current list no longer
   // contains the selected report — drop the stale rows and detail and
   // invalidate any in-flight detail load so nothing from the old scope stays
-  // clickable (and actionable) while the new list loads.
+  // clickable (and actionable) while the new list loads. Re-gate the URL sync
+  // too: a `?report=` from a combined tab+report Back must wait for the new
+  // scope's list before it's matched, not be tried against the old one.
   useEffect(() => {
     detailReqRef.current += 1;
+    setListLoaded(false);
     setSummaries([]);
     setSelectedActivityUUID("");
     setDetail(null);
