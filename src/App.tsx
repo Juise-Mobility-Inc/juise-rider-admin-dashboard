@@ -118,6 +118,7 @@ import { NotificationsScreen } from "./screens/dashboard/NotificationsScreen";
 import { PacksScreen } from "./screens/dashboard/PacksScreen";
 import { ParkingReportsScreen } from "./screens/dashboard/ParkingReportsScreen";
 import { PenaltyReportsScreen } from "./screens/dashboard/PenaltyReportsScreen";
+import { PostReportsScreen } from "./screens/dashboard/PostReportsScreen";
 import { PoisScreen } from "./screens/dashboard/PoisScreen";
 import { RegistrationFeesScreen } from "./screens/dashboard/RegistrationFeesScreen";
 import { ReportsScreen } from "./screens/dashboard/ReportsScreen";
@@ -159,6 +160,7 @@ type Section =
   | "registrationFees"
   | "penaltyReports"
   | "parkingReports"
+  | "postReports"
   | "studentRideViolations"
   | "violationFees"
   | "reports"
@@ -224,6 +226,11 @@ const dashboardSections: Array<{
     section: "parkingReports",
     label: "Parking Reports",
     path: "/parking-reports",
+  },
+  {
+    section: "postReports",
+    label: "Post Reports",
+    path: "/post-reports",
   },
   {
     section: "studentRideViolations",
@@ -6450,6 +6457,13 @@ function App() {
             onOpenStudentDevice={handleOpenStudentDeviceFromDashboard}
           />
         );
+      case "postReports":
+        return (
+          <PostReportsScreen
+            activeSchoolId={activeSchoolId}
+            managedAppId={context.managedAppId}
+          />
+        );
       case "parkingReports":
         return (
           <ParkingReportsScreen
@@ -7077,6 +7091,16 @@ function App() {
                           {openParkingReportCount}
                         </span>
                       )}
+                  </NavLink>
+                  <NavLink
+                    to="/post-reports"
+                    className={({ isActive }) =>
+                      isActive
+                        ? "nav-sub-item nav-sub-item-active"
+                        : "nav-sub-item"
+                    }
+                  >
+                    Post Reports
                   </NavLink>
                   <NavLink
                     to="/student-ride-violations"
