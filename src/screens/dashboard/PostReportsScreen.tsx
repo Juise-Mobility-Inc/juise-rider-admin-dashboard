@@ -97,6 +97,10 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
           ? rows.filter((row) => row.report.status !== "open")
           : rows;
       setSummaries(filtered);
+      // Only now is the list trustworthy enough to reconcile a `?report=`
+      // deep link — a failed load must not mark it ready, or the hook offers
+      // the param once against the empty list and never retries after Refresh.
+      setListLoaded(true);
     } catch (nextError) {
       if (reqId !== listReqRef.current) {
         return;
@@ -106,7 +110,6 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     } finally {
       if (reqId === listReqRef.current) {
         setListBusy(false);
-        setListLoaded(true);
       }
     }
   }, [activeSchoolId, managedAppId, tab]);
@@ -161,6 +164,9 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
       setDetail(null);
       setDetailBusy(true);
       setNotice("");
+      // Clear any stale banner from a previous failed load/action so it
+      // doesn't sit above a report that actually loaded fine.
+      setError("");
       try {
         const next = await fetchSchoolSocialPostReport(
           managedAppId,
@@ -400,7 +406,7 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
                 {detail.reported_post_text !== undefined &&
                 detail.reported_post_text.trim() !== detail.post_text.trim() ? (
                   <div className="post-reports-snapshot">
-                    <p className="eyebrow">Text when first reported (edited since)</p>
+                    <p className="eyebrow">Text as reported (post edited since)</p>
                     <blockquote className="post-reports-post-text post-reports-post-text-snapshot">
                       {detail.reported_post_text.trim() || "(no text)"}
                     </blockquote>
