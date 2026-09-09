@@ -8,12 +8,43 @@ import type {
 } from "react";
 
 import type { SchoolColorScheme } from "../../lib/api";
+import { resolveAppPreviewTheme } from "../../lib/appPreviewTheme";
 
 type SchoolColorField = {
   key: keyof SchoolColorScheme;
   label: string;
   fallback: string;
 };
+
+const ICON = {
+  menu: "M4 7h16M4 12h16M4 17h16",
+  home: "M4 11 12 4l8 7M6 10v9h12v-9",
+  flag: "M6 3v18M6 4h11l-2 4 2 4H6",
+  people:
+    "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20c0-3 2.7-5 6-5s6 2 6 5M17 13a3 3 0 1 0 0-6M15.5 20c0-2.4 1.6-4.3 4-4.6",
+  bell: "M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6M10 20a2 2 0 0 0 4 0",
+  play: "M8 5v14l11-7z",
+  sun: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v2M12 20v2M4 12H2M22 12h-2M5.6 5.6 4.2 4.2M19.8 19.8l-1.4-1.4M18.4 5.6l1.4-1.4M4.2 19.8l1.4-1.4",
+  arrow: "M5 12h13M13 6l6 6-6 6",
+};
+
+function GlyphIcon({ path, filled }: { path: string; filled?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      aria-hidden="true"
+      fill={filled ? "currentColor" : "none"}
+      stroke={filled ? "none" : "currentColor"}
+      strokeWidth={filled ? 0 : 1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d={path} />
+    </svg>
+  );
+}
 
 type SchoolLogoPreviewProps = {
   logoUrl?: string;
@@ -62,13 +93,10 @@ type Props = {
     value: string | undefined,
     fallback: keyof Required<SchoolColorScheme>,
   ) => string;
-  defaultSchoolColorScheme: Required<SchoolColorScheme>;
-  resolvedSchoolColors: SchoolColorScheme;
   resolvedSchoolLogoUrl: string;
   termDrafts: TermDraft[];
   setTermDrafts: Dispatch<SetStateAction<TermDraft[]>>;
   createEmptyTermDraft: () => TermDraft;
-  handleSaveTerms: () => Promise<void>;
   SchoolLogoPreview: ComponentType<SchoolLogoPreviewProps>;
 };
 
@@ -85,91 +113,76 @@ export function SchoolProfileScreen(props: Props) {
     handleSchoolColorChange,
     handleSchoolLogoFileChange,
     getColorPickerValue,
-    defaultSchoolColorScheme,
-    resolvedSchoolColors,
     resolvedSchoolLogoUrl,
     termDrafts,
     setTermDrafts,
     createEmptyTermDraft,
-    handleSaveTerms,
     SchoolLogoPreview,
   } = props;
 
+  // `name` and `title` are kept identical from this screen (the backend has
+  // no behavioural use for two), so name wins here.
   const schoolLabel =
-    schoolDraft.title.trim() ||
     schoolDraft.name.trim() ||
+    schoolDraft.title.trim() ||
     activeSchoolId ||
     "School profile";
+  const busy = schoolBusy || schoolLogoUploadBusy;
   const busyLabel = schoolLogoUploadBusy
     ? "Uploading logo…"
     : schoolBusy
       ? "Saving changes…"
       : "";
   const previewLogoUrl = resolvedSchoolLogoUrl || schoolDraft.logo_url;
-  const previewColors: Required<SchoolColorScheme> = {
-    primary: resolvedSchoolColors.primary || defaultSchoolColorScheme.primary,
-    secondary:
-      resolvedSchoolColors.secondary || defaultSchoolColorScheme.secondary,
-    accent: resolvedSchoolColors.accent || defaultSchoolColorScheme.accent,
-    background:
-      resolvedSchoolColors.background || defaultSchoolColorScheme.background,
-    text: resolvedSchoolColors.text || defaultSchoolColorScheme.text,
+  // Derive the full app palette (surfaces, text, borders) from the five brand
+  // colors exactly the way the customer app does, so the preview is honest.
+  const appTheme = resolveAppPreviewTheme(schoolDraft.color_scheme);
+  const swatchColors: Required<SchoolColorScheme> = {
+    primary: appTheme.primary,
+    secondary: appTheme.secondary,
+    accent: appTheme.accent,
+    background: appTheme.background,
+    text: appTheme.text,
   };
-  const appPreviewStyle: SchoolPreviewStyle = {
-    "--school-preview-primary": previewColors.primary,
-    "--school-preview-secondary": previewColors.secondary,
-    "--school-preview-accent": previewColors.accent,
-    "--school-preview-background": previewColors.background,
-    "--school-preview-text": previewColors.text,
+  const previewStyle: SchoolPreviewStyle = {
+    "--app-primary": appTheme.primary,
+    "--app-primary-tint": appTheme.primaryTint,
+    "--app-on-primary": appTheme.onPrimary,
+    "--app-bg": appTheme.background,
+    "--app-text": appTheme.text,
+    "--app-faded": appTheme.fadedText,
+    "--app-surface": appTheme.surface,
+    "--app-surface-elevated": appTheme.surfaceElevated,
+    "--app-border-muted": appTheme.borderMuted,
+    "--app-border-accent": appTheme.borderAccent,
+    "--app-accent": appTheme.accent,
   };
-  const palettePreviewItems = schoolColorFields.map((field) => ({
-    ...field,
-    color: previewColors[field.key],
-  }));
-  const profileStats = [
-    {
-      label: "Terms",
-      value: `${termDrafts.length}`,
-    },
-    {
-      label: "Status",
-      value: schoolDraft.active ? "Active" : "Inactive",
-    },
-  ];
+
+  function updateTerm(id: string, patch: Partial<TermDraft>) {
+    setTermDrafts((current) =>
+      current.map((term) => (term.id === id ? { ...term, ...patch } : term)),
+    );
+  }
 
   return (
-    <section className="school-profile-screen">
-      <section className="panel school-profile-hero">
-        <div className="school-profile-hero-main">
-          <div>
-            <p className="eyebrow">School Profile</p>
-            <h2>{schoolLabel}</h2>
-            <p className="school-profile-copy">
-              Branding, campus defaults, school terms, and metadata now live in
-              one setup surface.
-            </p>
-          </div>
-          <div className="school-profile-hero-actions">
-            {busyLabel ? <span className="muted-text">{busyLabel}</span> : null}
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={() => void refreshActiveSchool()}
-              disabled={schoolBusy || schoolLogoUploadBusy || !activeSchoolId}
-            >
-              Reload
-            </button>
-          </div>
+    <section className="sp-screen">
+      <header className="panel sp-header">
+        <div className="sp-header-main">
+          <p className="eyebrow">School profile</p>
+          <h2>{schoolLabel}</h2>
+          <p className="muted-text sp-header-copy">
+            Configure your school details, including branding, academic term
+            limits, and visibility in the app.
+          </p>
         </div>
-        <div className="school-profile-chip-row">
-          {profileStats.map((item) => (
-            <div className="school-profile-chip" key={item.label}>
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-            </div>
-          ))}
-        </div>
-      </section>
+        <span
+          className={`sp-status ${
+            schoolDraft.active ? "is-active" : "is-inactive"
+          }`}
+        >
+          {schoolDraft.active ? "Active" : "Inactive"}
+        </span>
+      </header>
 
       {!activeSchoolId ? (
         <section className="panel">
@@ -177,392 +190,353 @@ export function SchoolProfileScreen(props: Props) {
             This admin login is not scoped to a school.
           </p>
         </section>
-      ) : null}
-
-      {activeSchoolId ? (
-        <>
-          <form className="school-profile-stack" onSubmit={handleSaveSchool}>
-            <section className="panel school-profile-card school-profile-card-featured">
-              <div className="school-profile-card-header">
-                <div>
+      ) : (
+        <form className="sp-form" onSubmit={handleSaveSchool}>
+          <div className="sp-layout">
+            <div className="sp-main">
+              <section className="panel sp-card">
+                <div className="sp-card-head">
                   <p className="eyebrow">Identity</p>
-                  <h3>Brand and school settings</h3>
-                  <p className="school-profile-section-copy">
-                    Keep the school name, public title, logo, and campus
-                    defaults aligned in one place.
+                  <h3>Name &amp; logo</h3>
+                </div>
+
+                <div className="sp-logo-row">
+                  <SchoolLogoPreview
+                    key={`logo-${previewLogoUrl || "fallback"}`}
+                    logoUrl={previewLogoUrl}
+                    label={schoolLabel}
+                    size="tiny"
+                  />
+                  <div className="sp-logo-actions">
+                    <label
+                      className={`secondary-button upload-button${
+                        schoolLogoUploadBusy ? " upload-button-busy" : ""
+                      }`}
+                      aria-disabled={busy}
+                    >
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleSchoolLogoFileChange}
+                        disabled={busy}
+                      />
+                      {schoolLogoUploadBusy
+                        ? "Uploading…"
+                        : previewLogoUrl
+                          ? "Replace logo"
+                          : "Upload logo"}
+                    </label>
+                    {schoolDraft.logo_url.trim() ? (
+                      <button
+                        type="button"
+                        className="text-button sp-logo-remove"
+                        onClick={() =>
+                          setSchoolDraft((current) => ({
+                            ...current,
+                            logo_url: "",
+                          }))
+                        }
+                        disabled={busy}
+                      >
+                        Remove logo
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+                <label className="field">
+                  <span>School name</span>
+                  <input
+                    value={schoolDraft.name}
+                    onChange={(event) =>
+                      setSchoolDraft((current) => ({
+                        ...current,
+                        // One name, stored to both columns.
+                        name: event.target.value,
+                        title: event.target.value,
+                      }))
+                    }
+                    placeholder="University Name"
+                  />
+                  <small>Shown to students in the app and on their passes.</small>
+                </label>
+
+                <label className="field checkbox-field sp-active-field">
+                  <div className="sp-checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={schoolDraft.active}
+                      onChange={(event) =>
+                        setSchoolDraft((current) => ({
+                          ...current,
+                          active: event.target.checked,
+                        }))
+                      }
+                    />
+                    <span>
+                      <strong>Visible in the app</strong>
+                      <small>
+                        Students and school admins can see and join this school.
+                      </small>
+                    </span>
+                  </div>
+                </label>
+              </section>
+
+              <section className="panel sp-card">
+                <div className="sp-card-head">
+                  <p className="eyebrow">Brand colors</p>
+                  <h3>App theme</h3>
+                  <p className="muted-text">
+                    Drives the buttons, headers, and accents students see.
                   </p>
                 </div>
-              </div>
 
-              <div className="school-profile-brand-layout">
-                <div
-                  className="school-profile-brand-preview school-simple-preview"
-                  style={appPreviewStyle}
-                >
-                  <div className="school-simple-preview-shell">
-                    <div className="school-simple-preview-header">
+                <div className="sp-color-list">
+                  {schoolColorFields.map((field) => (
+                    <label className="field sp-color-field" key={field.key}>
+                      <span>{field.label}</span>
+                      <div className="sp-color-control">
+                        <span
+                          className="sp-color-dot"
+                          style={{ background: swatchColors[field.key] }}
+                          aria-hidden="true"
+                        />
+                        <input
+                          type="text"
+                          className="sp-color-hex"
+                          value={schoolDraft.color_scheme[field.key] ?? ""}
+                          onChange={(event) =>
+                            handleSchoolColorChange(
+                              field.key,
+                              event.target.value,
+                            )
+                          }
+                          placeholder={field.fallback}
+                          spellCheck={false}
+                          aria-label={`${field.label} colour hex`}
+                        />
+                        <input
+                          type="color"
+                          className="sp-color-picker"
+                          value={getColorPickerValue(
+                            schoolDraft.color_scheme[field.key],
+                            field.key as keyof Required<SchoolColorScheme>,
+                          )}
+                          onChange={(event) =>
+                            handleSchoolColorChange(
+                              field.key,
+                              event.target.value,
+                            )
+                          }
+                          aria-label={`${field.label} colour`}
+                        />
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </section>
+
+              <section className="panel sp-card">
+                <div className="sp-card-head sp-card-head-row">
+                  <div>
+                    <p className="eyebrow">Academic calendar</p>
+                    <h3>Terms</h3>
+                  </div>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() =>
+                      setTermDrafts((current) => [
+                        ...current,
+                        createEmptyTermDraft(),
+                      ])
+                    }
+                    disabled={busy}
+                  >
+                    Add term
+                  </button>
+                </div>
+
+                {termDrafts.length === 0 ? (
+                  <p className="empty-state">No terms configured yet.</p>
+                ) : (
+                  <div className="sp-term-list">
+                    {termDrafts.map((term, index) => (
+                      <div className="sp-term" key={term.id}>
+                        <div className="sp-term-head">
+                          <strong>
+                            {term.name.trim() || `Term ${index + 1}`}
+                          </strong>
+                          <div className="sp-term-head-meta">
+                            <span className="sp-term-tag">
+                              {term.term_uuid.trim() ? "Saved" : "New"}
+                            </span>
+                            <button
+                              className="text-button sp-term-remove"
+                              type="button"
+                              onClick={() =>
+                                setTermDrafts((current) =>
+                                  current.filter((item) => item.id !== term.id),
+                                )
+                              }
+                              disabled={busy}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                        <div className="sp-term-fields">
+                          <label className="field">
+                            <span>Term name</span>
+                            <input
+                              value={term.name}
+                              onChange={(event) =>
+                                updateTerm(term.id, {
+                                  name: event.target.value,
+                                })
+                              }
+                              placeholder={`Term ${index + 1}`}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Start date</span>
+                            <input
+                              type="date"
+                              value={term.start_date}
+                              onChange={(event) =>
+                                updateTerm(term.id, {
+                                  start_date: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>End date</span>
+                            <input
+                              type="date"
+                              value={term.end_date}
+                              onChange={(event) =>
+                                updateTerm(term.id, {
+                                  end_date: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+
+            <aside className="sp-side">
+              <div className="sp-preview" style={previewStyle}>
+                <span className="sp-preview-label">App preview</span>
+                <div className="sp-phone">
+                  <div className="sp-phone-header">
+                    <GlyphIcon path={ICON.menu} />
+                    <span className="sp-phone-title">{schoolLabel}</span>
+                    <span className="sp-phone-badge" aria-hidden="true" />
+                  </div>
+
+                  <div className="sp-phone-body">
+                    <div className="sp-phone-card">
                       <SchoolLogoPreview
-                        key={`field-${previewLogoUrl || "fallback"}`}
+                        key={`preview-${previewLogoUrl || "fallback"}`}
                         logoUrl={previewLogoUrl}
                         label={schoolLabel}
                         size="tiny"
                       />
-                      <div>
-                        <span>{schoolDraft.name.trim() || "School"}</span>
-                        <strong>{schoolLabel}</strong>
-                      </div>
-                    </div>
-                    <div className="school-simple-preview-body">
-                      <span>Welcome</span>
-                      <strong>{schoolDraft.title.trim() || schoolLabel}</strong>
-                      <span className="school-simple-preview-accent-pill">
-                        Accent
-                      </span>
-                      <p>
-                        Track rides, join challenges, and stay connected on
-                        campus.
-                      </p>
-                    </div>
-                    <div
-                      className="school-simple-preview-actions"
-                      aria-hidden="true"
-                    >
-                      <span className="school-simple-preview-button-primary">
-                        Get started
-                      </span>
-                      <span className="school-simple-preview-button-secondary">
-                        View challenges
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="school-profile-brand-fields">
-                  <div className="form-grid">
-                    <label className="field">
-                      <span>Name</span>
-                      <input
-                        value={schoolDraft.name}
-                        onChange={(event) =>
-                          setSchoolDraft((current) => ({
-                            ...current,
-                            name: event.target.value,
-                          }))
-                        }
-                        placeholder="Oakland University"
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Title</span>
-                      <input
-                        value={schoolDraft.title}
-                        onChange={(event) =>
-                          setSchoolDraft((current) => ({
-                            ...current,
-                            title: event.target.value,
-                          }))
-                        }
-                        placeholder="Oakland University"
-                      />
-                    </label>
-                    <label className="field checkbox-field school-profile-active-field">
-                      <span>School Active</span>
-                      <div className="school-profile-checkbox-row">
-                        <input
-                          type="checkbox"
-                          checked={schoolDraft.active}
-                          onChange={(event) =>
-                            setSchoolDraft((current) => ({
-                              ...current,
-                              active: event.target.checked,
-                            }))
-                          }
-                        />
-                        <strong>Visible to students and school admins</strong>
-                      </div>
-                    </label>
-                  </div>
-
-                  <div className="school-profile-logo-row">
-                    <label className="field">
-                      <span>Logo URL</span>
-                      <input
-                        value={schoolDraft.logo_url}
-                        onChange={(event) =>
-                          setSchoolDraft((current) => ({
-                            ...current,
-                            logo_url: event.target.value,
-                          }))
-                        }
-                        placeholder="https://…"
-                      />
-                    </label>
-                    <div className="school-profile-logo-sidecar">
-                      <div className="school-profile-logo-inline-preview">
-                        <span className="school-profile-logo-inline-label">
-                          Preview
-                        </span>
-                        <SchoolLogoPreview
-                          key={`inline-${previewLogoUrl || "fallback"}`}
-                          logoUrl={previewLogoUrl}
-                          label={schoolLabel}
-                          size="tiny"
-                        />
-                      </div>
-                      <div className="school-profile-logo-actions">
-                        <label
-                          className={`secondary-button upload-button${schoolLogoUploadBusy ? " upload-button-busy" : ""}`}
-                          aria-disabled={
-                            schoolBusy ||
-                            schoolLogoUploadBusy ||
-                            !activeSchoolId
-                          }
-                        >
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleSchoolLogoFileChange}
-                            disabled={
-                              schoolBusy ||
-                              schoolLogoUploadBusy ||
-                              !activeSchoolId
-                            }
-                          />
-                          {schoolLogoUploadBusy ? "Uploading…" : "Upload image"}
-                        </label>
-                        <p className="helper-text">
-                          Paste a hosted URL or upload an image here to fill the
-                          logo field automatically.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="form-actions school-profile-form-actions">
-                <button
-                  className="primary-button"
-                  type="submit"
-                  disabled={
-                    schoolBusy || schoolLogoUploadBusy || !activeSchoolId
-                  }
-                >
-                  {schoolBusy ? "Saving…" : "Save Profile"}
-                </button>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => void refreshActiveSchool()}
-                  disabled={
-                    schoolBusy || schoolLogoUploadBusy || !activeSchoolId
-                  }
-                >
-                  Reload School
-                </button>
-              </div>
-            </section>
-
-            <section className="panel school-profile-card">
-              <div className="school-profile-card-header">
-                <div>
-                  <p className="eyebrow">Color Scheme</p>
-                  <h3>Brand palette</h3>
-                  <p className="school-profile-section-copy">
-                    These colors now flow through the dashboard shell, cards,
-                    and primary actions.
-                  </p>
-                </div>
-              </div>
-
-              <div className="color-scheme-grid">
-                {schoolColorFields.map((field) => (
-                  <div className="color-input-row" key={field.key}>
-                    <div className="color-input-copy">
-                      <strong>{field.label}</strong>
-                      <span>{field.key}</span>
-                    </div>
-                    <input
-                      type="text"
-                      value={schoolDraft.color_scheme[field.key] ?? ""}
-                      onChange={(event) =>
-                        handleSchoolColorChange(field.key, event.target.value)
-                      }
-                      placeholder={field.fallback}
-                    />
-                    <input
-                      type="color"
-                      className="color-picker-input"
-                      value={getColorPickerValue(
-                        schoolDraft.color_scheme[field.key],
-                        field.key as keyof Required<SchoolColorScheme>,
-                      )}
-                      onChange={(event) =>
-                        handleSchoolColorChange(field.key, event.target.value)
-                      }
-                      aria-label={`${field.label} color`}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              <div
-                className="color-preview-card school-palette-preview"
-                style={appPreviewStyle}
-              >
-                <div className="school-palette-preview-grid">
-                  {palettePreviewItems.map((item) => (
-                    <div className="school-palette-preview-item" key={item.key}>
-                      <span
-                        className="school-palette-preview-swatch"
-                        style={{ background: item.color }}
-                        aria-hidden="true"
-                      />
-                      <div>
-                        <strong>{item.label}</strong>
-                        <code>{item.color}</code>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="school-palette-sample-row" aria-hidden="true">
-                  <span className="school-palette-sample-chip">Primary</span>
-                  <span className="school-palette-sample-chip school-palette-sample-chip-muted">
-                    Secondary
-                  </span>
-                  <span className="school-palette-sample-chip school-palette-sample-chip-accent">
-                    Accent
-                  </span>
-                </div>
-              </div>
-            </section>
-          </form>
-
-          <section className="panel school-profile-card school-profile-terms-panel">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">Academic Calendar</p>
-                <h3>School terms</h3>
-                <p className="school-profile-section-copy">
-                  Manage reservable terms directly from the profile screen.
-                </p>
-              </div>
-              <div className="form-actions">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() =>
-                    setTermDrafts((current) => [
-                      ...current,
-                      createEmptyTermDraft(),
-                    ])
-                  }
-                  disabled={!activeSchoolId || schoolBusy}
-                >
-                  Add Term
-                </button>
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={() => void handleSaveTerms()}
-                  disabled={schoolBusy || !activeSchoolId}
-                >
-                  Save Terms
-                </button>
-              </div>
-            </div>
-
-            {termDrafts.length === 0 ? (
-              <p className="empty-state">
-                No terms configured yet for this school.
-              </p>
-            ) : (
-              <div className="school-profile-term-list">
-                {termDrafts.map((term, index) => (
-                  <div className="school-profile-term-card" key={term.id}>
-                    <div className="school-profile-term-heading">
-                      <div>
-                        <span className="school-profile-term-index">
-                          Term {index + 1}
-                        </span>
+                      <div className="sp-phone-card-text">
+                        <span>Your school</span>
                         <strong>
-                          {term.name.trim() || `Untitled term ${index + 1}`}
+                          {schoolDraft.name.trim() || "School name"}
                         </strong>
                       </div>
-                      <div className="school-profile-term-heading-meta">
-                        <span className="school-profile-term-status">
-                          {term.term_uuid.trim() ? "Saved" : "New"}
-                        </span>
-                        <button
-                          className="danger-button"
-                          type="button"
-                          onClick={() =>
-                            setTermDrafts((current) =>
-                              current.filter((item) => item.id !== term.id),
-                            )
-                          }
+                    </div>
+
+                    <div className="sp-today">
+                      <span className="sp-today-bar" aria-hidden="true" />
+                      <div className="sp-today-head">
+                        <div className="sp-today-copy">
+                          <span className="sp-today-eyebrow">
+                            <GlyphIcon path={ICON.sun} />
+                            Today&apos;s points
+                          </span>
+                          <span className="sp-today-desc">
+                            Rides at {schoolDraft.name.trim() || schoolLabel}
+                          </span>
+                        </div>
+                        <div className="sp-today-value">
+                          <strong>+50</strong>
+                          <span>points today</span>
+                        </div>
+                      </div>
+                      <div className="sp-today-action">
+                        <span>Start a ride to earn more points</span>
+                        <span
+                          className="sp-today-action-btn"
+                          aria-hidden="true"
                         >
-                          Remove
-                        </button>
+                          <GlyphIcon path={ICON.arrow} />
+                        </span>
                       </div>
                     </div>
-                    <div className="school-profile-term-fields">
-                      <label className="field">
-                        <span>Term Name</span>
-                        <input
-                          value={term.name}
-                          onChange={(event) =>
-                            setTermDrafts((current) =>
-                              current.map((item) =>
-                                item.id === term.id
-                                  ? { ...item, name: event.target.value }
-                                  : item,
-                              ),
-                            )
-                          }
-                          placeholder={`Term ${index + 1}`}
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Start Date</span>
-                        <input
-                          type="date"
-                          value={term.start_date}
-                          onChange={(event) =>
-                            setTermDrafts((current) =>
-                              current.map((item) =>
-                                item.id === term.id
-                                  ? { ...item, start_date: event.target.value }
-                                  : item,
-                              ),
-                            )
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>End Date</span>
-                        <input
-                          type="date"
-                          value={term.end_date}
-                          onChange={(event) =>
-                            setTermDrafts((current) =>
-                              current.map((item) =>
-                                item.id === term.id
-                                  ? { ...item, end_date: event.target.value }
-                                  : item,
-                              ),
-                            )
-                          }
-                        />
-                      </label>
-                    </div>
                   </div>
-                ))}
+
+                  <div className="sp-phone-tabs">
+                    <span className="sp-phone-tab is-active">
+                      <GlyphIcon path={ICON.home} />
+                      <em>Home</em>
+                    </span>
+                    <span className="sp-phone-tab">
+                      <GlyphIcon path={ICON.flag} />
+                      <em>Challenges</em>
+                    </span>
+                    <span className="sp-phone-tab sp-phone-tab-center">
+                      <span className="sp-phone-play">
+                        <GlyphIcon path={ICON.play} filled />
+                      </span>
+                    </span>
+                    <span className="sp-phone-tab">
+                      <GlyphIcon path={ICON.people} />
+                      <em>Social</em>
+                    </span>
+                    <span className="sp-phone-tab">
+                      <GlyphIcon path={ICON.bell} />
+                      <em>Alerts</em>
+                    </span>
+                  </div>
+                </div>
+                <p className="sp-preview-note">
+                  This is how {schoolLabel} looks in the Juise Rider App.
+                </p>
               </div>
-            )}
-          </section>
-        </>
-      ) : null}
+            </aside>
+          </div>
+
+          <div className="sp-save-bar">
+            <span className="muted-text">
+              {busyLabel || "Save your changes to update the school profile."}
+            </span>
+            <div className="form-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void refreshActiveSchool()}
+                disabled={busy}
+              >
+                Reload
+              </button>
+              <button className="primary-button" type="submit" disabled={busy}>
+                {schoolBusy ? "Saving…" : "Save changes"}
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
     </section>
   );
 }

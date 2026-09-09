@@ -1551,10 +1551,12 @@ function App() {
   // (handleJoinSchool / confirmLeaveSchool) can check it *after* their await
   // rather than reading a stale closure snapshot. `loadedOk` is true only
   // after a lookup has *succeeded* at least once (not merely settled).
-  const membershipsLookupRef = useRef<{ inFlight: boolean; loadedOk: boolean }>({
-    inFlight: false,
-    loadedOk: false,
-  });
+  const membershipsLookupRef = useRef<{ inFlight: boolean; loadedOk: boolean }>(
+    {
+      inFlight: false,
+      loadedOk: false,
+    },
+  );
   // school_ids joined during this session. A membership lookup that raced the
   // join (or ran before the write replicated) can come back without them; we
   // keep those rows and don't treat the selection as "revoked".
@@ -3328,7 +3330,9 @@ function App() {
     // Load the selected challenge into the draft once per selection change, not
     // on every render — otherwise challengeToDraft's fresh object retriggers
     // this effect and clobbers in-progress edits.
-    if (syncedChallengeDraftIdRef.current !== selectedChallenge.challenge_uuid) {
+    if (
+      syncedChallengeDraftIdRef.current !== selectedChallenge.challenge_uuid
+    ) {
       setChallengeDraft(challengeToDraft(selectedChallenge));
       syncedChallengeDraftIdRef.current = selectedChallenge.challenge_uuid;
     }
@@ -4273,9 +4277,12 @@ function App() {
 
     setSchoolBusy(true);
     try {
+      const schoolName = schoolDraft.name.trim();
       const savedSchool = await saveSchool(context.managedAppId, schoolId, {
-        name: schoolDraft.name.trim(),
-        title: schoolDraft.title.trim(),
+        name: schoolName,
+        // The profile screen exposes one "School name"; the backend's
+        // separate title column has no behavioural use, so keep it in sync.
+        title: schoolName,
         logo_url: schoolDraft.logo_url.trim(),
         default_campus_id: schoolDraft.default_campus_id.trim(),
         color_scheme: sanitizeSchoolColorScheme(schoolDraft.color_scheme),
@@ -4283,36 +4290,10 @@ function App() {
         active: schoolDraft.active,
       });
 
-      setSchoolDraft(schoolToDraft(savedSchool));
-      setTermDrafts(savedSchool.terms.map(termToDraft));
-      setBanner({
-        tone: "success",
-        message: `Saved school ${savedSchool.school_id}.`,
-      });
-    } catch (error) {
-      setBanner({
-        tone: "error",
-        message: getErrorMessage(error),
-      });
-    } finally {
-      setSchoolBusy(false);
-    }
-  }
-
-  async function handleSaveTerms() {
-    if (!activeSchoolId) {
-      setBanner({
-        tone: "error",
-        message: "Save the school profile first before managing terms.",
-      });
-      return;
-    }
-
-    setSchoolBusy(true);
-    try {
+      // Terms are edited on the same screen and saved by the same button.
       const savedTerms = await saveSchoolTerms(
         context.managedAppId,
-        activeSchoolId,
+        schoolId,
         termDrafts.map((term) => ({
           term_uuid: term.term_uuid.trim() || undefined,
           name: term.name.trim(),
@@ -4321,10 +4302,11 @@ function App() {
         })),
       );
 
+      setSchoolDraft(schoolToDraft(savedSchool));
       setTermDrafts(savedTerms.map(termToDraft));
       setBanner({
         tone: "success",
-        message: `Updated ${savedTerms.length} school terms.`,
+        message: `Saved school ${savedSchool.school_id}.`,
       });
     } catch (error) {
       setBanner({
@@ -4708,7 +4690,9 @@ function App() {
     }
   }
 
-  function handleChallengeImageFileChange(event: ChangeEvent<HTMLInputElement>) {
+  function handleChallengeImageFileChange(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
     const file = event.target.files?.[0];
     event.target.value = "";
 
@@ -5104,9 +5088,7 @@ function App() {
           : [target.challengeUUID],
       );
       setSchoolChallenges((current) =>
-        current.filter(
-          (challenge) => !removed.has(challenge.challenge_uuid),
-        ),
+        current.filter((challenge) => !removed.has(challenge.challenge_uuid)),
       );
       setChallengeParticipants([]);
       setSelectedChallengeId("");
@@ -5134,7 +5116,10 @@ function App() {
     }
     const { challengeUUID, title, isGame } = seriesDeletePrompt;
     setSeriesDeletePrompt(null);
-    void performDeleteChallenge({ challengeUUID, title, isGame }, applyToSeries);
+    void performDeleteChallenge(
+      { challengeUUID, title, isGame },
+      applyToSeries,
+    );
   }
 
   async function createPackFromDraft(
@@ -5429,7 +5414,9 @@ function App() {
                               void copyMfaText(mfaEnrollment.otpauth_uri, "uri")
                             }
                           >
-                            {mfaCopied === "uri" ? "Copied!" : "Copy setup link"}
+                            {mfaCopied === "uri"
+                              ? "Copied!"
+                              : "Copy setup link"}
                           </button>
                         </div>
                         <p className="mfa-panel-hint">
@@ -5654,7 +5641,7 @@ function App() {
                             username: event.target.value,
                           }))
                         }
-                        placeholder="ou.parking"
+                        placeholder="SchoolUser"
                         required
                       />
                     </label>
@@ -5841,7 +5828,8 @@ function App() {
               ) : schoolMembershipsError && activeMemberships.length === 0 ? (
                 <div className="school-selection-load-error">
                   <p className="mfa-help">
-                    We couldn&rsquo;t load your schools. {schoolMembershipsError}
+                    We couldn&rsquo;t load your schools.{" "}
+                    {schoolMembershipsError}
                   </p>
                   <button
                     type="button"
@@ -6074,7 +6062,7 @@ function App() {
                           sanitizeSchoolIdOnBlur(event.target.value),
                         )
                       }
-                      placeholder="ou"
+                      placeholder="ID"
                       disabled={joinSchoolBusy}
                       autoFocus
                     />
@@ -6086,7 +6074,7 @@ function App() {
                       onChange={(event) =>
                         setJoinNewSchoolName(event.target.value)
                       }
-                      placeholder="Oakland University"
+                      placeholder="University Name"
                       disabled={joinSchoolBusy}
                     />
                   </label>
@@ -6166,13 +6154,10 @@ function App() {
       handleSchoolColorChange={handleSchoolColorChange}
       handleSchoolLogoFileChange={handleSchoolLogoFileChange}
       getColorPickerValue={getColorPickerValue}
-      defaultSchoolColorScheme={defaultSchoolColorScheme}
-      resolvedSchoolColors={resolvedSchoolColors}
       resolvedSchoolLogoUrl={resolvedSchoolLogoUrl}
       termDrafts={termDrafts}
       setTermDrafts={setTermDrafts}
       createEmptyTermDraft={createEmptyTermDraft}
-      handleSaveTerms={handleSaveTerms}
       SchoolLogoPreview={(props: Parameters<typeof SchoolLogoPreview>[0]) => (
         <SchoolLogoPreview {...props} onPreview={handleOpenImagePreview} />
       )}
@@ -7204,7 +7189,9 @@ function App() {
             <div className="management-modal-header">
               <div>
                 <p className="eyebrow">Repeating challenge</p>
-                <h3>Update just this one, or all {seriesEditPrompt.seriesCount}?</h3>
+                <h3>
+                  Update just this one, or all {seriesEditPrompt.seriesCount}?
+                </h3>
               </div>
               <button
                 className="text-button management-modal-close"
@@ -7216,11 +7203,11 @@ function App() {
               </button>
             </div>
             <p className="muted-text series-edit-modal-copy">
-              This challenge repeats as {seriesEditPrompt.seriesCount}{" "}
-              separate challenges. Students still join each one on its own —
-              choose whether these changes apply to just this challenge, or
-              to all of them (each keeps its own dates, shifted the same way
-              this one moved).
+              This challenge repeats as {seriesEditPrompt.seriesCount} separate
+              challenges. Students still join each one on its own — choose
+              whether these changes apply to just this challenge, or to all of
+              them (each keeps its own dates, shifted the same way this one
+              moved).
             </p>
             <div className="form-actions series-edit-modal-actions">
               <button
@@ -7276,8 +7263,8 @@ function App() {
               “{seriesDeletePrompt.title}” repeats as{" "}
               {seriesDeletePrompt.seriesCount} separate{" "}
               {seriesDeletePrompt.isGame ? "games" : "challenges"}. Deleting
-              stops riders from joining — choose whether to remove just this
-              one or every occurrence in the series.
+              stops riders from joining — choose whether to remove just this one
+              or every occurrence in the series.
             </p>
             <div className="form-actions series-edit-modal-actions">
               <button
