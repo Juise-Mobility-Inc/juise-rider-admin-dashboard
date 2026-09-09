@@ -62,12 +62,16 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
   // Keep the tab in the URL so a link to a report opened under "Resolved"
   // reloads on that tab — otherwise the default "open" query never contains
   // the linked row and the detail can't be restored.
-  const [tab, setTab] = useState<StatusTab>(() =>
-    searchParams.get("tab") === "resolved" ? "resolved" : "open",
-  );
+  const urlTab: StatusTab =
+    searchParams.get("tab") === "resolved" ? "resolved" : "open";
+  const [tab, setTab] = useState<StatusTab>(urlTab);
+  // Follow back/forward navigation that changes ?tab= — the initializer only
+  // runs once, so without this the state and URL can drift apart.
+  useEffect(() => {
+    setTab((prev) => (prev === urlTab ? prev : urlTab));
+  }, [urlTab]);
   const changeTab = useCallback(
     (next: StatusTab) => {
-      setTab(next);
       setSearchParams(
         (prev) => {
           const params = new URLSearchParams(prev);
