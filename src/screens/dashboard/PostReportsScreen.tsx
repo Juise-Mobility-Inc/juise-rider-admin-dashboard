@@ -9,6 +9,7 @@ import {
   type SocialPostReportDetail,
   type SocialPostReportSummary,
 } from "../../lib/api";
+import { useDetailParamSync } from "../../lib/useDetailParamSync";
 
 type Props = {
   activeSchoolId: string;
@@ -65,6 +66,9 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
   const [detailBusy, setDetailBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  // Gate the URL<->selection sync until the list has loaded once, so a
+  // `?report=` deep link isn't discarded before the rows that back it arrive.
+  const [listLoaded, setListLoaded] = useState(false);
   // Monotonic request ids so a slow response for a stale tab/school/report
   // can't overwrite the current view.
   const listReqRef = useRef(0);
@@ -102,6 +106,7 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     } finally {
       if (reqId === listReqRef.current) {
         setListBusy(false);
+        setListLoaded(true);
       }
     }
   }, [activeSchoolId, managedAppId, tab]);
@@ -137,6 +142,16 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     [summaries, selectedActivityUUID],
   );
 
+  const reporterByUUID = useMemo(() => {
+    const map = new Map<string, SocialModerationUser>();
+    for (const reporter of detail?.reporters ?? []) {
+      if (reporter.user_uuid) {
+        map.set(reporter.user_uuid, reporter);
+      }
+    }
+    return map;
+  }, [detail]);
+
   const loadDetail = useCallback(
     async (reportUUID: string, activityUUID: string) => {
       const reqId = ++detailReqRef.current;
@@ -169,6 +184,29 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
       }
     },
     [managedAppId, activeSchoolId],
+  );
+
+  // Keep the open report in the URL so browser back/forward closes/reopens the
+  // detail and a `?report=<activity_uuid>` link restores it once the list is in.
+  useDetailParamSync(
+    "report",
+    detail && selectedActivityUUID ? selectedActivityUUID : "",
+    (value) => {
+      if (!value) {
+        detailReqRef.current += 1;
+        setSelectedActivityUUID("");
+        setDetail(null);
+        setNotice("");
+        return;
+      }
+      const match = summaries.find(
+        (row) => row.report.activity_uuid === value,
+      );
+      if (match) {
+        void loadDetail(match.report.report_uuid, value);
+      }
+    },
+    listLoaded,
   );
 
   async function applyAction(action: SocialPostReportAction) {
@@ -397,6 +435,12 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
                           — {formatWhen(report.created_at)}
                         </span>
                       </div>
+                      <p className="muted-text">
+                        Reported by{" "}
+                        {userLabel(
+                          reporterByUUID.get(report.reporter_user_uuid),
+                        )}
+                      </p>
                       {report.details?.trim() ? (
                         <p className="muted-text">{report.details}</p>
                       ) : null}
