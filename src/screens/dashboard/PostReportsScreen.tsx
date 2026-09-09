@@ -216,6 +216,8 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
         }
         setError(getErrorMessage(nextError));
         setDetail(null);
+        // The load failed, so there's no valid detail to keep in the URL.
+        setSelectedActivityUUID("");
       } finally {
         if (reqId === detailReqRef.current) {
           setDetailBusy(false);
@@ -227,9 +229,12 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
 
   // Keep the open report in the URL so browser back/forward closes/reopens the
   // detail and a `?report=<activity_uuid>` link restores it once the list is in.
+  // Track selectedActivityUUID directly (not `detail && ...`) so switching from
+  // one report to another goes A -> B in history, not A -> "" -> B; a failed
+  // load clears selectedActivityUUID so nothing broken lingers in the URL.
   useDetailParamSync(
     "report",
-    detail && selectedActivityUUID ? selectedActivityUUID : "",
+    selectedActivityUUID,
     (value) => {
       if (!value) {
         detailReqRef.current += 1;
