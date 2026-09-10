@@ -349,6 +349,7 @@ export interface SchoolEmailInvite {
   campus_id?: string;
   email: string;
   inviter_user_uuid: string;
+  source?: "admin" | "self_signup";
   status: "pending" | "accepted" | "expired" | "revoked";
   invited_at: number;
   expires_at?: number;
@@ -1782,6 +1783,42 @@ export async function revokeSchoolInvite(
       appIdHeader: managedAppId,
     },
   );
+}
+
+export interface BetaSignupLink {
+  token: string;
+  school_name: string;
+}
+
+// Mints the opaque token behind the public "join this school's beta" link.
+// Admin-only (requireSchoolAdmin, per school) — goes through the dashboard
+// nebula gateway like the other invite calls.
+export async function fetchSchoolBetaSignupLink(
+  managedAppId: string,
+  schoolId: string,
+): Promise<BetaSignupLink> {
+  return request<BetaSignupLink>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/beta-signup-link`,
+    {
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
+// Called from the standalone public /join-beta page — no session. Adds the
+// visitor's own email to the beta invite list for whichever school the
+// signed token was minted for.
+export async function submitBetaSelfSignup(
+  token: string,
+  email: string,
+): Promise<void> {
+  await request<{ ok: boolean }>("kcaProxy", "/api/v1/public/beta-signup", {
+    method: "POST",
+    body: { token, email },
+    authRequired: false,
+    retryOnUnauthorized: false,
+  });
 }
 
 export async function fetchSchools(managedAppId: string): Promise<School[]> {

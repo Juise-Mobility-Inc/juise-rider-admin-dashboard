@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import QRCode from "qrcode";
 
 import {
   createSchoolInvite,
+  fetchSchoolBetaSignupLink,
   fetchSchoolInvites,
   revokeSchoolInvite,
   type SchoolEmailInvite,
@@ -12,6 +14,20 @@ type Props = {
   activeSchoolId: string;
   managedAppId: string;
 };
+
+// The public /join-beta page is served by this same app. In production the
+// app runs under a HashRouter (see main.tsx), so the route lives after the
+// "#"; in dev it's a plain path.
+function buildJoinBetaUrl(token: string, schoolName: string): string {
+  const base = import.meta.env.PROD
+    ? `${window.location.origin}${window.location.pathname}#/join-beta`
+    : `${window.location.origin}/join-beta`;
+  const params = new URLSearchParams({ t: token });
+  if (schoolName) {
+    params.set("s", schoolName);
+  }
+  return `${base}?${params.toString()}`;
+}
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -63,6 +79,11 @@ export function BetaInvitesScreen({ activeSchoolId, managedAppId }: Props) {
   const [inviteError, setInviteError] = useState("");
   const [inviteStatus, setInviteStatus] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [publicLink, setPublicLink] = useState("");
+  const [publicLinkQr, setPublicLinkQr] = useState("");
+  const [publicLinkBusy, setPublicLinkBusy] = useState(false);
+  const [publicLinkError, setPublicLinkError] = useState("");
+  const [publicLinkCopied, setPublicLinkCopied] = useState(false);
   // Guards against a slower, earlier fetch (e.g. the initial mount load)
   // resolving after a later one (e.g. the reload after creating an
   // invite) and overwriting it with stale data.
@@ -93,6 +114,54 @@ export function BetaInvitesScreen({ activeSchoolId, managedAppId }: Props) {
     void loadSchoolInvites();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [managedAppId, activeSchoolId]);
+
+  // The public link is school-specific — drop it when the active school changes.
+  useEffect(() => {
+    setPublicLink("");
+    setPublicLinkQr("");
+    setPublicLinkError("");
+    setPublicLinkCopied(false);
+  }, [managedAppId, activeSchoolId]);
+
+  async function handleGeneratePublicLink() {
+    setPublicLinkBusy(true);
+    setPublicLinkError("");
+    setPublicLinkCopied(false);
+    try {
+      const { token, school_name } = await fetchSchoolBetaSignupLink(
+        managedAppId,
+        activeSchoolId,
+      );
+      const url = buildJoinBetaUrl(token, school_name);
+      setPublicLink(url);
+      try {
+        setPublicLinkQr(await QRCode.toDataURL(url, { width: 220, margin: 1 }));
+      } catch {
+        setPublicLinkQr("");
+      }
+    } catch (err) {
+      setPublicLink("");
+      setPublicLinkQr("");
+      setPublicLinkError(
+        err instanceof Error
+          ? err.message
+          : "Unable to generate a public link.",
+      );
+    } finally {
+      setPublicLinkBusy(false);
+    }
+  }
+
+  async function handleCopyPublicLink() {
+    if (!publicLink) return;
+    try {
+      await navigator.clipboard.writeText(publicLink);
+      setPublicLinkCopied(true);
+      window.setTimeout(() => setPublicLinkCopied(false), 2000);
+    } catch {
+      setPublicLinkError("Couldn't copy — select the link and copy manually.");
+    }
+  }
 
   function addEmails(candidates: string[]) {
     setPendingEmails((current) => dedupeEmails([...current, ...candidates]));
@@ -262,9 +331,62 @@ export function BetaInvitesScreen({ activeSchoolId, managedAppId }: Props) {
             >
               Upload CSV
             </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => void handleGeneratePublicLink()}
+              disabled={publicLinkBusy}
+            >
+              {publicLinkBusy ? "Generating…" : "Create public link"}
+            </button>
           </div>
         ) : null}
       </div>
+
+      {activeSchoolId && (publicLink || publicLinkError) ? (
+        <div className="beta-public-link-panel">
+          <p className="eyebrow">Public signup link</p>
+          <p className="muted-text">
+            Anyone with this link can add their own email to this school&apos;s
+            beta from a simple page — no dashboard account needed. They get the
+            same download email as an invite you send by hand. Share it on a
+            flyer, slide, or QR code. Rotating it later isn&apos;t supported
+            yet, so treat it as semi-public.
+          </p>
+          {publicLinkError ? (
+            <p className="error-text">{publicLinkError}</p>
+          ) : null}
+          {publicLink ? (
+            <>
+              <div className="beta-public-link-row">
+                <input
+                  type="text"
+                  readOnly
+                  className="beta-public-link-input"
+                  value={publicLink}
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => void handleCopyPublicLink()}
+                >
+                  {publicLinkCopied ? "Copied!" : "Copy link"}
+                </button>
+              </div>
+              {publicLinkQr ? (
+                <img
+                  className="beta-public-link-qr"
+                  src={publicLinkQr}
+                  alt="QR code for the public beta signup link"
+                  width={220}
+                  height={220}
+                />
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      ) : null}
 
       {!activeSchoolId ? (
         <p className="empty-state">
@@ -341,6 +463,11 @@ export function BetaInvitesScreen({ activeSchoolId, managedAppId }: Props) {
                   className="school-invite-list-item"
                 >
                   <span className="school-invite-email">{invite.email}</span>
+                  {invite.source === "self_signup" ? (
+                    <span className="school-invite-source">
+                      via public link
+                    </span>
+                  ) : null}
                   <span
                     className={`school-invite-status school-invite-status-${invite.status}`}
                   >
