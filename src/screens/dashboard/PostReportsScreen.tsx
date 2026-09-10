@@ -107,6 +107,9 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
   // can't overwrite the current view.
   const listReqRef = useRef(0);
   const detailReqRef = useRef(0);
+  // A `?report=` deep link whose row isn't on the loaded pages yet — keep
+  // paging until it appears or the queue is exhausted.
+  const pendingDeepLinkRef = useRef<string | null>(null);
 
   const refreshList = useCallback(async () => {
     if (!activeSchoolId) {
@@ -119,19 +122,14 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     setListBusy(true);
     setError("");
     try {
-      const status = reqTab === "open" ? "open" : "";
       const rows = await fetchSchoolSocialPostReports(managedAppId, reqSchool, {
-        status,
+        status: reqTab,
         limit: PAGE_SIZE,
       });
       if (reqId !== listReqRef.current) {
         return;
       }
-      const filtered =
-        reqTab === "resolved"
-          ? rows.filter((row) => row.report.status !== "open")
-          : rows;
-      setSummaries(filtered);
+      setSummaries(rows);
       setHasMore(rows.length >= PAGE_SIZE);
       // Mark the scope these rows belong to. Only a successful load counts —
       // a failure leaves scopeReady false so the URL sync retries after a
@@ -170,37 +168,36 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     if (!activeSchoolId || loadingMore) {
       return;
     }
-    const reqTab = tab;
-    const reqSchool = activeSchoolId;
+    // Share the list request generation so a scope change (which bumps it via
+    // refreshList / the clearing effect) discards this response too.
+    const reqId = ++listReqRef.current;
     setLoadingMore(true);
     setError("");
     try {
-      const rows = await fetchSchoolSocialPostReports(managedAppId, reqSchool, {
-        status: reqTab === "open" ? "open" : "",
+      const rows = await fetchSchoolSocialPostReports(managedAppId, activeSchoolId, {
+        status: tab,
         limit: PAGE_SIZE,
         offset: summaries.length,
       });
-      if (reqSchool !== activeSchoolId || reqTab !== tab) {
+      if (reqId !== listReqRef.current) {
         return;
       }
-      const filtered =
-        reqTab === "resolved"
-          ? rows.filter((row) => row.report.status !== "open")
-          : rows;
       setSummaries((prev) => {
         const seen = new Set(prev.map((row) => row.report.activity_uuid));
         return [
           ...prev,
-          ...filtered.filter(
-            (row) => !seen.has(row.report.activity_uuid),
-          ),
+          ...rows.filter((row) => !seen.has(row.report.activity_uuid)),
         ];
       });
       setHasMore(rows.length >= PAGE_SIZE);
     } catch (nextError) {
-      setError(getErrorMessage(nextError));
+      if (reqId === listReqRef.current) {
+        setError(getErrorMessage(nextError));
+      }
     } finally {
-      setLoadingMore(false);
+      if (reqId === listReqRef.current) {
+        setLoadingMore(false);
+      }
     }
   }, [activeSchoolId, loadingMore, managedAppId, summaries.length, tab]);
 
@@ -212,6 +209,7 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
   // holds until the new scope's rows arrive without an extra effect.
   useEffect(() => {
     detailReqRef.current += 1;
+    pendingDeepLinkRef.current = null;
     setSummaries([]);
     setSelectedActivityUUID("");
     setDetail(null);
@@ -286,6 +284,7 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     (value) => {
       if (!value) {
         detailReqRef.current += 1;
+        pendingDeepLinkRef.current = null;
         setSelectedActivityUUID("");
         setDetail(null);
         setNotice("");
@@ -295,11 +294,47 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
         (row) => row.report.activity_uuid === value,
       );
       if (match) {
+        pendingDeepLinkRef.current = null;
         void loadDetail(match.report.report_uuid, value);
+      } else if (hasMore) {
+        // The linked report is on a later page — page toward it (the effect
+        // below keeps going until it's found or the queue runs out).
+        pendingDeepLinkRef.current = value;
+        void loadMore();
       }
     },
     scopeReady,
   );
+
+  // Drive `?report=` deep links that point past the loaded pages: page until
+  // the row shows up (then open it) or the queue is exhausted.
+  useEffect(() => {
+    const wanted = pendingDeepLinkRef.current;
+    if (!wanted || !scopeReady || loadingMore) {
+      return;
+    }
+    const match = summaries.find(
+      (row) => row.report.activity_uuid === wanted,
+    );
+    if (match) {
+      pendingDeepLinkRef.current = null;
+      if (selectedActivityUUID !== wanted) {
+        void loadDetail(match.report.report_uuid, wanted);
+      }
+    } else if (hasMore) {
+      void loadMore();
+    } else {
+      pendingDeepLinkRef.current = null;
+    }
+  }, [
+    summaries,
+    hasMore,
+    loadingMore,
+    scopeReady,
+    selectedActivityUUID,
+    loadDetail,
+    loadMore,
+  ]);
 
   async function applyAction(action: SocialPostReportAction) {
     if (!detail) {
