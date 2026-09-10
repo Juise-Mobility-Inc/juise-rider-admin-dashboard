@@ -19305,6 +19305,11 @@
         overflow-y: auto;
 }
 
+.post-reports-load-more {
+        justify-self: stretch;
+        margin-top: 2px;
+}
+
 .post-reports-row {
         display: grid;
         gap: 6px;

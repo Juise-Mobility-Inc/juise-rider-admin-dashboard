@@ -19,6 +19,8 @@ type Props = {
 
 type StatusTab = "open" | "resolved";
 
+const PAGE_SIZE = 50;
+
 const REASON_LABELS: Record<string, string> = {
   spam: "Spam",
   harassment: "Harassment",
@@ -62,14 +64,11 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
   // Keep the tab in the URL so a link to a report opened under "Resolved"
   // reloads on that tab — otherwise the default "open" query never contains
   // the linked row and the detail can't be restored.
-  const urlTab: StatusTab =
+  // The tab is derived from the URL every render (no separate state that could
+  // lag ?tab= on a Back/Forward), so URL-sync readiness is always keyed to the
+  // tab actually requested.
+  const tab: StatusTab =
     searchParams.get("tab") === "resolved" ? "resolved" : "open";
-  const [tab, setTab] = useState<StatusTab>(urlTab);
-  // Follow back/forward navigation that changes ?tab= — the initializer only
-  // runs once, so without this the state and URL can drift apart.
-  useEffect(() => {
-    setTab((prev) => (prev === urlTab ? prev : urlTab));
-  }, [urlTab]);
   const changeTab = useCallback(
     (next: StatusTab) => {
       // Drop any open report from the URL rather than carrying an id from the
@@ -97,12 +96,13 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
   const [actionBusy, setActionBusy] = useState(false);
   const [notice, setNotice] = useState("");
   // The scope (school|tab) whose rows are currently in `summaries`. The URL
-  // sync is only "ready" when this matches the rendered scope — deriving it
-  // synchronously in render (not via a `listLoaded` effect that lags a render
-  // behind) is what lets a combined ?tab=&report= Back wait for the RIGHT list.
+  // sync is only "ready" when this matches the rendered scope, so a combined
+  // ?tab=&report= Back waits for the RIGHT list before matching the report id.
   const currentScope = `${activeSchoolId}|${tab}`;
   const [loadedScope, setLoadedScope] = useState("");
   const scopeReady = loadedScope === currentScope;
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   // Monotonic request ids so a slow response for a stale tab/school/report
   // can't overwrite the current view.
   const listReqRef = useRef(0);
@@ -122,6 +122,7 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
       const status = reqTab === "open" ? "open" : "";
       const rows = await fetchSchoolSocialPostReports(managedAppId, reqSchool, {
         status,
+        limit: PAGE_SIZE,
       });
       if (reqId !== listReqRef.current) {
         return;
@@ -131,6 +132,7 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
           ? rows.filter((row) => row.report.status !== "open")
           : rows;
       setSummaries(filtered);
+      setHasMore(rows.length >= PAGE_SIZE);
       // Mark the scope these rows belong to. Only a successful load counts —
       // a failure leaves scopeReady false so the URL sync retries after a
       // Refresh instead of consuming the param against an empty list.
@@ -141,6 +143,10 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
       }
       setError(getErrorMessage(nextError));
       setSummaries([]);
+      // A failed refresh clears the rows, so the scope is no longer "loaded" —
+      // otherwise the URL sync would match a report id against an empty list
+      // and never retry after the next successful refresh.
+      setLoadedScope("");
     } finally {
       if (reqId === listReqRef.current) {
         setListBusy(false);
@@ -158,6 +164,45 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
   useEffect(() => {
     refreshListRef.current = refreshList;
   }, [refreshList]);
+
+  // Page past the server's per-request cap so no reported post is unreachable.
+  const loadMore = useCallback(async () => {
+    if (!activeSchoolId || loadingMore) {
+      return;
+    }
+    const reqTab = tab;
+    const reqSchool = activeSchoolId;
+    setLoadingMore(true);
+    setError("");
+    try {
+      const rows = await fetchSchoolSocialPostReports(managedAppId, reqSchool, {
+        status: reqTab === "open" ? "open" : "",
+        limit: PAGE_SIZE,
+        offset: summaries.length,
+      });
+      if (reqSchool !== activeSchoolId || reqTab !== tab) {
+        return;
+      }
+      const filtered =
+        reqTab === "resolved"
+          ? rows.filter((row) => row.report.status !== "open")
+          : rows;
+      setSummaries((prev) => {
+        const seen = new Set(prev.map((row) => row.report.activity_uuid));
+        return [
+          ...prev,
+          ...filtered.filter(
+            (row) => !seen.has(row.report.activity_uuid),
+          ),
+        ];
+      });
+      setHasMore(rows.length >= PAGE_SIZE);
+    } catch (nextError) {
+      setError(getErrorMessage(nextError));
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [activeSchoolId, loadingMore, managedAppId, summaries.length, tab]);
 
   // Changing the scope (tab or school) means the current list no longer
   // contains the selected report — drop the stale rows and detail and
@@ -416,6 +461,16 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
                 );
               })
             )}
+            {hasMore ? (
+              <button
+                className="secondary-button post-reports-load-more"
+                type="button"
+                onClick={() => void loadMore()}
+                disabled={loadingMore}
+              >
+                {loadingMore ? "Loading…" : "Load older reports"}
+              </button>
+            ) : null}
           </div>
 
           <div className="post-reports-detail panel">

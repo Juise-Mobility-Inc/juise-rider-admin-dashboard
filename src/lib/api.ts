@@ -3581,11 +3581,17 @@ export type SocialPostReportAction = "remove_post" | "dismiss" | "ban_user";
 export async function fetchSchoolSocialPostReports(
   managedAppId: string,
   schoolId: string,
-  options: { status?: string } = {},
+  options: { status?: string; limit?: number; offset?: number } = {},
 ): Promise<SocialPostReportSummary[]> {
   const query = new URLSearchParams();
   if (options.status?.trim()) {
     query.set("status", options.status.trim());
+  }
+  if (options.limit && options.limit > 0) {
+    query.set("limit", String(options.limit));
+  }
+  if (options.offset && options.offset > 0) {
+    query.set("offset", String(options.offset));
   }
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return request<SocialPostReportSummary[]>(
