@@ -117,6 +117,9 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
       return;
     }
     const reqId = ++listReqRef.current;
+    // A full refresh supersedes any in-flight load-more (whose guarded finally
+    // will now skip); clear its busy flag here so the button isn't stuck.
+    setLoadingMore(false);
     const reqTab = tab;
     const reqSchool = activeSchoolId;
     setListBusy(true);
@@ -215,6 +218,11 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     setDetail(null);
     setDetailBusy(false);
     setNotice("");
+    // Reset pagination for the new scope — and clear loadingMore so a stale
+    // load-more (whose finally is now request-guarded) can't leave the button
+    // disabled.
+    setHasMore(false);
+    setLoadingMore(false);
   }, [activeSchoolId, tab]);
 
   const selectedSummary = useMemo(
