@@ -3518,6 +3518,114 @@ export async function issueSchoolParkingIncidentReportViolation(
   );
 }
 
+// ── Social post reports (content moderation) ────────────────────────────────
+
+export interface SocialModerationUser {
+  user_uuid: string;
+  first_name: string;
+  last_name: string;
+  username: string;
+  email: string;
+  student_id: string;
+  profile_image_object_key?: string;
+}
+
+export interface SocialPostReport {
+  report_uuid: string;
+  app_id: string;
+  school_id: string;
+  activity_uuid: string;
+  reported_user_uuid: string;
+  reporter_user_uuid: string;
+  reason: string;
+  details?: string;
+  /** Post text captured when this report was filed (edit-proof evidence). */
+  reported_post_text?: string;
+  status: "open" | "actioned" | "dismissed";
+  resolution?: "" | "post_removed" | "user_banned" | "dismissed";
+  resolved_by_user_uuid?: string;
+  resolved_at?: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface SocialPostReportSummary {
+  report: SocialPostReport;
+  report_count: number;
+  post_active: boolean;
+  post_hidden: boolean;
+  post_text: string;
+  post_created_at: number;
+  reported_user?: SocialModerationUser;
+  latest_reporter?: SocialModerationUser;
+}
+
+export interface SocialPostReportDetail {
+  activity_uuid: string;
+  school_id: string;
+  post_text: string;
+  /** Post text as it read when the anchor report was filed. */
+  reported_post_text?: string;
+  post_active: boolean;
+  post_hidden: boolean;
+  post_created_at: number;
+  report_count: number;
+  reported_user?: SocialModerationUser;
+  reported_user_banned: boolean;
+  reports: SocialPostReport[];
+  reporters: SocialModerationUser[];
+}
+
+export type SocialPostReportAction = "remove_post" | "dismiss" | "ban_user";
+
+export async function fetchSchoolSocialPostReports(
+  managedAppId: string,
+  schoolId: string,
+  options: { status?: string; limit?: number; offset?: number } = {},
+): Promise<SocialPostReportSummary[]> {
+  const query = new URLSearchParams();
+  if (options.status?.trim()) {
+    query.set("status", options.status.trim());
+  }
+  if (options.limit && options.limit > 0) {
+    query.set("limit", String(options.limit));
+  }
+  if (options.offset && options.offset > 0) {
+    query.set("offset", String(options.offset));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return request<SocialPostReportSummary[]>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/social-post-reports${suffix}`,
+    { appIdHeader: managedAppId },
+  );
+}
+
+export async function fetchSchoolSocialPostReport(
+  managedAppId: string,
+  schoolId: string,
+  reportUUID: string,
+): Promise<SocialPostReportDetail> {
+  return request<SocialPostReportDetail>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/social-post-reports/${encodeURIComponent(reportUUID)}`,
+    { appIdHeader: managedAppId },
+  );
+}
+
+export async function resolveSchoolSocialPostReport(
+  managedAppId: string,
+  schoolId: string,
+  reportUUID: string,
+  action: SocialPostReportAction,
+): Promise<SocialPostReportDetail> {
+  return request<SocialPostReportDetail>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/social-post-reports/${encodeURIComponent(reportUUID)}/resolve`,
+    { method: "POST", body: { action }, appIdHeader: managedAppId },
+  );
+}
+
 export async function fetchSchoolParkingViolationHistory(
   managedAppId: string,
   schoolId: string,
