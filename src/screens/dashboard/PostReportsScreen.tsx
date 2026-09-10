@@ -168,7 +168,9 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
 
   // Page past the server's per-request cap so no reported post is unreachable.
   const loadMore = useCallback(async () => {
-    if (!activeSchoolId || loadingMore) {
+    // Never page while a full list load is running — loadMore shares
+    // listReqRef and would invalidate the refresh, leaving it stuck.
+    if (!activeSchoolId || loadingMore || listBusy) {
       return;
     }
     // Share the list request generation so a scope change (which bumps it via
@@ -196,13 +198,16 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     } catch (nextError) {
       if (reqId === listReqRef.current) {
         setError(getErrorMessage(nextError));
+        // Stop the deep-link effect from re-firing loadMore in a loop on a
+        // persistent failure — the moderator can retry with the button.
+        pendingDeepLinkRef.current = null;
       }
     } finally {
       if (reqId === listReqRef.current) {
         setLoadingMore(false);
       }
     }
-  }, [activeSchoolId, loadingMore, managedAppId, summaries.length, tab]);
+  }, [activeSchoolId, listBusy, loadingMore, managedAppId, summaries.length, tab]);
 
   // Changing the scope (tab or school) means the current list no longer
   // contains the selected report — drop the stale rows and detail and
@@ -509,7 +514,7 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
                 className="secondary-button post-reports-load-more"
                 type="button"
                 onClick={() => void loadMore()}
-                disabled={loadingMore}
+                disabled={loadingMore || listBusy}
               >
                 {loadingMore ? "Loading…" : "Load older reports"}
               </button>
