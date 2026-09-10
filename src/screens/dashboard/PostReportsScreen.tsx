@@ -96,9 +96,13 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
   const [detailBusy, setDetailBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [notice, setNotice] = useState("");
-  // Gate the URL<->selection sync until the list has loaded once, so a
-  // `?report=` deep link isn't discarded before the rows that back it arrive.
-  const [listLoaded, setListLoaded] = useState(false);
+  // The scope (school|tab) whose rows are currently in `summaries`. The URL
+  // sync is only "ready" when this matches the rendered scope — deriving it
+  // synchronously in render (not via a `listLoaded` effect that lags a render
+  // behind) is what lets a combined ?tab=&report= Back wait for the RIGHT list.
+  const currentScope = `${activeSchoolId}|${tab}`;
+  const [loadedScope, setLoadedScope] = useState("");
+  const scopeReady = loadedScope === currentScope;
   // Monotonic request ids so a slow response for a stale tab/school/report
   // can't overwrite the current view.
   const listReqRef = useRef(0);
@@ -127,10 +131,10 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
           ? rows.filter((row) => row.report.status !== "open")
           : rows;
       setSummaries(filtered);
-      // Only now is the list trustworthy enough to reconcile a `?report=`
-      // deep link — a failed load must not mark it ready, or the hook offers
-      // the param once against the empty list and never retries after Refresh.
-      setListLoaded(true);
+      // Mark the scope these rows belong to. Only a successful load counts —
+      // a failure leaves scopeReady false so the URL sync retries after a
+      // Refresh instead of consuming the param against an empty list.
+      setLoadedScope(`${reqSchool}|${reqTab}`);
     } catch (nextError) {
       if (reqId !== listReqRef.current) {
         return;
@@ -158,12 +162,11 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
   // Changing the scope (tab or school) means the current list no longer
   // contains the selected report — drop the stale rows and detail and
   // invalidate any in-flight detail load so nothing from the old scope stays
-  // clickable (and actionable) while the new list loads. Re-gate the URL sync
-  // too: a `?report=` from a combined tab+report Back must wait for the new
-  // scope's list before it's matched, not be tried against the old one.
+  // clickable (and actionable) while the new list loads. `scopeReady` already
+  // goes false synchronously (loadedScope !== currentScope), so the URL sync
+  // holds until the new scope's rows arrive without an extra effect.
   useEffect(() => {
     detailReqRef.current += 1;
-    setListLoaded(false);
     setSummaries([]);
     setSelectedActivityUUID("");
     setDetail(null);
@@ -250,7 +253,7 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
         void loadDetail(match.report.report_uuid, value);
       }
     },
-    listLoaded,
+    scopeReady,
   );
 
   async function applyAction(action: SocialPostReportAction) {
