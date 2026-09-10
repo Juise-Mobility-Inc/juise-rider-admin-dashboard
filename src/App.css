@@ -6157,6 +6157,16 @@
         justify-content: flex-end;
 }
 
+.beta-students-panel .school-invite-header {
+        margin-bottom: 4px;
+}
+
+.beta-students-table th:last-child,
+.beta-students-actions {
+        text-align: right;
+        white-space: nowrap;
+}
+
 .school-invite-entry-row {
         display: flex;
         align-items: stretch;
