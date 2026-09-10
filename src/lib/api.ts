@@ -1784,6 +1784,39 @@ export async function revokeSchoolInvite(
   );
 }
 
+export interface UserDeletionStep {
+  service: string;
+  success: boolean;
+  status?: number;
+  error?: string;
+}
+
+export interface UserDeletionResult {
+  user_uuid: string;
+  app_id: string;
+  success: boolean;
+  steps: UserDeletionStep[];
+}
+
+// Permanently deletes a user's account and all their data across every
+// service (hub-store, nebula, global-auth). Backed by kca-proxy's
+// AdminDeleteUserAndData orchestrator — internal-admin-only (is_admin), not
+// school_admin, so the caller's account must have is_admin set. Used from
+// the Beta Invites screen to remove a beta student.
+export async function deleteUserAccountAndData(
+  managedAppId: string,
+  userUuid: string,
+): Promise<UserDeletionResult> {
+  return request<UserDeletionResult>(
+    "kcaProxy",
+    `/api/v1/admin/internal/apps/${encodeURIComponent(managedAppId)}/users/${encodeURIComponent(userUuid)}`,
+    {
+      method: "DELETE",
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
 export async function fetchSchools(managedAppId: string): Promise<School[]> {
   // Genuinely public route (no auth at all) - the authenticated
   // /api/v1/apps/{app_id}/schools path requires an admin JWT, which a
