@@ -6154,7 +6154,119 @@
 .school-invite-upload-action {
         display: flex;
         flex: 0 0 auto;
+        flex-wrap: wrap;
+        gap: 10px;
         justify-content: flex-end;
+}
+
+.beta-public-link-panel {
+        border: 1px solid var(--panel-border);
+        border-radius: 12px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+}
+
+.beta-public-link-panel .eyebrow,
+.beta-public-link-panel .muted-text,
+.beta-public-link-panel .error-text {
+        margin: 0;
+}
+
+.beta-public-link-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: stretch;
+        gap: 10px;
+}
+
+.beta-public-link-input {
+        flex: 1;
+        min-width: 220px;
+        border: 1px solid var(--input-border);
+        border-radius: 10px;
+        padding: 9px 12px;
+        font-family: inherit;
+        font-size: 0.9rem;
+        background: var(--surface, #fff);
+        color: inherit;
+}
+
+.beta-public-link-qr {
+        align-self: flex-start;
+        border: 1px solid var(--panel-border);
+        border-radius: 12px;
+        background: #fff;
+        padding: 8px;
+}
+
+.school-invite-source {
+        font-size: 0.75rem;
+        color: var(--muted, #6b7280);
+        border: 1px solid var(--panel-border);
+        border-radius: 999px;
+        padding: 1px 8px;
+        white-space: nowrap;
+}
+
+.join-beta-card {
+        max-width: 420px;
+        text-align: left;
+}
+
+.join-beta-lead {
+        margin: 4px 0 0;
+        color: var(--muted, #6b7280);
+        font-size: 0.92rem;
+        line-height: 1.5;
+}
+
+.join-beta-fineprint {
+        margin: 8px 0 0;
+        color: var(--muted, #6b7280);
+        font-size: 0.82rem;
+}
+
+.join-beta-form {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        margin-top: 18px;
+}
+
+.join-beta-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 0.85rem;
+        font-weight: 600;
+}
+
+.join-beta-field input {
+        border: 1px solid var(--input-border);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font: inherit;
+        font-weight: 400;
+}
+
+.join-beta-consent {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        font-size: 0.82rem;
+        line-height: 1.4;
+        color: var(--muted, #6b7280);
+}
+
+.join-beta-consent input {
+        margin-top: 2px;
+        flex: 0 0 auto;
+}
+
+.join-beta-submit {
+        align-self: stretch;
 }
 
 .school-invite-entry-row {

@@ -113,6 +113,7 @@ import { AuditLogScreen } from "./screens/dashboard/AuditLogScreen";
 import { ChallengesScreen } from "./screens/dashboard/ChallengesScreen";
 import { DashboardScreen } from "./screens/dashboard/DashboardScreen";
 import { BetaInvitesScreen } from "./screens/dashboard/BetaInvitesScreen";
+import { JoinBetaScreen } from "./screens/JoinBetaScreen";
 import { StudentLeaderboardScreen } from "./screens/dashboard/StudentLeaderboardScreen";
 import { NotificationsScreen } from "./screens/dashboard/NotificationsScreen";
 import { PacksScreen } from "./screens/dashboard/PacksScreen";
@@ -2806,6 +2807,11 @@ function App() {
   }
 
   useEffect(() => {
+    if (normalizeDashboardPath(location.pathname) === "/join-beta") {
+      // Public beta signup page — not a dashboard section, must not be
+      // bounced to /dashboard.
+      return;
+    }
     if (resolveSectionFromPathname(location.pathname)) {
       return;
     }
@@ -5268,6 +5274,13 @@ function App() {
     } finally {
       setReservationsBusy(false);
     }
+  }
+
+  // Public, unauthenticated page — the "join this school's beta" link a
+  // school admin hands out. Rendered before the session gate so a
+  // prospective rider (who has no account) can reach it.
+  if (normalizeDashboardPath(location.pathname) === "/join-beta") {
+    return <JoinBetaScreen />;
   }
 
   if (authInitializing) {
