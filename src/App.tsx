@@ -7324,6 +7324,15 @@ function App() {
                 </div>
               )}
             </div>
+
+            <NavLink
+              to="/security-settings"
+              className={({ isActive }) =>
+                isActive ? "nav-button nav-button-active" : "nav-button"
+              }
+            >
+              Security Settings
+            </NavLink>
           </nav>
 
           <div className="sidebar-footer">
