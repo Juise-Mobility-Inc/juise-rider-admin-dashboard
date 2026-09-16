@@ -570,6 +570,35 @@
         line-height: 1.45;
 }
 
+.mfa-method-choice {
+        width: 100%;
+        display: grid;
+        gap: 10px;
+}
+
+.security-methods-panel {
+        display: grid;
+        gap: 12px;
+}
+
+.security-method-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--panel-border);
+}
+
+.security-passkey-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+}
+
 .mfa-enroll-hint {
         width: 100%;
         margin: 0;

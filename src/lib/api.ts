@@ -1,3 +1,10 @@
+import type {
+  AuthenticationResponseJSON,
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+  RegistrationResponseJSON,
+} from "@simplewebauthn/browser";
+
 import { BEACONS_ENABLED } from "./flags";
 
 export interface TokenPair {
@@ -1013,6 +1020,7 @@ export interface MFAChallenge {
   enrollment_required: boolean;
   mfa_token: string;
   exp: number;
+  available_methods?: MFAMethod[];
 }
 
 export interface MFAEnrollment {
@@ -1025,6 +1033,41 @@ interface MFACompletedResponse {
   tokens: AuthTokenBundle;
   trusted_device_token: string;
   trusted_device_expires: number;
+}
+
+// available_methods lists what the signed-in-but-not-yet-verified user has
+// enrolled ("totp", "webauthn", or both) so the client can offer a picker
+// when more than one is present. Omitted (or absent) during enrollment,
+// since nothing is enrolled yet.
+export type MFAMethod = "totp" | "webauthn";
+
+export interface WebAuthnCredentialSummary {
+  credential_id: string;
+  label: string;
+  created_at: number;
+  last_used_at: number | null;
+}
+
+export interface MFAMethodsSummary {
+  totp_enabled: boolean;
+  webauthn_credentials: WebAuthnCredentialSummary[];
+}
+
+// The backend returns go-webauthn's *protocol.CredentialCreation /
+// *protocol.CredentialAssertion verbatim, which wrap the options a client
+// actually needs under a "publicKey" key (mirroring the shape of the
+// navigator.credentials.create({publicKey}) / .get({publicKey}) call) —
+// unwrap .publicKey before handing it to @simplewebauthn/browser, which
+// expects the inner options object directly.
+interface WebAuthnCreationOptionsResponse {
+  publicKey: PublicKeyCredentialCreationOptionsJSON;
+}
+interface WebAuthnRequestOptionsResponse {
+  publicKey: PublicKeyCredentialRequestOptionsJSON;
+}
+interface WebAuthnManagementBeginResponse
+  extends WebAuthnCreationOptionsResponse {
+  challenge_id: string;
 }
 
 const trustedDeviceStorageKey =
@@ -1569,21 +1612,36 @@ export async function beginMFAEnrollment(
   });
 }
 
-async function completeMFA(
+async function establishMfaSession(
+  response: MFACompletedResponse,
+  authAppId: string,
+): Promise<AdminSession> {
+  saveTrustedDevice(response);
+  return createAdminSession(response.tokens, authAppId);
+}
+
+async function completeMFAWithBody(
   path: string,
   authAppId: string,
-  mfaToken: string,
-  code: string,
+  body: Record<string, unknown>,
 ): Promise<AdminSession> {
   const response = await request<MFACompletedResponse>("auth", path, {
     method: "POST",
-    body: { mfa_token: mfaToken, code },
+    body,
     authRequired: false,
     appIdHeader: authAppId,
     retryOnUnauthorized: false,
   });
-  saveTrustedDevice(response);
-  return createAdminSession(response.tokens, authAppId);
+  return establishMfaSession(response, authAppId);
+}
+
+function completeMFA(
+  path: string,
+  authAppId: string,
+  mfaToken: string,
+  code: string,
+) {
+  return completeMFAWithBody(path, authAppId, { mfa_token: mfaToken, code });
 }
 
 export function confirmMFAEnrollment(
@@ -1596,6 +1654,128 @@ export function confirmMFAEnrollment(
 
 export function verifyMFA(authAppId: string, mfaToken: string, code: string) {
   return completeMFA("/api/v1/auth/mfa/verify", authAppId, mfaToken, code);
+}
+
+// --- Passkeys (WebAuthn), as an alternative or additional MFA method ---
+
+export async function beginWebAuthnEnrollment(
+  authAppId: string,
+  mfaToken: string,
+): Promise<PublicKeyCredentialCreationOptionsJSON> {
+  const response = await request<WebAuthnCreationOptionsResponse>(
+    "auth",
+    "/api/v1/auth/mfa/webauthn/enroll/begin",
+    {
+      method: "POST",
+      body: { mfa_token: mfaToken },
+      authRequired: false,
+      appIdHeader: authAppId,
+      retryOnUnauthorized: false,
+    },
+  );
+  return response.publicKey;
+}
+
+export function finishWebAuthnEnrollment(
+  authAppId: string,
+  mfaToken: string,
+  credential: RegistrationResponseJSON,
+  label?: string,
+): Promise<AdminSession> {
+  return completeMFAWithBody(
+    "/api/v1/auth/mfa/webauthn/enroll/finish",
+    authAppId,
+    { mfa_token: mfaToken, credential, label: label ?? "" },
+  );
+}
+
+export async function beginWebAuthnVerification(
+  authAppId: string,
+  mfaToken: string,
+): Promise<PublicKeyCredentialRequestOptionsJSON> {
+  const response = await request<WebAuthnRequestOptionsResponse>(
+    "auth",
+    "/api/v1/auth/mfa/webauthn/verify/begin",
+    {
+      method: "POST",
+      body: { mfa_token: mfaToken },
+      authRequired: false,
+      appIdHeader: authAppId,
+      retryOnUnauthorized: false,
+    },
+  );
+  return response.publicKey;
+}
+
+export function finishWebAuthnVerification(
+  authAppId: string,
+  mfaToken: string,
+  credential: AuthenticationResponseJSON,
+): Promise<AdminSession> {
+  return completeMFAWithBody(
+    "/api/v1/auth/mfa/webauthn/verify/finish",
+    authAppId,
+    { mfa_token: mfaToken, credential },
+  );
+}
+
+// --- MFA method management (Security Settings) — requires a signed-in session ---
+
+export async function listMFAMethods(
+  authAppId: string,
+): Promise<MFAMethodsSummary> {
+  return request<MFAMethodsSummary>("auth", "/api/v1/auth/mfa/methods", {
+    method: "GET",
+    appIdHeader: authAppId,
+  });
+}
+
+export async function beginWebAuthnRegistration(
+  authAppId: string,
+): Promise<{ challengeId: string; options: PublicKeyCredentialCreationOptionsJSON }> {
+  const response = await request<WebAuthnManagementBeginResponse>(
+    "auth",
+    "/api/v1/auth/mfa/webauthn/register/begin",
+    { method: "POST", body: {}, appIdHeader: authAppId },
+  );
+  return { challengeId: response.challenge_id, options: response.publicKey };
+}
+
+export function finishWebAuthnRegistration(
+  authAppId: string,
+  challengeId: string,
+  credential: RegistrationResponseJSON,
+  label?: string,
+): Promise<MFAMethodsSummary> {
+  return request<MFAMethodsSummary>(
+    "auth",
+    "/api/v1/auth/mfa/webauthn/register/finish",
+    {
+      method: "POST",
+      body: { challenge_id: challengeId, credential, label: label ?? "" },
+      appIdHeader: authAppId,
+    },
+  );
+}
+
+export async function removeTOTPMethod(
+  authAppId: string,
+): Promise<MFAMethodsSummary> {
+  return request<MFAMethodsSummary>("auth", "/api/v1/auth/mfa/methods/totp", {
+    method: "DELETE",
+    appIdHeader: authAppId,
+  });
+}
+
+export async function removeWebAuthnCredential(
+  authAppId: string,
+  credentialId: string,
+): Promise<MFAMethodsSummary> {
+  return request<MFAMethodsSummary>(
+    "auth",
+    `/api/v1/auth/mfa/methods/webauthn/${encodeURIComponent(credentialId)}`,
+    { method: "DELETE", appIdHeader: authAppId },
+  );
 }
 
 export async function createSchoolAdminAccount(
