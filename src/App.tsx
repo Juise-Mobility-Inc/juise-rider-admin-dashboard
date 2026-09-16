@@ -4098,11 +4098,18 @@ function App() {
     // Prefer whichever method the account actually has and the browser can
     // use; default to passkey when both are available and supported, since
     // it's the faster path, but let the form's "use X instead" link switch.
+    // A passkey-only account (webauthn enrolled, totp not) must still
+    // resolve to "webauthn" even when this browser can't use it - falling
+    // back to "totp" here would silently point the user at a code form for
+    // a method their account was never enrolled in, which can never
+    // succeed. The webauthn render branch below shows an explicit
+    // unsupported-browser message instead in that case.
     const methods = challenge.available_methods ?? ["totp"];
     setMfaMethodChoice(
-      methods.includes("webauthn") && passkeySupported
+      methods.includes("webauthn") &&
+        (passkeySupported || !methods.includes("totp"))
         ? "webauthn"
-        : (methods.find((method) => method !== "webauthn") ?? "totp"),
+        : "totp",
     );
   }
 
@@ -5524,7 +5531,13 @@ function App() {
                 {!mfaChallenge.enrollment_required &&
                 mfaMethodChoice === "webauthn" ? (
                   <div className="mfa-method">
-                    {passkeyBusy ? (
+                    {!passkeySupported ? (
+                      <p className="error-text">
+                        This browser doesn&rsquo;t support the passkey your
+                        account uses. Try a different browser or device to
+                        sign in.
+                      </p>
+                    ) : passkeyBusy ? (
                       <p className="mfa-help">
                         Waiting for your passkey&hellip; follow the prompt
                         from your browser.

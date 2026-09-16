@@ -1758,6 +1758,38 @@ export function finishWebAuthnRegistration(
   );
 }
 
+interface TOTPManagementBeginResponse extends MFAEnrollment {
+  challenge_id: string;
+}
+
+export async function beginTOTPRegistration(
+  authAppId: string,
+): Promise<{ challengeId: string; enrollment: MFAEnrollment }> {
+  const response = await request<TOTPManagementBeginResponse>(
+    "auth",
+    "/api/v1/auth/mfa/totp/register/begin",
+    { method: "POST", body: {}, appIdHeader: authAppId },
+  );
+  const { challenge_id, ...enrollment } = response;
+  return { challengeId: challenge_id, enrollment };
+}
+
+export function finishTOTPRegistration(
+  authAppId: string,
+  challengeId: string,
+  code: string,
+): Promise<MFAMethodsSummary> {
+  return request<MFAMethodsSummary>(
+    "auth",
+    "/api/v1/auth/mfa/totp/register/finish",
+    {
+      method: "POST",
+      body: { challenge_id: challengeId, code },
+      appIdHeader: authAppId,
+    },
+  );
+}
+
 export async function removeTOTPMethod(
   authAppId: string,
 ): Promise<MFAMethodsSummary> {

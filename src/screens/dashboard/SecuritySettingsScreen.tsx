@@ -1,12 +1,16 @@
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import QRCode from "qrcode";
 
 import {
+  beginTOTPRegistration,
   beginWebAuthnRegistration,
+  finishTOTPRegistration,
   finishWebAuthnRegistration,
   listMFAMethods,
   removeTOTPMethod,
   removeWebAuthnCredential,
+  type MFAEnrollment,
   type MFAMethodsSummary,
 } from "../../lib/api";
 import {
@@ -36,6 +40,12 @@ export function SecuritySettingsScreen({ authAppId }: Props) {
   const [statusMessage, setStatusMessage] = useState("");
   const [busyKey, setBusyKey] = useState("");
   const passkeySupported = isPasskeySupported();
+  const [totpChallengeId, setTotpChallengeId] = useState("");
+  const [totpEnrollment, setTotpEnrollment] = useState<MFAEnrollment | null>(
+    null,
+  );
+  const [totpQrCode, setTotpQrCode] = useState("");
+  const [totpCode, setTotpCode] = useState("");
 
   async function loadMethods() {
     setLoading(true);
@@ -74,6 +84,59 @@ export function SecuritySettingsScreen({ authAppId }: Props) {
       );
       setMethods(updated);
       setStatusMessage("Passkey added.");
+    } catch (error) {
+      setActionError(getErrorMessage(error));
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  async function handleBeginTotpEnrollment() {
+    setBusyKey("begin-totp");
+    setActionError("");
+    setStatusMessage("");
+    try {
+      const { challengeId, enrollment } = await beginTOTPRegistration(
+        authAppId,
+      );
+      setTotpChallengeId(challengeId);
+      setTotpEnrollment(enrollment);
+      setTotpCode("");
+      setTotpQrCode(
+        await QRCode.toDataURL(enrollment.otpauth_uri, {
+          width: 200,
+          margin: 3,
+          errorCorrectionLevel: "Q",
+        }),
+      );
+    } catch (error) {
+      setActionError(getErrorMessage(error));
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  function cancelTotpEnrollment() {
+    setTotpChallengeId("");
+    setTotpEnrollment(null);
+    setTotpQrCode("");
+    setTotpCode("");
+  }
+
+  async function handleConfirmTotpEnrollment(event: FormEvent) {
+    event.preventDefault();
+    setBusyKey("confirm-totp");
+    setActionError("");
+    setStatusMessage("");
+    try {
+      const updated = await finishTOTPRegistration(
+        authAppId,
+        totpChallengeId,
+        totpCode,
+      );
+      setMethods(updated);
+      cancelTotpEnrollment();
+      setStatusMessage("Authenticator app added.");
     } catch (error) {
       setActionError(getErrorMessage(error));
     } finally {
@@ -157,11 +220,101 @@ export function SecuritySettingsScreen({ authAppId }: Props) {
                 {busyKey === "totp" ? "Removing…" : "Remove"}
               </button>
             </div>
+          ) : totpEnrollment ? (
+            <form
+              className="mfa-form mfa-enroll-layout"
+              onSubmit={(event) => void handleConfirmTotpEnrollment(event)}
+            >
+              <div className="mfa-enroll-qr">
+                {totpQrCode ? (
+                  <img
+                    className="mfa-qr-code"
+                    src={totpQrCode}
+                    alt="Authenticator app setup QR code"
+                  />
+                ) : null}
+              </div>
+              <div className="mfa-methods">
+                <div className="mfa-method">
+                  <p className="mfa-method-title">Use an authenticator app</p>
+                  <p className="mfa-help">
+                    Scan this QR code with Google Authenticator, Microsoft
+                    Authenticator, Authy, 1Password, or a similar app, then
+                    enter the 6-digit code it shows below.
+                  </p>
+                </div>
+              </div>
+              <details className="mfa-recovery-codes">
+                <summary>
+                  Recovery codes ({totpEnrollment.recovery_codes.length}) —
+                  save these before you finish
+                </summary>
+                <p>
+                  They will not be shown again. Each code can be used once if
+                  you lose access to your authenticator app.
+                </p>
+                <ul className="mfa-recovery-code-list">
+                  {totpEnrollment.recovery_codes.map((code) => (
+                    <li key={code}>
+                      <code>{code}</code>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+              <label className="field">
+                <span>6-digit code</span>
+                <input
+                  autoComplete="one-time-code"
+                  inputMode="numeric"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  maxLength={6}
+                  minLength={6}
+                  required
+                  value={totpCode}
+                  onChange={(event) =>
+                    setTotpCode(
+                      event.target.value.replace(/\D/g, "").slice(0, 6),
+                    )
+                  }
+                  placeholder="123456"
+                />
+              </label>
+              <div className="mfa-panel-actions">
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={
+                    busyKey === "confirm-totp" || totpCode.trim().length < 6
+                  }
+                >
+                  {busyKey === "confirm-totp" ? "Confirming…" : "Confirm"}
+                </button>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={cancelTotpEnrollment}
+                  disabled={busyKey === "confirm-totp"}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           ) : (
-            <p className="muted-text">
-              Not set up. You can add one during your next sign-in, or after
-              adding a passkey here.
-            </p>
+            <div className="security-method-row">
+              <span className="muted-text">Not set up.</span>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={busyKey === "begin-totp"}
+                onClick={() => void handleBeginTotpEnrollment()}
+              >
+                {busyKey === "begin-totp"
+                  ? "Starting…"
+                  : "Add authenticator app"}
+              </button>
+            </div>
           )}
 
           <div className="panel-header">
