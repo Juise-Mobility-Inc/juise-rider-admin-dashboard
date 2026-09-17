@@ -4135,7 +4135,7 @@ function App() {
         }),
       );
     } catch (error) {
-      setAuthError(getErrorMessage(error));
+      handleMfaError(error);
     } finally {
       setAuthBusy(false);
     }
