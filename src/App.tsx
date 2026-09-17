@@ -1562,6 +1562,17 @@ function App() {
   // "the session is ending" action ignore observer-driven revivals until
   // the next deliberate login/signup/MFA success explicitly clears it.
   const sessionEndedGuardRef = useRef(false);
+  // verifyMFA/finishWebAuthnVerification publish the session (via
+  // createAdminSession -> updateSession -> the observer below) the moment
+  // they resolve, before finishOrOfferAddMethod ever runs - the top-level
+  // render below branches on `session` to swap the whole login/MFA UI for
+  // the dashboard, so if the observer published immediately, the
+  // post-verify "add a method" step would never actually get a chance to
+  // render. Set true just before submitting a verification the user opted
+  // to follow with an add-method step, so the observer holds the session
+  // back; onMfaSessionEstablished (the only thing that publishes it from
+  // here on) clears it again once that step finishes or is skipped.
+  const suppressSessionPublishRef = useRef(false);
   const [authInitializing, setAuthInitializing] = useState(
     () => initialSession !== null,
   );
@@ -3092,6 +3103,9 @@ function App() {
       if (sessionEndedGuardRef.current && nextSession) {
         return;
       }
+      if (suppressSessionPublishRef.current && nextSession) {
+        return;
+      }
       setSession(nextSession);
     });
 
@@ -4183,6 +4197,7 @@ function App() {
 
   function onMfaSessionEstablished(nextSession: AdminSession) {
     sessionEndedGuardRef.current = false;
+    suppressSessionPublishRef.current = false;
     setSession(nextSession);
     setMfaChallenge(null);
     setMfaEnrollment(null);
@@ -4314,6 +4329,11 @@ function App() {
     if (!mfaChallenge) return;
     setAuthBusy(true);
     setAuthError("");
+    const willOfferAddMethod =
+      !mfaChallenge.enrollment_required && addMethodAfterVerify !== null;
+    if (willOfferAddMethod) {
+      suppressSessionPublishRef.current = true;
+    }
     try {
       const nextSession = mfaChallenge.enrollment_required
         ? await confirmMFAEnrollment(authAppId, mfaChallenge.mfa_token, mfaCode)
@@ -4324,6 +4344,9 @@ function App() {
         finishOrOfferAddMethod(nextSession);
       }
     } catch (error) {
+      if (willOfferAddMethod) {
+        suppressSessionPublishRef.current = false;
+      }
       handleMfaError(error);
     } finally {
       setAuthBusy(false);
@@ -4358,6 +4381,10 @@ function App() {
     if (!mfaChallenge) return;
     setPasskeyBusy(true);
     setAuthError("");
+    const willOfferAddMethod = addMethodAfterVerify !== null;
+    if (willOfferAddMethod) {
+      suppressSessionPublishRef.current = true;
+    }
     try {
       const options = await beginWebAuthnVerification(
         authAppId,
@@ -4371,6 +4398,9 @@ function App() {
       );
       finishOrOfferAddMethod(nextSession);
     } catch (error) {
+      if (willOfferAddMethod) {
+        suppressSessionPublishRef.current = false;
+      }
       handleMfaError(error);
     } finally {
       setPasskeyBusy(false);
