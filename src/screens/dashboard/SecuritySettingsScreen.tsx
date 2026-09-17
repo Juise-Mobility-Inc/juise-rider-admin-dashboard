@@ -68,6 +68,16 @@ export function SecuritySettingsScreen({ authAppId }: Props) {
     (methods?.totp_enabled ? 1 : 0) +
     (methods?.webauthn_credentials.length ?? 0);
   const canRemoveAMethod = totalMethods > 1;
+  // Disables every method-management control whenever any one mutation is
+  // in flight, not just the specific button that started it. Without this,
+  // a user could kick off two removals at once (e.g. both of two
+  // passkeys), and because each response independently calls setMethods,
+  // whichever response lands last wins regardless of which request the
+  // server actually processed last - an older response can silently
+  // resurrect a credential the server already deleted. Serializing at the
+  // UI level means only one request is ever in flight, so responses can
+  // never arrive out of order.
+  const mutationInProgress = busyKey !== "";
 
   async function handleAddPasskey() {
     setBusyKey("add-passkey");
@@ -209,7 +219,7 @@ export function SecuritySettingsScreen({ authAppId }: Props) {
               <button
                 type="button"
                 className="secondary-button"
-                disabled={!canRemoveAMethod || busyKey === "totp"}
+                disabled={!canRemoveAMethod || mutationInProgress}
                 title={
                   canRemoveAMethod
                     ? undefined
@@ -286,7 +296,7 @@ export function SecuritySettingsScreen({ authAppId }: Props) {
                   type="submit"
                   className="primary-button"
                   disabled={
-                    busyKey === "confirm-totp" || totpCode.trim().length < 6
+                    mutationInProgress || totpCode.trim().length < 6
                   }
                 >
                   {busyKey === "confirm-totp" ? "Confirming…" : "Confirm"}
@@ -295,7 +305,7 @@ export function SecuritySettingsScreen({ authAppId }: Props) {
                   type="button"
                   className="text-button"
                   onClick={cancelTotpEnrollment}
-                  disabled={busyKey === "confirm-totp"}
+                  disabled={mutationInProgress}
                 >
                   Cancel
                 </button>
@@ -307,7 +317,7 @@ export function SecuritySettingsScreen({ authAppId }: Props) {
               <button
                 type="button"
                 className="secondary-button"
-                disabled={busyKey === "begin-totp"}
+                disabled={mutationInProgress}
                 onClick={() => void handleBeginTotpEnrollment()}
               >
                 {busyKey === "begin-totp"
@@ -342,10 +352,7 @@ export function SecuritySettingsScreen({ authAppId }: Props) {
                   <button
                     type="button"
                     className="secondary-button"
-                    disabled={
-                      !canRemoveAMethod ||
-                      busyKey === credential.credential_id
-                    }
+                    disabled={!canRemoveAMethod || mutationInProgress}
                     title={
                       canRemoveAMethod
                         ? undefined
@@ -367,7 +374,7 @@ export function SecuritySettingsScreen({ authAppId }: Props) {
           <button
             type="button"
             className="primary-button"
-            disabled={!passkeySupported || busyKey === "add-passkey"}
+            disabled={!passkeySupported || mutationInProgress}
             title={
               passkeySupported
                 ? undefined
