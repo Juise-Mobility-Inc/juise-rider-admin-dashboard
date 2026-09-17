@@ -15,6 +15,8 @@ import "./App.css";
 import {
   approveReservation,
   beginMFAEnrollment,
+  beginWebAuthnEnrollment,
+  beginWebAuthnVerification,
   confirmMFAEnrollment,
   createSchoolChallenge,
   createSchoolPack,
@@ -43,6 +45,8 @@ import {
   fetchSchoolZones,
   fetchStudentProfile,
   fetchUserMediaAssets,
+  finishWebAuthnEnrollment,
+  finishWebAuthnVerification,
   generateAdminPackQrCode,
   generateAdminPackSpotQrCode,
   getSessionRefreshExpiryMs,
@@ -59,6 +63,7 @@ import {
   type AdminSession,
   type MFAChallenge,
   type MFAEnrollment,
+  type MFAMethod,
   type Pack,
   type PackSpot,
   type PackSpotReservation,
@@ -101,6 +106,11 @@ import { type SchoolZoneMapPolygon } from "./components/SchoolZoneMapEditor";
 import { useImageCropper } from "./components/useImageCropper";
 import { IMAGE_ASPECT } from "./lib/imageCrop";
 import {
+  authenticateWithPasskey,
+  isPasskeySupported,
+  registerPasskey,
+} from "./lib/webauthn";
+import {
   clearDashboardSession,
   readDashboardContext,
   readDashboardSession,
@@ -115,6 +125,7 @@ import { DashboardScreen } from "./screens/dashboard/DashboardScreen";
 import { BetaInvitesScreen } from "./screens/dashboard/BetaInvitesScreen";
 import { StudentLeaderboardScreen } from "./screens/dashboard/StudentLeaderboardScreen";
 import { NotificationsScreen } from "./screens/dashboard/NotificationsScreen";
+import { SecuritySettingsScreen } from "./screens/dashboard/SecuritySettingsScreen";
 import { PacksScreen } from "./screens/dashboard/PacksScreen";
 import { ParkingReportsScreen } from "./screens/dashboard/ParkingReportsScreen";
 import { PenaltyReportsScreen } from "./screens/dashboard/PenaltyReportsScreen";
@@ -167,7 +178,8 @@ type Section =
   | "packs"
   | "reservations"
   | "mapOverview"
-  | "sightingsMap";
+  | "sightingsMap"
+  | "securitySettings";
 type PackTab = "create" | "existing";
 type BannerTone = "success" | "error" | "info";
 type AuthMode = "login" | "signup";
@@ -250,6 +262,11 @@ const dashboardSections: Array<{
     section: "reservations",
     label: "Pending Reservations",
     path: "/reservations",
+  },
+  {
+    section: "securitySettings",
+    label: "Security Settings",
+    path: "/security-settings",
   },
 ];
 
@@ -1632,6 +1649,16 @@ function App() {
   const [mfaCopied, setMfaCopied] = useState<"" | "secret" | "codes" | "uri">(
     "",
   );
+  // Which method the user is currently working through. null while a
+  // first-time-setup challenge is waiting on the choice screen; set as soon
+  // as they pick "passkey" or "authenticator app" (setup), or is derived
+  // from available_methods for a returning user with an existing enrollment
+  // (verify).
+  const [mfaMethodChoice, setMfaMethodChoice] = useState<MFAMethod | null>(
+    null,
+  );
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const passkeySupported = useMemo(() => isPasskeySupported(), []);
 
   const copyMfaText = async (
     text: string,
@@ -1653,7 +1680,7 @@ function App() {
       "Juise Rider Admin Dashboard — MFA recovery codes",
       `Generated: ${new Date().toLocaleString()}`,
       "",
-      "Each code can be used once if you lose access to Google Authenticator.",
+      "Each code can be used once if you lose access to your authenticator app.",
       "",
       ...codes,
       "",
@@ -4062,9 +4089,39 @@ function App() {
     setMfaEnrollment(null);
     setMfaQrCode("");
     if (challenge.enrollment_required) {
+      // No method chosen yet - the choice screen (passkey vs authenticator
+      // app) renders until the user picks one, instead of jumping straight
+      // into TOTP's QR flow like before.
+      setMfaMethodChoice(null);
+      return;
+    }
+    // Prefer whichever method the account actually has and the browser can
+    // use; default to passkey when both are available and supported, since
+    // it's the faster path, but let the form's "use X instead" link switch.
+    // A passkey-only account (webauthn enrolled, totp not) must still
+    // resolve to "webauthn" even when this browser can't use it - falling
+    // back to "totp" here would silently point the user at a code form for
+    // a method their account was never enrolled in, which can never
+    // succeed. The webauthn render branch below shows an explicit
+    // unsupported-browser message instead in that case.
+    const methods = challenge.available_methods ?? ["totp"];
+    setMfaMethodChoice(
+      methods.includes("webauthn") &&
+        (passkeySupported || !methods.includes("totp"))
+        ? "webauthn"
+        : "totp",
+    );
+  }
+
+  async function beginTotpEnrollment() {
+    if (!mfaChallenge) return;
+    setMfaMethodChoice("totp");
+    setAuthBusy(true);
+    setAuthError("");
+    try {
       const enrollment = await beginMFAEnrollment(
         authAppId,
-        challenge.mfa_token,
+        mfaChallenge.mfa_token,
       );
       setMfaEnrollment(enrollment);
       setMfaQrCode(
@@ -4077,6 +4134,62 @@ function App() {
           errorCorrectionLevel: "Q",
         }),
       );
+    } catch (error) {
+      handleMfaError(error);
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  function onMfaSessionEstablished(nextSession: AdminSession) {
+    sessionEndedGuardRef.current = false;
+    setSession(nextSession);
+    setMfaChallenge(null);
+    setMfaEnrollment(null);
+    setMfaQrCode("");
+    setMfaCode("");
+    setMfaMethodChoice(null);
+    setAuthMode("login");
+    setLoginLock(null);
+    localStorage.removeItem(loginLockStorageKey);
+  }
+
+  function handleMfaError(error: unknown) {
+    if (error instanceof DashboardLoginLockedError) {
+      const nextLock = {
+        identifier: normalizeLoginIdentifier(identifier),
+        blockedUntil: error.blockedUntil,
+      };
+      setLoginLock(nextLock);
+      setLoginClockMs(Date.now());
+      localStorage.setItem(loginLockStorageKey, JSON.stringify(nextLock));
+      setAuthError(getErrorMessage(error));
+    } else if (isDeadMfaChallengeError(error)) {
+      // The mfa_token itself is dead (its 5-minute TTL passed, or its
+      // per-challenge attempt cap was hit) - every retry against it is
+      // guaranteed to fail with this same error regardless of code
+      // correctness. There's no way to silently mint a fresh one without
+      // the password (cleared after login/signup), so send the user back
+      // to sign in again instead of leaving them stuck resubmitting a dead
+      // token. Force authMode to "login" - a challenge reached from
+      // handleCreateSchoolAdmin leaves authMode as "signup", and
+      // resubmitting the signup form here (with its password already
+      // cleared) would either fail outright or attempt to recreate the
+      // same account instead of showing the promised sign-in form.
+      if (!identifier.trim() && signupForm.email.trim()) {
+        setIdentifier(signupForm.email.trim());
+      }
+      setMfaChallenge(null);
+      setMfaEnrollment(null);
+      setMfaQrCode("");
+      setMfaCode("");
+      setMfaMethodChoice(null);
+      setAuthMode("login");
+      setAuthError(
+        "Your verification session expired. Please sign in again to continue.",
+      );
+    } else {
+      setAuthError(getErrorMessage(error));
     }
   }
 
@@ -4089,53 +4202,58 @@ function App() {
       const nextSession = mfaChallenge.enrollment_required
         ? await confirmMFAEnrollment(authAppId, mfaChallenge.mfa_token, mfaCode)
         : await verifyMFA(authAppId, mfaChallenge.mfa_token, mfaCode);
-      sessionEndedGuardRef.current = false;
-      setSession(nextSession);
-      setMfaChallenge(null);
-      setMfaEnrollment(null);
-      setMfaQrCode("");
-      setMfaCode("");
-      setAuthMode("login");
-      setLoginLock(null);
-      localStorage.removeItem(loginLockStorageKey);
+      onMfaSessionEstablished(nextSession);
     } catch (error) {
-      if (error instanceof DashboardLoginLockedError) {
-        const nextLock = {
-          identifier: normalizeLoginIdentifier(identifier),
-          blockedUntil: error.blockedUntil,
-        };
-        setLoginLock(nextLock);
-        setLoginClockMs(Date.now());
-        localStorage.setItem(loginLockStorageKey, JSON.stringify(nextLock));
-        setAuthError(getErrorMessage(error));
-      } else if (isDeadMfaChallengeError(error)) {
-        // The mfa_token itself is dead (its 5-minute TTL passed, or its
-        // per-challenge attempt cap was hit) - every retry against it is
-        // guaranteed to fail with this same error regardless of code
-        // correctness. There's no way to silently mint a fresh one without
-        // the password (cleared after login/signup), so send the user back
-        // to sign in again instead of leaving them stuck resubmitting a dead
-        // token. Force authMode to "login" - a challenge reached from
-        // handleCreateSchoolAdmin leaves authMode as "signup", and
-        // resubmitting the signup form here (with its password already
-        // cleared) would either fail outright or attempt to recreate the
-        // same account instead of showing the promised sign-in form.
-        if (!identifier.trim() && signupForm.email.trim()) {
-          setIdentifier(signupForm.email.trim());
-        }
-        setMfaChallenge(null);
-        setMfaEnrollment(null);
-        setMfaQrCode("");
-        setMfaCode("");
-        setAuthMode("login");
-        setAuthError(
-          "Your verification session expired. Please sign in again to continue.",
-        );
-      } else {
-        setAuthError(getErrorMessage(error));
-      }
+      handleMfaError(error);
     } finally {
       setAuthBusy(false);
+    }
+  }
+
+  async function handlePasskeyEnrollment() {
+    if (!mfaChallenge) return;
+    setMfaMethodChoice("webauthn");
+    setPasskeyBusy(true);
+    setAuthError("");
+    try {
+      const options = await beginWebAuthnEnrollment(
+        authAppId,
+        mfaChallenge.mfa_token,
+      );
+      const credential = await registerPasskey(options);
+      const nextSession = await finishWebAuthnEnrollment(
+        authAppId,
+        mfaChallenge.mfa_token,
+        credential,
+      );
+      onMfaSessionEstablished(nextSession);
+    } catch (error) {
+      handleMfaError(error);
+    } finally {
+      setPasskeyBusy(false);
+    }
+  }
+
+  async function handlePasskeyVerification() {
+    if (!mfaChallenge) return;
+    setPasskeyBusy(true);
+    setAuthError("");
+    try {
+      const options = await beginWebAuthnVerification(
+        authAppId,
+        mfaChallenge.mfa_token,
+      );
+      const credential = await authenticateWithPasskey(options);
+      const nextSession = await finishWebAuthnVerification(
+        authAppId,
+        mfaChallenge.mfa_token,
+        credential,
+      );
+      onMfaSessionEstablished(nextSession);
+    } catch (error) {
+      handleMfaError(error);
+    } finally {
+      setPasskeyBusy(false);
     }
   }
 
@@ -4153,6 +4271,7 @@ function App() {
     setMfaEnrollment(null);
     setMfaQrCode("");
     setMfaCode("");
+    setMfaMethodChoice(null);
     setMfaCopied("");
     setAuthError("");
   }
@@ -5299,7 +5418,7 @@ function App() {
         <div className="login-shell">
           <div
             className={
-              mfaChallenge?.enrollment_required && mfaEnrollment
+              mfaChallenge?.enrollment_required
                 ? "login-center-card login-center-card--mfa-enroll"
                 : "login-center-card"
             }
@@ -5332,24 +5451,108 @@ function App() {
                   <p className="eyebrow">Two-step verification</p>
                   <h2>
                     {mfaChallenge.enrollment_required
-                      ? "Set up two-step verification"
-                      : "Enter your security code"}
+                      ? mfaMethodChoice === "webauthn"
+                        ? "Set up a passkey"
+                        : mfaMethodChoice === "totp"
+                          ? "Set up two-step verification"
+                          : "Set up two-step verification"
+                      : mfaMethodChoice === "webauthn"
+                        ? "Verify with your passkey"
+                        : "Enter your security code"}
                   </h2>
                   <p className="mfa-help">
                     {mfaChallenge.enrollment_required
-                      ? "Add this account to an authenticator app or to your iPhone, then enter the 6-digit code it shows."
-                      : "Enter the 6-digit code from your authenticator app or one of your recovery codes."}
+                      ? mfaMethodChoice === "webauthn"
+                        ? "Use Touch ID, Face ID, Windows Hello, or a security key to protect this account."
+                        : mfaMethodChoice === "totp"
+                          ? "Add this account to an authenticator app or to your iPhone, then enter the 6-digit code it shows."
+                          : "Choose how you'd like to protect this account. You can add the other method later from Security Settings."
+                      : mfaMethodChoice === "webauthn"
+                        ? "Use your passkey to finish signing in."
+                        : "Enter the 6-digit code from your authenticator app or one of your recovery codes."}
                   </p>
                 </div>
-                {mfaChallenge.enrollment_required && !mfaEnrollment ? (
+                {mfaChallenge.enrollment_required && !mfaMethodChoice ? (
+                  <div className="mfa-method-choice">
+                    <button
+                      className="primary-button"
+                      type="button"
+                      disabled={authBusy || passkeyBusy || !passkeySupported}
+                      onClick={() => void handlePasskeyEnrollment()}
+                    >
+                      Set up a passkey
+                    </button>
+                    {!passkeySupported ? (
+                      <p className="mfa-help">
+                        Passkeys aren&rsquo;t supported in this browser.
+                      </p>
+                    ) : null}
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      disabled={authBusy || passkeyBusy}
+                      onClick={() => void beginTotpEnrollment()}
+                    >
+                      Set up an authenticator app
+                    </button>
+                  </div>
+                ) : null}
+                {mfaChallenge.enrollment_required &&
+                mfaMethodChoice === "totp" &&
+                !mfaEnrollment ? (
                   <button
                     className="secondary-button"
                     type="button"
                     disabled={authBusy}
-                    onClick={() => void prepareMFAChallenge(mfaChallenge)}
+                    onClick={() => void beginTotpEnrollment()}
                   >
                     Retry authenticator setup
                   </button>
+                ) : null}
+                {mfaChallenge.enrollment_required &&
+                mfaMethodChoice === "webauthn" ? (
+                  <div className="mfa-method">
+                    {passkeyBusy ? (
+                      <p className="mfa-help">
+                        Waiting for your passkey&hellip; follow the prompt
+                        from your browser.
+                      </p>
+                    ) : null}
+                    <button
+                      className="text-button"
+                      type="button"
+                      disabled={authBusy || passkeyBusy}
+                      onClick={() => setMfaMethodChoice(null)}
+                    >
+                      Choose a different method
+                    </button>
+                  </div>
+                ) : null}
+                {!mfaChallenge.enrollment_required &&
+                mfaMethodChoice === "webauthn" ? (
+                  <div className="mfa-method">
+                    {!passkeySupported ? (
+                      <p className="error-text">
+                        This browser doesn&rsquo;t support the passkey your
+                        account uses. Try a different browser or device to
+                        sign in.
+                      </p>
+                    ) : passkeyBusy ? (
+                      <p className="mfa-help">
+                        Waiting for your passkey&hellip; follow the prompt
+                        from your browser.
+                      </p>
+                    ) : (
+                      <button
+                        className="primary-button"
+                        type="button"
+                        disabled={authBusy || passkeyBusy || loginIsLocked}
+                        onClick={() => void handlePasskeyVerification()}
+                      >
+                        Use passkey
+                      </button>
+                    )}
+                  </div>
                 ) : null}
                 {mfaChallenge.enrollment_required && mfaEnrollment ? (
                   <>
@@ -5375,8 +5578,9 @@ function App() {
                           </p>
                           <ol>
                             <li>
-                              Install <strong>Google Authenticator</strong>,
-                              Microsoft Authenticator, Authy, or 1Password.
+                              Install an authenticator app such as{" "}
+                              <strong>Google Authenticator</strong>, Microsoft
+                              Authenticator, Authy, or 1Password.
                             </li>
                             <li>
                               Tap <strong>+</strong> &rarr; &ldquo;Scan a QR
@@ -5480,7 +5684,9 @@ function App() {
                     </details>
                   </>
                 ) : null}
-                {!mfaChallenge.enrollment_required || mfaEnrollment ? (
+                {(!mfaChallenge.enrollment_required &&
+                  mfaMethodChoice !== "webauthn") ||
+                (mfaChallenge.enrollment_required && mfaEnrollment) ? (
                   <label className="field">
                     <span>Authenticator or recovery code</span>
                     <input
@@ -5533,7 +5739,9 @@ function App() {
                 {authError && !loginIsLocked ? (
                   <p className="error-text">{authError}</p>
                 ) : null}
-                {!mfaChallenge.enrollment_required || mfaEnrollment ? (
+                {(!mfaChallenge.enrollment_required &&
+                  mfaMethodChoice !== "webauthn") ||
+                (mfaChallenge.enrollment_required && mfaEnrollment) ? (
                   <button
                     className="primary-button"
                     type="submit"
@@ -5548,11 +5756,28 @@ function App() {
                         : "Verify and Sign In"}
                   </button>
                 ) : null}
+                {!mfaChallenge.enrollment_required &&
+                (mfaChallenge.available_methods?.length ?? 0) > 1 ? (
+                  <button
+                    className="text-button"
+                    type="button"
+                    disabled={authBusy || passkeyBusy}
+                    onClick={() =>
+                      setMfaMethodChoice((current) =>
+                        current === "webauthn" ? "totp" : "webauthn",
+                      )
+                    }
+                  >
+                    {mfaMethodChoice === "webauthn"
+                      ? "Use authenticator app instead"
+                      : "Use passkey instead"}
+                  </button>
+                ) : null}
                 <button
                   className="text-button"
                   type="button"
                   onClick={cancelMFA}
-                  disabled={authBusy}
+                  disabled={authBusy || passkeyBusy}
                 >
                   Back to sign in
                 </button>
@@ -6409,6 +6634,8 @@ function App() {
             formatNebulaUserName={formatNebulaUserName}
           />
         );
+      case "securitySettings":
+        return <SecuritySettingsScreen authAppId={authAppId} />;
       case "vehicleRegistrations":
         return (
           <VehicleRegistrationsScreen
@@ -7110,6 +7337,15 @@ function App() {
                 </div>
               )}
             </div>
+
+            <NavLink
+              to="/security-settings"
+              className={({ isActive }) =>
+                isActive ? "nav-button nav-button-active" : "nav-button"
+              }
+            >
+              Security Settings
+            </NavLink>
           </nav>
 
           <div className="sidebar-footer">
