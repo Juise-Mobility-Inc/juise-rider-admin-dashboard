@@ -46,6 +46,19 @@ export function SecuritySettingsScreen({ authAppId }: Props) {
   );
   const [totpQrCode, setTotpQrCode] = useState("");
   const [totpCode, setTotpCode] = useState("");
+  const [totpCopied, setTotpCopied] = useState<"" | "secret" | "uri">("");
+
+  async function copyTotpText(text: string, kind: "secret" | "uri") {
+    try {
+      await navigator.clipboard.writeText(text);
+      setTotpCopied(kind);
+      window.setTimeout(() => {
+        setTotpCopied((current) => (current === kind ? "" : current));
+      }, 2000);
+    } catch {
+      setTotpCopied("");
+    }
+  }
 
   async function loadMethods() {
     setLoading(true);
@@ -253,6 +266,35 @@ export function SecuritySettingsScreen({ authAppId }: Props) {
                     enter the 6-digit code it shows below.
                   </p>
                 </div>
+              </div>
+              <div className="mfa-secret">
+                <span>Can&rsquo;t scan? Add the key manually</span>
+                <code>{totpEnrollment.secret}</code>
+                <div className="mfa-panel-actions">
+                  <button
+                    type="button"
+                    className="mfa-chip-button"
+                    onClick={() =>
+                      void copyTotpText(totpEnrollment.secret, "secret")
+                    }
+                  >
+                    {totpCopied === "secret" ? "Copied!" : "Copy key"}
+                  </button>
+                  <button
+                    type="button"
+                    className="mfa-chip-button"
+                    onClick={() =>
+                      void copyTotpText(totpEnrollment.otpauth_uri, "uri")
+                    }
+                  >
+                    {totpCopied === "uri" ? "Copied!" : "Copy setup link"}
+                  </button>
+                </div>
+                <p className="mfa-panel-hint">
+                  Use this if you&rsquo;re adding this account on the same
+                  device you&rsquo;re viewing this page on, or if your app
+                  asks for a key instead of scanning.
+                </p>
               </div>
               <details className="mfa-recovery-codes">
                 <summary>
