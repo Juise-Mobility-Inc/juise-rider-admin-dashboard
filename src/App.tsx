@@ -1573,6 +1573,17 @@ function App() {
   // back; onMfaSessionEstablished (the only thing that publishes it from
   // here on) clears it again once that step finishes or is skipped.
   const suppressSessionPublishRef = useRef(false);
+  // The observer still runs (and updateSession still updates api.ts's own
+  // currentSession, which is what the add-method step's bearer-authed
+  // calls actually use) while suppressed - it just skips publishing to
+  // React. If the user lingers on the add-method step long enough for a
+  // background token refresh to replace the access/refresh tokens, this
+  // ref captures that newer session so it - not the older one captured
+  // when verification first completed - is what finally gets published.
+  // Otherwise the stale tokens get written back once suppression lifts,
+  // and the very next request has to refresh again, which can log the
+  // user out outright if refresh tokens are rotated (single-use).
+  const latestSuppressedSessionRef = useRef<AdminSession | null>(null);
   const [authInitializing, setAuthInitializing] = useState(
     () => initialSession !== null,
   );
@@ -3104,6 +3115,7 @@ function App() {
         return;
       }
       if (suppressSessionPublishRef.current && nextSession) {
+        latestSuppressedSessionRef.current = nextSession;
         return;
       }
       setSession(nextSession);
@@ -4198,6 +4210,7 @@ function App() {
   function onMfaSessionEstablished(nextSession: AdminSession) {
     sessionEndedGuardRef.current = false;
     suppressSessionPublishRef.current = false;
+    latestSuppressedSessionRef.current = null;
     setSession(nextSession);
     setMfaChallenge(null);
     setMfaEnrollment(null);
@@ -4223,6 +4236,16 @@ function App() {
       return;
     }
     setPostVerifySession(nextSession);
+  }
+
+  // Finishes login from the add-method step (on success or skip). Prefers
+  // whatever the observer most recently captured over the snapshot taken
+  // when verification first completed - see latestSuppressedSessionRef -
+  // so a token refresh that happened while this step was open isn't
+  // silently discarded.
+  function finishAddMethodStep() {
+    const finalSession = latestSuppressedSessionRef.current ?? postVerifySession;
+    if (finalSession) onMfaSessionEstablished(finalSession);
   }
 
   async function beginAddTotpAfterVerify() {
@@ -4256,7 +4279,7 @@ function App() {
     setAddMethodError("");
     try {
       await finishTOTPRegistration(authAppId, addTotpChallengeId, addTotpCode);
-      if (postVerifySession) onMfaSessionEstablished(postVerifySession);
+      finishAddMethodStep();
     } catch (error) {
       setAddMethodError(getErrorMessage(error));
     } finally {
@@ -4272,7 +4295,7 @@ function App() {
         await beginWebAuthnRegistration(authAppId);
       const credential = await registerPasskey(options);
       await finishWebAuthnRegistration(authAppId, challengeId, credential);
-      if (postVerifySession) onMfaSessionEstablished(postVerifySession);
+      finishAddMethodStep();
     } catch (error) {
       setAddMethodError(getErrorMessage(error));
     } finally {
@@ -4281,7 +4304,7 @@ function App() {
   }
 
   function skipAddMethodAfterVerify() {
-    if (postVerifySession) onMfaSessionEstablished(postVerifySession);
+    finishAddMethodStep();
   }
 
   function handleMfaError(error: unknown) {
@@ -4333,6 +4356,7 @@ function App() {
       !mfaChallenge.enrollment_required && addMethodAfterVerify !== null;
     if (willOfferAddMethod) {
       suppressSessionPublishRef.current = true;
+      latestSuppressedSessionRef.current = null;
     }
     try {
       const nextSession = mfaChallenge.enrollment_required
@@ -4346,6 +4370,7 @@ function App() {
     } catch (error) {
       if (willOfferAddMethod) {
         suppressSessionPublishRef.current = false;
+        latestSuppressedSessionRef.current = null;
       }
       handleMfaError(error);
     } finally {
@@ -4384,6 +4409,7 @@ function App() {
     const willOfferAddMethod = addMethodAfterVerify !== null;
     if (willOfferAddMethod) {
       suppressSessionPublishRef.current = true;
+      latestSuppressedSessionRef.current = null;
     }
     try {
       const options = await beginWebAuthnVerification(
@@ -4400,6 +4426,7 @@ function App() {
     } catch (error) {
       if (willOfferAddMethod) {
         suppressSessionPublishRef.current = false;
+        latestSuppressedSessionRef.current = null;
       }
       handleMfaError(error);
     } finally {
@@ -5580,7 +5607,8 @@ function App() {
         <div className="login-shell">
           <div
             className={
-              mfaChallenge?.enrollment_required
+              mfaChallenge?.enrollment_required ||
+              (mfaChallenge && postVerifySession)
                 ? "login-center-card login-center-card--mfa-enroll"
                 : "login-center-card"
             }
@@ -6069,7 +6097,7 @@ function App() {
                   ) : (
                     <div className="mfa-method-opt-in">
                       <button
-                        className="text-button"
+                        className="secondary-button"
                         type="button"
                         disabled={authBusy || passkeyBusy}
                         onClick={() =>
@@ -6080,7 +6108,7 @@ function App() {
                       >
                         {addMethodAfterVerify === otherMfaMethod
                           ? `Won't add a ${otherMfaMethodLabel} this time`
-                          : `Add a ${otherMfaMethodLabel} after signing in`}
+                          : `+ Add a ${otherMfaMethodLabel} after signing in`}
                       </button>
                       {addMethodAfterVerify === otherMfaMethod ? (
                         <p className="mfa-help">
