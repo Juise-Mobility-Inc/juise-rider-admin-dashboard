@@ -1584,6 +1584,14 @@ function App() {
   // and the very next request has to refresh again, which can log the
   // user out outright if refresh tokens are rotated (single-use).
   const latestSuppressedSessionRef = useRef<AdminSession | null>(null);
+  // A suppressed null update means the API layer invalidated the session
+  // outright (e.g. a 401 on one of the add-method step's own requests
+  // whose refresh attempt also failed/was revoked) - not just "no session
+  // yet." That's terminal: latestSuppressedSessionRef's snapshot is dead
+  // credentials at that point, so finishAddMethodStep must not fall back
+  // to it (or to postVerifySession) and republish something the backend
+  // has already revoked. See the observer and finishAddMethodStep below.
+  const sessionInvalidatedWhileSuppressedRef = useRef(false);
   const [authInitializing, setAuthInitializing] = useState(
     () => initialSession !== null,
   );
@@ -3114,8 +3122,16 @@ function App() {
       if (sessionEndedGuardRef.current && nextSession) {
         return;
       }
-      if (suppressSessionPublishRef.current && nextSession) {
-        latestSuppressedSessionRef.current = nextSession;
+      if (suppressSessionPublishRef.current) {
+        if (nextSession) {
+          latestSuppressedSessionRef.current = nextSession;
+        } else {
+          // Terminal - see sessionInvalidatedWhileSuppressedRef. React
+          // `session` is already null (that's the whole point of
+          // suppression), so there's nothing to publish here either way.
+          latestSuppressedSessionRef.current = null;
+          sessionInvalidatedWhileSuppressedRef.current = true;
+        }
         return;
       }
       setSession(nextSession);
@@ -4211,6 +4227,7 @@ function App() {
     sessionEndedGuardRef.current = false;
     suppressSessionPublishRef.current = false;
     latestSuppressedSessionRef.current = null;
+    sessionInvalidatedWhileSuppressedRef.current = false;
     setSession(nextSession);
     setMfaChallenge(null);
     setMfaEnrollment(null);
@@ -4242,10 +4259,38 @@ function App() {
   // whatever the observer most recently captured over the snapshot taken
   // when verification first completed - see latestSuppressedSessionRef -
   // so a token refresh that happened while this step was open isn't
-  // silently discarded.
+  // silently discarded. If the session was instead invalidated outright
+  // (a failed/revoked refresh on one of this step's own requests) neither
+  // snapshot is safe to republish - see sessionInvalidatedWhileSuppressedRef.
   function finishAddMethodStep() {
+    if (sessionInvalidatedWhileSuppressedRef.current) {
+      abandonAddMethodStepAfterInvalidation();
+      return;
+    }
     const finalSession = latestSuppressedSessionRef.current ?? postVerifySession;
     if (finalSession) onMfaSessionEstablished(finalSession);
+  }
+
+  // Mirrors handleMfaError's dead-mfa_token branch: there's no way to
+  // silently recover here (the session is genuinely gone), so send the
+  // user back to a fresh sign-in rather than let "Skip for now" or a
+  // completed add-method step republish dead credentials.
+  function abandonAddMethodStepAfterInvalidation() {
+    if (!identifier.trim() && signupForm.email.trim()) {
+      setIdentifier(signupForm.email.trim());
+    }
+    setMfaChallenge(null);
+    setMfaEnrollment(null);
+    setMfaQrCode("");
+    setMfaCode("");
+    setMfaMethodChoice(null);
+    setAuthMode("login");
+    suppressSessionPublishRef.current = false;
+    sessionInvalidatedWhileSuppressedRef.current = false;
+    resetAddMethodState();
+    setAuthError(
+      "Your session was invalidated while adding this method. Please sign in again.",
+    );
   }
 
   async function beginAddTotpAfterVerify() {
@@ -4357,6 +4402,7 @@ function App() {
     if (willOfferAddMethod) {
       suppressSessionPublishRef.current = true;
       latestSuppressedSessionRef.current = null;
+      sessionInvalidatedWhileSuppressedRef.current = false;
     }
     try {
       const nextSession = mfaChallenge.enrollment_required
@@ -4371,6 +4417,7 @@ function App() {
       if (willOfferAddMethod) {
         suppressSessionPublishRef.current = false;
         latestSuppressedSessionRef.current = null;
+        sessionInvalidatedWhileSuppressedRef.current = false;
       }
       handleMfaError(error);
     } finally {
@@ -4410,6 +4457,7 @@ function App() {
     if (willOfferAddMethod) {
       suppressSessionPublishRef.current = true;
       latestSuppressedSessionRef.current = null;
+      sessionInvalidatedWhileSuppressedRef.current = false;
     }
     try {
       const options = await beginWebAuthnVerification(
@@ -4427,6 +4475,7 @@ function App() {
       if (willOfferAddMethod) {
         suppressSessionPublishRef.current = false;
         latestSuppressedSessionRef.current = null;
+        sessionInvalidatedWhileSuppressedRef.current = false;
       }
       handleMfaError(error);
     } finally {
