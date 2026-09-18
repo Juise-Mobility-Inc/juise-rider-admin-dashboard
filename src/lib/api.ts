@@ -1259,6 +1259,13 @@ function refreshSession(): Promise<AdminSession> {
   return inFlightRefresh;
 }
 
+// Thrown by performRefresh when currentSession's identity changed out from
+// under it - see there. request()/requestBlob() must let this propagate as
+// a genuine failure (not retry the original call with whatever token
+// currentSession happens to hold now), since that token may belong to a
+// different login than the one that made the original request.
+class StaleSessionRefreshError extends Error {}
+
 async function performRefresh(): Promise<AdminSession> {
   const previousSession = currentSession;
   if (!previousSession) {
@@ -1282,8 +1289,8 @@ async function performRefresh(): Promise<AdminSession> {
   if (!response.ok) {
     const message = await parseErrorMessage(response);
     // Only clear the session this failure is actually about - see the
-    // reference-equality guard below for why currentSession may no longer
-    // be previousSession by the time this await resolves.
+    // identity check below for why currentSession may no longer be
+    // previousSession by the time this await resolves.
     if (currentSession === previousSession) {
       updateSession(null);
     }
@@ -1292,40 +1299,50 @@ async function performRefresh(): Promise<AdminSession> {
 
   const tokens = await parseResponse<AuthTokenBundle>(response);
   const claims = await inspectAccessToken(tokens, previousSession.authAppId);
+
+  // currentSession can change identity while this request was in flight -
+  // an explicit logout, a session expiring, or (during the MFA add-method
+  // step) a fresh login completing. This refresh's tokens are for whichever
+  // account previousSession belonged to, not whatever's current now, so
+  // from here on this is a stale-refresh failure, not a success: silently
+  // publishing it would revive a session that was deliberately ended or -
+  // worse, on a shared machine - clobber a different account's session
+  // that has since logged in; and letting it resolve as if it succeeded
+  // would let request()/requestBlob() retry the ORIGINAL caller's request
+  // using currentSession's (different account's) token instead, executing
+  // it as the wrong user.
+  if (currentSession !== previousSession) {
+    throw new StaleSessionRefreshError("Session changed during refresh");
+  }
+
   const refreshedSession: AdminSession = {
     ...previousSession,
     tokens,
     claims,
   };
-
-  // currentSession can change identity while this request was in flight -
-  // an explicit logout, a session expiring, or (during the MFA add-method
-  // step) a fresh login completing. Publishing this refresh's result
-  // regardless would either revive a session that was deliberately ended,
-  // or - worse, on a shared machine - clobber a different account's
-  // session that has since logged in with tokens for the account this
-  // refresh was actually for. Only ever publish while currentSession is
-  // still exactly the session this call started from; the fresh tokens
-  // are still returned either way so whichever request triggered this
-  // refresh can retry with them.
-  if (currentSession === previousSession) {
-    updateSession(refreshedSession);
-  }
+  updateSession(refreshedSession);
 
   try {
     const user = await fetchNebulaUser(claims.user_uuid, {
       accessToken: tokens.access_token.token,
       retryOnUnauthorized: false,
     });
+    if (currentSession !== refreshedSession) {
+      throw new StaleSessionRefreshError("Session changed during refresh");
+    }
     const hydratedSession: AdminSession = {
       ...refreshedSession,
       user,
     };
-    if (currentSession === refreshedSession) {
-      updateSession(hydratedSession);
-    }
+    updateSession(hydratedSession);
     return hydratedSession;
-  } catch {
+  } catch (error) {
+    if (error instanceof StaleSessionRefreshError) {
+      throw error;
+    }
+    // fetchNebulaUser failing is a soft failure - the refresh itself
+    // already succeeded and published above, just without the profile
+    // hydration.
     return refreshedSession;
   }
 }
