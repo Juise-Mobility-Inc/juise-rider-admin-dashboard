@@ -4248,6 +4248,19 @@ function App() {
   // this function even runs) to call the same bearer-authed "manage"
   // endpoints Security Settings uses.
   function finishOrOfferAddMethod(nextSession: AdminSession) {
+    // A prior logout/session-expiry can leave sessionEndedGuardRef true,
+    // set precisely to stop a stale in-flight refresh from reviving a
+    // session the user (or expiry) already ended - but it's only ever
+    // cleared in onMfaSessionEstablished, which the add-method branch
+    // below defers. Left set, the observer's *first* check (above the
+    // suppression one) would drop every update for the rest of this step,
+    // including a legitimate token refresh - meaning
+    // latestSuppressedSessionRef never captures it and finishAddMethodStep
+    // falls back to this stale nextSession snapshot instead. Verification
+    // just succeeded against the live backend, so this is unambiguously a
+    // fresh login: safe to clear the guard now, before any suppression
+    // begins, while still holding off the actual React publish.
+    sessionEndedGuardRef.current = false;
     if (!addMethodAfterVerify) {
       onMfaSessionEstablished(nextSession);
       return;
