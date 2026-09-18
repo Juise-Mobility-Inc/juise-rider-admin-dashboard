@@ -1281,7 +1281,12 @@ async function performRefresh(): Promise<AdminSession> {
 
   if (!response.ok) {
     const message = await parseErrorMessage(response);
-    updateSession(null);
+    // Only clear the session this failure is actually about - see the
+    // reference-equality guard below for why currentSession may no longer
+    // be previousSession by the time this await resolves.
+    if (currentSession === previousSession) {
+      updateSession(null);
+    }
     throw new Error(message);
   }
 
@@ -1293,7 +1298,19 @@ async function performRefresh(): Promise<AdminSession> {
     claims,
   };
 
-  updateSession(refreshedSession);
+  // currentSession can change identity while this request was in flight -
+  // an explicit logout, a session expiring, or (during the MFA add-method
+  // step) a fresh login completing. Publishing this refresh's result
+  // regardless would either revive a session that was deliberately ended,
+  // or - worse, on a shared machine - clobber a different account's
+  // session that has since logged in with tokens for the account this
+  // refresh was actually for. Only ever publish while currentSession is
+  // still exactly the session this call started from; the fresh tokens
+  // are still returned either way so whichever request triggered this
+  // refresh can retry with them.
+  if (currentSession === previousSession) {
+    updateSession(refreshedSession);
+  }
 
   try {
     const user = await fetchNebulaUser(claims.user_uuid, {
@@ -1304,7 +1321,9 @@ async function performRefresh(): Promise<AdminSession> {
       ...refreshedSession,
       user,
     };
-    updateSession(hydratedSession);
+    if (currentSession === refreshedSession) {
+      updateSession(hydratedSession);
+    }
     return hydratedSession;
   } catch {
     return refreshedSession;

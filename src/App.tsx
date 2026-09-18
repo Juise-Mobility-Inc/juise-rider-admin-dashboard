@@ -4260,6 +4260,16 @@ function App() {
     // just succeeded against the live backend, so this is unambiguously a
     // fresh login: safe to clear the guard now, before any suppression
     // begins, while still holding off the actual React publish.
+    //
+    // This alone would NOT be safe if a stale refresh from the *ended*
+    // session were still in flight - clearing the guard early could let it
+    // slip through and get captured into latestSuppressedSessionRef,
+    // reviving (or on a shared machine, clobbering onto) this new login.
+    // performRefresh in api.ts is what actually closes that hole: it only
+    // ever publishes a refresh's result while currentSession is still
+    // reference-equal to the session it captured when it started, so a
+    // refresh belonging to any session other than the current one can
+    // never reach the observer regardless of this guard's state.
     sessionEndedGuardRef.current = false;
     if (!addMethodAfterVerify) {
       onMfaSessionEstablished(nextSession);
