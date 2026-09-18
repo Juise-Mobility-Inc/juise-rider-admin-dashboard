@@ -15,7 +15,9 @@ import "./App.css";
 import {
   approveReservation,
   beginMFAEnrollment,
+  beginTOTPRegistration,
   beginWebAuthnEnrollment,
+  beginWebAuthnRegistration,
   beginWebAuthnVerification,
   confirmMFAEnrollment,
   createSchoolChallenge,
@@ -45,7 +47,9 @@ import {
   fetchSchoolZones,
   fetchStudentProfile,
   fetchUserMediaAssets,
+  finishTOTPRegistration,
   finishWebAuthnEnrollment,
+  finishWebAuthnRegistration,
   finishWebAuthnVerification,
   generateAdminPackQrCode,
   generateAdminPackSpotQrCode,
@@ -1558,6 +1562,36 @@ function App() {
   // "the session is ending" action ignore observer-driven revivals until
   // the next deliberate login/signup/MFA success explicitly clears it.
   const sessionEndedGuardRef = useRef(false);
+  // verifyMFA/finishWebAuthnVerification publish the session (via
+  // createAdminSession -> updateSession -> the observer below) the moment
+  // they resolve, before finishOrOfferAddMethod ever runs - the top-level
+  // render below branches on `session` to swap the whole login/MFA UI for
+  // the dashboard, so if the observer published immediately, the
+  // post-verify "add a method" step would never actually get a chance to
+  // render. Set true just before submitting a verification the user opted
+  // to follow with an add-method step, so the observer holds the session
+  // back; onMfaSessionEstablished (the only thing that publishes it from
+  // here on) clears it again once that step finishes or is skipped.
+  const suppressSessionPublishRef = useRef(false);
+  // The observer still runs (and updateSession still updates api.ts's own
+  // currentSession, which is what the add-method step's bearer-authed
+  // calls actually use) while suppressed - it just skips publishing to
+  // React. If the user lingers on the add-method step long enough for a
+  // background token refresh to replace the access/refresh tokens, this
+  // ref captures that newer session so it - not the older one captured
+  // when verification first completed - is what finally gets published.
+  // Otherwise the stale tokens get written back once suppression lifts,
+  // and the very next request has to refresh again, which can log the
+  // user out outright if refresh tokens are rotated (single-use).
+  const latestSuppressedSessionRef = useRef<AdminSession | null>(null);
+  // A suppressed null update means the API layer invalidated the session
+  // outright (e.g. a 401 on one of the add-method step's own requests
+  // whose refresh attempt also failed/was revoked) - not just "no session
+  // yet." That's terminal: latestSuppressedSessionRef's snapshot is dead
+  // credentials at that point, so finishAddMethodStep must not fall back
+  // to it (or to postVerifySession) and republish something the backend
+  // has already revoked. See the observer and finishAddMethodStep below.
+  const sessionInvalidatedWhileSuppressedRef = useRef(false);
   const [authInitializing, setAuthInitializing] = useState(
     () => initialSession !== null,
   );
@@ -1659,6 +1693,29 @@ function App() {
   );
   const [passkeyBusy, setPasskeyBusy] = useState(false);
   const passkeySupported = useMemo(() => isPasskeySupported(), []);
+  // Set when the user opts, from the verify screen, to add their other
+  // (not-yet-enrolled) MFA method right after this sign-in instead of
+  // hunting for Security Settings afterward. Still requires completing
+  // verification with the currently-enrolled method first - enrolling a
+  // brand new method off nothing but the mfa_token (proof of password, not
+  // of the existing second factor) would let anyone who merely knows the
+  // password add their own passkey/authenticator and defeat MFA entirely.
+  const [addMethodAfterVerify, setAddMethodAfterVerify] =
+    useState<MFAMethod | null>(null);
+  // Holds the session verifyMFA/finishWebAuthnVerification already
+  // returned while the post-verify "add a method" step below renders;
+  // onMfaSessionEstablished (which actually finishes login) only runs once
+  // that step completes or is skipped.
+  const [postVerifySession, setPostVerifySession] =
+    useState<AdminSession | null>(null);
+  const [addPasskeyBusy, setAddPasskeyBusy] = useState(false);
+  const [addTotpChallengeId, setAddTotpChallengeId] = useState("");
+  const [addTotpEnrollment, setAddTotpEnrollment] =
+    useState<MFAEnrollment | null>(null);
+  const [addTotpQrCode, setAddTotpQrCode] = useState("");
+  const [addTotpCode, setAddTotpCode] = useState("");
+  const [addTotpBusy, setAddTotpBusy] = useState(false);
+  const [addMethodError, setAddMethodError] = useState("");
 
   const copyMfaText = async (
     text: string,
@@ -3065,6 +3122,18 @@ function App() {
       if (sessionEndedGuardRef.current && nextSession) {
         return;
       }
+      if (suppressSessionPublishRef.current) {
+        if (nextSession) {
+          latestSuppressedSessionRef.current = nextSession;
+        } else {
+          // Terminal - see sessionInvalidatedWhileSuppressedRef. React
+          // `session` is already null (that's the whole point of
+          // suppression), so there's nothing to publish here either way.
+          latestSuppressedSessionRef.current = null;
+          sessionInvalidatedWhileSuppressedRef.current = true;
+        }
+        return;
+      }
       setSession(nextSession);
     });
 
@@ -4083,11 +4152,24 @@ function App() {
     }
   }
 
+  function resetAddMethodState() {
+    setAddMethodAfterVerify(null);
+    setPostVerifySession(null);
+    setAddPasskeyBusy(false);
+    setAddTotpChallengeId("");
+    setAddTotpEnrollment(null);
+    setAddTotpQrCode("");
+    setAddTotpCode("");
+    setAddTotpBusy(false);
+    setAddMethodError("");
+  }
+
   async function prepareMFAChallenge(challenge: MFAChallenge) {
     setMfaChallenge(challenge);
     setMfaCode("");
     setMfaEnrollment(null);
     setMfaQrCode("");
+    resetAddMethodState();
     if (challenge.enrollment_required) {
       // No method chosen yet - the choice screen (passkey vs authenticator
       // app) renders until the user picks one, instead of jumping straight
@@ -4143,6 +4225,9 @@ function App() {
 
   function onMfaSessionEstablished(nextSession: AdminSession) {
     sessionEndedGuardRef.current = false;
+    suppressSessionPublishRef.current = false;
+    latestSuppressedSessionRef.current = null;
+    sessionInvalidatedWhileSuppressedRef.current = false;
     setSession(nextSession);
     setMfaChallenge(null);
     setMfaEnrollment(null);
@@ -4152,6 +4237,142 @@ function App() {
     setAuthMode("login");
     setLoginLock(null);
     localStorage.removeItem(loginLockStorageKey);
+    resetAddMethodState();
+  }
+
+  // Routes a completed verification (TOTP code or passkey assertion) to
+  // either finish login immediately, or - if the user opted in on the
+  // verify screen - to the post-verify "add a method" step first. That
+  // step uses the bearer token already live on nextSession (createAdminSession
+  // sets it as soon as verifyMFA/finishWebAuthnVerification resolve, before
+  // this function even runs) to call the same bearer-authed "manage"
+  // endpoints Security Settings uses.
+  function finishOrOfferAddMethod(nextSession: AdminSession) {
+    // A prior logout/session-expiry can leave sessionEndedGuardRef true,
+    // set precisely to stop a stale in-flight refresh from reviving a
+    // session the user (or expiry) already ended - but it's only ever
+    // cleared in onMfaSessionEstablished, which the add-method branch
+    // below defers. Left set, the observer's *first* check (above the
+    // suppression one) would drop every update for the rest of this step,
+    // including a legitimate token refresh - meaning
+    // latestSuppressedSessionRef never captures it and finishAddMethodStep
+    // falls back to this stale nextSession snapshot instead. Verification
+    // just succeeded against the live backend, so this is unambiguously a
+    // fresh login: safe to clear the guard now, before any suppression
+    // begins, while still holding off the actual React publish.
+    //
+    // This alone would NOT be safe if a stale refresh from the *ended*
+    // session were still in flight - clearing the guard early could let it
+    // slip through and get captured into latestSuppressedSessionRef,
+    // reviving (or on a shared machine, clobbering onto) this new login.
+    // performRefresh in api.ts is what actually closes that hole: it only
+    // ever publishes a refresh's result while currentSession is still
+    // reference-equal to the session it captured when it started, so a
+    // refresh belonging to any session other than the current one can
+    // never reach the observer regardless of this guard's state.
+    sessionEndedGuardRef.current = false;
+    if (!addMethodAfterVerify) {
+      onMfaSessionEstablished(nextSession);
+      return;
+    }
+    setPostVerifySession(nextSession);
+  }
+
+  // Finishes login from the add-method step (on success or skip). Prefers
+  // whatever the observer most recently captured over the snapshot taken
+  // when verification first completed - see latestSuppressedSessionRef -
+  // so a token refresh that happened while this step was open isn't
+  // silently discarded. If the session was instead invalidated outright
+  // (a failed/revoked refresh on one of this step's own requests) neither
+  // snapshot is safe to republish - see sessionInvalidatedWhileSuppressedRef.
+  function finishAddMethodStep() {
+    if (sessionInvalidatedWhileSuppressedRef.current) {
+      abandonAddMethodStepAfterInvalidation();
+      return;
+    }
+    const finalSession = latestSuppressedSessionRef.current ?? postVerifySession;
+    if (finalSession) onMfaSessionEstablished(finalSession);
+  }
+
+  // Mirrors handleMfaError's dead-mfa_token branch: there's no way to
+  // silently recover here (the session is genuinely gone), so send the
+  // user back to a fresh sign-in rather than let "Skip for now" or a
+  // completed add-method step republish dead credentials.
+  function abandonAddMethodStepAfterInvalidation() {
+    if (!identifier.trim() && signupForm.email.trim()) {
+      setIdentifier(signupForm.email.trim());
+    }
+    setMfaChallenge(null);
+    setMfaEnrollment(null);
+    setMfaQrCode("");
+    setMfaCode("");
+    setMfaMethodChoice(null);
+    setAuthMode("login");
+    suppressSessionPublishRef.current = false;
+    sessionInvalidatedWhileSuppressedRef.current = false;
+    resetAddMethodState();
+    setAuthError(
+      "Your session was invalidated while adding this method. Please sign in again.",
+    );
+  }
+
+  async function beginAddTotpAfterVerify() {
+    setAddTotpBusy(true);
+    setAddMethodError("");
+    try {
+      const { challengeId, enrollment } =
+        await beginTOTPRegistration(authAppId);
+      setAddTotpChallengeId(challengeId);
+      setAddTotpEnrollment(enrollment);
+      setAddTotpCode("");
+      setAddTotpQrCode(
+        await QRCode.toDataURL(enrollment.otpauth_uri, {
+          width: 232,
+          margin: 3,
+          errorCorrectionLevel: "Q",
+        }),
+      );
+    } catch (error) {
+      setAddMethodError(getErrorMessage(error));
+    } finally {
+      setAddTotpBusy(false);
+    }
+  }
+
+  async function handleConfirmAddTotpAfterVerify(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+    setAddTotpBusy(true);
+    setAddMethodError("");
+    try {
+      await finishTOTPRegistration(authAppId, addTotpChallengeId, addTotpCode);
+      finishAddMethodStep();
+    } catch (error) {
+      setAddMethodError(getErrorMessage(error));
+    } finally {
+      setAddTotpBusy(false);
+    }
+  }
+
+  async function handleAddPasskeyAfterVerify() {
+    setAddPasskeyBusy(true);
+    setAddMethodError("");
+    try {
+      const { challengeId, options } =
+        await beginWebAuthnRegistration(authAppId);
+      const credential = await registerPasskey(options);
+      await finishWebAuthnRegistration(authAppId, challengeId, credential);
+      finishAddMethodStep();
+    } catch (error) {
+      setAddMethodError(getErrorMessage(error));
+    } finally {
+      setAddPasskeyBusy(false);
+    }
+  }
+
+  function skipAddMethodAfterVerify() {
+    finishAddMethodStep();
   }
 
   function handleMfaError(error: unknown) {
@@ -4185,6 +4406,7 @@ function App() {
       setMfaCode("");
       setMfaMethodChoice(null);
       setAuthMode("login");
+      resetAddMethodState();
       setAuthError(
         "Your verification session expired. Please sign in again to continue.",
       );
@@ -4198,12 +4420,28 @@ function App() {
     if (!mfaChallenge) return;
     setAuthBusy(true);
     setAuthError("");
+    const willOfferAddMethod =
+      !mfaChallenge.enrollment_required && addMethodAfterVerify !== null;
+    if (willOfferAddMethod) {
+      suppressSessionPublishRef.current = true;
+      latestSuppressedSessionRef.current = null;
+      sessionInvalidatedWhileSuppressedRef.current = false;
+    }
     try {
       const nextSession = mfaChallenge.enrollment_required
         ? await confirmMFAEnrollment(authAppId, mfaChallenge.mfa_token, mfaCode)
         : await verifyMFA(authAppId, mfaChallenge.mfa_token, mfaCode);
-      onMfaSessionEstablished(nextSession);
+      if (mfaChallenge.enrollment_required) {
+        onMfaSessionEstablished(nextSession);
+      } else {
+        finishOrOfferAddMethod(nextSession);
+      }
     } catch (error) {
+      if (willOfferAddMethod) {
+        suppressSessionPublishRef.current = false;
+        latestSuppressedSessionRef.current = null;
+        sessionInvalidatedWhileSuppressedRef.current = false;
+      }
       handleMfaError(error);
     } finally {
       setAuthBusy(false);
@@ -4238,6 +4476,12 @@ function App() {
     if (!mfaChallenge) return;
     setPasskeyBusy(true);
     setAuthError("");
+    const willOfferAddMethod = addMethodAfterVerify !== null;
+    if (willOfferAddMethod) {
+      suppressSessionPublishRef.current = true;
+      latestSuppressedSessionRef.current = null;
+      sessionInvalidatedWhileSuppressedRef.current = false;
+    }
     try {
       const options = await beginWebAuthnVerification(
         authAppId,
@@ -4249,8 +4493,13 @@ function App() {
         mfaChallenge.mfa_token,
         credential,
       );
-      onMfaSessionEstablished(nextSession);
+      finishOrOfferAddMethod(nextSession);
     } catch (error) {
+      if (willOfferAddMethod) {
+        suppressSessionPublishRef.current = false;
+        latestSuppressedSessionRef.current = null;
+        sessionInvalidatedWhileSuppressedRef.current = false;
+      }
       handleMfaError(error);
     } finally {
       setPasskeyBusy(false);
@@ -4274,6 +4523,7 @@ function App() {
     setMfaMethodChoice(null);
     setMfaCopied("");
     setAuthError("");
+    resetAddMethodState();
   }
 
   async function handleCreateSchoolAdmin(event: FormEvent<HTMLFormElement>) {
@@ -5396,6 +5646,17 @@ function App() {
     }
   }
 
+  // The method NOT currently being used to verify, and whether the account
+  // actually has it enrolled - drives both the "use X instead" switch (when
+  // it's enrolled) and the "add X after signing in" opt-in (when it isn't).
+  const otherMfaMethod: MFAMethod =
+    mfaMethodChoice === "webauthn" ? "totp" : "webauthn";
+  const otherMfaMethodEnrolled = (
+    mfaChallenge?.available_methods ?? ["totp"]
+  ).includes(otherMfaMethod);
+  const otherMfaMethodLabel =
+    otherMfaMethod === "webauthn" ? "passkey" : "authenticator app";
+
   if (authInitializing) {
     return (
       <div className="login-shell">
@@ -5418,7 +5679,8 @@ function App() {
         <div className="login-shell">
           <div
             className={
-              mfaChallenge?.enrollment_required
+              mfaChallenge?.enrollment_required ||
+              (mfaChallenge && postVerifySession)
                 ? "login-center-card login-center-card--mfa-enroll"
                 : "login-center-card"
             }
@@ -5430,7 +5692,145 @@ function App() {
             />
             <p className="login-brand-title">Juise Rider Admin Dashboard</p>
 
-            {mfaChallenge ? (
+            {mfaChallenge && postVerifySession ? (
+              <div className="login-form mfa-form">
+                <div className="login-form-header">
+                  <p className="eyebrow">One more step</p>
+                  <h2>
+                    {addMethodAfterVerify === "webauthn"
+                      ? "Add a passkey"
+                      : "Add an authenticator app"}
+                  </h2>
+                  <p className="mfa-help">
+                    {addMethodAfterVerify === "webauthn"
+                      ? "Use Touch ID, Face ID, Windows Hello, or a security key so you can sign in without a code next time."
+                      : "Add this account to an authenticator app so you have a backup way to sign in."}
+                  </p>
+                </div>
+                {addMethodAfterVerify === "webauthn" ? (
+                  <div className="mfa-method">
+                    {!passkeySupported ? (
+                      <p className="error-text">
+                        Passkeys aren&rsquo;t supported in this browser. You
+                        can add one later from Security Settings on a
+                        supported browser or device.
+                      </p>
+                    ) : addPasskeyBusy ? (
+                      <p className="mfa-help">
+                        Waiting for your passkey&hellip; follow the prompt
+                        from your browser.
+                      </p>
+                    ) : (
+                      <button
+                        className="primary-button"
+                        type="button"
+                        disabled={addPasskeyBusy}
+                        onClick={() => void handleAddPasskeyAfterVerify()}
+                      >
+                        Add a passkey
+                      </button>
+                    )}
+                  </div>
+                ) : addTotpEnrollment ? (
+                  <form
+                    className="mfa-enroll-layout"
+                    onSubmit={(event) =>
+                      void handleConfirmAddTotpAfterVerify(event)
+                    }
+                  >
+                    <div className="mfa-enroll-qr">
+                      {addTotpQrCode ? (
+                        <img
+                          className="mfa-qr-code"
+                          src={addTotpQrCode}
+                          alt="Authenticator app setup QR code"
+                        />
+                      ) : (
+                        <div
+                          className="mfa-qr-code mfa-qr-code--pending"
+                          aria-hidden="true"
+                        />
+                      )}
+                    </div>
+                    <div className="mfa-secret">
+                      <span>Can&rsquo;t scan? Add the key manually</span>
+                      <code>{addTotpEnrollment.secret}</code>
+                    </div>
+                    <details className="mfa-recovery-codes">
+                      <summary>
+                        Recovery codes (
+                        {addTotpEnrollment.recovery_codes.length}) &mdash;
+                        save these before you finish
+                      </summary>
+                      <p>
+                        They will not be shown again. Each code can be used
+                        once if you lose access to your authenticator app.
+                      </p>
+                      <ul className="mfa-recovery-code-list">
+                        {addTotpEnrollment.recovery_codes.map((code) => (
+                          <li key={code}>
+                            <code>{code}</code>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                    <label className="field">
+                      <span>6-digit code</span>
+                      <input
+                        autoComplete="one-time-code"
+                        inputMode="numeric"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
+                        maxLength={6}
+                        minLength={6}
+                        required
+                        autoFocus
+                        value={addTotpCode}
+                        onChange={(event) => {
+                          const value = event.target.value
+                            .replace(/\D/g, "")
+                            .slice(0, 6);
+                          setAddTotpCode(value);
+                          if (/^\d{6}$/.test(value) && !addTotpBusy) {
+                            const form = event.target.form;
+                            window.setTimeout(() => form?.requestSubmit(), 0);
+                          }
+                        }}
+                        placeholder="123456"
+                      />
+                    </label>
+                    <button
+                      className="primary-button"
+                      type="submit"
+                      disabled={addTotpBusy || addTotpCode.trim().length < 6}
+                    >
+                      {addTotpBusy ? "Confirming…" : "Confirm"}
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    className="primary-button"
+                    type="button"
+                    disabled={addTotpBusy}
+                    onClick={() => void beginAddTotpAfterVerify()}
+                  >
+                    {addTotpBusy ? "Starting…" : "Add an authenticator app"}
+                  </button>
+                )}
+                {addMethodError ? (
+                  <p className="error-text">{addMethodError}</p>
+                ) : null}
+                <button
+                  className="text-button"
+                  type="button"
+                  disabled={addPasskeyBusy || addTotpBusy}
+                  onClick={skipAddMethodAfterVerify}
+                >
+                  Skip for now
+                </button>
+              </div>
+            ) : mfaChallenge ? (
               <form className="login-form mfa-form" onSubmit={handleMFA}>
                 {/* Present-but-hidden username so the browser / password
                     manager keeps the sign-in it just saw associated with
@@ -5756,22 +6156,40 @@ function App() {
                         : "Verify and Sign In"}
                   </button>
                 ) : null}
-                {!mfaChallenge.enrollment_required &&
-                (mfaChallenge.available_methods?.length ?? 0) > 1 ? (
-                  <button
-                    className="text-button"
-                    type="button"
-                    disabled={authBusy || passkeyBusy}
-                    onClick={() =>
-                      setMfaMethodChoice((current) =>
-                        current === "webauthn" ? "totp" : "webauthn",
-                      )
-                    }
-                  >
-                    {mfaMethodChoice === "webauthn"
-                      ? "Use authenticator app instead"
-                      : "Use passkey instead"}
-                  </button>
+                {!mfaChallenge.enrollment_required ? (
+                  otherMfaMethodEnrolled ? (
+                    <button
+                      className="text-button"
+                      type="button"
+                      disabled={authBusy || passkeyBusy}
+                      onClick={() => setMfaMethodChoice(otherMfaMethod)}
+                    >
+                      Use {otherMfaMethodLabel} instead
+                    </button>
+                  ) : (
+                    <div className="mfa-method-opt-in">
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        disabled={authBusy || passkeyBusy}
+                        onClick={() =>
+                          setAddMethodAfterVerify((current) =>
+                            current === otherMfaMethod ? null : otherMfaMethod,
+                          )
+                        }
+                      >
+                        {addMethodAfterVerify === otherMfaMethod
+                          ? `Won't add a ${otherMfaMethodLabel} this time`
+                          : `+ Add a ${otherMfaMethodLabel} after signing in`}
+                      </button>
+                      {addMethodAfterVerify === otherMfaMethod ? (
+                        <p className="mfa-help">
+                          You&rsquo;ll be asked to set it up right after you
+                          verify below.
+                        </p>
+                      ) : null}
+                    </div>
+                  )
                 ) : null}
                 <button
                   className="text-button"
