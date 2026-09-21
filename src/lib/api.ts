@@ -1174,6 +1174,22 @@ let sessionGeneration = 0;
 function sessionIdentity(session: AdminSession | null): string | null {
   return session ? `${session.authAppId}:${session.claims.user_uuid}` : null;
 }
+
+// Shared by updateSession and setApiSession - both assign currentSession
+// directly and must bump the generation counter identically. setApiSession
+// deliberately doesn't call the sessionObserver (App.tsx's own effect calls
+// it to mirror React's `session` state into this module on every change,
+// including a logout/expiry setting it to null - routing that through the
+// observer would call setSession again and re-trigger the same effect).
+// But skipping the observer must NOT mean skipping the generation bump: a
+// refresh already in flight has to see logout/expiry as a new generation
+// either way, or its still-pending hydration can complete afterward and
+// resurrect the session it belonged to.
+function advanceSessionGeneration(nextSession: AdminSession | null) {
+  if (sessionIdentity(nextSession) !== sessionIdentity(currentSession)) {
+    sessionGeneration += 1;
+  }
+}
 // See the 403 branch in request() below — rate-limits 403-triggered
 // refresh recovery so a genuinely persistent 403 (not just a stale token)
 // can't loop forever via effect-driven requests. A per-request flag that's
@@ -1191,9 +1207,7 @@ function forbiddenRecoveryIsOnCooldown(): boolean {
 const tokenExpirySkewMs = 30_000;
 
 function updateSession(session: AdminSession | null) {
-  if (sessionIdentity(session) !== sessionIdentity(currentSession)) {
-    sessionGeneration += 1;
-  }
+  advanceSessionGeneration(session);
   currentSession = session;
   if (sessionObserver) {
     sessionObserver(session);
@@ -1543,6 +1557,7 @@ async function requestBlob(
 }
 
 export function setApiSession(session: AdminSession | null) {
+  advanceSessionGeneration(session);
   currentSession = session;
 }
 
