@@ -1151,6 +1151,29 @@ const serviceBase: Record<ServiceName, string> = {
 
 let currentSession: AdminSession | null = null;
 let sessionObserver: ((session: AdminSession | null) => void) | null = null;
+// Bumped by updateSession whenever the account actually changes (a login,
+// a logout, or a different account signing in) - see there and
+// performRefresh. An account marker alone (see sessionIdentity) can't
+// distinguish two separate logins to the SAME account: if a refresh is
+// still in flight when the user logs out and immediately signs back into
+// that same account, an account-only comparison sees no difference and
+// treats the stale refresh as still current - letting its failure path
+// clear the brand-new session, or its success path overwrite the new
+// session's tokens with old ones and let the original (pre-logout)
+// request retry using them.
+let sessionGeneration = 0;
+
+// An account marker, not an object reference: `session` itself gets
+// replaced with a new object on every hydration (the profile-image/user
+// spread in createAdminSession, or App.tsx's own re-spread when it attaches
+// `user` after the fact) even when it's still the exact same login. Only
+// used to detect a genuine account change for sessionGeneration above -
+// comparing this directly (as an earlier version of this guard did) is not
+// enough on its own, since it can't tell two logins to the same account
+// apart.
+function sessionIdentity(session: AdminSession | null): string | null {
+  return session ? `${session.authAppId}:${session.claims.user_uuid}` : null;
+}
 // See the 403 branch in request() below — rate-limits 403-triggered
 // refresh recovery so a genuinely persistent 403 (not just a stale token)
 // can't loop forever via effect-driven requests. A per-request flag that's
@@ -1168,6 +1191,9 @@ function forbiddenRecoveryIsOnCooldown(): boolean {
 const tokenExpirySkewMs = 30_000;
 
 function updateSession(session: AdminSession | null) {
+  if (sessionIdentity(session) !== sessionIdentity(currentSession)) {
+    sessionGeneration += 1;
+  }
   currentSession = session;
   if (sessionObserver) {
     sessionObserver(session);
@@ -1266,30 +1292,17 @@ function refreshSession(): Promise<AdminSession> {
 // belong to a different login than the one that made the original request.
 class StaleSessionRefreshError extends Error {}
 
-// An account marker, not an object reference: `session` itself gets
-// replaced with a new object on every hydration (the profile-image/user
-// spread in createAdminSession, or App.tsx's own re-spread when it attaches
-// `user` after the fact) even when it's still the exact same login. Compare
-// this instead of the AdminSession object itself when deciding whether
-// currentSession still means "the same login performRefresh started
-// from" - a reference check would treat routine hydration racing a
-// still-in-flight refresh as a completely different session, discarding a
-// refresh that actually succeeded and leaving the (possibly now-rotated,
-// so already-dead) previous refresh token as the one still considered
-// current.
-function sessionIdentity(session: AdminSession | null): string | null {
-  return session ? `${session.authAppId}:${session.claims.user_uuid}` : null;
-}
-
 async function performRefresh(): Promise<AdminSession> {
   const previousSession = currentSession;
   if (!previousSession) {
     throw new Error("Login required");
   }
-  const previousIdentity = sessionIdentity(previousSession);
+  const previousGeneration = sessionGeneration;
 
   if (isTokenExpired(previousSession.tokens.refresh_token)) {
-    updateSession(null);
+    if (sessionGeneration === previousGeneration) {
+      updateSession(null);
+    }
     throw new Error("Your session has expired. Please sign in again.");
   }
 
@@ -1305,9 +1318,9 @@ async function performRefresh(): Promise<AdminSession> {
   if (!response.ok) {
     const message = await parseErrorMessage(response);
     // Only clear the session this failure is actually about - see the
-    // identity check below for why currentSession may no longer match
-    // previousIdentity by the time this await resolves.
-    if (sessionIdentity(currentSession) === previousIdentity) {
+    // generation check below for why the session may have moved on by the
+    // time this await resolves.
+    if (sessionGeneration === previousGeneration) {
       updateSession(null);
     }
     throw new Error(message);
@@ -1316,18 +1329,21 @@ async function performRefresh(): Promise<AdminSession> {
   const tokens = await parseResponse<AuthTokenBundle>(response);
   const claims = await inspectAccessToken(tokens, previousSession.authAppId);
 
-  // currentSession can change identity while this request was in flight -
-  // an explicit logout, a session expiring, or (during the MFA add-method
-  // step) a fresh login completing. This refresh's tokens are for whichever
-  // account previousSession belonged to, not whatever's current now, so
-  // from here on this is a stale-refresh failure, not a success: silently
-  // publishing it would revive a session that was deliberately ended or -
-  // worse, on a shared machine - clobber a different account's session
-  // that has since logged in; and letting it resolve as if it succeeded
-  // would let request()/requestBlob() retry the ORIGINAL caller's request
-  // using currentSession's (different account's) token instead, executing
-  // it as the wrong user.
-  if (sessionIdentity(currentSession) !== previousIdentity) {
+  // The session can move on to a new generation while this request was in
+  // flight - an explicit logout, a session expiring, a different account
+  // signing in, or even a logout immediately followed by signing back into
+  // this SAME account (sessionGeneration, unlike an account-only marker,
+  // treats that as a distinct generation too - see there). This refresh's
+  // tokens are for whichever login previousSession was, not whatever's
+  // current now, so from here on this is a stale-refresh failure, not a
+  // success: silently publishing it would revive a session that was
+  // deliberately ended, clobber a different account's session that has
+  // since logged in, or overwrite a fresh same-account login's tokens with
+  // stale ones; and letting it resolve as if it succeeded would let
+  // request()/requestBlob() retry the ORIGINAL caller's request using
+  // currentSession's token instead, executing it under whatever login
+  // happens to be current now.
+  if (sessionGeneration !== previousGeneration) {
     throw new StaleSessionRefreshError("Session changed during refresh");
   }
 
@@ -1343,7 +1359,7 @@ async function performRefresh(): Promise<AdminSession> {
       accessToken: tokens.access_token.token,
       retryOnUnauthorized: false,
     });
-    if (sessionIdentity(currentSession) !== previousIdentity) {
+    if (sessionGeneration !== previousGeneration) {
       throw new StaleSessionRefreshError("Session changed during refresh");
     }
     const hydratedSession: AdminSession = {
