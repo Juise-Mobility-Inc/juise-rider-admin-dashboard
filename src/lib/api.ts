@@ -1259,18 +1259,34 @@ function refreshSession(): Promise<AdminSession> {
   return inFlightRefresh;
 }
 
-// Thrown by performRefresh when currentSession's identity changed out from
-// under it - see there. request()/requestBlob() must let this propagate as
-// a genuine failure (not retry the original call with whatever token
-// currentSession happens to hold now), since that token may belong to a
-// different login than the one that made the original request.
+// Thrown by performRefresh when the account currentSession belongs to
+// changed out from under it - see there. request()/requestBlob() must let
+// this propagate as a genuine failure (not retry the original call with
+// whatever token currentSession happens to hold now), since that token may
+// belong to a different login than the one that made the original request.
 class StaleSessionRefreshError extends Error {}
+
+// An account marker, not an object reference: `session` itself gets
+// replaced with a new object on every hydration (the profile-image/user
+// spread in createAdminSession, or App.tsx's own re-spread when it attaches
+// `user` after the fact) even when it's still the exact same login. Compare
+// this instead of the AdminSession object itself when deciding whether
+// currentSession still means "the same login performRefresh started
+// from" - a reference check would treat routine hydration racing a
+// still-in-flight refresh as a completely different session, discarding a
+// refresh that actually succeeded and leaving the (possibly now-rotated,
+// so already-dead) previous refresh token as the one still considered
+// current.
+function sessionIdentity(session: AdminSession | null): string | null {
+  return session ? `${session.authAppId}:${session.claims.user_uuid}` : null;
+}
 
 async function performRefresh(): Promise<AdminSession> {
   const previousSession = currentSession;
   if (!previousSession) {
     throw new Error("Login required");
   }
+  const previousIdentity = sessionIdentity(previousSession);
 
   if (isTokenExpired(previousSession.tokens.refresh_token)) {
     updateSession(null);
@@ -1289,9 +1305,9 @@ async function performRefresh(): Promise<AdminSession> {
   if (!response.ok) {
     const message = await parseErrorMessage(response);
     // Only clear the session this failure is actually about - see the
-    // identity check below for why currentSession may no longer be
-    // previousSession by the time this await resolves.
-    if (currentSession === previousSession) {
+    // identity check below for why currentSession may no longer match
+    // previousIdentity by the time this await resolves.
+    if (sessionIdentity(currentSession) === previousIdentity) {
       updateSession(null);
     }
     throw new Error(message);
@@ -1311,7 +1327,7 @@ async function performRefresh(): Promise<AdminSession> {
   // would let request()/requestBlob() retry the ORIGINAL caller's request
   // using currentSession's (different account's) token instead, executing
   // it as the wrong user.
-  if (currentSession !== previousSession) {
+  if (sessionIdentity(currentSession) !== previousIdentity) {
     throw new StaleSessionRefreshError("Session changed during refresh");
   }
 
@@ -1327,7 +1343,7 @@ async function performRefresh(): Promise<AdminSession> {
       accessToken: tokens.access_token.token,
       retryOnUnauthorized: false,
     });
-    if (currentSession !== refreshedSession) {
+    if (sessionIdentity(currentSession) !== previousIdentity) {
       throw new StaleSessionRefreshError("Session changed during refresh");
     }
     const hydratedSession: AdminSession = {
