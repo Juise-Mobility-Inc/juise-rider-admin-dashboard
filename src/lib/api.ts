@@ -1151,6 +1151,45 @@ const serviceBase: Record<ServiceName, string> = {
 
 let currentSession: AdminSession | null = null;
 let sessionObserver: ((session: AdminSession | null) => void) | null = null;
+// Bumped by updateSession whenever the account actually changes (a login,
+// a logout, or a different account signing in) - see there and
+// performRefresh. An account marker alone (see sessionIdentity) can't
+// distinguish two separate logins to the SAME account: if a refresh is
+// still in flight when the user logs out and immediately signs back into
+// that same account, an account-only comparison sees no difference and
+// treats the stale refresh as still current - letting its failure path
+// clear the brand-new session, or its success path overwrite the new
+// session's tokens with old ones and let the original (pre-logout)
+// request retry using them.
+let sessionGeneration = 0;
+
+// An account marker, not an object reference: `session` itself gets
+// replaced with a new object on every hydration (the profile-image/user
+// spread in createAdminSession, or App.tsx's own re-spread when it attaches
+// `user` after the fact) even when it's still the exact same login. Only
+// used to detect a genuine account change for sessionGeneration above -
+// comparing this directly (as an earlier version of this guard did) is not
+// enough on its own, since it can't tell two logins to the same account
+// apart.
+function sessionIdentity(session: AdminSession | null): string | null {
+  return session ? `${session.authAppId}:${session.claims.user_uuid}` : null;
+}
+
+// Shared by updateSession and setApiSession - both assign currentSession
+// directly and must bump the generation counter identically. setApiSession
+// deliberately doesn't call the sessionObserver (App.tsx's own effect calls
+// it to mirror React's `session` state into this module on every change,
+// including a logout/expiry setting it to null - routing that through the
+// observer would call setSession again and re-trigger the same effect).
+// But skipping the observer must NOT mean skipping the generation bump: a
+// refresh already in flight has to see logout/expiry as a new generation
+// either way, or its still-pending hydration can complete afterward and
+// resurrect the session it belonged to.
+function advanceSessionGeneration(nextSession: AdminSession | null) {
+  if (sessionIdentity(nextSession) !== sessionIdentity(currentSession)) {
+    sessionGeneration += 1;
+  }
+}
 // See the 403 branch in request() below — rate-limits 403-triggered
 // refresh recovery so a genuinely persistent 403 (not just a stale token)
 // can't loop forever via effect-driven requests. A per-request flag that's
@@ -1168,6 +1207,7 @@ function forbiddenRecoveryIsOnCooldown(): boolean {
 const tokenExpirySkewMs = 30_000;
 
 function updateSession(session: AdminSession | null) {
+  advanceSessionGeneration(session);
   currentSession = session;
   if (sessionObserver) {
     sessionObserver(session);
@@ -1259,14 +1299,24 @@ function refreshSession(): Promise<AdminSession> {
   return inFlightRefresh;
 }
 
+// Thrown by performRefresh when the account currentSession belongs to
+// changed out from under it - see there. request()/requestBlob() must let
+// this propagate as a genuine failure (not retry the original call with
+// whatever token currentSession happens to hold now), since that token may
+// belong to a different login than the one that made the original request.
+class StaleSessionRefreshError extends Error {}
+
 async function performRefresh(): Promise<AdminSession> {
   const previousSession = currentSession;
   if (!previousSession) {
     throw new Error("Login required");
   }
+  const previousGeneration = sessionGeneration;
 
   if (isTokenExpired(previousSession.tokens.refresh_token)) {
-    updateSession(null);
+    if (sessionGeneration === previousGeneration) {
+      updateSession(null);
+    }
     throw new Error("Your session has expired. Please sign in again.");
   }
 
@@ -1281,18 +1331,41 @@ async function performRefresh(): Promise<AdminSession> {
 
   if (!response.ok) {
     const message = await parseErrorMessage(response);
-    updateSession(null);
+    // Only clear the session this failure is actually about - see the
+    // generation check below for why the session may have moved on by the
+    // time this await resolves.
+    if (sessionGeneration === previousGeneration) {
+      updateSession(null);
+    }
     throw new Error(message);
   }
 
   const tokens = await parseResponse<AuthTokenBundle>(response);
   const claims = await inspectAccessToken(tokens, previousSession.authAppId);
+
+  // The session can move on to a new generation while this request was in
+  // flight - an explicit logout, a session expiring, a different account
+  // signing in, or even a logout immediately followed by signing back into
+  // this SAME account (sessionGeneration, unlike an account-only marker,
+  // treats that as a distinct generation too - see there). This refresh's
+  // tokens are for whichever login previousSession was, not whatever's
+  // current now, so from here on this is a stale-refresh failure, not a
+  // success: silently publishing it would revive a session that was
+  // deliberately ended, clobber a different account's session that has
+  // since logged in, or overwrite a fresh same-account login's tokens with
+  // stale ones; and letting it resolve as if it succeeded would let
+  // request()/requestBlob() retry the ORIGINAL caller's request using
+  // currentSession's token instead, executing it under whatever login
+  // happens to be current now.
+  if (sessionGeneration !== previousGeneration) {
+    throw new StaleSessionRefreshError("Session changed during refresh");
+  }
+
   const refreshedSession: AdminSession = {
     ...previousSession,
     tokens,
     claims,
   };
-
   updateSession(refreshedSession);
 
   try {
@@ -1300,13 +1373,22 @@ async function performRefresh(): Promise<AdminSession> {
       accessToken: tokens.access_token.token,
       retryOnUnauthorized: false,
     });
+    if (sessionGeneration !== previousGeneration) {
+      throw new StaleSessionRefreshError("Session changed during refresh");
+    }
     const hydratedSession: AdminSession = {
       ...refreshedSession,
       user,
     };
     updateSession(hydratedSession);
     return hydratedSession;
-  } catch {
+  } catch (error) {
+    if (error instanceof StaleSessionRefreshError) {
+      throw error;
+    }
+    // fetchNebulaUser failing is a soft failure - the refresh itself
+    // already succeeded and published above, just without the profile
+    // hydration.
     return refreshedSession;
   }
 }
@@ -1475,6 +1557,7 @@ async function requestBlob(
 }
 
 export function setApiSession(session: AdminSession | null) {
+  advanceSessionGeneration(session);
   currentSession = session;
 }
 

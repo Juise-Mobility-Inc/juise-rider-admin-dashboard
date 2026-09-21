@@ -576,6 +576,12 @@
         gap: 10px;
 }
 
+.mfa-method-opt-in {
+        width: 100%;
+        display: grid;
+        gap: 4px;
+}
+
 .security-methods-panel {
         display: grid;
         gap: 12px;
