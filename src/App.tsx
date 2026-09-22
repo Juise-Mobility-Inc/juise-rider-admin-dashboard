@@ -15,10 +15,12 @@ import "./App.css";
 import {
   approveReservation,
   beginMFAEnrollment,
+  beginPasswordlessWebAuthnLogin,
   beginTOTPRegistration,
   beginWebAuthnEnrollment,
   beginWebAuthnRegistration,
   beginWebAuthnVerification,
+  completePasswordReset,
   confirmMFAEnrollment,
   createSchoolChallenge,
   createSchoolPack,
@@ -47,6 +49,7 @@ import {
   fetchSchoolZones,
   fetchStudentProfile,
   fetchUserMediaAssets,
+  finishPasswordlessWebAuthnLogin,
   finishTOTPRegistration,
   finishWebAuthnEnrollment,
   finishWebAuthnRegistration,
@@ -57,6 +60,8 @@ import {
   loginWithIdentifier,
   verifyMFA,
   refreshDashboardSession,
+  requestPasswordReset,
+  requestRecoveryCodePasswordReset,
   saveSchool,
   saveSchoolPOIs,
   saveSchoolZones,
@@ -64,6 +69,7 @@ import {
   setApiSession,
   setSessionObserver,
   signSchoolMedia,
+  submitPasswordResetCode,
   type AdminSession,
   type MFAChallenge,
   type MFAEnrollment,
@@ -186,7 +192,13 @@ type Section =
   | "securitySettings";
 type PackTab = "create" | "existing";
 type BannerTone = "success" | "error" | "info";
-type AuthMode = "login" | "signup";
+type AuthMode = "login" | "signup" | "forgot-password";
+
+// "identify": enter identifier + pick a delivery method (email/SMS) OR
+// submit a recovery code, in one screen. "code": enter the delivered
+// email/SMS code (skipped by the recovery-code path, which produces its
+// verified token in one round trip). "password": set the new password.
+type ForgotPasswordStep = "identify" | "code" | "password";
 const maxSessionExpiryCheckDelayMs = 2_147_483_647;
 
 const dashboardSections: Array<{
@@ -419,6 +431,19 @@ interface StoredLoginLock {
 
 function normalizeLoginIdentifier(value: string): string {
   return value.trim().toLowerCase();
+}
+
+// Mirrors global-auth-service's isResetPasswordValid (auth.go) so a weak
+// password is caught instantly instead of only after a server round trip -
+// the server re-validates this regardless, this is purely for feedback.
+function isValidResetPassword(password: string): boolean {
+  const trimmed = password.trim();
+  if (trimmed.length < 6 || trimmed.length > 24 || /\s/.test(trimmed)) {
+    return false;
+  }
+  return (
+    /[a-z]/.test(trimmed) && /[A-Z]/.test(trimmed) && /\d/.test(trimmed)
+  );
 }
 
 function readStoredLoginLock(): StoredLoginLock | null {
@@ -1693,6 +1718,21 @@ function App() {
   );
   const [passkeyBusy, setPasskeyBusy] = useState(false);
   const passkeySupported = useMemo(() => isPasskeySupported(), []);
+  const [passwordlessBusy, setPasswordlessBusy] = useState(false);
+
+  // Forgot-password flow state. Reset by cancelForgotPassword whenever the
+  // user leaves this mode (back to sign-in, or after a successful reset).
+  const [forgotStep, setForgotStep] = useState<ForgotPasswordStep>("identify");
+  const [forgotIdentifier, setForgotIdentifier] = useState("");
+  const [forgotDeliveryMethod, setForgotDeliveryMethod] = useState<
+    "email" | "sms"
+  >("email");
+  const [forgotRecoveryCode, setForgotRecoveryCode] = useState("");
+  const [forgotChallengeToken, setForgotChallengeToken] = useState("");
+  const [forgotCode, setForgotCode] = useState("");
+  const [forgotNewPassword, setForgotNewPassword] = useState("");
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [forgotError, setForgotError] = useState("");
   // Set when the user opts, from the verify screen, to add their other
   // (not-yet-enrolled) MFA method right after this sign-in instead of
   // hunting for Security Settings afterward. Still requires completing
@@ -4506,6 +4546,38 @@ function App() {
     }
   }
 
+  async function handlePasswordlessLogin() {
+    const trimmed = identifier.trim();
+    if (!trimmed) {
+      document.getElementById("admin-identifier")?.focus();
+      setAuthError("Enter your username, email, or phone first.");
+      return;
+    }
+    setPasswordlessBusy(true);
+    setAuthError("");
+    try {
+      const { mfaToken, options } = await beginPasswordlessWebAuthnLogin(
+        trimmed,
+        authAppId,
+      );
+      const credential = await authenticateWithPasskey(options);
+      const nextSession = await finishPasswordlessWebAuthnLogin(
+        authAppId,
+        mfaToken,
+        credential,
+      );
+      setLoginLock(null);
+      localStorage.removeItem(loginLockStorageKey);
+      sessionEndedGuardRef.current = false;
+      setSession(nextSession);
+      setAuthMode("login");
+    } catch (error) {
+      handleMfaError(error);
+    } finally {
+      setPasswordlessBusy(false);
+    }
+  }
+
   function handleLoginIdentifierChange(value: string) {
     setIdentifier(value);
     if (loginLock && normalizeLoginIdentifier(value) !== loginLock.identifier) {
@@ -4524,6 +4596,107 @@ function App() {
     setMfaCopied("");
     setAuthError("");
     resetAddMethodState();
+  }
+
+  function cancelForgotPassword() {
+    setAuthMode("login");
+    setForgotStep("identify");
+    setForgotIdentifier("");
+    setForgotDeliveryMethod("email");
+    setForgotRecoveryCode("");
+    setForgotChallengeToken("");
+    setForgotCode("");
+    setForgotNewPassword("");
+    setForgotError("");
+  }
+
+  async function handleForgotPasswordRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setForgotBusy(true);
+    setForgotError("");
+    try {
+      const challenge = await requestPasswordReset(
+        forgotIdentifier.trim(),
+        forgotDeliveryMethod,
+        authAppId,
+      );
+      setForgotChallengeToken(challenge.token);
+      setForgotStep("code");
+    } catch (error) {
+      setForgotError(getErrorMessage(error));
+    } finally {
+      setForgotBusy(false);
+    }
+  }
+
+  async function handleForgotPasswordRecoveryCode(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+    setForgotBusy(true);
+    setForgotError("");
+    try {
+      const challenge = await requestRecoveryCodePasswordReset(
+        forgotIdentifier.trim(),
+        forgotRecoveryCode.trim(),
+        authAppId,
+      );
+      setForgotChallengeToken(challenge.token);
+      setForgotStep("password");
+    } catch (error) {
+      setForgotError(getErrorMessage(error));
+    } finally {
+      setForgotBusy(false);
+    }
+  }
+
+  async function handleForgotPasswordCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setForgotBusy(true);
+    setForgotError("");
+    try {
+      const verified = await submitPasswordResetCode(
+        forgotChallengeToken,
+        forgotCode.trim(),
+        authAppId,
+      );
+      setForgotChallengeToken(verified.token);
+      setForgotStep("password");
+    } catch (error) {
+      setForgotError(getErrorMessage(error));
+    } finally {
+      setForgotBusy(false);
+    }
+  }
+
+  async function handleForgotPasswordSetNewPassword(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+    if (!isValidResetPassword(forgotNewPassword)) {
+      setForgotError(
+        "Password must be 6-24 characters with one lowercase letter, one capital letter, and one number.",
+      );
+      return;
+    }
+    setForgotBusy(true);
+    setForgotError("");
+    try {
+      const nextSession = await completePasswordReset(
+        forgotChallengeToken,
+        forgotNewPassword,
+        authAppId,
+      );
+      setLoginLock(null);
+      localStorage.removeItem(loginLockStorageKey);
+      sessionEndedGuardRef.current = false;
+      setSession(nextSession);
+      cancelForgotPassword();
+    } catch (error) {
+      setForgotError(getErrorMessage(error));
+    } finally {
+      setForgotBusy(false);
+    }
   }
 
   async function handleCreateSchoolAdmin(event: FormEvent<HTMLFormElement>) {
@@ -6200,6 +6373,191 @@ function App() {
                   Back to sign in
                 </button>
               </form>
+            ) : authMode === "forgot-password" ? (
+              <div className="login-form mfa-form">
+                <div className="login-form-header">
+                  <p className="eyebrow">Account recovery</p>
+                  <h2>Reset your password</h2>
+                </div>
+                {forgotStep === "identify" ? (
+                  <>
+                    <form className="login-form" onSubmit={handleForgotPasswordRequest}>
+                      <label className="field">
+                        <span>Username, email, or phone</span>
+                        <input
+                          type="text"
+                          autoComplete="username"
+                          autoCorrect="off"
+                          autoCapitalize="off"
+                          spellCheck={false}
+                          value={forgotIdentifier}
+                          onChange={(event) =>
+                            setForgotIdentifier(event.target.value)
+                          }
+                          placeholder="admin@example.com"
+                          required
+                          autoFocus
+                        />
+                      </label>
+                      <div className="mfa-method-choice">
+                        <button
+                          type="button"
+                          className={
+                            forgotDeliveryMethod === "email"
+                              ? "secondary-button nav-button-active"
+                              : "secondary-button"
+                          }
+                          disabled={forgotBusy}
+                          onClick={() => setForgotDeliveryMethod("email")}
+                        >
+                          Email me a code
+                        </button>
+                        <button
+                          type="button"
+                          className={
+                            forgotDeliveryMethod === "sms"
+                              ? "secondary-button nav-button-active"
+                              : "secondary-button"
+                          }
+                          disabled={forgotBusy}
+                          onClick={() => setForgotDeliveryMethod("sms")}
+                        >
+                          Text me a code
+                        </button>
+                      </div>
+                      {forgotError ? (
+                        <p className="error-text">{forgotError}</p>
+                      ) : null}
+                      <button
+                        className="primary-button"
+                        type="submit"
+                        disabled={forgotBusy}
+                      >
+                        {forgotBusy ? "Sending…" : "Send code"}
+                      </button>
+                    </form>
+                    <details className="mfa-recovery-codes">
+                      <summary>Use an authenticator app recovery code instead</summary>
+                      <form
+                        className="login-form"
+                        onSubmit={handleForgotPasswordRecoveryCode}
+                      >
+                        <label className="field">
+                          <span>Username, email, or phone</span>
+                          <input
+                            type="text"
+                            autoComplete="username"
+                            value={forgotIdentifier}
+                            onChange={(event) =>
+                              setForgotIdentifier(event.target.value)
+                            }
+                            placeholder="admin@example.com"
+                            required
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Recovery code</span>
+                          <input
+                            type="text"
+                            autoCorrect="off"
+                            autoCapitalize="off"
+                            spellCheck={false}
+                            value={forgotRecoveryCode}
+                            onChange={(event) =>
+                              setForgotRecoveryCode(event.target.value)
+                            }
+                            placeholder="ABCD-1234-EFGH-5678"
+                            required
+                          />
+                        </label>
+                        <button
+                          className="secondary-button"
+                          type="submit"
+                          disabled={forgotBusy}
+                        >
+                          {forgotBusy ? "Verifying…" : "Use recovery code"}
+                        </button>
+                      </form>
+                    </details>
+                  </>
+                ) : null}
+                {forgotStep === "code" ? (
+                  <form className="login-form" onSubmit={handleForgotPasswordCode}>
+                    <p className="mfa-help">
+                      Enter the code we sent to your{" "}
+                      {forgotDeliveryMethod === "email" ? "email" : "phone"}.
+                    </p>
+                    <label className="field">
+                      <span>Code</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
+                        value={forgotCode}
+                        onChange={(event) => setForgotCode(event.target.value)}
+                        placeholder="123456"
+                        required
+                        autoFocus
+                      />
+                    </label>
+                    {forgotError ? (
+                      <p className="error-text">{forgotError}</p>
+                    ) : null}
+                    <button
+                      className="primary-button"
+                      type="submit"
+                      disabled={forgotBusy}
+                    >
+                      {forgotBusy ? "Verifying…" : "Verify code"}
+                    </button>
+                  </form>
+                ) : null}
+                {forgotStep === "password" ? (
+                  <form
+                    className="login-form"
+                    onSubmit={handleForgotPasswordSetNewPassword}
+                  >
+                    <label className="field">
+                      <span>New password</span>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={forgotNewPassword}
+                        onChange={(event) =>
+                          setForgotNewPassword(event.target.value)
+                        }
+                        placeholder="••••••••"
+                        required
+                        autoFocus
+                      />
+                    </label>
+                    <p className="mfa-help">
+                      6-24 characters, with one lowercase letter, one capital
+                      letter, and one number.
+                    </p>
+                    {forgotError ? (
+                      <p className="error-text">{forgotError}</p>
+                    ) : null}
+                    <button
+                      className="primary-button"
+                      type="submit"
+                      disabled={forgotBusy}
+                    >
+                      {forgotBusy ? "Saving…" : "Set new password"}
+                    </button>
+                  </form>
+                ) : null}
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={cancelForgotPassword}
+                  disabled={forgotBusy}
+                >
+                  Back to sign in
+                </button>
+              </div>
             ) : (
               <>
                 <div className="auth-switcher">
@@ -6411,6 +6769,18 @@ function App() {
                         required
                       />
                     </label>
+                    <button
+                      type="button"
+                      className="text-button mfa-switch-link"
+                      disabled={authBusy || passwordlessBusy}
+                      onClick={() => {
+                        setForgotIdentifier(identifier);
+                        setAuthError("");
+                        setAuthMode("forgot-password");
+                      }}
+                    >
+                      Forgot password?
+                    </button>
                     {authError && !loginIsLocked ? (
                       <p className="error-text">{authError}</p>
                     ) : null}
@@ -6425,6 +6795,18 @@ function App() {
                           ? `Try again in ${formatLoginLockCountdown(loginLockSeconds)}`
                           : "Enter Dashboard"}
                     </button>
+                    {passkeySupported ? (
+                      <button
+                        type="button"
+                        className="text-button"
+                        disabled={authBusy || passwordlessBusy || loginIsLocked}
+                        onClick={() => void handlePasswordlessLogin()}
+                      >
+                        {passwordlessBusy
+                          ? "Signing in with passkey…"
+                          : "Sign in with a passkey instead"}
+                      </button>
+                    ) : null}
                   </form>
                 )}
               </>
