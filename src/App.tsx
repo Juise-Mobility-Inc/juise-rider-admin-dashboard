@@ -6754,6 +6754,7 @@ function App() {
                         }
                         placeholder="admin@example.com"
                         required
+                        disabled={passwordlessBusy}
                       />
                     </label>
                     <label className="field">
@@ -6767,6 +6768,7 @@ function App() {
                         onChange={(event) => setPassword(event.target.value)}
                         placeholder="••••••••"
                         required
+                        disabled={passwordlessBusy}
                       />
                     </label>
                     <button
@@ -6787,7 +6789,7 @@ function App() {
                     <button
                       className="primary-button"
                       type="submit"
-                      disabled={authBusy || loginIsLocked}
+                      disabled={authBusy || loginIsLocked || passwordlessBusy}
                     >
                       {authBusy
                         ? "Signing in…"
