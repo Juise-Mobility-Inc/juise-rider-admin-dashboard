@@ -1117,6 +1117,12 @@ interface RequestOptions {
   appIdHeader?: string;
   retryOnUnauthorized?: boolean;
   accessToken?: string;
+  // Sets the `Challenge: Bearer <token>` header global-auth-service's
+  // ChallengeShieldMiddleware reads for the account-recovery flow (request
+  // code -> verify code -> set new password). Distinct from `accessToken`
+  // (Authorization bearer) - a challenge token proves possession of a
+  // delivered/consumed recovery credential, not a signed-in session.
+  challengeToken?: string;
 }
 
 function normalizeBaseUrl(value: string | undefined): string {
@@ -1413,6 +1419,7 @@ async function request<T>(
     appIdHeader,
     retryOnUnauthorized = true,
     accessToken,
+    challengeToken,
   } = options;
 
   const headers = new Headers();
@@ -1424,6 +1431,9 @@ async function request<T>(
   }
   if (appIdHeader) {
     headers.set("X-App-Id", appIdHeader);
+  }
+  if (challengeToken) {
+    headers.set("Challenge", `Bearer ${challengeToken}`);
   }
   if (authRequired) {
     const bearerToken =
@@ -1682,6 +1692,110 @@ export async function createAdminSession(
   }
 }
 
+// --- Forgot password — request/request/reset/{email,sms,recovery-code} on
+// global-auth-service, none of which require an existing session. The
+// email/SMS path is a two-step challenge (request a code, submit the code)
+// producing a token that authorizes the final password-set call; the
+// recovery-code path collapses the first two steps into one, since a TOTP
+// recovery code already in hand is itself the whole credential - there's
+// nothing to "request." All three converge on completePasswordReset, which
+// matches the backend's actual behavior of logging the user in immediately
+// on a successful reset. ---
+
+export interface PasswordResetChallengeToken {
+  token: string;
+  exp: number;
+}
+
+// Mirrors resolveLoginIdentifier's server-side classification (auth.go) so
+// only the correctly-typed field is sent - ResetLostAccount takes
+// username/email/phone as three separate fields with no sniffing of its
+// own, unlike /auth/login's identifier-based handlers.
+function classifyIdentifier(
+  identifier: string,
+): { username?: string; email?: string; phone?: string } {
+  const trimmed = identifier.trim();
+  if (trimmed.includes("@")) {
+    return { email: trimmed.toLowerCase() };
+  }
+  const digitCount = (trimmed.match(/\d/g) ?? []).length;
+  if (digitCount >= 10 && !/[a-zA-Z]/.test(trimmed)) {
+    return { phone: trimmed };
+  }
+  return { username: trimmed.toLowerCase() };
+}
+
+export async function requestPasswordReset(
+  identifier: string,
+  deliveryMethod: "email" | "sms",
+  authAppId: string,
+): Promise<PasswordResetChallengeToken> {
+  return request<PasswordResetChallengeToken>(
+    "auth",
+    "/api/v1/request/password/reset",
+    {
+      method: "POST",
+      body: {
+        ...classifyIdentifier(identifier),
+        delivery_method: deliveryMethod,
+        app_id: authAppId,
+      },
+      authRequired: false,
+      appIdHeader: authAppId,
+      retryOnUnauthorized: false,
+    },
+  );
+}
+
+export async function submitPasswordResetCode(
+  challengeToken: string,
+  code: string,
+  authAppId: string,
+): Promise<PasswordResetChallengeToken> {
+  return request<PasswordResetChallengeToken>("auth", "/api/v1/auth/challenge", {
+    method: "PUT",
+    body: { code },
+    authRequired: false,
+    appIdHeader: authAppId,
+    retryOnUnauthorized: false,
+    challengeToken,
+  });
+}
+
+export async function requestRecoveryCodePasswordReset(
+  identifier: string,
+  recoveryCode: string,
+  authAppId: string,
+): Promise<PasswordResetChallengeToken> {
+  return request<PasswordResetChallengeToken>(
+    "auth",
+    "/api/v1/request/password/reset/recovery-code",
+    {
+      method: "POST",
+      body: { identifier, recovery_code: recoveryCode, app_id: authAppId },
+      authRequired: false,
+      appIdHeader: authAppId,
+      retryOnUnauthorized: false,
+    },
+  );
+}
+
+export async function completePasswordReset(
+  challengeToken: string,
+  password: string,
+  authAppId: string,
+): Promise<AdminSession> {
+  const tokens = await request<AuthTokenBundle>("auth", "/api/v1/password/reset", {
+    method: "POST",
+    body: { password },
+    authRequired: false,
+    appIdHeader: authAppId,
+    retryOnUnauthorized: false,
+    challengeToken,
+  });
+  return createAdminSession(tokens, authAppId);
+}
+
 export async function beginMFAEnrollment(
   authAppId: string,
   mfaToken: string,
@@ -1800,6 +1914,49 @@ export function finishWebAuthnVerification(
     authAppId,
     { mfa_token: mfaToken, credential },
   );
+}
+
+// --- Passwordless passkey sign-in — no password step at all, just an
+// identifier. Unlike beginWebAuthnVerification above (which assumes an
+// mfa_token already exists from a completed password login), begin here
+// mints a brand new "passwordless"-purpose mfa_token and hands it back
+// alongside the assertion options, since the caller has no session/token of
+// any kind yet. Finish reuses completeMFAWithBody exactly like the other
+// completion calls - the backend's finish handler returns the same
+// MFACompletedResponse shape. ---
+
+interface PasswordlessLoginBeginResponse extends WebAuthnRequestOptionsResponse {
+  mfa_token: string;
+  exp: number;
+}
+
+export async function beginPasswordlessWebAuthnLogin(
+  identifier: string,
+  authAppId: string,
+): Promise<{ mfaToken: string; options: PublicKeyCredentialRequestOptionsJSON }> {
+  const response = await request<PasswordlessLoginBeginResponse>(
+    "auth",
+    "/api/v1/auth/webauthn/login/begin",
+    {
+      method: "POST",
+      body: { identifier, app_id: authAppId },
+      authRequired: false,
+      appIdHeader: authAppId,
+      retryOnUnauthorized: false,
+    },
+  );
+  return { mfaToken: response.mfa_token, options: response.publicKey };
+}
+
+export function finishPasswordlessWebAuthnLogin(
+  authAppId: string,
+  mfaToken: string,
+  credential: AuthenticationResponseJSON,
+): Promise<AdminSession> {
+  return completeMFAWithBody("/api/v1/auth/webauthn/login/finish", authAppId, {
+    mfa_token: mfaToken,
+    credential,
+  });
 }
 
 // --- MFA method management (Security Settings) — requires a signed-in session ---
