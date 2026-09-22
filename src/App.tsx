@@ -6568,6 +6568,7 @@ function App() {
                         : "nav-button"
                     }
                     type="button"
+                    disabled={passwordlessBusy}
                     onClick={() => {
                       setAuthMode("signup");
                       setAuthError("");
@@ -6582,6 +6583,7 @@ function App() {
                         : "nav-button"
                     }
                     type="button"
+                    disabled={passwordlessBusy}
                     onClick={() => {
                       setAuthMode("login");
                       setAuthError("");
@@ -6714,7 +6716,7 @@ function App() {
                     <button
                       className="primary-button"
                       type="submit"
-                      disabled={authBusy}
+                      disabled={authBusy || passwordlessBusy}
                     >
                       Continue
                     </button>
