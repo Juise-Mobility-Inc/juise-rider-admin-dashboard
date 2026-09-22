@@ -582,6 +582,35 @@
         gap: 4px;
 }
 
+/* Verification/enrollment steps that hold a single primary action (e.g. the
+   "Use passkey" button, or "Choose a different method" while a passkey
+   prompt is in flight): stretch it full-width so it lines up with the
+   card's other full-width buttons instead of sitting left-aligned at its
+   own intrinsic width. */
+.mfa-method--action {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+}
+
+/* The "Use <other method> instead" switch is a real alternate sign-in path,
+   not a throwaway action like "Skip" or "Back to sign in" - give it enough
+   color and weight to read as a link rather than blend into the help text
+   around it, similar to how GitHub sets off "Try another verification
+   method" from its primary 2FA button. */
+.login-form .text-button.mfa-switch-link {
+        color: #14532d;
+        font-weight: 600;
+        font-size: 0.9rem;
+        text-align: center;
+}
+
+.login-form .text-button.mfa-switch-link:hover:not(:disabled) {
+        color: #0f3d21;
+        text-decoration: underline;
+}
+
 .security-methods-panel {
         display: grid;
         gap: 12px;
