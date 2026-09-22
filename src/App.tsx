@@ -5911,7 +5911,7 @@ function App() {
                 ) : null}
                 {mfaChallenge.enrollment_required &&
                 mfaMethodChoice === "webauthn" ? (
-                  <div className="mfa-method">
+                  <div className="mfa-method mfa-method--action">
                     {passkeyBusy ? (
                       <p className="mfa-help">
                         Waiting for your passkey&hellip; follow the prompt
@@ -5930,7 +5930,7 @@ function App() {
                 ) : null}
                 {!mfaChallenge.enrollment_required &&
                 mfaMethodChoice === "webauthn" ? (
-                  <div className="mfa-method">
+                  <div className="mfa-method mfa-method--action">
                     {!passkeySupported ? (
                       <p className="error-text">
                         This browser doesn&rsquo;t support the passkey your
@@ -6159,7 +6159,7 @@ function App() {
                 {!mfaChallenge.enrollment_required ? (
                   otherMfaMethodEnrolled ? (
                     <button
-                      className="text-button"
+                      className="text-button mfa-switch-link"
                       type="button"
                       disabled={authBusy || passkeyBusy}
                       onClick={() => setMfaMethodChoice(otherMfaMethod)}
