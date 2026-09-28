@@ -106,6 +106,7 @@ export function FeedbackScreen({ authAppId }: Props) {
               onChange={(event) =>
                 setCategory(event.target.value as FeedbackCategory)
               }
+              disabled={busy}
             >
               <option value="feedback">Feedback</option>
               <option value="suggestion">Suggestion</option>
@@ -120,6 +121,7 @@ export function FeedbackScreen({ authAppId }: Props) {
               onChange={(event) => setMessage(event.target.value)}
               placeholder="Tell us what's working, what's not, or what you'd like to see."
               required
+              disabled={busy}
             />
           </label>
 
