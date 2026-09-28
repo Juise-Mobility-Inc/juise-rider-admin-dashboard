@@ -135,6 +135,7 @@ import { DashboardScreen } from "./screens/dashboard/DashboardScreen";
 import { BetaInvitesScreen } from "./screens/dashboard/BetaInvitesScreen";
 import { StudentLeaderboardScreen } from "./screens/dashboard/StudentLeaderboardScreen";
 import { NotificationsScreen } from "./screens/dashboard/NotificationsScreen";
+import { FeedbackScreen } from "./screens/dashboard/FeedbackScreen";
 import { SecuritySettingsScreen } from "./screens/dashboard/SecuritySettingsScreen";
 import { PacksScreen } from "./screens/dashboard/PacksScreen";
 import { ParkingReportsScreen } from "./screens/dashboard/ParkingReportsScreen";
@@ -189,7 +190,8 @@ type Section =
   | "reservations"
   | "mapOverview"
   | "sightingsMap"
-  | "securitySettings";
+  | "securitySettings"
+  | "feedback";
 type PackTab = "create" | "existing";
 type BannerTone = "success" | "error" | "info";
 type AuthMode = "login" | "signup" | "forgot-password";
@@ -283,6 +285,11 @@ const dashboardSections: Array<{
     section: "securitySettings",
     label: "Security Settings",
     path: "/security-settings",
+  },
+  {
+    section: "feedback",
+    label: "Send Feedback",
+    path: "/feedback",
   },
 ];
 
@@ -7440,6 +7447,8 @@ function App() {
         );
       case "securitySettings":
         return <SecuritySettingsScreen authAppId={authAppId} />;
+      case "feedback":
+        return <FeedbackScreen authAppId={authAppId} />;
       case "vehicleRegistrations":
         return (
           <VehicleRegistrationsScreen
@@ -8149,6 +8158,15 @@ function App() {
               }
             >
               Security Settings
+            </NavLink>
+
+            <NavLink
+              to="/feedback"
+              className={({ isActive }) =>
+                isActive ? "nav-button nav-button-active" : "nav-button"
+              }
+            >
+              Send Feedback
             </NavLink>
           </nav>
 

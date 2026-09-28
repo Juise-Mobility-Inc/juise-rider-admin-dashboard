@@ -1587,6 +1587,22 @@ export async function emitDashboardAudit(input: {
   );
 }
 
+export type FeedbackCategory = "feedback" | "suggestion" | "bug_report";
+
+export async function submitFeedback(input: {
+  category: FeedbackCategory;
+  message: string;
+  attachment_object_key?: string;
+  attachment_content_type?: string;
+}): Promise<void> {
+  const appId = currentSession?.authAppId ?? "juise_rider_admin_dashboard";
+  await request("nebula", `/api/v1/apps/${encodeURIComponent(appId)}/feedback`, {
+    method: "POST",
+    body: input,
+    appIdHeader: appId,
+  });
+}
+
 export async function fetchDashboardAuditEvents(
   appId: string,
   filters: DashboardAuditFilters = {},
