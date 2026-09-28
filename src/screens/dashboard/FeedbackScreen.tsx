@@ -18,14 +18,34 @@ function generateFeedbackUUID(): string {
   return `fb_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+type UploadedAttachment = {
+  file: File;
+  objectKey: string;
+  contentType: string;
+};
+
 export function FeedbackScreen({ authAppId }: Props) {
   const [category, setCategory] = useState<FeedbackCategory>("feedback");
   const [message, setMessage] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  // Keyed on the exact File that was uploaded, so a retry after a failed
+  // submitFeedback call (upload already succeeded) reuses that object_key
+  // instead of uploading another copy under a fresh entity UUID - without
+  // this, every retry orphaned the previous upload.
+  const [uploadedAttachment, setUploadedAttachment] =
+    useState<UploadedAttachment | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  function clearAttachment() {
+    setFile(null);
+    setUploadedAttachment(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     setFile(event.target.files?.[0] ?? null);
@@ -48,18 +68,28 @@ export function FeedbackScreen({ authAppId }: Props) {
       let attachmentContentType: string | undefined;
 
       if (file) {
-        const uploaded = await uploadUserEntityMedia(
-          authAppId,
-          {
-            entityType: "feedback",
-            entityUUID: generateFeedbackUUID(),
-            slot: file.type.startsWith("video/") ? "recording" : "screenshot",
+        if (uploadedAttachment && uploadedAttachment.file === file) {
+          attachmentObjectKey = uploadedAttachment.objectKey;
+          attachmentContentType = uploadedAttachment.contentType;
+        } else {
+          const uploaded = await uploadUserEntityMedia(
+            authAppId,
+            {
+              entityType: "feedback",
+              entityUUID: generateFeedbackUUID(),
+              slot: file.type.startsWith("video/") ? "recording" : "screenshot",
+              file,
+            },
+            authAppId,
+          );
+          attachmentObjectKey = uploaded.media.object_key;
+          attachmentContentType = uploaded.media.content_type;
+          setUploadedAttachment({
             file,
-          },
-          authAppId,
-        );
-        attachmentObjectKey = uploaded.media.object_key;
-        attachmentContentType = uploaded.media.content_type;
+            objectKey: attachmentObjectKey,
+            contentType: attachmentContentType,
+          });
+        }
       }
 
       await submitFeedback({
@@ -70,13 +100,7 @@ export function FeedbackScreen({ authAppId }: Props) {
       });
 
       setMessage("");
-      setFile(null);
-      // Clearing React state alone leaves the uncontrolled <input> holding
-      // its previous value, so re-picking the exact same file for a second
-      // report wouldn't fire onChange at all (the value wouldn't change).
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+      clearAttachment();
       setCategory("feedback");
       setSuccess("Thanks! Your feedback was submitted.");
     } catch (err) {
@@ -125,19 +149,34 @@ export function FeedbackScreen({ authAppId }: Props) {
             />
           </label>
 
-          <label
-            className={`secondary-button upload-button${busy ? " upload-button-busy" : ""}`}
-            aria-disabled={busy}
+          <div
+            className="field field-span-2"
+            style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
           >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,video/*"
-              onChange={handleFileChange}
-              disabled={busy}
-            />
-            {file ? file.name : "Attach a screenshot or recording (optional)"}
-          </label>
+            <label
+              className={`secondary-button upload-button${busy ? " upload-button-busy" : ""}`}
+              aria-disabled={busy}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                onChange={handleFileChange}
+                disabled={busy}
+              />
+              {file ? file.name : "Attach a screenshot or recording (optional)"}
+            </label>
+            {file ? (
+              <button
+                className="text-button"
+                type="button"
+                onClick={clearAttachment}
+                disabled={busy}
+              >
+                Remove
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {error ? <p className="error-text">{error}</p> : null}
