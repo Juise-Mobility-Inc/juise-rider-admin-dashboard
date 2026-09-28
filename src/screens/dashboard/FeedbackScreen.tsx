@@ -1,4 +1,4 @@
-import { type ChangeEvent, type FormEvent, useState } from "react";
+import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
 
 import {
   submitFeedback,
@@ -22,6 +22,7 @@ export function FeedbackScreen({ authAppId }: Props) {
   const [category, setCategory] = useState<FeedbackCategory>("feedback");
   const [message, setMessage] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -70,6 +71,12 @@ export function FeedbackScreen({ authAppId }: Props) {
 
       setMessage("");
       setFile(null);
+      // Clearing React state alone leaves the uncontrolled <input> holding
+      // its previous value, so re-picking the exact same file for a second
+      // report wouldn't fire onChange at all (the value wouldn't change).
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
       setCategory("feedback");
       setSuccess("Thanks! Your feedback was submitted.");
     } catch (err) {
@@ -121,6 +128,7 @@ export function FeedbackScreen({ authAppId }: Props) {
             aria-disabled={busy}
           >
             <input
+              ref={fileInputRef}
               type="file"
               accept="image/*,video/*"
               onChange={handleFileChange}
