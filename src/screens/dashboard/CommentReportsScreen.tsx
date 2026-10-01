@@ -219,6 +219,11 @@ export function CommentReportsScreen({ activeSchoolId, managedAppId }: Props) {
     detailReqRef.current += 1;
     pendingDeepLinkRef.current = null;
     setSummaries([]);
+    // The rows are gone, so no scope is loaded any more. Without this, a quick
+    // A → B → A (B's request never finishing) leaves loadedScope at "A" and
+    // the URL sync would treat the now-empty list as ready, consuming a
+    // restored ?report= before A's rows come back.
+    setLoadedScope("");
     setSelectedCommentUUID("");
     setDetail(null);
     setDetailBusy(false);
@@ -547,6 +552,16 @@ export function CommentReportsScreen({ activeSchoolId, managedAppId }: Props) {
                   {(detail.comment_text || detail.reported_comment_text || "").trim() ||
                     "(no text)"}
                 </blockquote>
+
+                {detail.reported_comment_text !== undefined &&
+                detail.reported_comment_text.trim() !== detail.comment_text.trim() ? (
+                  <div className="post-reports-snapshot">
+                    <p className="eyebrow">Text as reported (changed since)</p>
+                    <blockquote className="post-reports-post-text post-reports-post-text-snapshot">
+                      {detail.reported_comment_text.trim() || "(no text)"}
+                    </blockquote>
+                  </div>
+                ) : null}
 
                 <div className="post-reports-snapshot">
                   <p className="eyebrow">

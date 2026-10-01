@@ -219,6 +219,11 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     detailReqRef.current += 1;
     pendingDeepLinkRef.current = null;
     setSummaries([]);
+    // The rows are gone, so no scope is loaded any more. Without this, a quick
+    // A → B → A (B's request never finishing) leaves loadedScope at "A" and
+    // the URL sync would treat the now-empty list as ready, consuming a
+    // restored ?report= before A's rows come back.
+    setLoadedScope("");
     setSelectedActivityUUID("");
     setDetail(null);
     setDetailBusy(false);
