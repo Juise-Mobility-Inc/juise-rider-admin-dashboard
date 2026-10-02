@@ -4094,6 +4094,108 @@ export async function resolveSchoolSocialPostReport(
   );
 }
 
+// ── Social comment reports (content moderation) ─────────────────────────────
+
+export interface SocialCommentReport {
+  report_uuid: string;
+  app_id: string;
+  school_id: string;
+  activity_uuid: string;
+  comment_uuid: string;
+  reported_user_uuid: string;
+  reporter_user_uuid: string;
+  reason: string;
+  details?: string;
+  /** Comment text captured when this report was filed. */
+  reported_comment_text?: string;
+  status: "open" | "actioned" | "dismissed";
+  resolution?: "" | "comment_removed" | "user_banned" | "dismissed";
+  resolved_by_user_uuid?: string;
+  resolved_at?: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface SocialCommentReportSummary {
+  report: SocialCommentReport;
+  report_count: number;
+  comment_active: boolean;
+  comment_hidden: boolean;
+  comment_text: string;
+  comment_created_at: number;
+  reported_user?: SocialModerationUser;
+  latest_reporter?: SocialModerationUser;
+}
+
+export interface SocialCommentReportDetail {
+  comment_uuid: string;
+  activity_uuid: string;
+  school_id: string;
+  comment_text: string;
+  reported_comment_text?: string;
+  comment_active: boolean;
+  comment_hidden: boolean;
+  comment_created_at: number;
+  /** The post the comment was left on, for context. */
+  post_text: string;
+  post_author?: SocialModerationUser;
+  report_count: number;
+  reported_user?: SocialModerationUser;
+  reported_user_banned: boolean;
+  reports: SocialCommentReport[];
+  reporters: SocialModerationUser[];
+}
+
+export type SocialCommentReportAction = "remove_comment" | "dismiss" | "ban_user";
+
+export async function fetchSchoolSocialCommentReports(
+  managedAppId: string,
+  schoolId: string,
+  options: { status?: string; limit?: number; offset?: number } = {},
+): Promise<SocialCommentReportSummary[]> {
+  const query = new URLSearchParams();
+  if (options.status?.trim()) {
+    query.set("status", options.status.trim());
+  }
+  if (options.limit && options.limit > 0) {
+    query.set("limit", String(options.limit));
+  }
+  if (options.offset && options.offset > 0) {
+    query.set("offset", String(options.offset));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return request<SocialCommentReportSummary[]>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/social-comment-reports${suffix}`,
+    { appIdHeader: managedAppId },
+  );
+}
+
+export async function fetchSchoolSocialCommentReport(
+  managedAppId: string,
+  schoolId: string,
+  reportUUID: string,
+): Promise<SocialCommentReportDetail> {
+  return request<SocialCommentReportDetail>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/social-comment-reports/${encodeURIComponent(reportUUID)}`,
+    { appIdHeader: managedAppId },
+  );
+}
+
+export async function resolveSchoolSocialCommentReport(
+  managedAppId: string,
+  schoolId: string,
+  reportUUID: string,
+  action: SocialCommentReportAction,
+): Promise<SocialCommentReportDetail> {
+  return request<SocialCommentReportDetail>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/social-comment-reports/${encodeURIComponent(reportUUID)}/resolve`,
+    { method: "POST", body: { action }, appIdHeader: managedAppId },
+  );
+}
+
 export async function fetchSchoolParkingViolationHistory(
   managedAppId: string,
   schoolId: string,

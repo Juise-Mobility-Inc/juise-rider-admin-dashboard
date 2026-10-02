@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import {
-  fetchSchoolSocialPostReport,
-  fetchSchoolSocialPostReports,
-  resolveSchoolSocialPostReport,
+  fetchSchoolSocialCommentReport,
+  fetchSchoolSocialCommentReports,
+  resolveSchoolSocialCommentReport,
   type SocialModerationUser,
-  type SocialPostReportAction,
-  type SocialPostReportDetail,
-  type SocialPostReportSummary,
+  type SocialCommentReportAction,
+  type SocialCommentReportDetail,
+  type SocialCommentReportSummary,
 } from "../../lib/api";
 import { useDetailParamSync } from "../../lib/useDetailParamSync";
 
@@ -59,7 +59,7 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong.";
 }
 
-export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
+export function CommentReportsScreen({ activeSchoolId, managedAppId }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   // Keep the tab in the URL so a link to a report opened under "Resolved"
   // reloads on that tab — otherwise the default "open" query never contains
@@ -87,11 +87,11 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     },
     [setSearchParams],
   );
-  const [summaries, setSummaries] = useState<SocialPostReportSummary[]>([]);
+  const [summaries, setSummaries] = useState<SocialCommentReportSummary[]>([]);
   const [listBusy, setListBusy] = useState(false);
   const [error, setError] = useState("");
-  const [selectedActivityUUID, setSelectedActivityUUID] = useState("");
-  const [detail, setDetail] = useState<SocialPostReportDetail | null>(null);
+  const [selectedCommentUUID, setSelectedCommentUUID] = useState("");
+  const [detail, setDetail] = useState<SocialCommentReportDetail | null>(null);
   const [detailBusy, setDetailBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -125,7 +125,7 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     setListBusy(true);
     setError("");
     try {
-      const rows = await fetchSchoolSocialPostReports(managedAppId, reqSchool, {
+      const rows = await fetchSchoolSocialCommentReports(managedAppId, reqSchool, {
         status: reqTab,
         limit: PAGE_SIZE,
       });
@@ -166,7 +166,7 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     refreshListRef.current = refreshList;
   }, [refreshList]);
 
-  // Page past the server's per-request cap so no reported post is unreachable.
+  // Page past the server's per-request cap so no reported comment is unreachable.
   const loadMore = useCallback(async () => {
     // Never page while a full list load is running — loadMore shares
     // listReqRef and would invalidate the refresh, leaving it stuck.
@@ -179,7 +179,7 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     setLoadingMore(true);
     setError("");
     try {
-      const rows = await fetchSchoolSocialPostReports(managedAppId, activeSchoolId, {
+      const rows = await fetchSchoolSocialCommentReports(managedAppId, activeSchoolId, {
         status: tab,
         limit: PAGE_SIZE,
         offset: summaries.length,
@@ -188,10 +188,10 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
         return;
       }
       setSummaries((prev) => {
-        const seen = new Set(prev.map((row) => row.report.activity_uuid));
+        const seen = new Set(prev.map((row) => row.report.comment_uuid));
         return [
           ...prev,
-          ...rows.filter((row) => !seen.has(row.report.activity_uuid)),
+          ...rows.filter((row) => !seen.has(row.report.comment_uuid)),
         ];
       });
       setHasMore(rows.length >= PAGE_SIZE);
@@ -224,7 +224,7 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     // the URL sync would treat the now-empty list as ready, consuming a
     // restored ?report= before A's rows come back.
     setLoadedScope("");
-    setSelectedActivityUUID("");
+    setSelectedCommentUUID("");
     setDetail(null);
     setDetailBusy(false);
     setNotice("");
@@ -237,9 +237,9 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
 
   const selectedSummary = useMemo(
     () =>
-      summaries.find((row) => row.report.activity_uuid === selectedActivityUUID) ??
+      summaries.find((row) => row.report.comment_uuid === selectedCommentUUID) ??
       null,
-    [summaries, selectedActivityUUID],
+    [summaries, selectedCommentUUID],
   );
 
   const reporterByUUID = useMemo(() => {
@@ -253,11 +253,11 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
   }, [detail]);
 
   const loadDetail = useCallback(
-    async (reportUUID: string, activityUUID: string) => {
+    async (reportUUID: string, commentUUID: string) => {
       const reqId = ++detailReqRef.current;
-      setSelectedActivityUUID(activityUUID);
+      setSelectedCommentUUID(commentUUID);
       // Drop the previous report's detail immediately so its Remove / Ban
-      // buttons can't be fired against the wrong post while this loads.
+      // buttons can't be fired against the wrong comment while this loads.
       setDetail(null);
       setDetailBusy(true);
       setNotice("");
@@ -265,7 +265,7 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
       // doesn't sit above a report that actually loaded fine.
       setError("");
       try {
-        const next = await fetchSchoolSocialPostReport(
+        const next = await fetchSchoolSocialCommentReport(
           managedAppId,
           activeSchoolId,
           reportUUID,
@@ -281,7 +281,7 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
         setError(getErrorMessage(nextError));
         setDetail(null);
         // The load failed, so there's no valid detail to keep in the URL.
-        setSelectedActivityUUID("");
+        setSelectedCommentUUID("");
       } finally {
         if (reqId === detailReqRef.current) {
           setDetailBusy(false);
@@ -292,24 +292,24 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
   );
 
   // Keep the open report in the URL so browser back/forward closes/reopens the
-  // detail and a `?report=<activity_uuid>` link restores it once the list is in.
-  // Track selectedActivityUUID directly (not `detail && ...`) so switching from
+  // detail and a `?report=<comment_uuid>` link restores it once the list is in.
+  // Track selectedCommentUUID directly (not `detail && ...`) so switching from
   // one report to another goes A -> B in history, not A -> "" -> B; a failed
-  // load clears selectedActivityUUID so nothing broken lingers in the URL.
+  // load clears selectedCommentUUID so nothing broken lingers in the URL.
   useDetailParamSync(
     "report",
-    selectedActivityUUID,
+    selectedCommentUUID,
     (value) => {
       if (!value) {
         detailReqRef.current += 1;
         pendingDeepLinkRef.current = null;
-        setSelectedActivityUUID("");
+        setSelectedCommentUUID("");
         setDetail(null);
         setNotice("");
         return;
       }
       const match = summaries.find(
-        (row) => row.report.activity_uuid === value,
+        (row) => row.report.comment_uuid === value,
       );
       if (match) {
         pendingDeepLinkRef.current = null;
@@ -332,11 +332,11 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
       return;
     }
     const match = summaries.find(
-      (row) => row.report.activity_uuid === wanted,
+      (row) => row.report.comment_uuid === wanted,
     );
     if (match) {
       pendingDeepLinkRef.current = null;
-      if (selectedActivityUUID !== wanted) {
+      if (selectedCommentUUID !== wanted) {
         void loadDetail(match.report.report_uuid, wanted);
       }
     } else if (hasMore) {
@@ -349,12 +349,12 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     hasMore,
     loadingMore,
     scopeReady,
-    selectedActivityUUID,
+    selectedCommentUUID,
     loadDetail,
     loadMore,
   ]);
 
-  async function applyAction(action: SocialPostReportAction) {
+  async function applyAction(action: SocialCommentReportAction) {
     if (!detail) {
       return;
     }
@@ -363,11 +363,11 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
       return;
     }
     const confirmCopy =
-      action === "remove_post"
-        ? "Remove this post from the feed?"
+      action === "remove_comment"
+        ? "Remove this comment?"
         : action === "ban_user"
-          ? `Remove the post and ban ${userLabel(detail.reported_user)} from Social?`
-          : "Dismiss every report on this post and restore it?";
+          ? `Remove the comment and ban ${userLabel(detail.reported_user)} from Social? This also removes their other posts and comments.`
+          : "Dismiss every report on this comment and restore it?";
     if (!window.confirm(confirmCopy)) {
       return;
     }
@@ -378,7 +378,7 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
     const reqId = detailReqRef.current;
     setActionBusy(true);
     try {
-      const updated = await resolveSchoolSocialPostReport(
+      const updated = await resolveSchoolSocialCommentReport(
         managedAppId,
         activeSchoolId,
         anchor.report_uuid,
@@ -388,10 +388,10 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
         setDetail(updated);
         setNotice(
           action === "dismiss"
-            ? "Reports dismissed. Post restored."
+            ? "Reports dismissed. Comment restored."
             : action === "ban_user"
-              ? "Post removed and rider banned from Social."
-              : "Post removed.",
+              ? "Comment removed and rider banned from Social."
+              : "Comment removed.",
         );
       }
       await refreshListRef.current();
@@ -413,15 +413,15 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
   }
 
   return (
-    <section className="management-page post-reports-page">
+    <section className="management-page post-reports-page comment-reports-page">
       <section className="panel">
         <div className="panel-header">
           <div>
             <p className="eyebrow">Trust &amp; Safety</p>
-            <h2>Post Reports</h2>
+            <h2>Comment Reports</h2>
             <p className="muted-text">
-              Riders' reports on Social posts. A post is auto-hidden once three
-              different riders report it.
+              Riders' reports on comments under Social posts. A comment is
+              auto-hidden once three different riders report it.
             </p>
           </div>
           <div className="form-actions">
@@ -456,22 +456,22 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
             {summaries.length === 0 && !listBusy ? (
               <p className="empty-state">
                 {tab === "open"
-                  ? "No open post reports. Nice."
+                  ? "No open comment reports. Nice."
                   : "No resolved reports yet."}
               </p>
             ) : (
               summaries.map((row) => {
                 const isSelected =
-                  row.report.activity_uuid === selectedActivityUUID;
+                  row.report.comment_uuid === selectedCommentUUID;
                 return (
                   <button
-                    key={row.report.activity_uuid}
+                    key={row.report.comment_uuid}
                     type="button"
                     className={`post-reports-row ${isSelected ? "is-selected" : ""}`}
                     onClick={() =>
                       void loadDetail(
                         row.report.report_uuid,
-                        row.report.activity_uuid,
+                        row.report.comment_uuid,
                       )
                     }
                   >
@@ -483,18 +483,18 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
                       </span>
                     </div>
                     <p className="post-reports-snippet">
-                      {row.post_text.trim() || "(no text)"}
+                      {row.comment_text.trim() || "(no text)"}
                     </p>
                     <div className="post-reports-row-meta">
                       <span className="challenge-status-badge">
                         {reasonLabel(row.report.reason)}
                       </span>
-                      {row.post_hidden ? (
+                      {row.comment_hidden ? (
                         <span className="challenge-status-badge challenge-status-ended">
                           Hidden
                         </span>
                       ) : null}
-                      {!row.post_active ? (
+                      {!row.comment_active ? (
                         <span className="challenge-status-badge challenge-status-ended">
                           Removed
                         </span>
@@ -535,10 +535,10 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
               <>
                 <div className="panel-header">
                   <div>
-                    <p className="eyebrow">Reported post</p>
+                    <p className="eyebrow">Reported comment</p>
                     <h3>{userLabel(detail.reported_user)}</h3>
                     <p className="muted-text">
-                      Posted {formatWhen(detail.post_created_at)} ·{" "}
+                      Commented {formatWhen(detail.comment_created_at)} ·{" "}
                       {detail.report_count}{" "}
                       {detail.report_count === 1 ? "report" : "reports"}
                       {detail.reported_user_banned
@@ -549,25 +549,35 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
                 </div>
 
                 <blockquote className="post-reports-post-text">
-                  {detail.post_text.trim() || "(no text)"}
+                  {(detail.comment_text || detail.reported_comment_text || "").trim() ||
+                    "(no text)"}
                 </blockquote>
 
-                {detail.reported_post_text !== undefined &&
-                detail.reported_post_text.trim() !== detail.post_text.trim() ? (
+                {detail.reported_comment_text !== undefined &&
+                detail.reported_comment_text.trim() !== detail.comment_text.trim() ? (
                   <div className="post-reports-snapshot">
-                    <p className="eyebrow">Text as reported (post edited since)</p>
+                    <p className="eyebrow">Text as reported (changed since)</p>
                     <blockquote className="post-reports-post-text post-reports-post-text-snapshot">
-                      {detail.reported_post_text.trim() || "(no text)"}
+                      {detail.reported_comment_text.trim() || "(no text)"}
                     </blockquote>
                   </div>
                 ) : null}
 
+                <div className="post-reports-snapshot">
+                  <p className="eyebrow">
+                    On a post by {userLabel(detail.post_author)}
+                  </p>
+                  <blockquote className="post-reports-post-text post-reports-post-text-snapshot">
+                    {detail.post_text.trim() || "(no text)"}
+                  </blockquote>
+                </div>
+
                 <div className="post-reports-state-row">
                   <span
-                    className={`challenge-status-badge ${detail.post_active ? "" : "challenge-status-ended"}`}
+                    className={`challenge-status-badge ${detail.comment_active ? "" : "challenge-status-ended"}`}
                   >
-                    {detail.post_active
-                      ? detail.post_hidden
+                    {detail.comment_active
+                      ? detail.comment_hidden
                         ? "Live · hidden pending review"
                         : "Live"
                       : "Removed"}
@@ -617,10 +627,10 @@ export function PostReportsScreen({ activeSchoolId, managedAppId }: Props) {
                   <button
                     className="danger-button"
                     type="button"
-                    disabled={actionBusy || !detail.post_active}
-                    onClick={() => void applyAction("remove_post")}
+                    disabled={actionBusy || !detail.comment_active}
+                    onClick={() => void applyAction("remove_comment")}
                   >
-                    Remove post
+                    Remove comment
                   </button>
                   <button
                     className="danger-button"
