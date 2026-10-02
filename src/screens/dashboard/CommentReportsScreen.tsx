@@ -563,6 +563,15 @@ export function CommentReportsScreen({ activeSchoolId, managedAppId }: Props) {
                   </div>
                 ) : null}
 
+                {detail.parent_comment_text?.trim() ? (
+                  <div className="post-reports-snapshot">
+                    <p className="eyebrow">In reply to</p>
+                    <blockquote className="post-reports-post-text post-reports-post-text-snapshot">
+                      {detail.parent_comment_text.trim()}
+                    </blockquote>
+                  </div>
+                ) : null}
+
                 <div className="post-reports-snapshot">
                   <p className="eyebrow">
                     On a post by {userLabel(detail.post_author)}
