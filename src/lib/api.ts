@@ -4139,6 +4139,8 @@ export interface SocialCommentReportDetail {
   /** The post the comment was left on, for context. */
   post_text: string;
   post_author?: SocialModerationUser;
+  /** For a reported reply: the comment it was answering. */
+  parent_comment_text?: string;
   report_count: number;
   reported_user?: SocialModerationUser;
   reported_user_banned: boolean;
