@@ -98,6 +98,8 @@ import {
   type UserMediaAsset,
   type UserSchoolMembership,
   updateSchoolPack,
+  uploadPackCoverPhoto,
+  generateClientId,
 } from "./lib/api";
 import {
   buildDashboardThemeColors,
@@ -1922,6 +1924,14 @@ function App() {
   );
   const [packPhotoFile, setPackPhotoFile] = useState<File | null>(null);
   const [packPhotoPreviewUrl, setPackPhotoPreviewUrl] = useState("");
+  // Keyed on the exact File that was uploaded, so retrying a failed pack
+  // create reuses that upload instead of uploading another copy under a
+  // fresh client id - same pattern as FeedbackScreen's uploadedAttachment.
+  const [uploadedPackPhoto, setUploadedPackPhoto] = useState<{
+    file: File;
+    objectKey: string;
+    publicUrl: string;
+  } | null>(null);
   const [packBusy, setPackBusy] = useState(false);
   const [schoolPacks, setSchoolPacks] = useState<Pack[]>([]);
   const [packsLoading, setPacksLoading] = useState(false);
@@ -4895,6 +4905,7 @@ function App() {
     setPackDraft(createEmptyPackDraft(defaultCampusId ?? ""));
     setPackPhotoFile(null);
     setPackPhotoPreviewUrl("");
+    setUploadedPackPhoto(null);
   }
 
   function handlePackPhotoFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -5721,6 +5732,32 @@ function App() {
 
     setPackBusy(true);
     try {
+      let uploadedPhoto: { object_key: string; public_url: string } | null =
+        null;
+      if (photoFile) {
+        if (uploadedPackPhoto && uploadedPackPhoto.file === photoFile) {
+          uploadedPhoto = {
+            object_key: uploadedPackPhoto.objectKey,
+            public_url: uploadedPackPhoto.publicUrl,
+          };
+        } else {
+          // The pack doesn't have a pack_uuid yet at create time - a
+          // client-generated id is enough to namespace the upload, it
+          // doesn't need to match the pack_uuid hub-store-service mints.
+          const uploaded = await uploadPackCoverPhoto(
+            context.managedAppId,
+            generateClientId("pack"),
+            photoFile,
+          );
+          uploadedPhoto = uploaded;
+          setUploadedPackPhoto({
+            file: photoFile,
+            objectKey: uploaded.object_key,
+            publicUrl: uploaded.public_url,
+          });
+        }
+      }
+
       const campusId =
         draft.campus_id.trim() ||
         schoolDraft.default_campus_id.trim() ||
@@ -5741,7 +5778,7 @@ function App() {
             campus_id: campusId,
           },
         },
-        photoFile,
+        uploadedPhoto,
       );
 
       setSchoolPacks((current) =>

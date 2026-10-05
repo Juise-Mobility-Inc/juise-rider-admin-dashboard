@@ -2549,6 +2549,16 @@ function buildPackPhotoEntityUUID(managedAppId: string, packRef: string): string
   return `pack_photo.${appSegment}.${packSegment}`.slice(0, 128);
 }
 
+// crypto.randomUUID is unavailable on non-secure-context origins and in
+// some older browsers/webviews - same fallback App.tsx's makeDraftId uses,
+// since this only needs to be unique, not a real UUID.
+export function generateClientId(prefix: string): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 // Juise Pack cover photos upload through kca-proxy's Cloud Storage helper,
 // same as school logos/notification/challenge images - hub-store-service
 // never talks to GCS directly, it just gets told the resulting object key
@@ -2801,7 +2811,11 @@ export async function uploadFileToSignedUrl(
 export async function createSchoolPack(
   adminUser: string,
   input: PackCreateForSchoolInput,
-  photoFile?: File | null,
+  // The caller uploads the photo (via uploadPackCoverPhoto) and passes the
+  // result in, rather than this function uploading it - that way a failed
+  // create can be retried without re-uploading (and orphaning) the photo,
+  // the same way FeedbackScreen caches an attachment upload across retries.
+  uploadedPhoto?: { object_key: string; public_url: string } | null,
 ): Promise<Pack> {
   const formData = new FormData();
   if (input.name !== undefined) {
@@ -2818,17 +2832,9 @@ export async function createSchoolPack(
   if (input.school_owner.campus_id) {
     formData.append("school_owner_campus_id", input.school_owner.campus_id);
   }
-  if (photoFile) {
-    // The pack doesn't have a pack_uuid yet at create time - a random
-    // client-side token is enough to namespace the upload, it doesn't
-    // need to match the pack_uuid hub-store-service mints below.
-    const uploaded = await uploadPackCoverPhoto(
-      input.school_owner.app_id,
-      crypto.randomUUID(),
-      photoFile,
-    );
-    formData.append("photo_object_key", uploaded.object_key);
-    formData.append("photo_public_url", uploaded.public_url);
+  if (uploadedPhoto) {
+    formData.append("photo_object_key", uploadedPhoto.object_key);
+    formData.append("photo_public_url", uploadedPhoto.public_url);
   }
 
   return request<Pack>(
