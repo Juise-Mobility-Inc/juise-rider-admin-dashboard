@@ -2543,6 +2543,51 @@ function buildSchoolChallengeEntityUUID(
   return `school_challenge.${appSegment}.${schoolSegment}`.slice(0, 128);
 }
 
+function buildPackPhotoEntityUUID(managedAppId: string, packRef: string): string {
+  const appSegment = normalizeEntityMediaSegment(managedAppId, "app");
+  const packSegment = normalizeEntityMediaSegment(packRef, "pack");
+  return `pack_photo.${appSegment}.${packSegment}`.slice(0, 128);
+}
+
+// crypto.randomUUID is unavailable on non-secure-context origins and in
+// some older browsers/webviews - same fallback App.tsx's makeDraftId uses,
+// since this only needs to be unique, not a real UUID.
+export function generateClientId(prefix: string): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+// Juise Pack cover photos upload through kca-proxy's Cloud Storage helper,
+// same as school logos/notification/challenge images - hub-store-service
+// never talks to GCS directly, it just gets told the resulting object key
+// and public URL to store on the pack record.
+export async function uploadPackCoverPhoto(
+  managedAppId: string,
+  packRef: string,
+  file: File,
+): Promise<{ object_key: string; public_url: string }> {
+  const uploaded = await uploadUserEntityMediaViaProxy(
+    managedAppId,
+    {
+      entityType: "campaign_group",
+      entityUUID: buildPackPhotoEntityUUID(managedAppId, packRef),
+      slot: "pack_photo",
+      file,
+    },
+    currentSession?.authAppId ?? managedAppId,
+  );
+
+  const publicUrl =
+    uploaded.public_url?.trim() || uploaded.media.public_url?.trim() || "";
+  if (!publicUrl) {
+    throw new Error("Pack photo upload did not return a public URL.");
+  }
+
+  return { object_key: uploaded.media.object_key, public_url: publicUrl };
+}
+
 export async function initUserEntityMediaUpload(
   managedAppId: string,
   input: {
@@ -2766,7 +2811,11 @@ export async function uploadFileToSignedUrl(
 export async function createSchoolPack(
   adminUser: string,
   input: PackCreateForSchoolInput,
-  photoFile?: File | null,
+  // The caller uploads the photo (via uploadPackCoverPhoto) and passes the
+  // result in, rather than this function uploading it - that way a failed
+  // create can be retried without re-uploading (and orphaning) the photo,
+  // the same way FeedbackScreen caches an attachment upload across retries.
+  uploadedPhoto?: { object_key: string; public_url: string } | null,
 ): Promise<Pack> {
   const formData = new FormData();
   if (input.name !== undefined) {
@@ -2783,8 +2832,9 @@ export async function createSchoolPack(
   if (input.school_owner.campus_id) {
     formData.append("school_owner_campus_id", input.school_owner.campus_id);
   }
-  if (photoFile) {
-    formData.append("photo", photoFile);
+  if (uploadedPhoto) {
+    formData.append("photo_object_key", uploadedPhoto.object_key);
+    formData.append("photo_public_url", uploadedPhoto.public_url);
   }
 
   return request<Pack>(
@@ -2820,7 +2870,9 @@ export async function updateSchoolPack(
     formData.append("location_lng", String(input.location.lng));
   }
   if (photoFile) {
-    formData.append("photo", photoFile);
+    const uploaded = await uploadPackCoverPhoto(managedAppId, packUUID, photoFile);
+    formData.append("photo_object_key", uploaded.object_key);
+    formData.append("photo_public_url", uploaded.public_url);
   }
 
   return request<Pack>(

@@ -35,6 +35,10 @@ import { useDetailParamSync } from "../../lib/useDetailParamSync";
 import { useImageCropper } from "../../components/useImageCropper";
 import { IMAGE_ASPECT } from "../../lib/imageCrop";
 
+function getErrorMessage(error: unknown): string {
+        return error instanceof Error ? error.message : "Something went wrong.";
+}
+
 type ChallengeDraft = {
         challenge_uuid: string;
         challenge_type: "route_metric" | "scavenger_hunt";
@@ -849,6 +853,7 @@ export function ChallengesScreen(props: Props) {
         }>({ open: false, index: null, draft: emptyStopDraft });
 
         function openStopModal(index?: number) {
+                setStopImageError("");
                 if (index !== undefined) {
                         setStopModal({
                                 open: true,
@@ -897,6 +902,7 @@ export function ChallengesScreen(props: Props) {
         }
 
         const [stopImageBusy, setStopImageBusy] = useState(false);
+        const [stopImageError, setStopImageError] = useState("");
         const [screenTab, setScreenTab] = useState<
                 "list" | "details" | "participants"
         >("list");
@@ -961,6 +967,7 @@ export function ChallengesScreen(props: Props) {
                 const file = e.target.files?.[0];
                 e.target.value = "";
                 if (!file || !uploadStopImage) return;
+                setStopImageError("");
                 beginStopImageCrop(
                         file,
                         IMAGE_ASPECT.square,
@@ -972,9 +979,12 @@ export function ChallengesScreen(props: Props) {
         async function uploadCroppedStopImage(file: File) {
                 if (!uploadStopImage) return;
                 setStopImageBusy(true);
+                setStopImageError("");
                 try {
                         const url = await uploadStopImage(file);
                         updateModalDraft({ image_url: url });
+                } catch (error) {
+                        setStopImageError(getErrorMessage(error));
                 } finally {
                         setStopImageBusy(false);
                 }
@@ -1015,7 +1025,6 @@ export function ChallengesScreen(props: Props) {
 
         return (
                 <>
-                {stopImageCropModal}
                 <section
                         className={`panel challenge-master-panel ${isGamesMode ? "challenge-master-panel-games" : ""}`}>
                         {/* ── Page header ── */}
@@ -2953,6 +2962,9 @@ export function ChallengesScreen(props: Props) {
                                                                                                                         }}
                                                                                                                 />
                                                                                                         )}
+                                                                                                        {stopImageError && (
+                                                                                                                <p className="form-error">{stopImageError}</p>
+                                                                                                        )}
                                                                                                 </label>
 
                                                                                                 <label
@@ -2993,6 +3005,10 @@ export function ChallengesScreen(props: Props) {
                                         })()
                                 : null}
                 </section>
+                {/* Rendered after (not before) the stop editor modal above so it
+                    paints on top — both share the same fixed-overlay z-index,
+                    and the crop flow opens while the stop editor is still open. */}
+                {stopImageCropModal}
                 </>
         );
 }
