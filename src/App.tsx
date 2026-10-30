@@ -135,6 +135,7 @@ import { AuditLogScreen } from "./screens/dashboard/AuditLogScreen";
 import { ChallengesScreen } from "./screens/dashboard/ChallengesScreen";
 import { DashboardScreen } from "./screens/dashboard/DashboardScreen";
 import { BetaInvitesScreen } from "./screens/dashboard/BetaInvitesScreen";
+import { StaffScreen } from "./screens/dashboard/StaffScreen";
 import { StudentLeaderboardScreen } from "./screens/dashboard/StudentLeaderboardScreen";
 import { NotificationsScreen } from "./screens/dashboard/NotificationsScreen";
 import { FeedbackScreen } from "./screens/dashboard/FeedbackScreen";
@@ -179,6 +180,7 @@ type Section =
   | "students"
   | "studentLeaderboard"
   | "betaInvites"
+  | "staff"
   | "notifications"
   | "vehicleRegistrations"
   | "campusDevices"
@@ -235,6 +237,7 @@ const dashboardSections: Array<{
     label: "Beta Invites",
     path: "/beta-invites",
   },
+  { section: "staff", label: "Staff & Access", path: "/staff" },
   { section: "notifications", label: "Notifications", path: "/notifications" },
   {
     section: "vehicleRegistrations",
@@ -6872,6 +6875,43 @@ function App() {
     );
   }
 
+  // Officer-only accounts (enforcement officer somewhere, admin nowhere) use
+  // the parking enforcement app; the dashboard has nothing for them, and the
+  // join panel would otherwise invite them to request admin access.
+  if (
+    session?.claims.enforcement_officer &&
+    membershipsResolved &&
+    !schoolMembershipsLoading &&
+    !schoolMembershipsError &&
+    activeMemberships.length === 0
+  ) {
+    return (
+      <div className="login-shell">
+        <div className="login-center-card school-selection-card">
+          <img
+            src="/Juise_Icon_Bolt.png"
+            className="login-brand-icon"
+            alt="Juise"
+          />
+          <p className="login-brand-title">Juise Rider Admin Dashboard</p>
+          <div className="login-form-header school-selection-header">
+            <p className="eyebrow">Enforcement officer account</p>
+            <h2>Use the Juise Enforcement app</h2>
+            <p className="mfa-help">
+              Your account is set up for parking enforcement, which happens in
+              the Juise Enforcement app on your phone. Sign in there with this
+              same email and password. If you need dashboard access, ask an
+              admin of your school to change your level on their Staff page.
+            </p>
+          </div>
+          <button className="primary-button" type="button" onClick={handleLogout}>
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Show the picker when there's no selection, or when a persisted selection
   // could not be confirmed as an active membership once the lookup settled
   // (revoked, or the lookup failed). Otherwise the retry / error UI below is
@@ -7477,6 +7517,15 @@ function App() {
             managedAppId={context.managedAppId}
           />
         );
+      case "staff":
+        return (
+          <StaffScreen
+            key={activeSchoolId}
+            activeSchoolId={activeSchoolId}
+            managedAppId={context.managedAppId}
+            currentUserUuid={session?.claims.user_uuid ?? ""}
+          />
+        );
       case "notifications":
         return (
           <NotificationsScreen
@@ -8039,6 +8088,16 @@ function App() {
                     }
                   >
                     Beta Invites
+                  </NavLink>
+                  <NavLink
+                    to="/staff"
+                    className={({ isActive }) =>
+                      isActive
+                        ? "nav-sub-item nav-sub-item-active"
+                        : "nav-sub-item"
+                    }
+                  >
+                    Staff &amp; Access
                   </NavLink>
                 </div>
               )}
