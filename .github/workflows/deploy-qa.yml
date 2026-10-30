@@ -81,3 +81,46 @@ jobs:
           fi
           test "$(curl --fail --silent --output /dev/null --write-out '%{http_code}' "${URL}/health/live")" = "200"
           printf '## Dashboard QA\n\n- Image: `%s`\n- Revision: `%s`\n- Cloud Run URL: %s\n- Intended hostname: https://qa-dashboard.juisemobility.com\n' "${SERVICE_DIGEST_REF}" "${REVISION}" "${URL}" >> "${GITHUB_STEP_SUMMARY}"
+
+  # The TX-RAMP boundary's copy (tx-juise-rider-admin-dashboard): the same image as QA, run with
+  # its own service account, database and secrets (infrastructure-gcp
+  # services/txramp-preprod).
+  deploy_txramp:
+    name: Deploy the TX-RAMP copy
+    needs: deploy
+    runs-on: ubuntu-latest
+    environment: qa
+    env:
+      TX_SERVICE_NAME: tx-juise-rider-admin-dashboard
+
+    steps:
+      - name: Authenticate to Google Cloud without a service-account key
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Install Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Deploy and verify the TX-RAMP revision
+        run: |
+          set -euo pipefail
+          SERVICE_DIGEST_REF="$(gcloud artifacts docker images describe \
+            "${ARTIFACT_REGISTRY_HOST}/${GCP_PROJECT_ID}/${ARTIFACT_REGISTRY_REPOSITORY}/${IMAGE_NAME}:${GITHUB_SHA}" \
+            --format='value(image_summary.fully_qualified_digest)')"
+          test -n "${SERVICE_DIGEST_REF}"
+
+          gcloud run services update "${TX_SERVICE_NAME}" \
+            --image "${SERVICE_DIGEST_REF}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --quiet
+
+          REVISION="$(gcloud run services describe "${TX_SERVICE_NAME}" --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" --format='value(status.latestReadyRevisionName)')"
+          DEPLOYED="$(gcloud run revisions describe "${REVISION}" --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" --format='value(spec.containers[0].image)')"
+          if [[ "${DEPLOYED}" != "${SERVICE_DIGEST_REF}" ]]; then
+            echo "::error::${REVISION} runs ${DEPLOYED}, expected ${SERVICE_DIGEST_REF}."
+            exit 1
+          fi
+          printf '## TX-RAMP QA\n\n- Service: %s\n- Image: `%s`\n- Revision: `%s`\n' "${TX_SERVICE_NAME}" "${SERVICE_DIGEST_REF}" "${REVISION}" >> "${GITHUB_STEP_SUMMARY}"
