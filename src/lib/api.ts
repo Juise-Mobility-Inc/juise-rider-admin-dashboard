@@ -20,6 +20,10 @@ export interface AuthTokenBundle {
 
 export interface AccessClaims {
   admin: boolean;
+  school_admin?: boolean;
+  // Enforcement officer at one or more schools: uses the parking
+  // enforcement app, never this dashboard.
+  enforcement_officer?: boolean;
   user_uuid: string;
   app_id?: string;
   school_id?: string;
@@ -2245,6 +2249,81 @@ export async function revokeSchoolInvite(
   return request<SchoolEmailInvite>(
     "nebula",
     `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/invites/${encodeURIComponent(inviteUuid)}`,
+    {
+      method: "DELETE",
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
+export type SchoolStaffLevel = "admin" | "enforcement_officer";
+
+export interface SchoolStaffMember {
+  user_uuid: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  username: string;
+  level: SchoolStaffLevel;
+  created_at: number;
+  updated_at: number;
+}
+
+export async function fetchSchoolStaff(
+  managedAppId: string,
+  schoolId: string,
+): Promise<SchoolStaffMember[]> {
+  return request<SchoolStaffMember[]>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/staff`,
+    {
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
+// Adds an existing Dashboard account, found by email, at the given level.
+export async function addSchoolStaff(
+  managedAppId: string,
+  schoolId: string,
+  input: { email: string; level: SchoolStaffLevel },
+): Promise<SchoolStaffMember> {
+  return request<SchoolStaffMember>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/staff`,
+    {
+      method: "POST",
+      body: input,
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
+export async function updateSchoolStaffLevel(
+  managedAppId: string,
+  schoolId: string,
+  staffUuid: string,
+  level: SchoolStaffLevel,
+): Promise<SchoolStaffMember> {
+  return request<SchoolStaffMember>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/staff/${encodeURIComponent(staffUuid)}`,
+    {
+      method: "PUT",
+      body: { level },
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
+export async function removeSchoolStaff(
+  managedAppId: string,
+  schoolId: string,
+  staffUuid: string,
+): Promise<void> {
+  await request<unknown>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/staff/${encodeURIComponent(staffUuid)}`,
     {
       method: "DELETE",
       appIdHeader: managedAppId,
