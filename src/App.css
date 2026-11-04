@@ -19523,3 +19523,43 @@
                 grid-template-columns: minmax(0, 1fr);
         }
 }
+
+/* Enforcement officer view-only shell (OfficerViolationsView) */
+.officer-violations-shell {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+.officer-violations-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.officer-violations-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.penalty-report-readonly-details {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 0;
+}
+
+.penalty-report-readonly-details dt {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.penalty-report-readonly-details dd {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+}

@@ -2256,6 +2256,28 @@ export async function revokeSchoolInvite(
   );
 }
 
+export interface EnforcementOfficerMembership {
+  membership_uuid: string;
+  user_uuid: string;
+  app_id: string;
+  school_id: string;
+  active: boolean;
+}
+
+// The schools the signed-in user is an enforcement officer at.
+export async function fetchMyEnforcementOfficerMemberships(
+  managedAppId: string,
+  userUuid: string,
+): Promise<EnforcementOfficerMembership[]> {
+  return request<EnforcementOfficerMembership[]>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/user/${encodeURIComponent(userUuid)}/enforcement-officer-memberships`,
+    {
+      appIdHeader: managedAppId,
+    },
+  );
+}
+
 export type SchoolStaffLevel = "admin" | "enforcement_officer";
 
 export interface SchoolStaffMember {

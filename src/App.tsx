@@ -136,6 +136,7 @@ import { ChallengesScreen } from "./screens/dashboard/ChallengesScreen";
 import { DashboardScreen } from "./screens/dashboard/DashboardScreen";
 import { BetaInvitesScreen } from "./screens/dashboard/BetaInvitesScreen";
 import { StaffScreen } from "./screens/dashboard/StaffScreen";
+import { OfficerViolationsView } from "./screens/dashboard/OfficerViolationsView";
 import { StudentLeaderboardScreen } from "./screens/dashboard/StudentLeaderboardScreen";
 import { NotificationsScreen } from "./screens/dashboard/NotificationsScreen";
 import { FeedbackScreen } from "./screens/dashboard/FeedbackScreen";
@@ -6875,9 +6876,9 @@ function App() {
     );
   }
 
-  // Officer-only accounts (enforcement officer somewhere, admin nowhere) use
-  // the parking enforcement app; the dashboard has nothing for them, and the
-  // join panel would otherwise invite them to request admin access.
+  // Officer-only accounts (enforcement officer somewhere, admin nowhere) get
+  // a view-only list of their schools' violations and nothing else; the
+  // backend refuses officers every other dashboard route.
   if (
     session?.claims.enforcement_officer &&
     membershipsResolved &&
@@ -6886,29 +6887,11 @@ function App() {
     activeMemberships.length === 0
   ) {
     return (
-      <div className="login-shell">
-        <div className="login-center-card school-selection-card">
-          <img
-            src="/Juise_Icon_Bolt.png"
-            className="login-brand-icon"
-            alt="Juise"
-          />
-          <p className="login-brand-title">Juise Rider Admin Dashboard</p>
-          <div className="login-form-header school-selection-header">
-            <p className="eyebrow">Enforcement officer account</p>
-            <h2>Use the Juise Enforcement app</h2>
-            <p className="mfa-help">
-              Your account is set up for parking enforcement, which happens in
-              the Juise Enforcement app on your phone. Sign in there with this
-              same email and password. If you need dashboard access, ask an
-              admin of your school to change your level on their Staff page.
-            </p>
-          </div>
-          <button className="primary-button" type="button" onClick={handleLogout}>
-            Sign out
-          </button>
-        </div>
-      </div>
+      <OfficerViolationsView
+        managedAppId={context.managedAppId}
+        userUuid={session.claims.user_uuid}
+        onLogout={handleLogout}
+      />
     );
   }
 

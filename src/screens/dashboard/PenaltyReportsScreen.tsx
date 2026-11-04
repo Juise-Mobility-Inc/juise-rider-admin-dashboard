@@ -33,6 +33,9 @@ type Props = {
 	studentProfilePhotoUrls: Record<string, string>;
 	onOpenStudent: (membershipUUID: string) => void;
 	onOpenStudentDevice: (membershipUUID: string, deviceUUID: string) => void;
+	// Enforcement officers: view violations only. No edits, uploads, student
+	// or device screens, or ride (route history) tab.
+	readOnly?: boolean;
 };
 
 const openStatusTokens = ["reported", "awaiting_payment", "appealed", "under_review"];
@@ -396,6 +399,7 @@ export function PenaltyReportsScreen({
 	managedAppId,
 	onOpenStudentDevice,
 	onOpenStudent,
+	readOnly = false,
 	studentProfilePhotoUrls,
 	studentRoster,
 }: Props) {
@@ -941,16 +945,18 @@ export function PenaltyReportsScreen({
 							onClick={() => setListMode("history")}>
 							History
 						</button>
-						<button
-							className={
-								listMode === "ride"
-									? "penalty-report-list-tab penalty-report-list-tab-active"
-									: "penalty-report-list-tab"
-							}
-							type="button"
-							onClick={() => setListMode("ride")}>
-							Ride
-						</button>
+						{readOnly ? null : (
+							<button
+								className={
+									listMode === "ride"
+										? "penalty-report-list-tab penalty-report-list-tab-active"
+										: "penalty-report-list-tab"
+								}
+								type="button"
+								onClick={() => setListMode("ride")}>
+								Ride
+							</button>
+						)}
 					</div>
 					{listMode === "ride" ? (
 						rideLoadBusy ? (
@@ -1090,20 +1096,22 @@ export function PenaltyReportsScreen({
 												"Unavailable"}
 										</small>
 									</div>
-									<button
-										className="secondary-button penalty-report-student-link"
-										type="button"
-										disabled={!selectedRideItem.student}
-										onClick={() => {
-											if (selectedRideItem.student) {
-												onOpenStudent(
-													selectedRideItem.student.membership
-														.membership_uuid,
-												);
-											}
-										}}>
-										View Student
-									</button>
+									{readOnly ? null : (
+										<button
+											className="secondary-button penalty-report-student-link"
+											type="button"
+											disabled={!selectedRideItem.student}
+											onClick={() => {
+												if (selectedRideItem.student) {
+													onOpenStudent(
+														selectedRideItem.student.membership
+															.membership_uuid,
+													);
+												}
+											}}>
+											View Student
+										</button>
+									)}
 								</div>
 
 								<div className="ride-viol-info-card">
@@ -1229,19 +1237,21 @@ export function PenaltyReportsScreen({
 											"Unavailable"}
 									</small>
 								</div>
-								<button
-									className="secondary-button penalty-report-student-link"
-									type="button"
-									disabled={!selectedStudentEntry}
-									onClick={() => {
-										if (selectedStudentEntry) {
-											onOpenStudent(
-												selectedStudentEntry.membership.membership_uuid,
-											);
-										}
-									}}>
-									View Student
-								</button>
+								{readOnly ? null : (
+									<button
+										className="secondary-button penalty-report-student-link"
+										type="button"
+										disabled={!selectedStudentEntry}
+										onClick={() => {
+											if (selectedStudentEntry) {
+												onOpenStudent(
+													selectedStudentEntry.membership.membership_uuid,
+												);
+											}
+										}}>
+										View Student
+									</button>
+								)}
 							</div>
 							<div className="penalty-report-device-card">
 								<div className="penalty-report-device-thumb">
@@ -1265,20 +1275,22 @@ export function PenaltyReportsScreen({
 									</strong>
 									<small>{formatDeviceMeta(selectedDevice)}</small>
 								</div>
-								<button
-									className="secondary-button penalty-report-device-link"
-									type="button"
-									disabled={!selectedStudentEntry || !selectedDeviceUUID}
-									onClick={() => {
-										if (selectedStudentEntry && selectedDeviceUUID) {
-											onOpenStudentDevice(
-												selectedStudentEntry.membership.membership_uuid,
-												selectedDeviceUUID,
-											);
-										}
-									}}>
-									View Device
-								</button>
+								{readOnly ? null : (
+									<button
+										className="secondary-button penalty-report-device-link"
+										type="button"
+										disabled={!selectedStudentEntry || !selectedDeviceUUID}
+										onClick={() => {
+											if (selectedStudentEntry && selectedDeviceUUID) {
+												onOpenStudentDevice(
+													selectedStudentEntry.membership.membership_uuid,
+													selectedDeviceUUID,
+												);
+											}
+										}}>
+										View Device
+									</button>
+								)}
 							</div>
 							<div>
 								<span>Reported</span>
@@ -1359,7 +1371,38 @@ export function PenaltyReportsScreen({
 							))}
 						</div>
 
-						{detailTab === "details" ? (
+						{detailTab === "details" && readOnly ? (
+							<dl className="penalty-report-readonly-details">
+								<div>
+									<dt>Status</dt>
+									<dd>{formatStatus(selectedReport.status)}</dd>
+								</div>
+								<div>
+									<dt>Violation type</dt>
+									<dd>{selectedReport.violation_type ? formatStatus(selectedReport.violation_type) : "Unspecified"}</dd>
+								</div>
+								<div>
+									<dt>Amount</dt>
+									<dd>{formatCurrencyFromCents(selectedReport.payment_amount_cents)}</dd>
+								</div>
+								<div>
+									<dt>Description</dt>
+									<dd>{selectedReport.description || "None"}</dd>
+								</div>
+								{selectedReport.appeal_description ? (
+									<div>
+										<dt>Appeal</dt>
+										<dd>{selectedReport.appeal_description}</dd>
+									</div>
+								) : null}
+								<div>
+									<dt>Location</dt>
+									<dd>{formatViolationCoordinates(selectedReport)}</dd>
+								</div>
+							</dl>
+						) : null}
+
+						{detailTab === "details" && !readOnly ? (
 							<>
 								{isPaidLocked ? (
 									<div className="vr-paid-lock">
@@ -1495,18 +1538,20 @@ export function PenaltyReportsScreen({
 										<h4>Photos</h4>
 										<span>{media.length.toLocaleString()} attached</span>
 									</div>
-									<label className="secondary-button penalty-report-upload-button">
-										{uploadBusy ? "Uploading..." : "Add Photo"}
-										<input
-											type="file"
-											accept="image/*"
-											disabled={uploadBusy}
-											onChange={(event) => {
-												handleFileSelected(event.target.files);
-												event.target.value = "";
-											}}
-										/>
-									</label>
+									{readOnly ? null : (
+										<label className="secondary-button penalty-report-upload-button">
+											{uploadBusy ? "Uploading..." : "Add Photo"}
+											<input
+												type="file"
+												accept="image/*"
+												disabled={uploadBusy}
+												onChange={(event) => {
+													handleFileSelected(event.target.files);
+													event.target.value = "";
+												}}
+											/>
+										</label>
+									)}
 								</div>
 								{media.length === 0 ? (
 									<p className="empty-state">No photos attached yet.</p>
