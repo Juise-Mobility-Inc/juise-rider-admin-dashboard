@@ -5,6 +5,7 @@ import {
   uploadUserEntityMedia,
   type FeedbackCategory,
 } from "../../lib/api";
+import { getClientInfo } from "../../lib/client-info";
 
 type Props = {
   authAppId: string;
@@ -97,6 +98,7 @@ export function FeedbackScreen({ authAppId }: Props) {
         message: trimmedMessage,
         attachment_object_key: attachmentObjectKey,
         attachment_content_type: attachmentContentType,
+        client_info: await getClientInfo(),
       });
 
       setMessage("");
