@@ -7,6 +7,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useDetailParamSync } from "../../lib/useDetailParamSync";
 import { StudentEventMiniMap } from "../../components/StudentEventMiniMap";
+import { StudentParkingPassActivity } from "./StudentParkingPassActivity";
 import {
         csvObjectRow,
         downloadCsv,
@@ -921,7 +922,7 @@ export function StudentsScreen(props: Props) {
 
         const [detailTab, setDetailTab] = useState<DetailTab>("profile");
         const [activitySubTab, setActivitySubTab] = useState<
-                "speed" | "nogo" | "pois"
+                "speed" | "nogo" | "pois" | "passes"
         >("speed");
         const [expandedActivityKey, setExpandedActivityKey] = useState<string | null>(
                 null,
@@ -1854,6 +1855,12 @@ export function StudentsScreen(props: Props) {
                                                                                                                         </span>
                                                                                                                 )}
                                                                                                         </button>
+                                                                                                        <button
+                                                                                                        	type="button"
+                                                                                                        	className={`student-subtab-btn${activitySubTab === "passes" ? " student-tab-btn-active" : ""}`}
+                                                                                                        	onClick={() => setActivitySubTab("passes")}>
+                                                                                                        	Parking Pass
+                                                                                                        </button>
                                                                                                         {/* {penaltyEvents.length > 0 && (
                                                                                                                 <span
                                                                                                                         className="student-badge student-badge-muted"
@@ -1864,6 +1871,17 @@ export function StudentsScreen(props: Props) {
                                                                                                                 </span>
                                                                                                         )} */}
                                                                                                 </div>
+                                                                                        )}
+                                                                                        {detailTab === "activity" && activitySubTab === "passes" && (
+                                                                                        	<StudentParkingPassActivity
+                                                                                        		key={`${activeSchoolId}:${selectedStudentUserUUID}`}
+                                                                                        		managedAppId={managedAppId}
+                                                                                        		schoolId={activeSchoolId}
+                                                                                        		userUuid={selectedStudentUserUUID}
+                                                                                        		adminUserUuid={adminUserUUID ?? ""}
+                                                                                        		devices={matchedStudentProfile?.devices ?? []}
+                                                                                        		studentName={fullName}
+                                                                                        	/>
                                                                                         )}
                                                                                         {detailTab === "activity" &&
                                                                                                 activitySubTab === "pois" && (
@@ -2102,7 +2120,7 @@ export function StudentsScreen(props: Props) {
                                                                                                 )}
 
                                                                                         {detailTab === "activity" &&
-                                                                                                activitySubTab !== "pois" && (
+                                                                                                (activitySubTab === "speed" || activitySubTab === "nogo") && (
                                                                                                         <div className="data-section">
                                                                                                                 <div className="data-section-header">
                                                                                                                         <h4>

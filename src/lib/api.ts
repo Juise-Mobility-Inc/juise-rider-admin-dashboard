@@ -591,6 +591,8 @@ export interface RegisteredDevice {
   registration_payment_transaction_id?: string | null;
   registration_payment_error?: string;
   qr_unlocked_at?: number | null;
+  // The vehicle's active pre-printed parking pass, if any.
+  parking_pass?: ParkingPassSummary | null;
   created_at: number;
   updated_at: number;
 }
@@ -2350,6 +2352,126 @@ export async function removeSchoolStaff(
       method: "DELETE",
       appIdHeader: managedAppId,
     },
+  );
+}
+
+// Pre-printed parking passes. A pass's QR code is its pass_uuid; students
+// activate passes on their vehicles in the Rider App.
+export type ParkingPassStatus = "unassigned" | "active" | "inactive";
+export type ParkingPassDeactivatedReason = "replaced" | "lost" | "admin" | "device_deleted";
+
+export interface ParkingPassSummary {
+  pass_uuid: string;
+  status: ParkingPassStatus;
+  activated_at: number | null;
+}
+
+export interface SchoolParkingPass {
+  pass_uuid: string;
+  app_id: string;
+  school_id: string;
+  batch_uuid: string;
+  status: ParkingPassStatus;
+  registered_device_uuid: string | null;
+  user_uuid: string | null;
+  tags: string[];
+  created_at: number;
+  activated_at: number | null;
+  deactivated_at: number | null;
+  deactivated_reason: ParkingPassDeactivatedReason | null;
+  replaced_by_pass_uuid: string | null;
+  updated_at: number;
+  student_name: string;
+  student_email: string;
+  student_membership_uuid: string | null;
+  vehicle_name: string;
+}
+
+export type ParkingPassEventType =
+  | "created"
+  | "activated"
+  | "replaced"
+  | "reported_lost"
+  | "deactivated"
+  | "device_deleted";
+
+export interface ParkingPassEvent {
+  event_uuid: string;
+  pass_uuid: string;
+  school_id: string;
+  user_uuid: string | null;
+  registered_device_uuid: string | null;
+  event_type: ParkingPassEventType;
+  actor_user_uuid: string;
+  note: string;
+  created_at: number;
+}
+
+export interface SchoolParkingPassDetail {
+  pass: SchoolParkingPass;
+  events: ParkingPassEvent[];
+}
+
+function schoolParkingPassesPath(managedAppId: string, schoolId: string): string {
+  return `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/parking-passes`;
+}
+
+export async function fetchSchoolParkingPasses(
+  managedAppId: string,
+  schoolId: string,
+): Promise<SchoolParkingPass[]> {
+  return request<SchoolParkingPass[]>("nebula", schoolParkingPassesPath(managedAppId, schoolId), {
+    appIdHeader: managedAppId,
+  });
+}
+
+export async function fetchSchoolParkingPass(
+  managedAppId: string,
+  schoolId: string,
+  passUuid: string,
+): Promise<SchoolParkingPassDetail> {
+  return request<SchoolParkingPassDetail>(
+    "nebula",
+    `${schoolParkingPassesPath(managedAppId, schoolId)}/${encodeURIComponent(passUuid)}`,
+    { appIdHeader: managedAppId },
+  );
+}
+
+export async function updateParkingPassTags(
+  managedAppId: string,
+  schoolId: string,
+  input: { pass_uuids: string[]; add: string[]; remove: string[] },
+): Promise<{ updated: number }> {
+  return request<{ updated: number }>("nebula", `${schoolParkingPassesPath(managedAppId, schoolId)}/tags`, {
+    method: "PUT",
+    body: input,
+    appIdHeader: managedAppId,
+  });
+}
+
+export async function deactivateParkingPass(
+  managedAppId: string,
+  schoolId: string,
+  passUuid: string,
+  note: string,
+): Promise<SchoolParkingPass> {
+  return request<SchoolParkingPass>(
+    "nebula",
+    `${schoolParkingPassesPath(managedAppId, schoolId)}/${encodeURIComponent(passUuid)}/deactivate`,
+    { method: "POST", body: { note }, appIdHeader: managedAppId },
+  );
+}
+
+// A student's parking pass history at one school (student activity tab).
+export async function fetchStudentParkingPassEvents(
+  managedAppId: string,
+  userUuid: string,
+  schoolId: string,
+): Promise<ParkingPassEvent[]> {
+  return request<ParkingPassEvent[]>(
+    "nebula",
+    `/api/v1/apps/${encodeURIComponent(managedAppId)}/user/${encodeURIComponent(userUuid)}/parking-pass-events?school_id=${encodeURIComponent(schoolId)}`,
+    { appIdHeader: managedAppId },
   );
 }
 
