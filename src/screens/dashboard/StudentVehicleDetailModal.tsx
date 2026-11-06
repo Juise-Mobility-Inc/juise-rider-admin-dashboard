@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import QRCode from "qrcode";
+import { useMemo } from "react";
 
 import {
   getRegisteredDeviceBeaconInfo,
   type RegisteredDevice,
   type UserMediaAsset,
 } from "../../lib/api";
+import { shortPassId } from "../../lib/parkingPasses";
 
 type Props = {
   device: RegisteredDevice;
@@ -18,19 +18,6 @@ type Props = {
   onPreviewImage: (imageUrl: string, alt: string, label?: string) => void;
   formatUnixTimestamp: (value?: number) => string;
 };
-
-type QrDescriptor = {
-  value: string;
-  source: string;
-  isGenerated: boolean;
-};
-
-const qrMetadataKeys = [
-  "qr_code",
-  "qr_value",
-  "scan_value",
-  "qr_payload",
-] as const;
 
 const mediaSlotPriority: Record<string, number> = {
   photo: 0,
@@ -55,35 +42,6 @@ function titleCase(value: string): string {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-}
-
-function resolveDeviceQrDescriptor(device: RegisteredDevice): QrDescriptor {
-  const metadata = getMetadataRecord(device.metadata);
-  for (const key of qrMetadataKeys) {
-    const value = getStringValue(metadata[key]);
-    if (value) {
-      return {
-        value,
-        source: titleCase(key),
-        isGenerated: false,
-      };
-    }
-  }
-
-  return {
-    value: device.registered_device_uuid,
-    source: "Registered Device UUID",
-    isGenerated: true,
-  };
-}
-
-function isDeviceQrUnlocked(device: RegisteredDevice): boolean {
-  return Boolean(
-    device.qr_unlocked_at &&
-      device.registration_status === "approved" &&
-      ((device.payment_status ?? "not_required") === "not_required" ||
-        device.payment_status === "paid"),
-  );
 }
 
 function resolveBikeIndexMetadata(
@@ -124,12 +82,9 @@ export function StudentVehicleDetailModal({
   onPreviewImage,
   formatUnixTimestamp,
 }: Props) {
-  const qrDescriptor = useMemo(() => resolveDeviceQrDescriptor(device), [device]);
-  const qrUnlocked = isDeviceQrUnlocked(device);
+  const parkingPass = device.parking_pass ?? null;
   const bikeIndexMetadata = useMemo(() => resolveBikeIndexMetadata(device), [device]);
   const beaconInfo = useMemo(() => getRegisteredDeviceBeaconInfo(device), [device]);
-  const [qrDataUrl, setQrDataUrl] = useState("");
-  const [qrBusy, setQrBusy] = useState(false);
 
   const bikeIndexUrl =
     getStringValue(bikeIndexMetadata.bike_url) ||
@@ -158,65 +113,6 @@ export function StudentVehicleDetailModal({
         .filter((item) => item.url),
     [mediaAssets, signedMediaUrls],
   );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function generateQrPreview() {
-      if (!qrDescriptor.value) {
-        setQrDataUrl("");
-        return;
-      }
-
-      try {
-        setQrBusy(true);
-        const nextQrDataUrl = await QRCode.toDataURL(qrDescriptor.value, {
-          errorCorrectionLevel: "M",
-          margin: 1,
-          width: 420,
-          color: {
-            dark: "#0E2219",
-            light: "#FFFFFFFF",
-          },
-        });
-        if (!cancelled) {
-          setQrDataUrl(nextQrDataUrl);
-        }
-      } catch {
-        if (!cancelled) {
-          setQrDataUrl("");
-        }
-      } finally {
-        if (!cancelled) {
-          setQrBusy(false);
-        }
-      }
-    }
-
-    void generateQrPreview();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [qrDescriptor.value]);
-
-  const handleDownloadQr = () => {
-    if (!qrDataUrl) {
-      return;
-    }
-
-    const anchor = document.createElement("a");
-    anchor.href = qrDataUrl;
-    anchor.download = `${(device.nickname || device.registered_device_uuid)
-      .trim()
-      .replace(/[^a-z0-9-_]+/gi, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "")
-      .toLowerCase() || "device"}-qr.png`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-  };
 
   return (
     <div
@@ -282,65 +178,47 @@ export function StudentVehicleDetailModal({
 
           <div className="vehicle-modal-qr-card">
             <div className="data-section-header">
-              <h4>Device QR code</h4>
+              <h4>Parking pass</h4>
             </div>
-            {qrUnlocked && qrDataUrl ? (
-              <img
-                className="vehicle-modal-qr-image"
-                src={qrDataUrl}
-                alt={`${device.nickname || device.device_type} QR code`}
-              />
-            ) : (
-              <div className="vehicle-modal-qr-placeholder">
-                {!qrUnlocked
-                  ? "QR locked until approval and payment"
-                  : qrBusy
-                    ? "Generating QR…"
-                    : "QR preview unavailable"}
-              </div>
-            )}
-            <p className="vehicle-modal-qr-meta">
-              {!qrUnlocked
-                ? "Pending, declined, and payment-due devices are not valid for enforcement scans."
-                : qrDescriptor.isGenerated
-                ? `No saved QR payload was found, so this QR was generated from the ${qrDescriptor.source}.`
-                : `Using the saved ${qrDescriptor.source} value for this device.`}
-            </p>
-            <div className="vehicle-modal-action-row">
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={handleDownloadQr}
-                disabled={!qrUnlocked || !qrDataUrl}
-              >
-                {qrDescriptor.isGenerated ? "Download generated QR" : "Download QR"}
-              </button>
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={() => void onCopy("device scan value", qrDescriptor.value)}
-                disabled={!qrUnlocked}
-              >
-                Copy scan value
-              </button>
-            </div>
-            <div className="uuid-copy-stack">
-              <div className="uuid-copy-card">
-                <span className="uuid-copy-label">scan_value</span>
-                <div className="uuid-copy-row">
-                  <code className="uuid-copy-value" title={qrDescriptor.value}>
-                    {qrDescriptor.value}
-                  </code>
-                  <button
-                    className="secondary-button uuid-copy-button"
-                    type="button"
-                    onClick={() => void onCopy("device scan value", qrDescriptor.value)}
-                  >
-                    Copy
-                  </button>
+            {parkingPass ? (
+              <>
+                <div className="vehicle-modal-qr-placeholder">
+                  <strong>{shortPassId(parkingPass.pass_uuid)}</strong>
                 </div>
-              </div>
-            </div>
+                <p className="vehicle-modal-qr-meta">
+                  Active
+                  {parkingPass.activated_at
+                    ? ` since ${formatUnixTimestamp(parkingPass.activated_at)}`
+                    : ""}
+                  . The student activated this pre-printed pass in the Rider App.
+                </p>
+                <div className="uuid-copy-stack">
+                  <div className="uuid-copy-card">
+                    <span className="uuid-copy-label">pass_uuid</span>
+                    <div className="uuid-copy-row">
+                      <code className="uuid-copy-value" title={parkingPass.pass_uuid}>
+                        {parkingPass.pass_uuid}
+                      </code>
+                      <button
+                        className="secondary-button uuid-copy-button"
+                        type="button"
+                        onClick={() => void onCopy("parking pass", parkingPass.pass_uuid)}
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="vehicle-modal-qr-placeholder">No active pass</div>
+                <p className="vehicle-modal-qr-meta">
+                  This vehicle has no active parking pass. Enforcement can't match it until the
+                  student scans a pre-printed pass in the Rider App.
+                </p>
+              </>
+            )}
           </div>
         </div>
 
@@ -370,8 +248,8 @@ export function StudentVehicleDetailModal({
               <strong>{device.payment_status || "not_required"}</strong>
             </div>
             <div className="detail-row">
-              <span>QR access</span>
-              <strong>{qrUnlocked ? "Unlocked" : "Locked"}</strong>
+              <span>Parking pass</span>
+              <strong>{parkingPass ? shortPassId(parkingPass.pass_uuid) : "None"}</strong>
             </div>
             <div className="detail-row">
               <span>Make &amp; model</span>

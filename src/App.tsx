@@ -155,6 +155,7 @@ import { SchoolProfileScreen } from "./screens/dashboard/SchoolProfileScreen";
 import { StudentVehicleDetailModal } from "./screens/dashboard/StudentVehicleDetailModal";
 import { StudentsScreen } from "./screens/dashboard/StudentsScreen";
 import { VehicleRegistrationsScreen } from "./screens/dashboard/VehicleRegistrationsScreen";
+import { ParkingPassesScreen } from "./screens/dashboard/ParkingPassesScreen";
 import { ViolationFeesScreen } from "./screens/dashboard/ViolationFeesScreen";
 import { ZonesScreen } from "./screens/dashboard/ZonesScreen";
 import { MapOverviewScreen } from "./screens/dashboard/MapOverviewScreen";
@@ -184,6 +185,7 @@ type Section =
   | "staff"
   | "notifications"
   | "vehicleRegistrations"
+  | "parkingPasses"
   | "campusDevices"
   | "registrationFees"
   | "penaltyReports"
@@ -245,6 +247,7 @@ const dashboardSections: Array<{
     label: "Vehicle Registrations",
     path: "/vehicle-registrations",
   },
+  { section: "parkingPasses", label: "Parking Passes", path: "/parking-passes" },
   {
     section: "campusDevices",
     label: "Campus Devices",
@@ -7532,6 +7535,17 @@ function App() {
             managedAppId={context.managedAppId}
           />
         );
+      case "parkingPasses":
+        return (
+          <ParkingPassesScreen
+            key={activeSchoolId}
+            activeSchoolId={activeSchoolId}
+            managedAppId={context.managedAppId}
+            onOpenVehicle={(membershipUuid, deviceUuid) =>
+              void handleOpenStudentDeviceFromDashboard(membershipUuid, deviceUuid)
+            }
+          />
+        );
       case "campusDevices":
         return (
           <CampusDevicesScreen
@@ -8134,6 +8148,16 @@ function App() {
                       pendingVehicleCount > 0 && (
                         <span className="nav-badge">{pendingVehicleCount}</span>
                       )}
+                  </NavLink>
+                  <NavLink
+                    to="/parking-passes"
+                    className={({ isActive }) =>
+                      isActive
+                        ? "nav-sub-item nav-sub-item-active"
+                        : "nav-sub-item"
+                    }
+                  >
+                    Parking Passes
                   </NavLink>
                   <NavLink
                     to="/registration-fees"
