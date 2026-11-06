@@ -149,11 +149,17 @@ export async function getClientInfo(): Promise<ClientInfo> {
           .catch(() => undefined),
         500,
       );
-      const brand =
-        pickBrand(hints?.fullVersionList) ?? pickBrand(uaData.brands);
+      const fullBrand = pickBrand(hints?.fullVersionList);
+      const brand = fullBrand ?? pickBrand(uaData.brands);
       if (brand) {
         info.browser_name = BRAND_NAMES[brand.brand] ?? brand.brand;
-        info.browser_version = brand.version;
+        // Low-entropy brands carry only the major version ("142"). If the
+        // hints failed or timed out, keep the full version parsed from the
+        // User-Agent ("142.0.3595.53") when it has the same major.
+        const parsedMajor = info.browser_version?.split(".")[0];
+        if (fullBrand || parsedMajor !== brand.version.split(".")[0]) {
+          info.browser_version = brand.version;
+        }
       }
       const os = osFromHints(
         hints?.platform ?? uaData.platform,
