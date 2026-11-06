@@ -1598,6 +1598,7 @@ export async function submitFeedback(input: {
   message: string;
   attachment_object_key?: string;
   attachment_content_type?: string;
+  client_info?: Record<string, string>;
 }): Promise<void> {
   const appId = currentSession?.authAppId ?? "juise_rider_admin_dashboard";
   await request("nebula", `/api/v1/apps/${encodeURIComponent(appId)}/feedback`, {
