@@ -124,6 +124,12 @@ export function ParkingPassesScreen({
     return [...tags].sort();
   }, [passes]);
 
+  // A tag filter for a tag no pass has any more (e.g. after removing it from
+  // every pass) would hide every pass along with the tag buttons, so drop it.
+  useEffect(() => {
+    if (tagFilter && !allTags.includes(tagFilter)) setTagFilter("");
+  }, [allTags, tagFilter]);
+
   const counts = useMemo(() => {
     const next = { unassigned: 0, active: 0, inactive: 0 };
     for (const pass of passes) next[pass.status] += 1;
