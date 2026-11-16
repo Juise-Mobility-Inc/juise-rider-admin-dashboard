@@ -3,7 +3,7 @@ import type { ParkingPassEvent } from "./api";
 export const parkingPassEventLabels: Record<ParkingPassEvent["event_type"], string> = {
   created: "Printed",
   activated: "Activated",
-  replaced: "Replaced by a new pass",
+  replaced: "Replaced by a new tag",
   reported_lost: "Reported lost",
   deactivated: "Deactivated by admin",
   device_deleted: "Vehicle deleted",

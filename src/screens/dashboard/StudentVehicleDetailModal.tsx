@@ -178,7 +178,7 @@ export function StudentVehicleDetailModal({
 
           <div className="vehicle-modal-qr-card">
             <div className="data-section-header">
-              <h4>Parking pass</h4>
+              <h4>Device identification tag</h4>
             </div>
             {parkingPass ? (
               <>
@@ -190,11 +190,11 @@ export function StudentVehicleDetailModal({
                   {parkingPass.activated_at
                     ? ` since ${formatUnixTimestamp(parkingPass.activated_at)}`
                     : ""}
-                  . The student activated this pre-printed pass in the Rider App.
+                  . The student activated this pre-printed tag in the Rider App.
                 </p>
                 <div className="uuid-copy-stack">
                   <div className="uuid-copy-card">
-                    <span className="uuid-copy-label">pass_uuid</span>
+                    <span className="uuid-copy-label">tag_id</span>
                     <div className="uuid-copy-row">
                       <code className="uuid-copy-value" title={parkingPass.pass_uuid}>
                         {parkingPass.pass_uuid}
@@ -212,10 +212,10 @@ export function StudentVehicleDetailModal({
               </>
             ) : (
               <>
-                <div className="vehicle-modal-qr-placeholder">No active pass</div>
+                <div className="vehicle-modal-qr-placeholder">No active tag</div>
                 <p className="vehicle-modal-qr-meta">
-                  This vehicle has no active parking pass. Enforcement can't match it until the
-                  student scans a pre-printed pass in the Rider App.
+                  This vehicle has no active device identification tag. Enforcement can't match it until
+                  the student scans a pre-printed tag in the Rider App.
                 </p>
               </>
             )}
@@ -248,7 +248,7 @@ export function StudentVehicleDetailModal({
               <strong>{device.payment_status || "not_required"}</strong>
             </div>
             <div className="detail-row">
-              <span>Parking pass</span>
+              <span>ID tag</span>
               <strong>{parkingPass ? shortPassId(parkingPass.pass_uuid) : "None"}</strong>
             </div>
             <div className="detail-row">

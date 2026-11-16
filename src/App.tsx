@@ -247,7 +247,7 @@ const dashboardSections: Array<{
     label: "Vehicle Registrations",
     path: "/vehicle-registrations",
   },
-  { section: "parkingPasses", label: "Parking Passes", path: "/parking-passes" },
+  { section: "parkingPasses", label: "Device ID Tags", path: "/device-tags" },
   {
     section: "campusDevices",
     label: "Campus Devices",
@@ -8150,14 +8150,14 @@ function App() {
                       )}
                   </NavLink>
                   <NavLink
-                    to="/parking-passes"
+                    to="/device-tags"
                     className={({ isActive }) =>
                       isActive
                         ? "nav-sub-item nav-sub-item-active"
                         : "nav-sub-item"
                     }
                   >
-                    Parking Passes
+                    Device ID Tags
                   </NavLink>
                   <NavLink
                     to="/registration-fees"

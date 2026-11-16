@@ -1859,7 +1859,7 @@ export function StudentsScreen(props: Props) {
                                                                                                         	type="button"
                                                                                                         	className={`student-subtab-btn${activitySubTab === "passes" ? " student-tab-btn-active" : ""}`}
                                                                                                         	onClick={() => setActivitySubTab("passes")}>
-                                                                                                        	Parking Pass
+                                                                                                        	ID Tag
                                                                                                         </button>
                                                                                                         {/* {penaltyEvents.length > 0 && (
                                                                                                                 <span

@@ -53,7 +53,7 @@ export function StudentParkingPassActivity({
         if (!cancelled) setEvents(next);
       })
       .catch((nextError) => {
-        if (!cancelled) setError(nextError instanceof Error ? nextError.message : "Unable to load pass history.");
+        if (!cancelled) setError(nextError instanceof Error ? nextError.message : "Unable to load tag history.");
       });
     return () => {
       cancelled = true;
@@ -76,17 +76,17 @@ export function StudentParkingPassActivity({
   return (
     <div className="data-section">
       <div className="data-section-header">
-        <h4>Parking Pass</h4>
+        <h4>Device Identification Tag</h4>
         <div className="section-header-actions">
           <span>{rows.length}</span>
           <button
             className="section-dl-btn"
             type="button"
-            title="Download parking pass history as CSV"
+            title="Download device identification tag history as CSV"
             disabled={rows.length === 0}
             onClick={() =>
               downloadCsv(
-                sanitizeCsvFilename(`${studentName || "student"}-parking-pass-history`, "student-parking-pass-history"),
+                sanitizeCsvFilename(`${studentName || "student"}-device-identification-tag-history`, "student-device-identification-tag-history"),
                 [
                   ["occurred_at", "event", "pass_uuid", "vehicle", "registered_device_uuid", "by", "note"],
                   ...rows.map((event) => [
@@ -107,11 +107,11 @@ export function StudentParkingPassActivity({
         </div>
       </div>
       {error ? (
-        <p className="muted-text">Parking pass history unavailable right now: {error}</p>
+        <p className="muted-text">Device identification tag history unavailable right now: {error}</p>
       ) : events === null ? (
-        <p className="muted-text">Loading parking pass history…</p>
+        <p className="muted-text">Loading device identification tag history…</p>
       ) : rows.length === 0 ? (
-        <p className="muted-text">This student hasn't activated a parking pass yet.</p>
+        <p className="muted-text">This student hasn't activated a device identification tag yet.</p>
       ) : (
         <div className="management-table-scroll">
           <table className="management-table">
@@ -119,7 +119,7 @@ export function StudentParkingPassActivity({
               <tr>
                 <th>Date</th>
                 <th>Event</th>
-                <th>Pass</th>
+                <th>Tag</th>
                 <th>Vehicle</th>
                 <th>By</th>
               </tr>

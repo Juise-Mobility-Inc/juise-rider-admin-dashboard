@@ -186,7 +186,7 @@ export function ParkingPassesScreen({
         remove: mode === "remove" ? tags : [],
       });
       setSuccess(
-        `${mode === "add" ? "Added" : "Removed"} ${tags.join(", ")} ${mode === "add" ? "to" : "from"} ${result.updated} pass${result.updated === 1 ? "" : "es"}.`,
+        `${mode === "add" ? "Added" : "Removed"} ${tags.join(", ")} ${mode === "add" ? "to" : "from"} ${result.updated} tag${result.updated === 1 ? "" : "s"}.`,
       );
       setTagInput("");
       await refresh();
@@ -198,8 +198,8 @@ export function ParkingPassesScreen({
   }
 
   function exportCsv() {
-    downloadCsv(sanitizeCsvFilename(`${activeSchoolId}-parking-passes`), [
-      ["pass_uuid", "status", "tags", "student", "student_email", "vehicle", "activated_at", "deactivated_at", "deactivated_reason"],
+    downloadCsv(sanitizeCsvFilename(`${activeSchoolId}-device-identification-tags`), [
+      ["tag_id", "status", "labels", "student", "student_email", "vehicle", "activated_at", "deactivated_at", "deactivated_reason"],
       ...visiblePasses.map((pass) => [
         pass.pass_uuid,
         pass.status,
@@ -248,12 +248,12 @@ export function ParkingPassesScreen({
       <section className="dashboard-panel">
         <div className="section-header">
           <div>
-            <p className="eyebrow">Parking pass</p>
+            <p className="eyebrow">Device identification tag</p>
             <h2>{shortPassId(selectedUUID)}</h2>
             <p className="muted-text parking-pass-uuid">{selectedUUID}</p>
           </div>
           <button className="secondary-button" type="button" onClick={closeDetail}>
-            Back to passes
+            Back to tags
           </button>
         </div>
 
@@ -261,7 +261,7 @@ export function ParkingPassesScreen({
         {success ? <p className="success-text">{success}</p> : null}
 
         {!pass ? (
-          <p className="muted-text">Loading pass...</p>
+          <p className="muted-text">Loading tag...</p>
         ) : (
           <>
             <dl className="parking-pass-details">
@@ -291,7 +291,7 @@ export function ParkingPassesScreen({
                 <dd>{formatTimestamp(pass.deactivated_at) || "—"}</dd>
               </div>
               <div>
-                <dt>Tags</dt>
+                <dt>Labels</dt>
                 <dd>{pass.tags.length ? pass.tags.join(", ") : "—"}</dd>
               </div>
               {pass.replaced_by_pass_uuid ? (
@@ -322,7 +322,7 @@ export function ParkingPassesScreen({
               ) : null}
               {pass.status === "active" && !confirmDeactivate ? (
                 <button className="danger-button" type="button" onClick={() => setConfirmDeactivate(true)}>
-                  Deactivate pass
+                  Deactivate tag
                 </button>
               ) : null}
             </div>
@@ -330,8 +330,8 @@ export function ParkingPassesScreen({
             {confirmDeactivate ? (
               <div className="parking-pass-confirm">
                 <p>
-                  Deactivate this pass? It stays on record, but enforcement will see it as an inactive
-                  pass. The student will need a new pass for this vehicle.
+                  Deactivate this tag? It stays on record, but enforcement will see it as an inactive
+                  tag. The student will need a new tag for this vehicle.
                 </p>
                 <textarea
                   value={deactivateNote}
@@ -384,10 +384,10 @@ export function ParkingPassesScreen({
       <div className="section-header">
         <div>
           <p className="eyebrow">Vehicles</p>
-          <h2>Parking Passes</h2>
+          <h2>Device Identification Tags</h2>
           <p className="muted-text">
-            Every pre-printed parking pass for this school. Students activate a pass by scanning it in
-            the Rider App. Inactive passes stay on record.
+            Every pre-printed device identification tag for this school. Students activate a tag by
+            scanning it in the Rider App. Inactive tags stay on record.
           </p>
         </div>
         <div className="parking-pass-actions">
@@ -418,13 +418,13 @@ export function ParkingPassesScreen({
           className="reg-table-search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search pass, student, vehicle, tag..."
+          placeholder="Search tag, student, vehicle, label..."
         />
       </div>
 
       {allTags.length > 0 ? (
         <div className="parking-pass-tag-filters">
-          <span className="muted-text">Tags:</span>
+          <span className="muted-text">Labels:</span>
           <button
             type="button"
             className={`parking-pass-tag ${tagFilter === "" ? "parking-pass-tag-active" : ""}`}
@@ -451,7 +451,7 @@ export function ParkingPassesScreen({
           <input
             value={tagInput}
             onChange={(event) => setTagInput(event.target.value)}
-            placeholder="Tags, comma-separated"
+            placeholder="Labels, comma-separated"
           />
           <button
             className="secondary-button"
@@ -459,7 +459,7 @@ export function ParkingPassesScreen({
             disabled={actionBusy || parseTags(tagInput).length === 0}
             onClick={() => void applyTags("add")}
           >
-            Add tag
+            Add label
           </button>
           <button
             className="secondary-button"
@@ -467,7 +467,7 @@ export function ParkingPassesScreen({
             disabled={actionBusy || parseTags(tagInput).length === 0}
             onClick={() => void applyTags("remove")}
           >
-            Remove tag
+            Remove label
           </button>
           <button className="link-button" type="button" onClick={() => setChecked(new Set())}>
             Clear selection
@@ -481,7 +481,7 @@ export function ParkingPassesScreen({
 
       <div className="management-table-card reg-table-card">
         <div className="reg-table-summary">
-          <strong>{visiblePasses.length.toLocaleString()} passes</strong>
+          <strong>{visiblePasses.length.toLocaleString()} tags</strong>
           <span>
             {[
               statusFilter ? statusLabels[statusFilter] : "All statuses",
@@ -498,14 +498,14 @@ export function ParkingPassesScreen({
                 <th className="parking-pass-check">
                   <input
                     type="checkbox"
-                    aria-label="Select all shown passes"
+                    aria-label="Select all shown tags"
                     checked={allVisibleChecked}
                     onChange={toggleAllVisible}
                   />
                 </th>
-                <th>Pass</th>
+                <th>Tag</th>
                 <th>Status</th>
-                <th>Tags</th>
+                <th>Labels</th>
                 <th>Student</th>
                 <th>Vehicle</th>
                 <th>Activated</th>
@@ -576,8 +576,8 @@ export function ParkingPassesScreen({
                   <td colSpan={8}>
                     <span>
                       {passes.length === 0
-                        ? "No parking passes have been printed for this school yet."
-                        : "No parking passes match these filters."}
+                        ? "No device identification tags have been printed for this school yet."
+                        : "No device identification tags match these filters."}
                     </span>
                   </td>
                 </tr>
