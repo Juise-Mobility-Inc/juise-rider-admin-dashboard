@@ -16839,73 +16839,61 @@
         padding-right: 8px;
 }
 
-.cd-device-qr-layout {
-        display: grid;
-        grid-template-columns: 150px minmax(0, 1fr);
-        gap: 14px;
-        padding: 16px;
-        align-items: start;
-}
-
-.cd-device-qr-image,
-.cd-device-qr-placeholder {
-        width: 150px;
-        aspect-ratio: 1;
-        border-radius: 8px;
-        border: 1px solid #e2e6ea;
-        background: #fff;
-}
-
-.cd-device-qr-image {
-        display: block;
-        object-fit: contain;
-        padding: 8px;
-}
-
-.cd-device-qr-placeholder {
-        display: grid;
-        place-items: center;
-        color: #6c757d;
-        font-size: 0.82rem;
-        text-align: center;
-        padding: 12px;
-}
-
-.cd-device-qr-copy {
+.cd-device-tag-body {
         display: grid;
         gap: 10px;
-        min-width: 0;
+        padding: 16px;
 }
 
-.cd-device-qr-copy p {
-        margin: 0;
+.cd-device-tag-id {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 10px;
+}
+
+.cd-device-tag-short {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 1.35rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        color: #0e2219;
+}
+
+.cd-device-tag-meta {
         color: #6c757d;
         font-size: 0.85rem;
+}
+
+.cd-device-tag-empty {
+        margin: 0;
+        padding: 16px;
+        color: #6c757d;
+        font-size: 0.88rem;
         line-height: 1.45;
 }
 
-.cd-device-qr-actions {
+.cd-device-tag-actions {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
 }
 
-.cd-device-qr-status {
-        color: #217e52;
-        font-size: 0.8rem;
-        font-weight: 700;
-}
-
-.cd-device-qr-value {
+.cd-device-tag-value {
         padding: 8px 0 0;
         border-bottom: none;
         align-items: flex-start;
 }
 
-.cd-device-qr-value strong {
+.cd-device-tag-value strong {
         max-width: 100%;
         overflow-wrap: anywhere;
         text-align: left;
+}
+
+.cd-table-no-tag {
+        color: #b26a00;
+        font-weight: 600;
 }
 
 .cd-coordinate-value {
@@ -17628,14 +17616,6 @@
                 max-width: 100%;
         }
 
-        .cd-device-qr-layout {
-                grid-template-columns: 1fr;
-        }
-
-        .cd-device-qr-image,
-        .cd-device-qr-placeholder {
-                justify-self: center;
-        }
 }
 
 /* ── Campus Devices — device map & beacon ── */
@@ -19680,4 +19660,97 @@
   font: inherit;
   text-decoration: underline;
   cursor: pointer;
+}
+
+/* Device ID Tags: student and vehicle paired with a tag */
+.parking-pass-pairing {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  margin: 16px 0;
+}
+
+.parking-pass-card {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 16px;
+  border: 1px solid #e2e6ea;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.parking-pass-card .eyebrow {
+  margin: 0;
+}
+
+.parking-pass-card > button {
+  justify-self: start;
+}
+
+.parking-pass-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.parking-pass-card-head > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.parking-pass-card-head strong {
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+
+.parking-pass-card-head span {
+  color: #6c757d;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.parking-pass-card-photo {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #eef2ef;
+}
+
+.parking-pass-card-initials {
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  color: #0e2219;
+}
+
+.parking-pass-card-rows {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.parking-pass-card-rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.88rem;
+}
+
+.parking-pass-card-rows dt {
+  color: #6c757d;
+}
+
+.parking-pass-card-rows dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.parking-pass-unpaired {
+  margin: 16px 0;
 }

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { LatLngBounds } from "leaflet";
-import QRCode from "qrcode";
 import {
   Circle,
   CircleMarker,
@@ -12,6 +11,7 @@ import {
   useMap,
 } from "react-leaflet";
 import { juisePackIcon } from "../../lib/mapIcons";
+import { shortPassId } from "../../lib/parkingPasses";
 import {
   fetchSchoolBeaconLocations,
   fetchSchoolParkingViolations,
@@ -46,19 +46,6 @@ type BeaconMeta = {
   rssi?: number;
   position: [number, number] | null;
 };
-
-type DeviceQrDescriptor = {
-  value: string;
-  source: string;
-  isGenerated: boolean;
-};
-
-const DEVICE_QR_METADATA_KEYS = [
-  "qr_code",
-  "qr_value",
-  "scan_value",
-  "qr_payload",
-] as const;
 
 function getErrorMessage(err: unknown) {
   return err instanceof Error ? err.message : "Something went wrong.";
@@ -199,63 +186,6 @@ function googleMapsUrl(position: [number, number]): string {
 function capitalize(str: string) {
   if (!str) return "";
   return str.charAt(0).toUpperCase() + str.slice(1).replace(/_/g, " ");
-}
-
-function titleCase(str: string) {
-  return str
-    .split(/[_\s-]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function getStringValue(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function getMetadataRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return {};
-  }
-  return value as Record<string, unknown>;
-}
-
-function resolveDeviceQrDescriptor(
-  device: RegisteredDevice,
-): DeviceQrDescriptor {
-  const metadata = getMetadataRecord(device.metadata);
-  for (const key of DEVICE_QR_METADATA_KEYS) {
-    const value = getStringValue(metadata[key]);
-    if (value) {
-      return {
-        value,
-        source: titleCase(key),
-        isGenerated: false,
-      };
-    }
-  }
-
-  return {
-    value: device.registered_device_uuid,
-    source: "Registered Device UUID",
-    isGenerated: true,
-  };
-}
-
-function deviceQrFilename(entry: RegisteredDeviceReviewEntry) {
-  const base =
-    formatDevice(entry) ||
-    entry.device.nickname ||
-    entry.device.registered_device_uuid ||
-    "device";
-  return `${
-    base
-      .trim()
-      .replace(/[^a-z0-9-_]+/gi, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "")
-      .toLowerCase() || "device"
-  }-qr.png`;
 }
 
 function getInitials(name: string) {
@@ -509,13 +439,15 @@ export function CampusDevicesScreen({
   onOpenStudent,
 }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
-  const [view, setView] = useState<View>(() => {
-    const deepLinked =
-      searchParams.get("device")?.trim() ||
-      searchParams.get("registered_device_uuid")?.trim();
-    return deepLinked ? "detail" : "table";
-  });
+  // The URL is the source of truth for the open device, so links from other
+  // screens (e.g. Device ID Tags → Open vehicle) and back/forward just work.
+  const selectedUUID =
+    searchParams.get("device")?.trim() ||
+    searchParams.get("registered_device_uuid")?.trim() ||
+    null;
+  const view: View = selectedUUID ? "detail" : "table";
 
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [errorMsg, setErrorMsg] = useState("");
@@ -530,14 +462,6 @@ export function CampusDevicesScreen({
   const [devicePhotoUrls, setDevicePhotoUrls] = useState<
     Record<string, string>
   >({});
-  const [qrDataUrl, setQrDataUrl] = useState("");
-  const [qrBusy, setQrBusy] = useState(false);
-  const [qrStatusMessage, setQrStatusMessage] = useState("");
-  const [selectedUUID, setSelectedUUID] = useState<string | null>(
-    searchParams.get("device")?.trim() ||
-      searchParams.get("registered_device_uuid")?.trim() ||
-      null,
-  );
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -704,105 +628,11 @@ export function CampusDevicesScreen({
         : [],
     [selectedEntry, violationsByDevice],
   );
-  const selectedQrDescriptor = useMemo(
-    () =>
-      selectedEntry ? resolveDeviceQrDescriptor(selectedEntry.device) : null,
-    [selectedEntry],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    setQrStatusMessage("");
-
-    async function generateQrPreview() {
-      if (!selectedQrDescriptor?.value) {
-        setQrDataUrl("");
-        return;
-      }
-
-      try {
-        setQrBusy(true);
-        const nextQrDataUrl = await QRCode.toDataURL(
-          selectedQrDescriptor.value,
-          {
-            errorCorrectionLevel: "M",
-            margin: 1,
-            width: 420,
-            color: {
-              dark: "#0E2219",
-              light: "#FFFFFFFF",
-            },
-          },
-        );
-        if (!cancelled) {
-          setQrDataUrl(nextQrDataUrl);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setQrDataUrl("");
-          setQrStatusMessage(getErrorMessage(error));
-        }
-      } finally {
-        if (!cancelled) {
-          setQrBusy(false);
-        }
-      }
-    }
-
-    void generateQrPreview();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedQrDescriptor]);
-
-  function downloadSelectedDeviceQr() {
-    if (!selectedEntry || !qrDataUrl) {
-      return;
-    }
-    const anchor = document.createElement("a");
-    anchor.href = qrDataUrl;
-    anchor.download = deviceQrFilename(selectedEntry);
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    setQrStatusMessage("QR code downloaded.");
-  }
-
-  async function copySelectedDeviceQrValue() {
-    if (!selectedQrDescriptor?.value) {
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(selectedQrDescriptor.value);
-      setQrStatusMessage("Device scan value copied.");
-    } catch (error) {
-      setQrStatusMessage(getErrorMessage(error));
-    }
-  }
-
-  useEffect(() => {
-    const urlUUID =
-      searchParams.get("device")?.trim() ||
-      searchParams.get("registered_device_uuid")?.trim() ||
-      "";
-    if (urlUUID) {
-      setSelectedUUID((current) => (current === urlUUID ? current : urlUUID));
-      setView((current) => (current === "detail" ? current : "detail"));
-    } else {
-      setView((current) => (current === "table" ? current : "table"));
-      setSelectedUUID((current) => (current === null ? current : null));
-    }
-  }, [searchParams]);
-
   function openDetail(uuid: string) {
-    setSelectedUUID(uuid);
     setSearchParams({ device: uuid });
-    setView("detail");
   }
 
   function backToTable() {
-    setView("table");
     setSearchParams({});
   }
 
@@ -1058,64 +888,60 @@ export function CampusDevicesScreen({
                   </div>
                 </section>
 
-                <section className="cd-section cd-device-qr-section">
+                <section className="cd-section cd-device-tag-section">
                   <div className="cd-section-heading-row">
-                    <h4 className="cd-section-title">Device QR Code</h4>
-                    <span className="cd-tag">
-                      {selectedQrDescriptor?.isGenerated
-                        ? "Generated"
-                        : "Saved payload"}
-                    </span>
-                  </div>
-                  <div className="cd-device-qr-layout">
-                    {qrDataUrl ? (
-                      <img
-                        className="cd-device-qr-image"
-                        src={qrDataUrl}
-                        alt={`${formatDevice(selectedEntry)} QR code`}
-                      />
+                    <h4 className="cd-section-title">
+                      Device Identification Tag
+                    </h4>
+                    {selectedEntry.device.parking_pass ? (
+                      <span className="parking-pass-status parking-pass-status-active">
+                        Active
+                      </span>
                     ) : (
-                      <div className="cd-device-qr-placeholder">
-                        {qrBusy ? "Generating QR..." : "QR preview unavailable"}
-                      </div>
+                      <span className="cd-tag">None</span>
                     )}
-                    <div className="cd-device-qr-copy">
-                      <p>
-                        {selectedQrDescriptor?.isGenerated
-                          ? `No saved QR payload was found, so this QR uses the ${selectedQrDescriptor.source}.`
-                          : `Using the saved ${selectedQrDescriptor?.source ?? "QR payload"} for this device.`}
-                      </p>
-                      <div className="cd-device-qr-actions">
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={downloadSelectedDeviceQr}
-                          disabled={!qrDataUrl}
-                        >
-                          Download QR
-                        </button>
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={() => void copySelectedDeviceQrValue()}
-                          disabled={!selectedQrDescriptor?.value}
-                        >
-                          Copy scan value
-                        </button>
-                      </div>
-                      {qrStatusMessage ? (
-                        <span className="cd-device-qr-status">
-                          {qrStatusMessage}
+                  </div>
+                  {selectedEntry.device.parking_pass ? (
+                    <div className="cd-device-tag-body">
+                      <div className="cd-device-tag-id">
+                        <span className="cd-device-tag-short">
+                          {shortPassId(
+                            selectedEntry.device.parking_pass.pass_uuid,
+                          )}
                         </span>
-                      ) : null}
-                      <div className="cd-info-row cd-device-qr-value">
-                        <span>Scan value</span>
+                        <span className="cd-device-tag-meta">
+                          {selectedEntry.device.parking_pass.activated_at
+                            ? `Activated ${formatTimestampFull(selectedEntry.device.parking_pass.activated_at)}`
+                            : "Active"}
+                        </span>
+                      </div>
+                      <div className="cd-info-row cd-device-tag-value">
+                        <span>Tag ID</span>
                         <strong className="cd-mono">
-                          {selectedQrDescriptor?.value ?? "-"}
+                          {selectedEntry.device.parking_pass.pass_uuid}
                         </strong>
                       </div>
+                      <div className="cd-device-tag-actions">
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() =>
+                            navigate(
+                              `/device-tags?pass=${encodeURIComponent(selectedEntry.device.parking_pass?.pass_uuid ?? "")}`,
+                            )
+                          }
+                        >
+                          View tag history
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <p className="cd-device-tag-empty">
+                      This vehicle has no device identification tag. Enforcement
+                      can't match it until the student scans a pre-printed tag
+                      in the Rider App.
+                    </p>
+                  )}
                 </section>
 
                 {(beaconInfo || beaconMeta || liveLocation) && (
@@ -1461,6 +1287,7 @@ export function CampusDevicesScreen({
                       <th>Student</th>
                       <th>Type</th>
                       <th>Status</th>
+                      <th>ID tag</th>
                       <th>Violations</th>
                       <th>Registered</th>
                     </tr>
@@ -1565,6 +1392,17 @@ export function CampusDevicesScreen({
                             <span className={getDeviceStatusClass(statusLabel)}>
                               {statusLabel}
                             </span>
+                          </td>
+                          <td>
+                            {entry.device.parking_pass ? (
+                              <strong className="cd-mono">
+                                {shortPassId(
+                                  entry.device.parking_pass.pass_uuid,
+                                )}
+                              </strong>
+                            ) : (
+                              <span className="cd-table-no-tag">No tag</span>
+                            )}
                           </td>
                           <td>
                             <strong>

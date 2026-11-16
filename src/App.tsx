@@ -4165,25 +4165,28 @@ function App() {
       return;
     }
 
-    navigate(sectionPathByName.students);
-    void handleSelectStudentInRoster(normalizedMembershipId);
+    // The Students screen opens the student from ?student= (useDetailParamSync).
+    // Navigating without it made that sync clear the selection we set here.
+    navigate(
+      `${sectionPathByName.students}?student=${encodeURIComponent(normalizedMembershipId)}`,
+    );
   }
 
-  async function handleOpenStudentDeviceFromDashboard(
+  // Vehicles open in Campus Devices, which selects the device from ?device=.
+  // Falls back to the student when there is no device UUID.
+  function handleOpenStudentDeviceFromDashboard(
     membershipId: string,
     deviceUUID: string,
   ) {
-    const normalizedMembershipId = membershipId.trim();
     const normalizedDeviceUUID = deviceUUID.trim();
-    if (!normalizedMembershipId) {
+    if (!normalizedDeviceUUID) {
+      handleOpenStudentFromDashboard(membershipId);
       return;
     }
 
-    navigate(sectionPathByName.students);
-    await handleSelectStudentInRoster(normalizedMembershipId);
-    if (normalizedDeviceUUID) {
-      handleOpenStudentDevice(normalizedDeviceUUID);
-    }
+    navigate(
+      `${sectionPathByName.campusDevices}?device=${encodeURIComponent(normalizedDeviceUUID)}`,
+    );
   }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -7542,8 +7545,9 @@ function App() {
             activeSchoolId={activeSchoolId}
             managedAppId={context.managedAppId}
             onOpenVehicle={(membershipUuid, deviceUuid) =>
-              void handleOpenStudentDeviceFromDashboard(membershipUuid, deviceUuid)
+              handleOpenStudentDeviceFromDashboard(membershipUuid, deviceUuid)
             }
+            onOpenStudent={handleOpenStudentFromDashboard}
           />
         );
       case "campusDevices":
