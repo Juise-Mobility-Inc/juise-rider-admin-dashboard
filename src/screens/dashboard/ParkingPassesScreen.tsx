@@ -4,8 +4,11 @@ import {
   deactivateParkingPass,
   fetchSchoolParkingPass,
   fetchSchoolParkingPasses,
+  fetchSchoolRegisteredDevices,
+  signSchoolMedia,
   updateParkingPassTags,
   type ParkingPassStatus,
+  type RegisteredDeviceReviewEntry,
   type SchoolParkingPass,
   type SchoolParkingPassDetail,
 } from "../../lib/api";
@@ -17,7 +20,55 @@ type Props = {
   activeSchoolId: string;
   managedAppId: string;
   onOpenVehicle: (membershipUuid: string, registeredDeviceUuid: string) => void;
+  onOpenStudent: (membershipUuid: string) => void;
 };
+
+function capitalize(value?: string | null): string {
+  const text = (value ?? "").trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1).replace(/_/g, " ") : "";
+}
+
+function initials(name: string): string {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join("") || "?"
+  );
+}
+
+function vehicleTitle(entry: RegisteredDeviceReviewEntry | undefined, fallback: string): string {
+  if (!entry) return fallback;
+  const d = entry.device;
+  return [d.make, d.model].filter(Boolean).join(" ").trim() || d.nickname || capitalize(d.device_type) || fallback;
+}
+
+function vehicleSubtitle(entry: RegisteredDeviceReviewEntry | undefined): string {
+  if (!entry) return "";
+  const d = entry.device;
+  const title = [d.make, d.model].filter(Boolean).join(" ").trim();
+  return [title && d.nickname ? `"${d.nickname}"` : "", capitalize(d.device_type), capitalize(d.color)]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function registrationLabel(entry: RegisteredDeviceReviewEntry | undefined): string {
+  if (!entry) return "";
+  const d = entry.device;
+  if (!d.active) return "Vehicle inactive";
+  if (d.registration_status === "declined") return "Registration declined";
+  if (d.registration_status === "pending") return "Registration pending";
+  if (d.payment_status === "pending" || d.payment_status === "failed") return "Fee unpaid";
+  return "Registered";
+}
+
+function studentName(entry: RegisteredDeviceReviewEntry | undefined, pass: SchoolParkingPass): string {
+  const user = entry?.student.user;
+  const fromUser = user ? `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() : "";
+  return pass.student_name || fromUser || user?.username || pass.student_email || "";
+}
 
 const statusFilters: Array<{ label: string; value: "" | ParkingPassStatus }> = [
   { label: "All", value: "" },
@@ -58,8 +109,11 @@ export function ParkingPassesScreen({
   activeSchoolId,
   managedAppId,
   onOpenVehicle,
+  onOpenStudent,
 }: Props) {
   const [passes, setPasses] = useState<SchoolParkingPass[]>([]);
+  const [vehicles, setVehicles] = useState<Record<string, RegisteredDeviceReviewEntry>>({});
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [statusFilter, setStatusFilter] = useState<"" | ParkingPassStatus>("");
   const [tagFilter, setTagFilter] = useState("");
   const [search, setSearch] = useState("");
@@ -85,7 +139,31 @@ export function ParkingPassesScreen({
     setBusy(true);
     setError("");
     try {
-      setPasses(await fetchSchoolParkingPasses(managedAppId, activeSchoolId));
+      // Vehicles fill in student and vehicle details; the list still works
+      // with just the names on each tag if they fail to load.
+      const [nextPasses, entries] = await Promise.all([
+        fetchSchoolParkingPasses(managedAppId, activeSchoolId),
+        fetchSchoolRegisteredDevices(managedAppId, activeSchoolId, "").catch(
+          () => [] as RegisteredDeviceReviewEntry[],
+        ),
+      ]);
+      setPasses(nextPasses);
+      const byDevice: Record<string, RegisteredDeviceReviewEntry> = {};
+      for (const entry of entries) byDevice[entry.device.registered_device_uuid] = entry;
+      setVehicles(byDevice);
+
+      const linked = new Set(nextPasses.map((pass) => pass.registered_device_uuid).filter(Boolean));
+      const keys: string[] = [];
+      for (const entry of entries) {
+        if (!linked.has(entry.device.registered_device_uuid)) continue;
+        const profileKey = entry.student.profile_image_object_key?.trim();
+        if (profileKey) keys.push(profileKey);
+        const photo = entry.device_media.find((media) => media.active && media.object_key?.trim());
+        if (photo?.object_key) keys.push(photo.object_key);
+      }
+      if (keys.length > 0) {
+        setPhotoUrls(await signSchoolMedia(activeSchoolId, keys).catch(() => ({})));
+      }
     } catch (nextError) {
       setError(getErrorMessage(nextError));
     } finally {
@@ -130,6 +208,20 @@ export function ParkingPassesScreen({
     if (tagFilter && !allTags.includes(tagFilter)) setTagFilter("");
   }, [allTags, tagFilter]);
 
+  function vehicleFor(pass: SchoolParkingPass): RegisteredDeviceReviewEntry | undefined {
+    return pass.registered_device_uuid ? vehicles[pass.registered_device_uuid] : undefined;
+  }
+
+  function studentPhoto(entry: RegisteredDeviceReviewEntry | undefined): string {
+    const key = entry?.student.profile_image_object_key?.trim();
+    return key ? photoUrls[key] ?? "" : "";
+  }
+
+  function vehiclePhoto(entry: RegisteredDeviceReviewEntry | undefined): string {
+    const key = entry?.device_media.find((media) => media.active && media.object_key?.trim())?.object_key;
+    return key ? photoUrls[key] ?? "" : "";
+  }
+
   const counts = useMemo(() => {
     const next = { unassigned: 0, active: 0, inactive: 0 };
     for (const pass of passes) next[pass.status] += 1;
@@ -142,11 +234,23 @@ export function ParkingPassesScreen({
       if (statusFilter && pass.status !== statusFilter) return false;
       if (tagFilter && !pass.tags.includes(tagFilter)) return false;
       if (!query) return true;
-      return [pass.pass_uuid, pass.student_name, pass.student_email, pass.vehicle_name, ...pass.tags].some(
+      const entry = pass.registered_device_uuid ? vehicles[pass.registered_device_uuid] : undefined;
+      return [
+        pass.pass_uuid,
+        pass.student_name,
+        pass.student_email,
+        pass.vehicle_name,
+        entry?.student.membership?.student_id,
+        entry?.device.make,
+        entry?.device.model,
+        entry?.device.nickname,
+        entry?.device.serial_number,
+        ...pass.tags,
+      ].some(
         (field) => (field ?? "").toLowerCase().includes(query),
       );
     });
-  }, [passes, search, statusFilter, tagFilter]);
+  }, [passes, search, statusFilter, tagFilter, vehicles]);
 
   const visibleChecked = visiblePasses.filter((pass) => checked.has(pass.pass_uuid));
   const allVisibleChecked = visiblePasses.length > 0 && visibleChecked.length === visiblePasses.length;
@@ -275,14 +379,6 @@ export function ParkingPassesScreen({
                 </dd>
               </div>
               <div>
-                <dt>{pass.status === "inactive" ? "Last student" : "Student"}</dt>
-                <dd>{pass.student_name || pass.student_email || "—"}</dd>
-              </div>
-              <div>
-                <dt>{pass.status === "inactive" ? "Last vehicle" : "Vehicle"}</dt>
-                <dd>{pass.vehicle_name || "—"}</dd>
-              </div>
-              <div>
                 <dt>Activated</dt>
                 <dd>{formatTimestamp(pass.activated_at) || "—"}</dd>
               </div>
@@ -310,16 +406,22 @@ export function ParkingPassesScreen({
               ) : null}
             </dl>
 
+            {pass.user_uuid || pass.registered_device_uuid ? (
+              <ParkingPassPairing
+                pass={pass}
+                entry={vehicleFor(pass)}
+                studentPhotoUrl={studentPhoto(vehicleFor(pass))}
+                vehiclePhotoUrl={vehiclePhoto(vehicleFor(pass))}
+                onOpenStudent={onOpenStudent}
+                onOpenVehicle={onOpenVehicle}
+              />
+            ) : (
+              <p className="muted-text parking-pass-unpaired">
+                No student has activated this tag yet.
+              </p>
+            )}
+
             <div className="parking-pass-actions">
-              {pass.status === "active" && pass.student_membership_uuid && pass.registered_device_uuid ? (
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={() => onOpenVehicle(pass.student_membership_uuid ?? "", pass.registered_device_uuid ?? "")}
-                >
-                  Open vehicle
-                </button>
-              ) : null}
               {pass.status === "active" && !confirmDeactivate ? (
                 <button className="danger-button" type="button" onClick={() => setConfirmDeactivate(true)}>
                   Deactivate tag
@@ -545,23 +647,58 @@ export function ParkingPassesScreen({
                   </td>
                   <td>{pass.tags.join(", ") || "—"}</td>
                   <td>
-                    <strong>{pass.student_name || "—"}</strong>
-                    <span>{pass.student_email}</span>
+                    {pass.user_uuid ? (
+                      <div className="reg-table-identity">
+                        {studentPhoto(vehicleFor(pass)) ? (
+                          <img src={studentPhoto(vehicleFor(pass))} alt="" className="reg-table-photo" />
+                        ) : (
+                          <div className="reg-table-avatar">{initials(studentName(vehicleFor(pass), pass))}</div>
+                        )}
+                        <div>
+                          <strong>{studentName(vehicleFor(pass), pass) || "—"}</strong>
+                          <span>
+                            {[vehicleFor(pass)?.student.membership?.student_id, pass.student_email]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td>
-                    {pass.status === "active" && pass.student_membership_uuid && pass.registered_device_uuid ? (
-                      <button
-                        className="link-button"
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onOpenVehicle(pass.student_membership_uuid ?? "", pass.registered_device_uuid ?? "");
-                        }}
-                      >
-                        {pass.vehicle_name || "Open vehicle"}
-                      </button>
+                    {pass.registered_device_uuid ? (
+                      <div className="reg-table-identity">
+                        {vehiclePhoto(vehicleFor(pass)) ? (
+                          <img src={vehiclePhoto(vehicleFor(pass))} alt="" className="reg-table-photo" />
+                        ) : (
+                          <div className="reg-table-avatar">🚲</div>
+                        )}
+                        <div>
+                          {pass.status === "active" ? (
+                            <button
+                              className="link-button"
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onOpenVehicle(pass.student_membership_uuid ?? "", pass.registered_device_uuid ?? "");
+                              }}
+                            >
+                              {vehicleTitle(vehicleFor(pass), pass.vehicle_name || "Open vehicle")}
+                            </button>
+                          ) : (
+                            <strong>{vehicleTitle(vehicleFor(pass), pass.vehicle_name || "—")}</strong>
+                          )}
+                          <span>
+                            {[vehicleSubtitle(vehicleFor(pass)), pass.status === "active" ? registrationLabel(vehicleFor(pass)) : ""]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
+                        </div>
+                      </div>
                     ) : (
-                      pass.vehicle_name || "—"
+                      "—"
                     )}
                   </td>
                   <td>{formatTimestamp(pass.activated_at) || "—"}</td>
@@ -587,5 +724,109 @@ export function ParkingPassesScreen({
         </div>
       </div>
     </section>
+  );
+}
+
+type PairingProps = {
+  pass: SchoolParkingPass;
+  entry: RegisteredDeviceReviewEntry | undefined;
+  studentPhotoUrl: string;
+  vehiclePhotoUrl: string;
+  onOpenStudent: (membershipUuid: string) => void;
+  onOpenVehicle: (membershipUuid: string, registeredDeviceUuid: string) => void;
+};
+
+// The student and vehicle the tag is (or was last) paired with, so admins
+// don't have to open either to see who and what it is.
+function ParkingPassPairing({
+  pass,
+  entry,
+  studentPhotoUrl,
+  vehiclePhotoUrl,
+  onOpenStudent,
+  onOpenVehicle,
+}: PairingProps) {
+  const inactive = pass.status !== "active";
+  const name = studentName(entry, pass);
+  const membershipUuid = pass.student_membership_uuid ?? entry?.student.membership?.membership_uuid ?? "";
+  const device = entry?.device;
+  const rows = (items: Array<[string, string | null | undefined]>) =>
+    items
+      .filter(([, value]) => Boolean(value && String(value).trim()))
+      .map(([label, value]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>{value}</dd>
+        </div>
+      ));
+
+  return (
+    <div className="parking-pass-pairing">
+      <article className="parking-pass-card">
+        <p className="eyebrow">{inactive ? "Last student" : "Student"}</p>
+        <div className="parking-pass-card-head">
+          {studentPhotoUrl ? (
+            <img src={studentPhotoUrl} alt="" className="parking-pass-card-photo" />
+          ) : (
+            <div className="parking-pass-card-photo parking-pass-card-initials">{initials(name)}</div>
+          )}
+          <div>
+            <strong>{name || "Unknown student"}</strong>
+            <span>{entry?.student.membership?.student_id || pass.student_email}</span>
+          </div>
+        </div>
+        <dl className="parking-pass-card-rows">
+          {rows([
+            ["Email", pass.student_email || entry?.student.user.email],
+            ["Username", entry?.student.user.username ? `@${entry.student.user.username}` : ""],
+            ["Phone", entry?.student.user.phone],
+            ["Membership", capitalize(entry?.student.membership?.status)],
+          ])}
+        </dl>
+        {membershipUuid ? (
+          <button className="secondary-button" type="button" onClick={() => onOpenStudent(membershipUuid)}>
+            Open student
+          </button>
+        ) : null}
+      </article>
+
+      <article className="parking-pass-card">
+        <p className="eyebrow">{inactive ? "Last vehicle" : "Vehicle"}</p>
+        <div className="parking-pass-card-head">
+          {vehiclePhotoUrl ? (
+            <img src={vehiclePhotoUrl} alt="" className="parking-pass-card-photo" />
+          ) : (
+            <div className="parking-pass-card-photo parking-pass-card-initials">🚲</div>
+          )}
+          <div>
+            <strong>{vehicleTitle(entry, pass.vehicle_name || "Unknown vehicle")}</strong>
+            <span>{vehicleSubtitle(entry)}</span>
+          </div>
+        </div>
+        {device ? (
+          <dl className="parking-pass-card-rows">
+            {rows([
+              ["Powertrain", capitalize(device.powertrain_type)],
+              ["Serial", device.serial_number],
+              ["Registration", registrationLabel(entry)],
+              ["Fee", capitalize(device.payment_status)],
+            ])}
+          </dl>
+        ) : (
+          <p className="muted-text">
+            {inactive ? "This vehicle is no longer registered at the school." : "Vehicle details unavailable."}
+          </p>
+        )}
+        {device && pass.registered_device_uuid ? (
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => onOpenVehicle(membershipUuid, pass.registered_device_uuid ?? "")}
+          >
+            Open in Campus Devices
+          </button>
+        ) : null}
+      </article>
+    </div>
   );
 }
