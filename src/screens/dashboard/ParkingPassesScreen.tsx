@@ -105,6 +105,29 @@ function parseTags(text: string): string[] {
     .filter(Boolean);
 }
 
+function visiblePassTags(pass: SchoolParkingPass, schoolId: string): string[] {
+  const normalizedSchoolId = schoolId.trim().toLowerCase();
+  return pass.tags.filter(
+    (tag) => tag.trim().toLowerCase() !== normalizedSchoolId,
+  );
+}
+
+function passActivity(pass: SchoolParkingPass): string {
+  if (pass.status === "active" && pass.activated_at) {
+    return `Activated · ${formatTimestamp(pass.activated_at)}`;
+  }
+  if (pass.deactivated_at) {
+    const reason = pass.deactivated_reason
+      ? reasonLabels[pass.deactivated_reason] ?? pass.deactivated_reason
+      : "Deactivated";
+    return `${reason} · ${formatTimestamp(pass.deactivated_at)}`;
+  }
+  if (pass.activated_at) {
+    return `Last activated · ${formatTimestamp(pass.activated_at)}`;
+  }
+  return "No activity yet";
+}
+
 export function ParkingPassesScreen({
   activeSchoolId,
   managedAppId,
@@ -197,10 +220,10 @@ export function ParkingPassesScreen({
   const allTags = useMemo(() => {
     const tags = new Set<string>();
     for (const pass of passes) {
-      for (const tag of pass.tags) tags.add(tag);
+      for (const tag of visiblePassTags(pass, activeSchoolId)) tags.add(tag);
     }
     return [...tags].sort();
-  }, [passes]);
+  }, [activeSchoolId, passes]);
 
   // A tag filter for a tag no pass has any more (e.g. after removing it from
   // every pass) would hide every pass along with the tag buttons, so drop it.
@@ -245,12 +268,12 @@ export function ParkingPassesScreen({
         entry?.device.model,
         entry?.device.nickname,
         entry?.device.serial_number,
-        ...pass.tags,
+        ...visiblePassTags(pass, activeSchoolId),
       ].some(
         (field) => (field ?? "").toLowerCase().includes(query),
       );
     });
-  }, [passes, search, statusFilter, tagFilter, vehicles]);
+  }, [activeSchoolId, passes, search, statusFilter, tagFilter, vehicles]);
 
   const visibleChecked = visiblePasses.filter((pass) => checked.has(pass.pass_uuid));
   const allVisibleChecked = visiblePasses.length > 0 && visibleChecked.length === visiblePasses.length;
@@ -307,7 +330,7 @@ export function ParkingPassesScreen({
       ...visiblePasses.map((pass) => [
         pass.pass_uuid,
         pass.status,
-        pass.tags.join("; "),
+        visiblePassTags(pass, activeSchoolId).join("; "),
         pass.student_name,
         pass.student_email,
         pass.vehicle_name,
@@ -349,8 +372,8 @@ export function ParkingPassesScreen({
   if (selectedUUID) {
     const pass = shownDetail?.pass;
     return (
-      <section className="dashboard-panel">
-        <div className="section-header">
+      <section className="dashboard-panel parking-pass-screen parking-pass-detail-screen">
+        <div className="section-header parking-pass-detail-header">
           <div>
             <p className="eyebrow">Device identification tag</p>
             <h2>{shortPassId(selectedUUID)}</h2>
@@ -385,10 +408,6 @@ export function ParkingPassesScreen({
               <div>
                 <dt>Deactivated</dt>
                 <dd>{formatTimestamp(pass.deactivated_at) || "—"}</dd>
-              </div>
-              <div>
-                <dt>Labels</dt>
-                <dd>{pass.tags.length ? pass.tags.join(", ") : "—"}</dd>
               </div>
               {pass.replaced_by_pass_uuid ? (
                 <div>
@@ -452,27 +471,35 @@ export function ParkingPassesScreen({
               </div>
             ) : null}
 
-            <h3 className="parking-pass-history-title">History</h3>
-            <div className="management-table-card">
-              <div className="management-table-scroll">
-                <table className="management-table">
-                  <thead>
-                    <tr>
-                      <th>When</th>
-                      <th>Event</th>
-                      <th>Note</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(shownDetail?.events ?? []).map((event) => (
-                      <tr key={event.event_uuid}>
-                        <td>{formatTimestamp(event.created_at)}</td>
-                        <td>{parkingPassEventLabels[event.event_type] ?? event.event_type}</td>
-                        <td>{event.note || "—"}</td>
+            <div className="parking-pass-history">
+              <div className="parking-pass-history-heading">
+                <div>
+                  <p className="eyebrow">Activity log</p>
+                  <h3 className="parking-pass-history-title">History</h3>
+                </div>
+                <span>{shownDetail?.events.length ?? 0} events</span>
+              </div>
+              <div className="management-table-card">
+                <div className="management-table-scroll">
+                  <table className="management-table">
+                    <thead>
+                      <tr>
+                        <th>When</th>
+                        <th>Event</th>
+                        <th>Note</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {(shownDetail?.events ?? []).map((event) => (
+                        <tr key={event.event_uuid}>
+                          <td>{formatTimestamp(event.created_at)}</td>
+                          <td>{parkingPassEventLabels[event.event_type] ?? event.event_type}</td>
+                          <td>{event.note || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </>
@@ -482,8 +509,8 @@ export function ParkingPassesScreen({
   }
 
   return (
-    <section className="dashboard-panel">
-      <div className="section-header">
+    <section className="dashboard-panel parking-pass-screen parking-pass-list-screen">
+      <div className="section-header parking-pass-list-header">
         <div>
           <p className="eyebrow">Vehicles</p>
           <h2>Device Identification Tags</h2>
@@ -502,7 +529,7 @@ export function ParkingPassesScreen({
         </div>
       </div>
 
-      <div className="reg-table-tools">
+      <div className="reg-table-tools parking-pass-table-tools">
         <div className="segmented-control">
           {statusFilters.map((option) => (
             <button
@@ -581,7 +608,7 @@ export function ParkingPassesScreen({
       {success ? <p className="success-text">{success}</p> : null}
       {busy ? <p className="muted-text">Loading parking passes...</p> : null}
 
-      <div className="management-table-card reg-table-card">
+      <div className="management-table-card reg-table-card parking-pass-table-card">
         <div className="reg-table-summary">
           <strong>{visiblePasses.length.toLocaleString()} tags</strong>
           <span>
@@ -607,11 +634,9 @@ export function ParkingPassesScreen({
                 </th>
                 <th>Tag</th>
                 <th>Status</th>
-                <th>Labels</th>
                 <th>Student</th>
                 <th>Vehicle</th>
-                <th>Activated</th>
-                <th>Deactivated</th>
+                <th>Recent activity</th>
               </tr>
             </thead>
             <tbody>
@@ -636,16 +661,15 @@ export function ParkingPassesScreen({
                       onChange={() => toggleChecked(pass.pass_uuid)}
                     />
                   </td>
-                  <td>
+                  <td className="parking-pass-tag-cell">
                     <strong>{shortPassId(pass.pass_uuid)}</strong>
-                    <span>{pass.pass_uuid}</span>
+                    <span className="parking-pass-full-id">{pass.pass_uuid}</span>
                   </td>
                   <td>
                     <span className={`parking-pass-status parking-pass-status-${pass.status}`}>
                       {statusLabels[pass.status]}
                     </span>
                   </td>
-                  <td>{pass.tags.join(", ") || "—"}</td>
                   <td>
                     {pass.user_uuid ? (
                       <div className="reg-table-identity">
@@ -701,16 +725,14 @@ export function ParkingPassesScreen({
                       "—"
                     )}
                   </td>
-                  <td>{formatTimestamp(pass.activated_at) || "—"}</td>
-                  <td>
-                    <strong>{formatTimestamp(pass.deactivated_at) || "—"}</strong>
-                    <span>{pass.deactivated_reason ? reasonLabels[pass.deactivated_reason] ?? pass.deactivated_reason : ""}</span>
+                  <td className="parking-pass-activity-cell">
+                    <span>{passActivity(pass)}</span>
                   </td>
                 </tr>
               ))}
               {visiblePasses.length === 0 && !busy ? (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={6}>
                     <span>
                       {passes.length === 0
                         ? "No device identification tags have been printed for this school yet."
