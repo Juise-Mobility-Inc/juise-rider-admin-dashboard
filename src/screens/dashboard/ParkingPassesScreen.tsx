@@ -374,11 +374,6 @@ export function ParkingPassesScreen({
     return (
       <section className="dashboard-panel parking-pass-screen parking-pass-detail-screen">
         <div className="section-header parking-pass-detail-header">
-          <div>
-            <p className="eyebrow">Device identification tag</p>
-            <h2>{shortPassId(selectedUUID)}</h2>
-            <p className="muted-text parking-pass-uuid">{selectedUUID}</p>
-          </div>
           <button className="secondary-button" type="button" onClick={closeDetail}>
             Back to tags
           </button>
@@ -663,7 +658,6 @@ export function ParkingPassesScreen({
                   </td>
                   <td className="parking-pass-tag-cell">
                     <strong>{shortPassId(pass.pass_uuid)}</strong>
-                    <span className="parking-pass-full-id">{pass.pass_uuid}</span>
                   </td>
                   <td>
                     <span className={`parking-pass-status parking-pass-status-${pass.status}`}>

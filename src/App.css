@@ -19570,12 +19570,6 @@
   color: #b91c1c;
 }
 
-.parking-pass-uuid {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  word-break: break-all;
-}
-
 .parking-pass-actions {
   display: flex;
   flex-wrap: wrap;
@@ -19917,18 +19911,6 @@
   min-width: 130px;
 }
 
-.parking-pass-table-card .parking-pass-full-id {
-  display: block;
-  max-width: 160px;
-  margin-top: 3px;
-  overflow: hidden;
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 0.67rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .parking-pass-table-card .reg-table-identity {
   min-width: 150px;
   gap: 10px;
@@ -19969,25 +19951,6 @@
   align-items: center;
   padding: 18px 0 16px;
   border-bottom: 1px solid var(--panel-border);
-}
-
-.parking-pass-detail-header h2 {
-  margin: 3px 0 6px;
-  font-size: clamp(1.65rem, 3vw, 2.25rem);
-  line-height: 1.05;
-}
-
-.parking-pass-uuid {
-  display: inline-block;
-  max-width: min(100%, 560px);
-  padding: 5px 9px;
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  background: rgba(17, 45, 78, 0.035);
-  color: var(--muted-strong);
-  font-size: 0.76rem;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
 }
 
 .parking-pass-detail-screen > .parking-pass-details {
