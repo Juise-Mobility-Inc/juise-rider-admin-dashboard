@@ -20197,3 +20197,28 @@
     grid-column: auto;
   }
 }
+
+/* Vehicle registration decision panel */
+.reg-decision h3 {
+        margin: 0;
+        font-size: 1rem;
+}
+
+.reg-decision .reg-fee-choice {
+        margin: 0;
+}
+
+.reg-fee-amount {
+        max-width: 14rem;
+}
+
+.reg-decision-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.75rem;
+}
+
+.reg-decline-button {
+        color: var(--danger, #c0392b);
+}
