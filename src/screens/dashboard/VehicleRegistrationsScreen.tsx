@@ -24,8 +24,6 @@ type Props = {
   managedAppId: string;
 };
 
-type ApprovalMode = "matched" | "manual" | "waive";
-
 const filters = [
   { label: "All", value: "" },
   { label: "Pending", value: "pending" },
@@ -99,44 +97,42 @@ function findMatchedRule(device: RegisteredDevice, rules: RegisteredDeviceFeeRul
     })[0];
 }
 
-function getApprovalActionCopy(
-  mode: ApprovalMode,
-  matchedRule?: RegisteredDeviceFeeRule,
-) {
-  switch (mode) {
-    case "manual":
-      return {
-        title: "Approve + request manual fee",
-        subtitle: "Uses the manual fee entered above.",
-      };
-    case "waive":
-      return {
-        title: "Waive fee + approve",
-        subtitle: "Accepts registration with no payment due.",
-      };
-    case "matched":
-    default:
-      if (matchedRule && matchedRule.amount_cents > 0) {
-        return {
-          title: "Approve + request matched fee",
-          subtitle: `${formatCurrency(matchedRule.amount_cents)} due before QR unlock.`,
-        };
-      }
-      return {
-        title: "Approve - no fee due",
-        subtitle: "No matching fee rule was found.",
-      };
-  }
+type FeeChoice = "none" | "rule" | "custom";
+
+// Stripe can't charge a card less than $0.50, so a fee is $0 or at least that.
+const MINIMUM_FEE_CENTS = 50;
+
+function parseDollarsToCents(value: string) {
+  const amount = Number(value.replace(/[$,\s]/g, ""));
+  return Number.isFinite(amount) ? Math.round(amount * 100) : NaN;
 }
 
-function getApprovalSuccessMessage(mode: ApprovalMode, device: RegisteredDevice) {
-  if (mode === "waive") {
-    return "Registration approved. The fee was waived and no payment is due.";
+function isFeePaid(device: RegisteredDevice) {
+  return Boolean(device.registration_payment_collected_at) || device.payment_status === "paid";
+}
+
+// The fee choice that describes the vehicle as it stands, used to preselect
+// the decision panel and to tell whether the admin changed anything.
+function currentFeeChoice(
+  device: RegisteredDevice,
+  matchedRule?: RegisteredDeviceFeeRule,
+): { choice: FeeChoice; customCents: number } {
+  const due =
+    device.payment_status === "awaiting_payment" || device.payment_status === "failed"
+      ? device.registration_fee_amount_cents ?? 0
+      : 0;
+  if (device.registration_status === "pending" || device.registration_status === "declined") {
+    return matchedRule && matchedRule.amount_cents > 0
+      ? { choice: "rule", customCents: 0 }
+      : { choice: "none", customCents: 0 };
   }
-  if (device.payment_status === "awaiting_payment") {
-    return "Registration approved. The student must pay before QR access unlocks.";
+  if (due > 0) {
+    return device.registration_fee_source === "fee_rule" &&
+      matchedRule?.amount_cents === due
+      ? { choice: "rule", customCents: 0 }
+      : { choice: "custom", customCents: due };
   }
-  return "Registration approved. No payment is due.";
+  return { choice: "none", customCents: 0 };
 }
 
 function getInitials(name: string) {
@@ -240,7 +236,8 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
     setSelectedUUID,
     hasLoadedOnce,
   );
-  const [manualAmounts, setManualAmounts] = useState<Record<string, string>>({});
+  const [feeChoices, setFeeChoices] = useState<Record<string, FeeChoice>>({});
+  const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -351,27 +348,33 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
     }
   }, [selectedUUID, sortedEntries]);
 
-  async function approve(entry: RegisteredDeviceReviewEntry, mode: ApprovalMode) {
+  async function applyDecision(
+    entry: RegisteredDeviceReviewEntry,
+    choice: FeeChoice,
+    amountCents: number,
+    successMessage: string,
+  ) {
     const deviceUUID = entry.device.registered_device_uuid;
-    let amount_cents: number | null | undefined;
-    if (mode === "manual") {
-      const amount = Number((manualAmounts[deviceUUID] ?? "").replace(/[$,\s]/g, ""));
-      if (!Number.isFinite(amount) || amount <= 0) {
-        setError("Manual fee amount is required.");
-        return;
-      }
-      amount_cents = Math.round(amount * 100);
-    }
-    setBusyId(`${deviceUUID}:${mode}`);
+    setBusyId(`${deviceUUID}:approve`);
     setError("");
     setSuccess("");
     try {
-      const updatedDevice = await approveSchoolRegisteredDevice(managedAppId, activeSchoolId, deviceUUID, {
-        fee_mode: mode,
-        amount_cents,
+      await approveSchoolRegisteredDevice(managedAppId, activeSchoolId, deviceUUID, {
+        fee_mode: choice === "none" ? "waive" : choice === "rule" ? "matched" : "manual",
+        amount_cents: choice === "custom" ? amountCents : undefined,
         note: notes[deviceUUID] ?? "",
       });
-      setSuccess(getApprovalSuccessMessage(mode, updatedDevice));
+      setSuccess(successMessage);
+      setFeeChoices((current) => {
+        const next = { ...current };
+        delete next[deviceUUID];
+        return next;
+      });
+      setCustomAmounts((current) => {
+        const next = { ...current };
+        delete next[deviceUUID];
+        return next;
+      });
       await refresh();
     } catch (nextError) {
       setError(getErrorMessage(nextError));
@@ -405,68 +408,176 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
     entry: RegisteredDeviceReviewEntry,
     matchedRule?: RegisteredDeviceFeeRule,
   ) {
-    const deviceUUID = entry.device.registered_device_uuid;
+    const device = entry.device;
+    const deviceUUID = device.registered_device_uuid;
     const isBusy = busyId.startsWith(deviceUUID);
+    const isPending = device.registration_status === "pending";
+    const isDeclined = device.registration_status === "declined";
+    // Only an approved registration can hold a paid fee; a pending or declined
+    // one always offers approval, so a decline can be reversed here.
+    const paid = !isPending && !isDeclined && isFeePaid(device);
+    const ruleCents = matchedRule && matchedRule.amount_cents > 0 ? matchedRule.amount_cents : 0;
+
+    const current = currentFeeChoice(device, matchedRule);
+    const choice = feeChoices[deviceUUID] ?? current.choice;
+    const customText =
+      customAmounts[deviceUUID] ??
+      (current.customCents > 0 ? (current.customCents / 100).toFixed(2) : "");
+    const customCents = parseDollarsToCents(customText);
+    const amountCents = choice === "rule" ? ruleCents : choice === "custom" ? customCents : 0;
+
+    const feeError =
+      choice === "custom" && (!Number.isFinite(customCents) || customCents < MINIMUM_FEE_CENTS)
+        ? "Enter an amount of at least $0.50."
+        : "";
+
+    const unchanged =
+      !isPending &&
+      !isDeclined &&
+      choice === current.choice &&
+      (choice !== "custom" || customCents === current.customCents);
+
+    let actionLabel: string;
+    let successMessage: string;
+    if (isPending || isDeclined) {
+      actionLabel =
+        amountCents > 0 ? `Approve with ${formatCurrency(amountCents)} fee` : "Approve with no fee";
+      successMessage =
+        amountCents > 0
+          ? "Approved. The student pays the fee in the app before their tag is valid."
+          : "Approved with no fee. The vehicle is ready to use.";
+    } else if (amountCents > 0) {
+      actionLabel =
+        current.choice === "none"
+          ? `Charge ${formatCurrency(amountCents)} fee`
+          : `Change fee to ${formatCurrency(amountCents)}`;
+      successMessage = "Fee updated. The student pays it in the app before their tag is valid.";
+    } else {
+      actionLabel = "Waive fee";
+      successMessage = "Fee waived. Nothing is due.";
+    }
+
+    const setChoice = (next: FeeChoice) =>
+      setFeeChoices((existing) => ({ ...existing, [deviceUUID]: next }));
 
     return (
-      <div className="reg-card-actions reg-detail-actions">
-        <div className="reg-card-fields">
-          <label className="field">
-            <span>Review note</span>
-            <input
-              value={notes[deviceUUID] ?? ""}
-              onChange={(event) =>
-                setNotes((current) => ({
-                  ...current,
-                  [deviceUUID]: event.target.value,
-                }))
-              }
-              placeholder="Optional approval note, required to decline"
-            />
-          </label>
-          <label className="field">
-            <span>Manual fee</span>
-            <input
-              value={manualAmounts[deviceUUID] ?? ""}
-              onChange={(event) =>
-                setManualAmounts((current) => ({
-                  ...current,
-                  [deviceUUID]: event.target.value,
-                }))
-              }
-              placeholder="$25.00"
-            />
-          </label>
-        </div>
-        <div className="inline-actions">
-          {(["matched", "manual", "waive"] as const).map((mode) => {
-            const copy = getApprovalActionCopy(mode, matchedRule);
-            return (
+      <div className="reg-card-actions reg-detail-actions reg-decision">
+        <h3>{isPending ? "Review registration" : isDeclined ? "Declined" : "Registration fee"}</h3>
+
+        {paid ? (
+          <p className="muted-text">
+            Paid {formatCurrency(device.registration_fee_amount_cents)}. Nothing more is due.
+          </p>
+        ) : (
+          <>
+            <div
+              className="segmented-control reg-fee-choice"
+              role="radiogroup"
+              aria-label="Registration fee"
+            >
               <button
-                key={mode}
-                className={
-                  mode === "matched"
-                    ? "primary-button reg-action-button"
-                    : "secondary-button reg-action-button"
-                }
                 type="button"
-                title={copy.subtitle}
-                disabled={isBusy}
-                onClick={() => void approve(entry, mode)}
+                role="radio"
+                aria-checked={choice === "none"}
+                className={choice === "none" ? "segment-active" : ""}
+                onClick={() => setChoice("none")}
               >
-                {busyId === `${deviceUUID}:${mode}` ? "Working..." : copy.title}
+                No fee
               </button>
-            );
-          })}
-          <button
-            className="danger-button reg-action-button"
-            type="button"
-            title="Requires a student-facing review note."
-            disabled={isBusy}
-            onClick={() => void decline(entry)}
-          >
-            {busyId === `${deviceUUID}:decline` ? "Working..." : "Decline"}
-          </button>
+              {ruleCents > 0 ? (
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={choice === "rule"}
+                  className={choice === "rule" ? "segment-active" : ""}
+                  title={matchedRule?.label || "Matching registration fee rule"}
+                  onClick={() => setChoice("rule")}
+                >
+                  Fee rule · {formatCurrency(ruleCents)}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                role="radio"
+                aria-checked={choice === "custom"}
+                className={choice === "custom" ? "segment-active" : ""}
+                onClick={() => setChoice("custom")}
+              >
+                Custom amount
+              </button>
+            </div>
+            {choice === "custom" ? (
+              <label className="field reg-fee-amount">
+                <span>Amount (USD)</span>
+                <input
+                  inputMode="decimal"
+                  value={customText}
+                  onChange={(event) =>
+                    setCustomAmounts((existing) => ({
+                      ...existing,
+                      [deviceUUID]: event.target.value,
+                    }))
+                  }
+                  placeholder="25.00"
+                />
+              </label>
+            ) : null}
+            {feeError && customText ? <p className="error-text">{feeError}</p> : null}
+          </>
+        )}
+
+        <label className="field">
+          <span>
+            Note to student{" "}
+            {isPending || isDeclined ? "(optional; required to decline)" : "(required to decline)"}
+          </span>
+          <input
+            value={notes[deviceUUID] ?? ""}
+            onChange={(event) =>
+              setNotes((existing) => ({
+                ...existing,
+                [deviceUUID]: event.target.value,
+              }))
+            }
+            placeholder={
+              isPending
+                ? "e.g. Welcome! Your bike is registered."
+                : "e.g. The serial number doesn't match the photo."
+            }
+          />
+        </label>
+
+        <div className="reg-decision-buttons">
+          {!paid ? (
+            <button
+              className="primary-button reg-action-button"
+              type="button"
+              disabled={isBusy || unchanged || Boolean(feeError)}
+              onClick={() => void applyDecision(entry, choice, amountCents, successMessage)}
+            >
+              {busyId === `${deviceUUID}:approve` ? "Saving..." : actionLabel}
+            </button>
+          ) : null}
+          {!isDeclined ? (
+            <button
+              className="text-button reg-decline-button"
+              type="button"
+              disabled={isBusy}
+              onClick={() => {
+                if (
+                  paid &&
+                  !window.confirm(
+                    `This vehicle's ${formatCurrency(device.registration_fee_amount_cents)} fee was paid. Declining clears the payment record and doesn't refund it. If you approve it again with a fee, the student is asked to pay again. Decline anyway?`,
+                  )
+                ) {
+                  return;
+                }
+                void decline(entry);
+              }}
+            >
+              {busyId === `${deviceUUID}:decline` ? "Declining..." : "Decline registration"}
+            </button>
+          ) : null}
         </div>
       </div>
     );
@@ -603,8 +714,8 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
           <p className="eyebrow">Vehicle registration</p>
           <h2>Review Queue</h2>
           <p className="muted-text">
-            Review every submitted device in a table, then open one registration
-            to accept it, waive fees, request payment, or decline it.
+            New vehicles are approved automatically. Open one to add, change
+            or waive its registration fee, or to decline it.
           </p>
         </div>
         <button className="secondary-button" type="button" onClick={() => void refresh()}>
