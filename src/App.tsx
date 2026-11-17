@@ -144,8 +144,7 @@ import { SecuritySettingsScreen } from "./screens/dashboard/SecuritySettingsScre
 import { PacksScreen } from "./screens/dashboard/PacksScreen";
 import { ParkingReportsScreen } from "./screens/dashboard/ParkingReportsScreen";
 import { PenaltyReportsScreen } from "./screens/dashboard/PenaltyReportsScreen";
-import { PostReportsScreen } from "./screens/dashboard/PostReportsScreen";
-import { CommentReportsScreen } from "./screens/dashboard/CommentReportsScreen";
+import { SocialReportsScreen } from "./screens/dashboard/social-reports/SocialReportsScreen";
 import { PoisScreen } from "./screens/dashboard/PoisScreen";
 import { RegistrationFeesScreen } from "./screens/dashboard/RegistrationFeesScreen";
 import { ReportsScreen } from "./screens/dashboard/ReportsScreen";
@@ -190,8 +189,7 @@ type Section =
   | "registrationFees"
   | "penaltyReports"
   | "parkingReports"
-  | "postReports"
-  | "commentReports"
+  | "socialReports"
   | "studentRideViolations"
   | "violationFees"
   | "reports"
@@ -269,14 +267,9 @@ const dashboardSections: Array<{
     path: "/parking-reports",
   },
   {
-    section: "postReports",
-    label: "Post Reports",
-    path: "/post-reports",
-  },
-  {
-    section: "commentReports",
-    label: "Comment Reports",
-    path: "/comment-reports",
+    section: "socialReports",
+    label: "Social Reports",
+    path: "/social-reports",
   },
   {
     section: "studentRideViolations",
@@ -2972,8 +2965,26 @@ function App() {
       return;
     }
 
+    // Post and comment reports moved into Social Reports; keep old links
+    // (including ?report= and ?tab=) working.
+    const legacySocialReports: Record<string, { type: string; kind: string }> = {
+      "/post-reports": { type: "posts", kind: "post" },
+      "/comment-reports": { type: "comments", kind: "comment" },
+    };
+    const legacy = legacySocialReports[normalizeDashboardPath(location.pathname)];
+    if (legacy) {
+      const params = new URLSearchParams(location.search);
+      params.set("type", legacy.type);
+      const report = params.get("report");
+      if (report) {
+        params.set("report", `${legacy.kind}:${report}`);
+      }
+      navigate(`/social-reports?${params.toString()}`, { replace: true });
+      return;
+    }
+
     navigate(sectionPathByName.dashboard, { replace: true });
-  }, [location.pathname, navigate]);
+  }, [location.pathname, location.search, navigate]);
 
   useEffect(() => {
     setPackDraft(createEmptyPackDraft(schoolDraft.default_campus_id ?? ""));
@@ -7576,16 +7587,9 @@ function App() {
             onOpenStudentDevice={handleOpenStudentDeviceFromDashboard}
           />
         );
-      case "postReports":
+      case "socialReports":
         return (
-          <PostReportsScreen
-            activeSchoolId={activeSchoolId}
-            managedAppId={context.managedAppId}
-          />
-        );
-      case "commentReports":
-        return (
-          <CommentReportsScreen
+          <SocialReportsScreen
             activeSchoolId={activeSchoolId}
             managedAppId={context.managedAppId}
           />
@@ -8239,24 +8243,14 @@ function App() {
                       )}
                   </NavLink>
                   <NavLink
-                    to="/post-reports"
+                    to="/social-reports"
                     className={({ isActive }) =>
                       isActive
                         ? "nav-sub-item nav-sub-item-active"
                         : "nav-sub-item"
                     }
                   >
-                    Post Reports
-                  </NavLink>
-                  <NavLink
-                    to="/comment-reports"
-                    className={({ isActive }) =>
-                      isActive
-                        ? "nav-sub-item nav-sub-item-active"
-                        : "nav-sub-item"
-                    }
-                  >
-                    Comment Reports
+                    Social Reports
                   </NavLink>
                   <NavLink
                     to="/student-ride-violations"

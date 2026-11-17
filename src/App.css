@@ -20222,3 +20222,45 @@
 .reg-decline-button {
         color: var(--danger, #c0392b);
 }
+
+/* Social Reports: posts and comments in one table */
+.social-reports-filters {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+}
+
+.social-reports-filters .segmented-control {
+        margin: 0;
+}
+
+.social-reports-page .post-reports-layout {
+        grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr);
+}
+
+.social-reports-page .post-reports-list {
+        display: block;
+}
+
+.social-reports-row {
+        cursor: pointer;
+}
+
+.social-reports-row.is-selected td {
+        background: rgba(44, 124, 92, 0.11);
+}
+
+.social-reports-snippet {
+        max-width: 22rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+        .social-reports-page .post-reports-layout {
+                grid-template-columns: minmax(0, 1fr);
+        }
+}
