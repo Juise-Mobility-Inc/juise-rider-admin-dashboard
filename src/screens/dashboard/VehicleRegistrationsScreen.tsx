@@ -413,7 +413,9 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
     const isBusy = busyId.startsWith(deviceUUID);
     const isPending = device.registration_status === "pending";
     const isDeclined = device.registration_status === "declined";
-    const paid = isFeePaid(device);
+    // Only an approved registration can hold a paid fee; a pending or declined
+    // one always offers approval, so a decline can be reversed here.
+    const paid = !isPending && !isDeclined && isFeePaid(device);
     const ruleCents = matchedRule && matchedRule.amount_cents > 0 ? matchedRule.amount_cents : 0;
 
     const current = currentFeeChoice(device, matchedRule);
@@ -561,7 +563,17 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
               className="text-button reg-decline-button"
               type="button"
               disabled={isBusy}
-              onClick={() => void decline(entry)}
+              onClick={() => {
+                if (
+                  paid &&
+                  !window.confirm(
+                    `This vehicle's ${formatCurrency(device.registration_fee_amount_cents)} fee was paid. Declining clears the payment record and doesn't refund it. If you approve it again with a fee, the student is asked to pay again. Decline anyway?`,
+                  )
+                ) {
+                  return;
+                }
+                void decline(entry);
+              }}
             >
               {busyId === `${deviceUUID}:decline` ? "Declining..." : "Decline registration"}
             </button>
