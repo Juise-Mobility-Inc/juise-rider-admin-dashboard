@@ -164,6 +164,16 @@ export function SocialReportsScreen({ activeSchoolId, managedAppId }: Props) {
     void refreshList();
   }, [refreshList]);
 
+  // An action that finishes after the moderator switched tab or school must
+  // refresh the list now on screen, not the one it started on.
+  const refreshListRef = useRef(refreshList);
+  useEffect(() => {
+    refreshListRef.current = refreshList;
+  }, [refreshList]);
+
+  // Bumped on every row click so reselecting a report reloads its detail.
+  const [reloadToken, setReloadToken] = useState(0);
+
   // A school or tab change drops the old rows and selection.
   useEffect(() => {
     setPostRows([]);
@@ -339,11 +349,15 @@ export function SocialReportsScreen({ activeSchoolId, managedAppId }: Props) {
                       key={row.key}
                       className={`social-reports-row ${row.key === selectedKey ? "is-selected" : ""}`}
                       tabIndex={0}
-                      onClick={() => setSelectedRow(row)}
+                      onClick={() => {
+                        setSelectedRow(row);
+                        setReloadToken((token) => token + 1);
+                      }}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
                           setSelectedRow(row);
+                          setReloadToken((token) => token + 1);
                         }
                       }}
                     >
@@ -404,7 +418,8 @@ export function SocialReportsScreen({ activeSchoolId, managedAppId }: Props) {
                 schoolId={activeSchoolId}
                 reportUUID={selectedRow.reportUUID}
                 latestReporter={selectedRow.latestReporter}
-                onChanged={() => void refreshList()}
+                reloadToken={reloadToken}
+                onChanged={() => void refreshListRef.current()}
               />
             ) : (
               <CommentReportDetail
@@ -413,7 +428,8 @@ export function SocialReportsScreen({ activeSchoolId, managedAppId }: Props) {
                 schoolId={activeSchoolId}
                 reportUUID={selectedRow.reportUUID}
                 latestReporter={selectedRow.latestReporter}
-                onChanged={() => void refreshList()}
+                reloadToken={reloadToken}
+                onChanged={() => void refreshListRef.current()}
               />
             )}
           </div>

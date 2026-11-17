@@ -13,6 +13,8 @@ type Props = {
   managedAppId: string;
   schoolId: string;
   reportUUID: string;
+  // Bumped when the moderator selects the report again, to reload it.
+  reloadToken?: number;
   latestReporter?: SocialModerationUser;
   // Called after an action changes the report, so the list can refresh.
   onChanged: () => void;
@@ -25,10 +27,12 @@ export function CommentReportDetail({
   managedAppId,
   schoolId,
   reportUUID,
+  reloadToken = 0,
   latestReporter,
   onChanged,
 }: Props) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
+  const [retries, setRetries] = useState(0);
   const [actionBusy, setActionBusy] = useState(false);
   // Messages are tagged with their report so they don't carry over to the
   // next one the moderator opens.
@@ -50,7 +54,7 @@ export function CommentReportDetail({
     return () => {
       cancelled = true;
     };
-  }, [managedAppId, schoolId, reportUUID]);
+  }, [managedAppId, schoolId, reportUUID, reloadToken, retries]);
 
   const current = loaded?.reportUUID === reportUUID ? loaded : null;
   const detail = current?.detail ?? null;
@@ -114,7 +118,21 @@ export function CommentReportDetail({
     return <p className="empty-state">Loading…</p>;
   }
   if (!detail) {
-    return <p className="form-error">{current.error || "Unable to load this report."}</p>;
+    return (
+      <div className="post-reports-detail-error">
+        <p className="form-error">{current.error || "Unable to load this report."}</p>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={() => {
+            setLoaded(null);
+            setRetries((count) => count + 1);
+          }}
+        >
+          Try again
+        </button>
+      </div>
+    );
   }
 
   return (
