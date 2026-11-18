@@ -46,7 +46,7 @@ export function ConfirmDialogHost() {
           <button
             className="secondary-button"
             type="button"
-            autoFocus
+            data-autofocus
             onClick={() => settleConfirm(pending.id, false)}
           >
             {pending.cancelLabel ?? "Cancel"}

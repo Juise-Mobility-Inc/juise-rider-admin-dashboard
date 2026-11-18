@@ -5,6 +5,24 @@ import { useEffect, useRef } from "react";
 const openDialogs: HTMLElement[] = [];
 let savedBodyOverflow = "";
 
+// The element focused before the current one. A dialog's own autoFocus
+// (React focuses during commit, before effects run) can move focus inside
+// before useDialog records what opened it; this remembers the opener.
+let focusBeforeCurrent: HTMLElement | null = null;
+let currentFocus: HTMLElement | null = null;
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "focusin",
+    (event) => {
+      if (event.target instanceof HTMLElement && event.target !== currentFocus) {
+        focusBeforeCurrent = currentFocus;
+        currentFocus = event.target;
+      }
+    },
+    true,
+  );
+}
+
 const focusableSelector = [
   "a[href]",
   "button:not([disabled])",
@@ -42,10 +60,16 @@ export function useDialog<T extends HTMLElement = HTMLDivElement>(
       return;
     }
 
-    const previouslyFocused =
+    const active =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
+    const previouslyFocused =
+      active && element.contains(active)
+        ? focusBeforeCurrent && !element.contains(focusBeforeCurrent)
+          ? focusBeforeCurrent
+          : null
+        : active;
 
     if (openDialogs.length === 0) {
       savedBodyOverflow = document.body.style.overflow;
@@ -54,7 +78,9 @@ export function useDialog<T extends HTMLElement = HTMLDivElement>(
     openDialogs.push(element);
 
     if (!element.contains(document.activeElement)) {
-      const autofocus = element.querySelector<HTMLElement>("[autofocus]");
+      const autofocus = element.querySelector<HTMLElement>(
+        "[data-autofocus], [autofocus]",
+      );
       const target = autofocus ?? focusableWithin(element)[0];
       if (target) {
         target.focus({ preventScroll: true });

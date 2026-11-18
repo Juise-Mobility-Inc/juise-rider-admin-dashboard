@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+
+import { useDialog } from "../lib/useDialog";
 import Cropper, { type Area } from "react-easy-crop";
 // react-easy-crop v6 ships its layout CSS as a separate file and does not
 // inject it — without this the crop container collapses and its dimming
@@ -48,15 +50,12 @@ export function ImageCropModal({
   const [busy, setBusy] = useState(false);
   const croppedAreaPixelsRef = useRef<Area | null>(null);
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !busy) {
-        onCancel();
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [busy, onCancel]);
+  // Registers on the shared dialog stack: the cropper opens on top of other
+  // modals (Pack editor, challenge stop), so Escape / Tab must reach it, not
+  // the editor underneath.
+  const dialogRef = useDialog<HTMLDivElement>(true, () => {
+    if (!busy) onCancel();
+  });
 
   const onCropComplete = useCallback((_area: Area, areaPixels: Area) => {
     croppedAreaPixelsRef.current = areaPixels;
@@ -83,6 +82,7 @@ export function ImageCropModal({
 
   return (
     <div
+      ref={dialogRef}
       className="management-modal-backdrop"
       role="dialog"
       aria-modal="true"
