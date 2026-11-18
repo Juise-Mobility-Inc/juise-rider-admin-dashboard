@@ -8,6 +8,7 @@ import {
   fetchParkingViolationFeeRules,
   fetchSchoolParkingIncidentReport,
   fetchSchoolParkingIncidentReportContext,
+  findSchoolParkingIncidentReport,
   fetchSchoolParkingIncidentReports,
   fetchSchoolRegisteredDevices,
   flagSchoolParkingIncidentReport,
@@ -270,16 +271,26 @@ export function ParkingReportsScreen({
     () => (historyCache.scope === historyScope ? historyCache.reports : {}),
     [historyCache, historyScope],
   );
-  function setHistoryReports(
-    update: (
-      current: Record<string, StudentParkingIncidentReport>,
-    ) => Record<string, StudentParkingIncidentReport>,
-  ) {
-    setHistoryCache((cache) => ({
-      scope: historyScope,
-      reports: update(cache.scope === historyScope ? cache.reports : {}),
-    }));
-  }
+  const setHistoryReports = useCallback(
+    (
+      update: (
+        current: Record<string, StudentParkingIncidentReport>,
+      ) => Record<string, StudentParkingIncidentReport>,
+    ) => {
+      setHistoryCache((cache) => ({
+        scope: historyScope,
+        reports: update(cache.scope === historyScope ? cache.reports : {}),
+      }));
+    },
+    [historyScope],
+  );
+  // Set once the first list load finishes, so a ?report= selection is only
+  // looked up on its own after the list had its chance to contain it.
+  const [listLoadedOnce, setListLoadedOnce] = useState(false);
+  const detailOpenRef = useRef(detailOpen);
+  useEffect(() => {
+    detailOpenRef.current = detailOpen;
+  }, [detailOpen]);
   const [expandedPhotoUrl, setExpandedPhotoUrl] = useState("");
 
   useDetailParamSync(
@@ -421,6 +432,11 @@ export function ParkingReportsScreen({
         if (nextReports.some((report) => report.report_uuid === current)) {
           return current;
         }
+        // An open detail keeps its report even when the list doesn't have
+        // it; the lookup effect below fetches it or closes the detail.
+        if (current && detailOpenRef.current) {
+          return current;
+        }
         return nextReports[0]?.report_uuid ?? "";
       });
 
@@ -458,6 +474,7 @@ export function ParkingReportsScreen({
       setError(getErrorMessage(nextError));
     } finally {
       setLoadBusy(false);
+      setListLoadedOnce(true);
     }
   }, [
     activeSchoolId,
@@ -497,11 +514,50 @@ export function ParkingReportsScreen({
     };
   }, [activeSchoolId, managedAppId]);
 
+  // A selection the loaded list doesn't contain (an old link, or Back to a
+  // report opened from history after leaving this screen): fetch it by UUID,
+  // and close the detail only if it can't be found.
   useEffect(() => {
-    if (detailOpen && !selectedReport) {
-      setDetailOpen(false);
+    if (!detailOpen || selectedReport || loadBusy || !listLoadedOnce) {
+      return;
     }
-  }, [detailOpen, selectedReport]);
+    if (!selectedReportId) {
+      setDetailOpen(false);
+      return;
+    }
+    let cancelled = false;
+    findSchoolParkingIncidentReport(
+      managedAppId,
+      activeSchoolId,
+      selectedReportId,
+    ).then(
+      (report) => {
+        if (!cancelled) {
+          setHistoryReports((current) => ({
+            ...current,
+            [report.report_uuid]: report,
+          }));
+        }
+      },
+      () => {
+        if (!cancelled) {
+          setDetailOpen(false);
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeSchoolId,
+    detailOpen,
+    listLoadedOnce,
+    loadBusy,
+    managedAppId,
+    selectedReport,
+    selectedReportId,
+    setHistoryReports,
+  ]);
 
   useEffect(() => {
     if (!selectedReport) {

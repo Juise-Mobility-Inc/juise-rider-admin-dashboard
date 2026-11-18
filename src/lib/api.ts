@@ -4187,6 +4187,24 @@ export async function fetchSchoolParkingIncidentReport(
   );
 }
 
+// Finds one report by UUID under any of the managed app's IDs (some reports
+// live under a compatibility app ID, as the list call accounts for).
+export async function findSchoolParkingIncidentReport(
+  managedAppId: string,
+  schoolId: string,
+  reportUUID: string,
+): Promise<StudentParkingIncidentReport> {
+  let lastError: unknown = new Error("Parking report not found");
+  for (const appId of buildManagedAppCandidates(managedAppId)) {
+    try {
+      return await fetchSchoolParkingIncidentReport(appId, schoolId, reportUUID);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
 export async function fetchSchoolParkingIncidentReportContext(
   managedAppId: string,
   schoolId: string,
