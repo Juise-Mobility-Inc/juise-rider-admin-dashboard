@@ -946,9 +946,11 @@ export function ParkingReportsScreen({
       setActionBusy("history");
       setError("");
       try {
+        // Related reports come from the open report's app and school (some
+        // reports live under a compatibility app ID), so fetch under those.
         const report = await fetchSchoolParkingIncidentReport(
-          managedAppId,
-          activeSchoolId,
+          selectedReport?.app_id || managedAppId,
+          selectedReport?.school_id || activeSchoolId,
           reportUUID,
         );
         const objectKeys = (report.media_assets ?? [])
