@@ -22,6 +22,11 @@ import {
   type CsvCell,
 } from "../../lib/csv";
 import { DialogBackdrop } from "../../components/DialogBackdrop";
+import {
+  DataRow,
+  DataTable,
+  TableCard,
+} from "../../components/table/DataTable";
 
 type Props = any;
 
@@ -382,7 +387,7 @@ export function PacksScreen(props: Props) {
             ) : null}
           </div>
 
-          <div className="management-table-card">
+          <div className="table-section">
             <div className="data-section-header">
               <div>
                 <h3>Created packs</h3>
@@ -408,8 +413,8 @@ export function PacksScreen(props: Props) {
             ) : null}
 
             {schoolPacks.length > 0 ? (
-              <div className="management-table-scroll">
-                <table className="management-table">
+              <TableCard>
+                <DataTable minWidth={720}>
                   <thead>
                     <tr>
                       <th>Pack</th>
@@ -423,7 +428,7 @@ export function PacksScreen(props: Props) {
                   <tbody>
                     {schoolPacks.map((pack: any) => {
                       return (
-                        <tr key={pack.pack_uuid}>
+                        <DataRow key={pack.pack_uuid} onOpen={packEditBusy ? undefined : () => handleStartEditingPack(pack)}>
                           <td>
                             <strong>{pack.name || "Juise Pack"}</strong>
                             <span>{pack.description || "No description"}</span>
@@ -471,12 +476,12 @@ export function PacksScreen(props: Props) {
                               Edit
                             </button>
                           </td>
-                        </tr>
+                        </DataRow>
                       );
                     })}
                   </tbody>
-                </table>
-              </div>
+                </DataTable>
+              </TableCard>
             ) : null}
           </div>
         </>
@@ -538,8 +543,8 @@ export function PacksScreen(props: Props) {
               ) : null}
 
               {pendingImportedPacks.length > 0 ? (
-                <div className="management-table-scroll">
-                  <table className="management-table">
+                <TableCard>
+                  <DataTable minWidth={720}>
                     <thead>
                       <tr>
                         <th>Name</th>
@@ -563,8 +568,8 @@ export function PacksScreen(props: Props) {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
-                </div>
+                  </DataTable>
+                </TableCard>
               ) : null}
 
               <div className="form-actions">

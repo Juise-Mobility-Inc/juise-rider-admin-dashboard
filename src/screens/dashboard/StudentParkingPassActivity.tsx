@@ -7,6 +7,10 @@ import {
 } from "../../lib/api";
 import { downloadCsv, sanitizeCsvFilename } from "../../lib/csv";
 import { parkingPassEventLabels, shortPassId } from "../../lib/parkingPasses";
+import {
+  DataTable,
+  TableCard,
+} from "../../components/table/DataTable";
 
 type Props = {
   managedAppId: string;
@@ -113,8 +117,8 @@ export function StudentParkingPassActivity({
       ) : rows.length === 0 ? (
         <p className="muted-text">This student hasn't activated a device identification tag yet.</p>
       ) : (
-        <div className="management-table-scroll">
-          <table className="management-table">
+        <TableCard>
+          <DataTable minWidth={560} aria-label="Device identification tag history">
             <thead>
               <tr>
                 <th>Date</th>
@@ -138,8 +142,8 @@ export function StudentParkingPassActivity({
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+          </DataTable>
+        </TableCard>
       )}
     </div>
   );

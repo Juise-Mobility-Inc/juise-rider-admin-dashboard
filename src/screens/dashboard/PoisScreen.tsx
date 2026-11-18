@@ -22,6 +22,12 @@ import {
   type CsvCell,
 } from "../../lib/csv";
 import { DialogBackdrop } from "../../components/DialogBackdrop";
+import {
+  DataRow,
+  DataTable,
+  StatusBadge,
+  TableCard,
+} from "../../components/table/DataTable";
 
 type POIDraft = {
   id: string;
@@ -424,7 +430,7 @@ export function PoisScreen(props: Props) {
             />
           </div>
 
-          <div className="management-table-card">
+          <div className="table-section">
             <div className="data-section-header">
               <div>
                 <h3>Created POIs</h3>
@@ -437,8 +443,8 @@ export function PoisScreen(props: Props) {
             {poiDrafts.length === 0 ? (
               <p className="empty-state">No POIs have been created yet.</p>
             ) : (
-              <div className="management-table-scroll">
-                <table className="management-table">
+              <TableCard>
+                <DataTable minWidth={720}>
                   <thead>
                     <tr>
                       <th>Name</th>
@@ -457,7 +463,7 @@ export function PoisScreen(props: Props) {
                       const isMapped = lat !== null && lng !== null;
 
                       return (
-                        <tr key={poi.id}>
+                        <DataRow key={poi.id} onOpen={() => openPoiModal(poi.id)}>
                           <td>
                             <strong>
                               {poi.title.trim() || `POI ${index + 1}`}
@@ -471,15 +477,7 @@ export function PoisScreen(props: Props) {
                           <td>{lat === null ? "-" : lat.toFixed(6)}</td>
                           <td>{lng === null ? "-" : lng.toFixed(6)}</td>
                           <td>
-                            <span
-                              className={`student-badge ${
-                                isMapped
-                                  ? "student-badge-highlight"
-                                  : "student-badge-muted"
-                              }`}
-                            >
-                              {isMapped ? "Pinned" : "Unplaced"}
-                            </span>
+                            <StatusBadge tone={isMapped ? "success" : "warning"}>{isMapped ? "Pinned" : "Unplaced"}</StatusBadge>
                           </td>
                           <td>
                             <button
@@ -490,12 +488,12 @@ export function PoisScreen(props: Props) {
                               Edit
                             </button>
                           </td>
-                        </tr>
+                        </DataRow>
                       );
                     })}
                   </tbody>
-                </table>
-              </div>
+                </DataTable>
+              </TableCard>
             )}
           </div>
         </>
@@ -557,8 +555,8 @@ export function PoisScreen(props: Props) {
               ) : null}
 
               {pendingImportedPois.length > 0 ? (
-                <div className="management-table-scroll">
-                  <table className="management-table">
+                <TableCard>
+                  <DataTable minWidth={720}>
                     <thead>
                       <tr>
                         <th>Title</th>
@@ -582,8 +580,8 @@ export function PoisScreen(props: Props) {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
-                </div>
+                  </DataTable>
+                </TableCard>
               ) : null}
 
               <div className="form-actions">

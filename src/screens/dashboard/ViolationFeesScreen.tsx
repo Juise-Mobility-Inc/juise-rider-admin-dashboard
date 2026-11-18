@@ -9,6 +9,13 @@ import {
   type ParkingViolationFeeRuleInput,
 } from "../../lib/api";
 import { confirmAction } from "../../lib/confirm";
+import {
+  DataRow,
+  DataTable,
+  StatusBadge,
+  TableCard,
+  TableMessageRow,
+} from "../../components/table/DataTable";
 
 type Props = {
   activeSchoolId: string;
@@ -509,33 +516,40 @@ export function ViolationFeesScreen({ activeSchoolId, managedAppId }: Props) {
               <span>{sortedRules.length.toLocaleString()} rules</span>
             </div>
           </div>
-          {sortedRules.length === 0 ? (
-            <p className="empty-state">No violation fee rules configured.</p>
-          ) : (
-            <div className="violation-fees-table">
-              {sortedRules.map((rule) => (
-                <div className="vf-rule-card" key={rule.fee_rule_uuid}>
-                  <div className="vf-rule-card-header">
-                    <div className="vf-rule-card-title">
+          <TableCard>
+            <DataTable minWidth={560} aria-label="Violation fees">
+              <thead>
+                <tr>
+                  <th>Violation</th>
+                  <th>Applies to</th>
+                  <th>Fee</th>
+                  <th>Status</th>
+                  <th aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {sortedRules.map((rule) => (
+                  <DataRow
+                    key={rule.fee_rule_uuid}
+                    className={rule.active ? undefined : "dt-row-inactive"}
+                  >
+                    <td>
                       <strong>{formatViolationType(rule.violation_type)}</strong>
-                      {rule.label.trim() ? <p>{rule.label.trim()}</p> : null}
-                    </div>
-                    <div className="vf-rule-card-kpi">
-                      <span className="vf-rule-amount">
-                        {formatCurrencyFromCents(rule.amount_cents)}
-                      </span>
-                      <span className={`vf-rule-status${rule.active ? " vf-rule-status-on" : " vf-rule-status-off"}`}>
-                        {rule.active ? "Active" : "Inactive"}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="vf-rule-card-footer">
-                    <div className="vf-rule-meta">
-                      <span>{formatRuleValue(rule.device_type)} device</span>
-                      <span className="vf-rule-meta-sep">·</span>
+                      {rule.label.trim() ? <span>{rule.label.trim()}</span> : null}
+                    </td>
+                    <td>
+                      <strong>{formatRuleValue(rule.device_type)} device</strong>
                       <span>{formatRuleValue(rule.powertrain_type)}</span>
-                    </div>
-                    <div className="vf-rule-actions">
+                    </td>
+                    <td>
+                      <strong>{formatCurrencyFromCents(rule.amount_cents)}</strong>
+                    </td>
+                    <td>
+                      <StatusBadge tone={rule.active ? "success" : "neutral"}>
+                        {rule.active ? "Active" : "Inactive"}
+                      </StatusBadge>
+                    </td>
+                    <td className="dt-actions-cell">
                       <button
                         className="secondary-button"
                         type="button"
@@ -544,7 +558,7 @@ export function ViolationFeesScreen({ activeSchoolId, managedAppId }: Props) {
                           setIsDeviceTypeCustom(false);
                         }}>
                         Edit
-                      </button>
+                      </button>{" "}
                       <button
                         className="danger-button"
                         type="button"
@@ -552,12 +566,17 @@ export function ViolationFeesScreen({ activeSchoolId, managedAppId }: Props) {
                         onClick={() => void handleDelete(rule)}>
                         Delete
                       </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                    </td>
+                  </DataRow>
+                ))}
+                {sortedRules.length === 0 ? (
+                  <TableMessageRow colSpan={5}>
+                    No violation fee rules configured.
+                  </TableMessageRow>
+                ) : null}
+              </tbody>
+            </DataTable>
+          </TableCard>
         </section>
       </div>
     </section>

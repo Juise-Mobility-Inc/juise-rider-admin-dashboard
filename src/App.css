@@ -4918,27 +4918,6 @@
         display: none;
 }
 
-.school-invite-list {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-}
-
-.school-invite-list-item {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 10px 0;
-        border-bottom: 1px solid var(--panel-border);
-}
-
-.school-invite-list-item:first-child {
-        padding-top: 4px;
-}
-
 @media (max-width: 640px) {
         .beta-invites-section {
                 gap: 16px;
@@ -4965,34 +4944,6 @@
         .school-invite-send-button {
                 width: 100%;
         }
-}
-
-.school-invite-email {
-        flex: 1;
-        font-size: 0.88rem;
-        color: var(--text-strong);
-}
-
-.school-invite-status {
-        font-size: 0.75rem;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        border-radius: 999px;
-        padding: 3px 9px;
-        color: var(--muted);
-        background: rgba(17, 45, 78, 0.08);
-}
-
-.school-invite-status-accepted {
-        color: #1f7a3f;
-        background: rgba(31, 122, 63, 0.12);
-}
-
-.school-invite-status-revoked,
-.school-invite-status-expired {
-        color: #9a3b3b;
-        background: rgba(154, 59, 59, 0.1);
 }
 
 .school-invite-revoke-btn {
@@ -6297,58 +6248,6 @@
         border: 1px solid var(--panel-border);
         background: var(--panel-bg-elevated, rgba(255, 255, 255, 0.54));
         min-width: 0;
-}
-
-.management-table-scroll {
-        width: 100%;
-        overflow-x: auto;
-        border-radius: 8px;
-        border: 1px solid var(--panel-border);
-        background: rgba(255, 255, 255, 0.52);
-}
-
-.management-table {
-        width: 100%;
-        min-width: 760px;
-        border-collapse: collapse;
-}
-
-.management-table th,
-.management-table td {
-        padding: 13px 14px;
-        border-bottom: 1px solid var(--panel-border);
-        text-align: left;
-        vertical-align: top;
-        font-size: 0.86rem;
-}
-
-.management-table th {
-        color: var(--muted);
-        font-size: 0.75rem;
-        font-weight: 800;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        background: rgba(17, 45, 78, 0.04);
-}
-
-.management-table tr:last-child td {
-        border-bottom: none;
-}
-
-.management-table td strong,
-.management-table td span {
-        display: block;
-}
-
-.management-table td strong {
-        color: var(--text-strong);
-        margin-bottom: 3px;
-}
-
-.management-table td span {
-        color: var(--muted);
-        font-size: 0.78rem;
-        line-height: 1.35;
 }
 
 .management-modal-backdrop {
@@ -8963,8 +8862,7 @@
 .violation-fees-screen,
 .violation-fees-layout,
 .violation-fees-form,
-.violation-fees-list,
-.violation-fees-table {
+.violation-fees-list {
         display: grid;
         gap: 16px;
 }
@@ -8993,120 +8891,6 @@
 }
 
 /* ── VF: RULE CARDS ─────────────────────────────────── */
-.vf-rule-card {
-        display: grid;
-        gap: 12px;
-        border: 1px solid var(--panel-border);
-        border-radius: 10px;
-        background: rgba(255, 255, 255, 0.58);
-        padding: 14px 16px;
-        transition: background 120ms ease;
-}
-
-.vf-rule-card:hover {
-        background: rgba(255, 255, 255, 0.82);
-}
-
-.vf-rule-card-header {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 16px;
-        min-width: 0;
-}
-
-.vf-rule-card-title {
-        display: grid;
-        gap: 5px;
-        min-width: 0;
-        flex: 1;
-}
-
-.vf-rule-card-title strong {
-        font-size: 0.96rem;
-        color: var(--text-strong);
-        overflow-wrap: anywhere;
-        word-break: break-word;
-        line-height: 1.3;
-}
-
-.vf-rule-card-title p {
-        margin: 0;
-        font-size: 0.84rem;
-        color: var(--muted);
-        line-height: 1.45;
-        overflow-wrap: anywhere;
-}
-
-.vf-rule-card-kpi {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 6px;
-        flex-shrink: 0;
-}
-
-.vf-rule-amount {
-        font-size: 1.05rem;
-        font-weight: 900;
-        color: var(--navy);
-        letter-spacing: -0.01em;
-        white-space: nowrap;
-}
-
-.vf-rule-status {
-        border-radius: 999px;
-        font-size: 0.75rem;
-        font-weight: 800;
-        padding: 2px 9px;
-        line-height: 1.6;
-        white-space: nowrap;
-}
-
-.vf-rule-status-on {
-        background: #dcfce7;
-        color: #15803d;
-}
-
-.vf-rule-status-off {
-        background: rgba(17, 45, 78, 0.07);
-        color: var(--muted);
-}
-
-.vf-rule-card-footer {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        flex-wrap: wrap;
-        padding-top: 10px;
-        border-top: 1px solid var(--panel-border);
-}
-
-.vf-rule-meta {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        flex-wrap: wrap;
-        min-width: 0;
-}
-
-.vf-rule-meta span {
-        font-size: 0.76rem;
-        font-weight: 700;
-        color: var(--muted);
-        white-space: nowrap;
-}
-
-.vf-rule-meta-sep {
-        opacity: 0.4;
-}
-
-.vf-rule-actions {
-        display: flex;
-        gap: 8px;
-        flex-shrink: 0;
-}
 
 .penalty-report-fee-match {
         border: 1px solid var(--panel-border);
@@ -11238,201 +11022,10 @@
 }
 
 /* List card */
-.rf-list-card {
-        border: 1px solid var(--panel-border);
-        border-radius: 18px;
-        background: var(--panel-bg);
-        box-shadow: var(--panel-shadow);
-        overflow: hidden;
-}
-
-.rf-list-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 1rem 1.25rem;
-        border-bottom: 1px solid var(--panel-border);
-        background: var(--panel-bg-elevated, rgba(255, 255, 255, 0.5));
-}
-
-.rf-list-title {
-        margin: 0;
-        font-size: 0.95rem;
-        font-weight: 700;
-        color: var(--text-strong);
-}
-
-.rf-list-meta {
-        display: flex;
-        gap: 6px;
-        align-items: center;
-}
-
-.rf-active-badge {
-        font-size: 0.7rem;
-        font-weight: 700;
-        padding: 2px 9px;
-        border-radius: 99px;
-        background: rgba(39, 204, 94, 0.12);
-        color: #15803d;
-}
-
-.rf-total-badge {
-        font-size: 0.7rem;
-        font-weight: 600;
-        padding: 2px 9px;
-        border-radius: 99px;
-        background: var(--panel-border);
-        color: var(--muted);
-}
 
 /* Empty state */
-.rf-empty {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 4px;
-        padding: 2.5rem 1rem;
-        text-align: center;
-}
-
-.rf-empty-icon {
-        font-size: 2rem;
-        margin-bottom: 4px;
-}
-
-.rf-empty-text {
-        font-weight: 600;
-        color: var(--text-strong);
-        margin: 0;
-}
-
-.rf-empty-sub {
-        font-size: 0.83rem;
-        color: var(--muted);
-        margin: 0;
-}
 
 /* Rule rows */
-.rf-rule-list {
-        display: flex;
-        flex-direction: column;
-}
-
-.rf-rule-row {
-        display: grid;
-        grid-template-columns: 36px 1fr auto auto;
-        align-items: center;
-        gap: 12px;
-        padding: 0.85rem 1.25rem;
-        border-bottom: 1px solid var(--panel-border);
-        transition: background 120ms;
-}
-
-.rf-rule-row:last-child {
-        border-bottom: none;
-}
-
-.rf-rule-row:hover {
-        background: var(--panel-bg-elevated, rgba(255, 255, 255, 0.4));
-}
-
-.rf-rule-row-inactive {
-        opacity: 0.45;
-}
-
-.rf-rule-icon {
-        font-size: 1.2rem;
-        text-align: center;
-        line-height: 1;
-}
-
-.rf-rule-body {
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-}
-
-.rf-rule-name {
-        margin: 0;
-        font-size: 0.88rem;
-        font-weight: 600;
-        color: var(--text-strong);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-}
-
-.rf-rule-chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-}
-
-.rf-chip {
-        font-size: 0.69rem;
-        font-weight: 600;
-        padding: 1px 7px;
-        border-radius: 99px;
-        background: var(--panel-border);
-        color: var(--text-strong);
-        white-space: nowrap;
-}
-
-.rf-chip-electric {
-        background: rgba(234, 179, 8, 0.14);
-        color: #78350f;
-}
-
-.rf-chip-inactive {
-        background: rgba(100, 100, 100, 0.08);
-        color: var(--muted);
-}
-
-.rf-rule-amount {
-        font-size: 1rem;
-        font-weight: 800;
-        color: var(--text-strong);
-        white-space: nowrap;
-}
-
-.rf-rule-actions {
-        display: flex;
-        gap: 6px;
-}
-
-.rf-action-btn {
-        padding: 5px 12px;
-        border-radius: 999px;
-        border: 1px solid var(--panel-border);
-        background: transparent;
-        font: inherit;
-        font-size: 0.78rem;
-        font-weight: 600;
-        color: var(--text);
-        cursor: pointer;
-        transition: background 120ms, color 120ms;
-}
-
-.rf-action-btn:hover:not(:disabled) {
-        background: var(--panel-border);
-}
-
-.rf-action-btn-danger {
-        color: #8a1f1f;
-        border-color: rgba(179, 58, 58, 0.2);
-}
-
-.rf-action-btn-danger:hover:not(:disabled) {
-        background: rgba(179, 58, 58, 0.08);
-}
-
-.rf-action-btn:disabled {
-        opacity: 0.4;
-        cursor: default;
-}
 
 /* settings-card improvements (kept for other screens) */
 
@@ -15535,15 +15128,6 @@
   border-radius: 14px;
 }
 
-.parking-pass-history .management-table-scroll {
-  border: 0;
-  border-radius: 0;
-}
-
-.parking-pass-history .management-table {
-  min-width: 560px;
-}
-
 .parking-pass-pairing {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
@@ -16141,4 +15725,122 @@
         color: var(--muted);
         font-size: 0.8rem;
         line-height: 1.35;
+}
+
+/* A titled section holding a shared table (Packs / POIs / Zones). */
+.table-section {
+        display: grid;
+        gap: 12px;
+        min-width: 0;
+}
+
+/* Right-aligned row actions (Remove / Revoke / Edit) in shared tables. */
+.dt td.dt-actions-cell {
+        text-align: right;
+        white-space: nowrap;
+}
+
+.dt select {
+        font: inherit;
+        font-size: 0.85rem;
+        padding: 6px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--input-border);
+        background: var(--field-bg, #fff);
+        color: var(--text);
+}
+
+.dt tbody tr.dt-row-inactive td {
+        color: var(--muted);
+}
+
+.dt tbody tr.dt-row-inactive td > strong {
+        color: var(--muted-strong);
+}
+
+.dt td .dt-badge {
+        margin: 2px 6px 2px 0;
+}
+
+/*
+ * Tables and record lists that keep their own markup (expandable activity
+ * rows, ride GPS points, the Students / Penalty / Ride Violations lists)
+ * share the table look: same header, padding, hover and selected colors.
+ */
+.act-table-wrap,
+.rv-point-table-wrap {
+        border: 1px solid var(--panel-border);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.62);
+}
+
+.act-table,
+.rv-point-table {
+        font-size: 0.875rem;
+}
+
+.act-table thead tr {
+        background: #f3f5f6;
+        border-bottom: 1px solid var(--panel-border);
+}
+
+.act-table th,
+.rv-point-table th {
+        padding: 10px 14px;
+        background: #f3f5f6;
+        color: var(--muted);
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+}
+
+.act-table td,
+.rv-point-table td {
+        padding: 12px 14px;
+}
+
+.act-row:hover {
+        background: rgba(39, 204, 94, 0.08);
+}
+
+.act-row-open {
+        background: rgba(39, 204, 94, 0.14);
+}
+
+.act-row:focus {
+        outline: none;
+}
+
+.act-row:focus-visible {
+        outline: 2px solid var(--brand-primary, #27cc5e);
+        outline-offset: -2px;
+}
+
+.student-list-item:hover {
+        background: rgba(39, 204, 94, 0.08);
+}
+
+.student-list-item-active {
+        background: rgba(39, 204, 94, 0.14) !important;
+        border-left: 3px solid var(--brand-primary, #27cc5e);
+}
+
+.penalty-report-list-item:hover {
+        background: rgba(39, 204, 94, 0.08);
+}
+
+.penalty-report-list-item-active {
+        border-color: var(--brand-primary, #27cc5e);
+        background: rgba(39, 204, 94, 0.14);
+}
+
+.rv-event-row:hover,
+.rv-event-row-active {
+        border-color: rgba(39, 204, 94, 0.7);
+        box-shadow: 0 0 0 2px rgba(39, 204, 94, 0.14);
+}
+
+.rv-event-row-active {
+        background: rgba(39, 204, 94, 0.1);
 }

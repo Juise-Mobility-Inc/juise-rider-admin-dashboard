@@ -9,6 +9,13 @@ import {
   type RegisteredDeviceFeeRuleInput,
 } from "../../lib/api";
 import { confirmAction } from "../../lib/confirm";
+import {
+  DataRow,
+  DataTable,
+  StatusBadge,
+  TableCard,
+  TableMessageRow,
+} from "../../components/table/DataTable";
 
 type Props = {
   activeSchoolId: string;
@@ -362,76 +369,83 @@ export function RegistrationFeesScreen({ activeSchoolId, managedAppId }: Props) 
         </div>
 
         {/* ── Rules list ── */}
-        <div className="rf-list-card">
-          <div className="rf-list-header">
-            <h3 className="rf-list-title">Fee rules</h3>
-            <div className="rf-list-meta">
-              {activeCount > 0 ? (
-                <span className="rf-active-badge">{activeCount} active</span>
-              ) : null}
-              <span className="rf-total-badge">{sortedRules.length} total</span>
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="rf-empty">
-              <p className="rf-empty-text">Loading…</p>
-            </div>
-          ) : sortedRules.length === 0 ? (
-            <div className="rf-empty">
-              <p className="rf-empty-icon">📋</p>
-              <p className="rf-empty-text">No fee rules yet.</p>
-              <p className="rf-empty-sub">Add your first rule using the form.</p>
-            </div>
-          ) : (
-            <div className="rf-rule-list">
+        <TableCard
+          className="rf-rule-table"
+          title="Fee rules"
+          meta={`${activeCount} active · ${sortedRules.length} total`}
+        >
+          <DataTable minWidth={520} aria-label="Registration fee rules">
+            <thead>
+              <tr>
+                <th>Rule</th>
+                <th>Applies to</th>
+                <th>Fee</th>
+                <th aria-label="Actions" />
+              </tr>
+            </thead>
+            <tbody>
               {sortedRules.map((rule) => {
                 const electric = isAlwaysElectric(rule.device_type ?? "");
                 const ptLabel = electric
                   ? "Electric"
                   : powertrainLabel(rule.powertrain_type);
                 return (
-                  <div
+                  <DataRow
                     key={rule.fee_rule_uuid}
-                    className={`rf-rule-row${rule.active ? "" : " rf-rule-row-inactive"}`}
+                    className={rule.active ? undefined : "dt-row-inactive"}
                   >
-                    <div className="rf-rule-icon">{deviceIcon(rule.device_type)}</div>
-                    <div className="rf-rule-body">
-                      <p className="rf-rule-name">{rule.label || "Untitled rule"}</p>
-                      <div className="rf-rule-chips">
-                        <span className="rf-chip">{deviceLabel(rule.device_type)}</span>
-                        <span className={`rf-chip${electric ? " rf-chip-electric" : ""}`}>
-                          {electric ? "⚡ " : ""}{ptLabel}
-                        </span>
-                        {!rule.active && (
-                          <span className="rf-chip rf-chip-inactive">Inactive</span>
-                        )}
-                      </div>
-                    </div>
-                    <p className="rf-rule-amount">{formatCurrency(rule.amount_cents)}</p>
-                    <div className="rf-rule-actions">
+                    <td>
+                      <strong>
+                        <span className="rf-rule-icon-inline" aria-hidden="true">
+                          {deviceIcon(rule.device_type)}
+                        </span>{" "}
+                        {rule.label || "Untitled rule"}
+                      </strong>
+                    </td>
+                    <td>
+                      <StatusBadge tone="neutral">{deviceLabel(rule.device_type)}</StatusBadge>
+                      <StatusBadge tone={electric ? "info" : "neutral"}>
+                        {electric ? "⚡ " : ""}
+                        {ptLabel}
+                      </StatusBadge>
+                      {!rule.active ? <StatusBadge tone="danger">Inactive</StatusBadge> : null}
+                    </td>
+                    <td>
+                      <strong>{formatCurrency(rule.amount_cents)}</strong>
+                    </td>
+                    <td className="dt-actions-cell">
                       <button
-                        className="rf-action-btn"
+                        className="secondary-button"
                         type="button"
                         onClick={() => { setDraft(draftFromRule(rule)); setError(""); setSuccess(""); }}
                       >
                         Edit
-                      </button>
+                      </button>{" "}
                       <button
-                        className="rf-action-btn rf-action-btn-danger"
+                        className="danger-button"
                         type="button"
                         disabled={busy || !rule.active}
                         onClick={() => void handleDelete(rule)}
                       >
                         Delete
                       </button>
-                    </div>
-                  </div>
+                    </td>
+                  </DataRow>
                 );
               })}
-            </div>
-          )}
-        </div>
+              {loading && sortedRules.length === 0 ? (
+                <TableMessageRow colSpan={4} tone="loading">
+                  Loading fee rules…
+                </TableMessageRow>
+              ) : null}
+              {!loading && sortedRules.length === 0 ? (
+                <TableMessageRow colSpan={4}>
+                  No fee rules yet. Add your first rule using the form.
+                </TableMessageRow>
+              ) : null}
+            </tbody>
+          </DataTable>
+        </TableCard>
       </div>
     </section>
   );
