@@ -13,6 +13,7 @@ FROM nginxinc/nginx-unprivileged:1.29.0-alpine3.22
 
 COPY deploy/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY deploy/security-headers.conf /etc/nginx/security-headers.conf
+COPY --chmod=0755 deploy/16-kca-proxy-target.envsh /docker-entrypoint.d/16-kca-proxy-target.envsh
 COPY --from=build /app/dist /usr/share/nginx/html
 
 ENV KCA_PROXY_TARGET=https://kca-proxy.juisemobility.com \

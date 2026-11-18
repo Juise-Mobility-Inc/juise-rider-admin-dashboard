@@ -1,3 +1,4 @@
+import 'leaflet/dist/leaflet.css'
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DomEvent, LatLngBounds, divIcon, type LatLngLiteral } from 'leaflet'
 import {
