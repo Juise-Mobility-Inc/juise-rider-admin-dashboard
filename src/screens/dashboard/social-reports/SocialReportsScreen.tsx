@@ -12,6 +12,26 @@ import { useDetailParamSync } from "../../../lib/useDetailParamSync";
 import { CommentReportDetail } from "./CommentReportDetail";
 import { PostReportDetail } from "./PostReportDetail";
 import { formatWhen, getErrorMessage, reasonLabel, userLabel } from "./format";
+import {
+  DataRow,
+  DataTable,
+  StatusBadge,
+  TableCard,
+  TableMessageRow,
+  type StatusTone,
+} from "../../../components/table/DataTable";
+
+function socialRowStatus(row: {
+  active: boolean;
+  hidden: boolean;
+  status: string;
+}): { label: string; tone: StatusTone } {
+  if (!row.active) return { label: "Removed", tone: "danger" };
+  if (row.hidden) return { label: "Hidden", tone: "warning" };
+  if (row.status === "open") return { label: "Live", tone: "success" };
+  if (row.status === "actioned") return { label: "Actioned", tone: "info" };
+  return { label: "Dismissed", tone: "neutral" };
+}
 
 type Props = {
   activeSchoolId: string;
@@ -330,8 +350,23 @@ export function SocialReportsScreen({ activeSchoolId, managedAppId }: Props) {
 
         <div className="post-reports-layout">
           <div className="post-reports-list">
-            <div className="management-table-scroll">
-              <table className="management-table social-reports-table">
+            <TableCard
+              title={`${rows.length.toLocaleString()} ${tab === "open" ? "open" : "resolved"} report${rows.length === 1 ? "" : "s"}`}
+              meta={TYPE_FILTERS.find((option) => option.value === typeFilter)?.label}
+              footer={
+                hasMore ? (
+                  <button
+                    className="secondary-button post-reports-load-more"
+                    type="button"
+                    onClick={() => void loadMore()}
+                    disabled={loadingMore || listBusy}
+                  >
+                    {loadingMore ? "Loading…" : "Load older reports"}
+                  </button>
+                ) : undefined
+              }
+            >
+              <DataTable minWidth={760} className="social-reports-table" aria-label="Social reports">
                 <thead>
                   <tr>
                     <th>Type</th>
@@ -344,68 +379,46 @@ export function SocialReportsScreen({ activeSchoolId, managedAppId }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => (
-                    <tr
-                      key={row.key}
-                      className={`social-reports-row ${row.key === selectedKey ? "is-selected" : ""}`}
-                      tabIndex={0}
-                      onClick={() => {
-                        setSelectedRow(row);
-                        setReloadToken((token) => token + 1);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
+                  {rows.map((row) => {
+                    const status = socialRowStatus(row);
+                    return (
+                      <DataRow
+                        key={row.key}
+                        selected={row.key === selectedKey}
+                        onOpen={() => {
                           setSelectedRow(row);
                           setReloadToken((token) => token + 1);
-                        }
-                      }}
-                    >
-                      <td>
-                        <span className="challenge-status-badge">
-                          {row.kind === "post" ? "Post" : "Comment"}
-                        </span>
-                      </td>
-                      <td>{userLabel(row.reportedUser)}</td>
-                      <td className="social-reports-snippet">{row.text.trim() || "(no text)"}</td>
-                      <td>{reasonLabel(row.reason)}</td>
-                      <td>{row.reportCount}</td>
-                      <td>
-                        {!row.active
-                          ? "Removed"
-                          : row.hidden
-                            ? "Hidden"
-                            : row.status === "open"
-                              ? "Live"
-                              : row.status === "actioned"
-                                ? "Actioned"
-                                : "Dismissed"}
-                      </td>
-                      <td>{formatWhen(row.createdAt)}</td>
-                    </tr>
-                  ))}
+                        }}
+                      >
+                        <td>
+                          <StatusBadge tone={row.kind === "post" ? "accent" : "info"}>
+                            {row.kind === "post" ? "Post" : "Comment"}
+                          </StatusBadge>
+                        </td>
+                        <td>{userLabel(row.reportedUser)}</td>
+                        <td className="social-reports-snippet">{row.text.trim() || "(no text)"}</td>
+                        <td>{reasonLabel(row.reason)}</td>
+                        <td>{row.reportCount}</td>
+                        <td>
+                          <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+                        </td>
+                        <td>{formatWhen(row.createdAt)}</td>
+                      </DataRow>
+                    );
+                  })}
+                  {rows.length === 0 && listBusy ? (
+                    <TableMessageRow colSpan={7} tone="loading">
+                      Loading reports…
+                    </TableMessageRow>
+                  ) : null}
                   {rows.length === 0 && !listBusy ? (
-                    <tr>
-                      <td colSpan={7}>
-                        <span className="empty-state">
-                          {tab === "open" ? "No open reports. Nice." : "No resolved reports yet."}
-                        </span>
-                      </td>
-                    </tr>
+                    <TableMessageRow colSpan={7}>
+                      {tab === "open" ? "No open reports. Nice." : "No resolved reports yet."}
+                    </TableMessageRow>
                   ) : null}
                 </tbody>
-              </table>
-            </div>
-            {hasMore ? (
-              <button
-                className="secondary-button post-reports-load-more"
-                type="button"
-                onClick={() => void loadMore()}
-                disabled={loadingMore || listBusy}
-              >
-                {loadingMore ? "Loading…" : "Load older reports"}
-              </button>
-            ) : null}
+              </DataTable>
+            </TableCard>
           </div>
 
           <div className="post-reports-detail panel">
