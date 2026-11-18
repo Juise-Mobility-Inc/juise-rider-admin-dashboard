@@ -1159,7 +1159,9 @@ export function StudentsScreen(props: Props) {
                                                         </span>
                                                 </div>
 
-                                                {schoolStudentRosterBusy ? (
+                                                {/* Only show "Loading" on the first load; a refresh keeps the
+                                                    current list on screen instead of collapsing it. */}
+                                                {schoolStudentRosterBusy && allStudentRoster.length === 0 ? (
                                                         <p className="muted-text students-loading">Loading roster…</p>
                                                 ) : filteredStudentRoster.length === 0 ? (
                                                         <p className="empty-state">

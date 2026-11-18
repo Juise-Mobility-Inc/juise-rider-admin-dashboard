@@ -6,6 +6,7 @@ import {
   type UserMediaAsset,
 } from "../../lib/api";
 import { shortPassId } from "../../lib/parkingPasses";
+import { DialogBackdrop } from "../../components/DialogBackdrop";
 
 type Props = {
   device: RegisteredDevice;
@@ -115,12 +116,13 @@ export function StudentVehicleDetailModal({
   );
 
   return (
-    <div
+    <DialogBackdrop
       className="vehicle-modal-backdrop"
       role="dialog"
       aria-modal="true"
       aria-label={`${device.nickname || device.device_type} details`}
       onClick={onClose}
+      onClose={onClose}
     >
       <div
         className="vehicle-modal-sheet"
@@ -458,6 +460,6 @@ export function StudentVehicleDetailModal({
           </pre>
         </div>
       </div>
-    </div>
+    </DialogBackdrop>
   );
 }

@@ -9,6 +9,7 @@ import {
   type SchoolStaffLevel,
   type SchoolStaffMember,
 } from "../../lib/api";
+import { confirmAction } from "../../lib/confirm";
 
 type Props = {
   activeSchoolId: string;
@@ -130,9 +131,11 @@ export function StaffScreen({
 
   async function handleRemove(member: SchoolStaffMember) {
     if (
-      !window.confirm(
-        `Remove ${staffName(member)} from this school? They will lose Dashboard and enforcement app access for it.`,
-      )
+      !(await confirmAction({
+        title: "Remove staff member?",
+        message: `Remove ${staffName(member)} from this school? They will lose Dashboard and enforcement app access for it.`,
+        confirmLabel: "Remove",
+      }))
     ) {
       return;
     }

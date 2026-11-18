@@ -24,6 +24,7 @@ import type {
   SchoolZonePunishmentPolicy,
   SchoolZonePunishmentRule,
 } from "../../lib/api";
+import { DialogBackdrop } from "../../components/DialogBackdrop";
 
 type ZoneDraft = {
   id: string;
@@ -665,12 +666,13 @@ export function ZonesScreen(props: Props) {
       ) : null}
 
       {isImportModalOpen ? (
-        <div
+        <DialogBackdrop
           className="management-modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-label="Upload zones CSV"
           onClick={() => setIsImportModalOpen(false)}
+          onClose={() => setIsImportModalOpen(false)}
         >
           <div
             className="management-modal-sheet management-import-modal"
@@ -767,16 +769,17 @@ export function ZonesScreen(props: Props) {
               </div>
             </div>
           </div>
-        </div>
+        </DialogBackdrop>
       ) : null}
 
       {isZoneModalOpen && selectedZoneDraft ? (
-        <div
+        <DialogBackdrop
           className="management-modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-label="Edit zone"
           onClick={closeZoneModal}
+          onClose={closeZoneModal}
         >
           <div
             className="management-modal-sheet zone-editor-modal"
@@ -1173,7 +1176,7 @@ export function ZonesScreen(props: Props) {
               </div>
             </div>
           </div>
-        </div>
+        </DialogBackdrop>
       ) : null}
     </section>
   );

@@ -8,6 +8,7 @@ import {
   type ParkingViolationFeeRule,
   type ParkingViolationFeeRuleInput,
 } from "../../lib/api";
+import { confirmAction } from "../../lib/confirm";
 
 type Props = {
   activeSchoolId: string;
@@ -253,9 +254,11 @@ export function ViolationFeesScreen({ activeSchoolId, managedAppId }: Props) {
   }
 
   async function handleDelete(rule: ParkingViolationFeeRule) {
-    const shouldDelete = window.confirm(
-      `Delete the ${formatViolationType(rule.violation_type)} fee?`,
-    );
+    const shouldDelete = await confirmAction({
+      title: "Delete fee?",
+      message: `Delete the ${formatViolationType(rule.violation_type)} fee?`,
+      confirmLabel: "Delete",
+    });
     if (!shouldDelete) {
       return;
     }

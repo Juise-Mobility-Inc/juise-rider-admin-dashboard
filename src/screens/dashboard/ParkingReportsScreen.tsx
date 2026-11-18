@@ -26,6 +26,8 @@ import {
   updateSchoolParkingIncidentReport,
 } from "../../lib/api";
 import { useDetailParamSync } from "../../lib/useDetailParamSync";
+import { confirmAction } from "../../lib/confirm";
+import { DialogBackdrop } from "../../components/DialogBackdrop";
 
 type Props = {
   activeSchoolId: string;
@@ -741,9 +743,12 @@ export function ParkingReportsScreen({
     if (!selectedReport) {
       return;
     }
-    const confirmed = window.confirm(
-      `Delete this parking report permanently?\n\nThis removes the report from the dashboard and student history. This cannot be undone.`,
-    );
+    const confirmed = await confirmAction({
+      title: "Delete this parking report permanently?",
+      message:
+        "This removes the report from the dashboard and student history. This cannot be undone.",
+      confirmLabel: "Delete",
+    });
     if (!confirmed) {
       return;
     }
@@ -2029,12 +2034,13 @@ export function ParkingReportsScreen({
       </div>
 
               {expandedPhotoUrl ? (
-                <div
+                <DialogBackdrop
                   className="prd-lightbox"
                   role="dialog"
                   aria-modal="true"
                   aria-label="Incident photo"
                   onClick={() => setExpandedPhotoUrl("")}
+                  onClose={() => setExpandedPhotoUrl("")}
                 >
                   <img
                     src={expandedPhotoUrl}
@@ -2054,16 +2060,17 @@ export function ParkingReportsScreen({
                       Close
                     </button>
                   </div>
-                </div>
+                </DialogBackdrop>
               ) : null}
 
               {filterModalOpen ? (
-                <div
+                <DialogBackdrop
           className="management-modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-labelledby="parking-report-filter-title"
           onClick={() => setFilterModalOpen(false)}
+          onClose={() => setFilterModalOpen(false)}
         >
           <div
             className="management-modal-sheet parking-report-filter-modal"
@@ -2144,16 +2151,17 @@ export function ParkingReportsScreen({
               </button>
             </div>
           </div>
-                </div>
+                </DialogBackdrop>
               ) : null}
 
               {issueModalOpen && selectedReport ? (
-                <div
+                <DialogBackdrop
                   className="management-modal-backdrop"
                   role="dialog"
                   aria-modal="true"
                   aria-labelledby="parking-report-issue-title"
                   onClick={() => setIssueModalOpen(false)}
+                  onClose={() => setIssueModalOpen(false)}
                 >
                   <div
                     className="management-modal-sheet parking-report-filter-modal"
@@ -2267,7 +2275,7 @@ export function ParkingReportsScreen({
                       </button>
                     </div>
                   </div>
-                </div>
+                </DialogBackdrop>
               ) : null}
             </div>
           );

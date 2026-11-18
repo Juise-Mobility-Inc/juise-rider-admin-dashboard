@@ -21,6 +21,7 @@ import {
   sanitizeCsvFilename,
   type CsvCell,
 } from "../../lib/csv";
+import { DialogBackdrop } from "../../components/DialogBackdrop";
 
 type POIDraft = {
   id: string;
@@ -501,12 +502,13 @@ export function PoisScreen(props: Props) {
       ) : null}
 
       {isImportModalOpen ? (
-        <div
+        <DialogBackdrop
           className="management-modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-label="Upload POIs CSV"
           onClick={() => setIsImportModalOpen(false)}
+          onClose={() => setIsImportModalOpen(false)}
         >
           <div
             className="management-modal-sheet management-import-modal"
@@ -604,16 +606,17 @@ export function PoisScreen(props: Props) {
               </div>
             </div>
           </div>
-        </div>
+        </DialogBackdrop>
       ) : null}
 
       {isPoiModalOpen && selectedPoiDraft ? (
-        <div
+        <DialogBackdrop
           className="management-modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-label="Edit POI"
           onClick={closePoiModal}
+          onClose={closePoiModal}
         >
           <div
             className="management-modal-sheet poi-editor-modal"
@@ -802,7 +805,7 @@ export function PoisScreen(props: Props) {
               </div>
             </div>
           </div>
-        </div>
+        </DialogBackdrop>
       ) : null}
     </section>
   );

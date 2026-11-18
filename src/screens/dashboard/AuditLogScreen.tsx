@@ -7,6 +7,7 @@ import {
   type DashboardAuditEvent,
 } from "../../lib/api";
 import { downloadCsv, type CsvCell } from "../../lib/csv";
+import { DialogBackdrop } from "../../components/DialogBackdrop";
 
 const sourceServiceDisplayNames: Record<string, string> = {
   "billing-api-service": "Billing",
@@ -536,12 +537,13 @@ export function AuditLogScreen({ appId }: { appId: string }) {
       </div>
 
       {filterModalOpen ? (
-        <div
+        <DialogBackdrop
           className="management-modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-labelledby="audit-filter-title"
           onClick={() => setFilterModalOpen(false)}
+          onClose={() => setFilterModalOpen(false)}
         >
           <div
             className="management-modal-sheet parking-report-filter-modal"
@@ -632,7 +634,7 @@ export function AuditLogScreen({ appId }: { appId: string }) {
               </button>
             </div>
           </div>
-        </div>
+        </DialogBackdrop>
       ) : null}
 
       {error ? <div className="banner banner-error">{error}</div> : null}
