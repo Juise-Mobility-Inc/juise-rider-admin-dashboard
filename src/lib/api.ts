@@ -3761,6 +3761,12 @@ export interface StudentParkingIncidentReport {
   assigned_by_user_uuid?: string | null;
   assigned_at?: number | null;
   assignment_note?: string;
+  // "tag" while the responsible student is an unconfirmed match from the
+  // scanned identification tag (the student can't see the report yet);
+  // "admin" or unset once an admin assigned or confirmed them.
+  assignment_source?: "tag" | "admin" | string | null;
+  // The device identification tag the reporter scanned, if any.
+  scanned_pass_uuid?: string | null;
   flagged_for_enforcement?: boolean;
   flag_priority?: "normal" | "urgent" | string;
   flag_note?: string;
@@ -3780,6 +3786,35 @@ export interface StudentParkingIncidentReport {
   created_at: number;
   updated_at: number;
   media_assets?: UserMediaAsset[];
+}
+
+// Another report or violation at the school that shares this report's
+// student, vehicle, or scanned tag.
+export interface ParkingIncidentRelatedRecord {
+  uuid: string;
+  type: string;
+  status: string;
+  created_at: number;
+  matched_on: Array<"student" | "vehicle" | "tag">;
+}
+
+export interface ParkingIncidentScannedPass {
+  pass_uuid: string;
+  school_id: string;
+  status: ParkingPassStatus;
+  registered_device_uuid?: string | null;
+  user_uuid?: string | null;
+  deactivated_reason?: ParkingPassDeactivatedReason | null;
+}
+
+export interface ParkingIncidentReportContext {
+  report_uuid: string;
+  scanned_pass?: ParkingIncidentScannedPass | null;
+  // The assigned student and vehicle, else the scanned tag's.
+  student_user_uuid?: string | null;
+  registered_device_uuid?: string | null;
+  related_reports: ParkingIncidentRelatedRecord[];
+  related_violations: ParkingIncidentRelatedRecord[];
 }
 
 export interface StudentParkingIncidentReportUpdateInput {
@@ -4150,6 +4185,29 @@ export async function fetchSchoolParkingIncidentReport(
       appIdHeader: currentSession?.authAppId ?? managedAppId,
     },
   );
+}
+
+export async function fetchSchoolParkingIncidentReportContext(
+  managedAppId: string,
+  schoolId: string,
+  reportUUID: string,
+): Promise<ParkingIncidentReportContext> {
+  const search = new URLSearchParams({
+    managed_app_id: managedAppId,
+  });
+
+  const context = await request<ParkingIncidentReportContext>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/parking-incident-reports/${encodeURIComponent(reportUUID)}/context?${search.toString()}`,
+    {
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+  return {
+    ...context,
+    related_reports: context.related_reports ?? [],
+    related_violations: context.related_violations ?? [],
+  };
 }
 
 export async function updateSchoolParkingIncidentReport(

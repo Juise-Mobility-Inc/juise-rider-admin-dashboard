@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
   assignSchoolParkingIncidentReport,
   clearSchoolParkingIncidentReportFlag,
   deleteSchoolParkingIncidentReport,
   fetchParkingViolationFeeRules,
+  fetchSchoolParkingIncidentReportContext,
   fetchSchoolParkingIncidentReports,
   fetchSchoolRegisteredDevices,
   flagSchoolParkingIncidentReport,
   issueSchoolParkingIncidentReportViolation,
   signSchoolMedia,
+  type ParkingIncidentRelatedRecord,
+  type ParkingIncidentReportContext,
   type ParkingIncidentResponsibilityConsequence,
+  type ParkingIncidentScannedPass,
   type ParkingViolationFeeRule,
   type ParkingIncidentReportStatus,
   type ParkingIncidentReportType,
@@ -27,6 +32,7 @@ type Props = {
   studentRoster: SchoolStudentRosterEntry[];
   studentProfilePhotoUrls: Record<string, string>;
   onOpenStudent: (membershipUUID: string) => void;
+  onOpenStudentDevice: (membershipUUID: string, deviceUUID: string) => void;
   onOpenReportCountChange?: (count: number) => void;
 };
 
@@ -163,6 +169,52 @@ function getDeviceLabel(entry: RegisteredDeviceReviewEntry): string {
   );
 }
 
+function getStudentLabel(entry: SchoolStudentRosterEntry): string {
+  const fullName = [entry.user.first_name?.trim(), entry.user.last_name?.trim()]
+    .filter(Boolean)
+    .join(" ");
+  return (
+    fullName || entry.user.username || entry.user.email || entry.user.k_guid
+  );
+}
+
+function describePassStatus(pass: ParkingIncidentScannedPass): string {
+  if (pass.status === "active") {
+    return "Active";
+  }
+  if (pass.status === "unassigned") {
+    return "Not registered";
+  }
+  switch (pass.deactivated_reason) {
+    case "lost":
+      return "Inactive · reported lost";
+    case "replaced":
+      return "Inactive · replaced";
+    case "device_deleted":
+      return "Inactive · vehicle removed";
+    case "admin":
+      return "Inactive · deactivated";
+    default:
+      return "Inactive";
+  }
+}
+
+type HistoryItem = {
+  kind: "report" | "violation";
+  record: ParkingIncidentRelatedRecord;
+};
+
+function HistoryBadge({ count }: { count: number }) {
+  if (count <= 0) {
+    return null;
+  }
+  return (
+    <span className="prd-history-badge" title="Other reports and violations">
+      {count} before
+    </span>
+  );
+}
+
 function centsToDollars(value: number): string {
   return (value / 100).toFixed(2);
 }
@@ -173,8 +225,10 @@ export function ParkingReportsScreen({
   studentRoster,
   studentProfilePhotoUrls,
   onOpenStudent,
+  onOpenStudentDevice,
   onOpenReportCountChange,
 }: Props) {
+  const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<
     "all" | ParkingIncidentReportStatus
   >("all");
@@ -190,12 +244,18 @@ export function ParkingReportsScreen({
   const [draftTypeFilter, setDraftTypeFilter] = useState<
     "all" | ParkingIncidentReportType
   >("all");
-  const [detailTab, setDetailTab] = useState<"evidence" | "details" | "review">(
-    "evidence",
-  );
   const [detailOpen, setDetailOpen] = useState(false);
   const [reports, setReports] = useState<StudentParkingIncidentReport[]>([]);
   const [selectedReportId, setSelectedReportId] = useState("");
+  // The open report's tag and history, keyed so a stale response for another
+  // report (or an older version of this one) is never shown.
+  const [reportContext, setReportContext] = useState<{
+    key: string;
+    value: ParkingIncidentReportContext | null;
+    error: string;
+  }>({ key: "", value: null, error: "" });
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [expandedPhotoUrl, setExpandedPhotoUrl] = useState("");
 
   useDetailParamSync(
     "report",
@@ -429,7 +489,6 @@ export function ParkingReportsScreen({
       setIssueModalOpen(false);
       return;
     }
-    setDetailTab("evidence");
     setStatusDraft(selectedReport.status);
     setAdminNotesDraft(selectedReport.admin_notes ?? "");
     setStudentNoteDraft(selectedReport.student_visible_note ?? "");
@@ -740,19 +799,6 @@ export function ParkingReportsScreen({
   const selectedAssignedStudent = selectedReport?.assigned_user_uuid
     ? studentByUser.get(selectedReport.assigned_user_uuid)
     : undefined;
-  const selectedAssignedStudentLabel =
-    selectedAssignedStudent && selectedReport
-      ? getReporterLabel(
-          {
-            ...selectedReport,
-            reporter_user_uuid: selectedAssignedStudent.user.k_guid,
-            reporter_membership_uuid:
-              selectedAssignedStudent.membership.membership_uuid,
-          },
-          studentByMembership,
-          studentByUser,
-        )
-      : selectedReport?.assigned_user_uuid || "";
   const assignmentDraftStudent = assignedUserDraft
     ? studentByUser.get(assignedUserDraft)
     : undefined;
@@ -760,18 +806,6 @@ export function ParkingReportsScreen({
     (entry) => entry.device.user_uuid === assignedUserDraft,
   );
   const activeFeeRules = feeRules.filter((rule) => rule.active !== false);
-  const linkedViolationLabel = selectedReport?.linked_violation_uuid
-    ? `Official violation ${selectedReport.linked_violation_uuid}`
-    : "";
-  const responsibilityConsequenceLabel = selectedReport
-    ? selectedReport.responsibility_consequence === "points"
-      ? `${selectedReport.responsibility_points_lost ?? 0} point loss`
-      : selectedReport.responsibility_consequence === "fine"
-        ? `$${((selectedReport.responsibility_fine_cents ?? 0) / 100).toFixed(
-            2,
-          )} fine`
-        : "No punishment"
-    : "";
   const hasLocation =
     typeof selectedReport?.violation_latitude === "number" &&
     typeof selectedReport?.violation_longitude === "number";
@@ -781,6 +815,132 @@ export function ParkingReportsScreen({
       : "";
   const activeFilterCount =
     (statusFilter === "all" ? 0 : 1) + (typeFilter === "all" ? 0 : 1);
+
+  const contextKey =
+    detailOpen && selectedReport
+      ? `${selectedReport.report_uuid}:${selectedReport.updated_at}`
+      : "";
+  useEffect(() => {
+    if (!contextKey || !selectedReport) {
+      return;
+    }
+    let cancelled = false;
+    fetchSchoolParkingIncidentReportContext(
+      selectedReport.app_id || managedAppId,
+      selectedReport.school_id || activeSchoolId,
+      selectedReport.report_uuid,
+    ).then(
+      (value) => {
+        if (!cancelled) {
+          setReportContext({ key: contextKey, value, error: "" });
+        }
+      },
+      (nextError: unknown) => {
+        if (!cancelled) {
+          setReportContext({
+            key: contextKey,
+            value: null,
+            error: getErrorMessage(nextError),
+          });
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+    // selectedReport changes identity on every list refresh; contextKey
+    // captures the parts that matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextKey, managedAppId, activeSchoolId]);
+
+  const context = reportContext.key === contextKey ? reportContext.value : null;
+  const contextError =
+    reportContext.key === contextKey ? reportContext.error : "";
+  const scannedPass = context?.scanned_pass ?? null;
+  const tagStudent = scannedPass?.user_uuid
+    ? studentByUser.get(scannedPass.user_uuid)
+    : undefined;
+  const responsibleStudent = selectedAssignedStudent;
+  const isTagMatch = selectedReport?.assignment_source === "tag";
+  const vehicleUUID =
+    selectedReport?.assigned_registered_device_uuid ||
+    context?.registered_device_uuid ||
+    "";
+  const vehicleEntry = vehicleUUID
+    ? registeredDevices.find(
+        (entry) => entry.device.registered_device_uuid === vehicleUUID,
+      )
+    : undefined;
+  const historyItems: HistoryItem[] = [
+    ...(context?.related_reports ?? []).map((record) => ({
+      kind: "report" as const,
+      record,
+    })),
+    ...(context?.related_violations ?? []).map((record) => ({
+      kind: "violation" as const,
+      record,
+    })),
+  ].sort((left, right) => right.record.created_at - left.record.created_at);
+  const historyCount = historyItems.length;
+  const historyCounts = {
+    student: historyItems.filter((item) =>
+      item.record.matched_on.includes("student"),
+    ).length,
+    vehicle: historyItems.filter((item) =>
+      item.record.matched_on.includes("vehicle"),
+    ).length,
+    tag: historyItems.filter((item) => item.record.matched_on.includes("tag"))
+      .length,
+  };
+  const reportHistoryCount = context?.related_reports.length ?? 0;
+  const violationHistoryCount = context?.related_violations.length ?? 0;
+  const historySummary = [
+    violationHistoryCount > 0
+      ? `${violationHistoryCount} violation${violationHistoryCount === 1 ? "" : "s"}`
+      : "",
+    reportHistoryCount > 0
+      ? `${reportHistoryCount} other report${reportHistoryCount === 1 ? "" : "s"}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" and ") +
+    " involving this " +
+    [
+      historyCounts.student > 0 ? "student" : "",
+      historyCounts.vehicle > 0 ? "vehicle" : "",
+      historyCounts.tag > 0 ? "ID tag" : "",
+    ]
+      .filter(Boolean)
+      .join(", ")
+      .replace(/, ([^,]*)$/, " or $1") +
+    ".";
+
+  function openHistoryItem(item: HistoryItem) {
+    if (item.kind === "violation") {
+      navigate(`/penalty-reports?report=${encodeURIComponent(item.record.uuid)}`);
+      return;
+    }
+    setHistoryOpen(false);
+    // Clear filters so the report is in the list whatever its status.
+    setShowClosed(true);
+    setStatusFilter("all");
+    setTypeFilter("all");
+    setSelectedReportId(item.record.uuid);
+    setDetailOpen(true);
+  }
+
+  useEffect(() => {
+    if (!expandedPhotoUrl) {
+      return;
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setExpandedPhotoUrl("");
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [expandedPhotoUrl]);
 
   function openFilterModal() {
     setDraftStatusFilter(statusFilter);
@@ -997,7 +1157,13 @@ export function ParkingReportsScreen({
                                         </span>
                                       ) : null}
                                       {report.assigned_user_uuid ? (
-                                        <span className="cd-tag">Assigned</span>
+                                        <span className="cd-tag">
+                                          {report.assignment_source === "tag"
+                                            ? "Tag match"
+                                            : "Assigned"}
+                                        </span>
+                                      ) : report.scanned_pass_uuid ? (
+                                        <span className="cd-tag">ID tag</span>
                                       ) : null}
                                     </div>
                                   </td>
@@ -1042,439 +1208,535 @@ export function ParkingReportsScreen({
                   {filteredReports.length !== 1 ? "s" : ""}
                 </span>
               </div>
-              <article className="penalty-report-detail parking-report-detail-section parking-report-detail-screen">
-                <div className="penalty-report-detail-header">
-                  <div>
-                    <p className="eyebrow">Parking report</p>
-                    <h3>{formatStatus(selectedReport.report_type)}</h3>
-                    <p className="muted">
-                      Submitted {formatDateTime(selectedReport.created_at)}
+              <article className="penalty-report-detail parking-report-detail-section parking-report-detail-screen prd">
+                <header className="prd-header">
+                  <div className="prd-header-copy">
+                    <p className="eyebrow">
+                      Parking report · Submitted{" "}
+                      {formatDateTime(selectedReport.created_at)}
                     </p>
+                    <h3>{formatStatus(selectedReport.report_type)}</h3>
+                    <div className="prd-chips">
+                      <span
+                        className={`cd-status ${getReportStatusClass(
+                          selectedReport.status,
+                        )}`}
+                      >
+                        {formatStatus(selectedReport.status)}
+                      </span>
+                      {selectedReport.flagged_for_enforcement ? (
+                        <span className="cd-status cd-status-declined">
+                          {selectedReport.flag_priority === "urgent"
+                            ? "Urgent enforcement flag"
+                            : "Flagged for enforcement"}
+                        </span>
+                      ) : null}
+                      {selectedReport.linked_violation_uuid ? (
+                        <span className="cd-status cd-status-approved">
+                          Violation issued
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
-                          <span
-                            className={`cd-status ${getReportStatusClass(
-                              selectedReport.status,
-                            )}`}
-                          >
-                            {formatStatus(selectedReport.status)}
-                          </span>
-                          {selectedReport.flagged_for_enforcement ? (
-                            <span className="cd-status cd-status-declined">
-                              {selectedReport.flag_priority === "urgent"
-                                ? "Urgent enforcement flag"
-                                : "Flagged for enforcement"}
-                            </span>
+                  <button
+                    type="button"
+                    className="danger-button"
+                    disabled={actionBusy === "delete"}
+                    onClick={() => void deleteSelectedReport()}
+                  >
+                    {actionBusy === "delete" ? "Deleting..." : "Delete report"}
+                  </button>
+                </header>
+
+                {historyCount > 0 ? (
+                  <div className="prd-history">
+                    <button
+                      type="button"
+                      className="prd-history-summary"
+                      aria-expanded={historyOpen}
+                      onClick={() => setHistoryOpen((current) => !current)}
+                    >
+                      <span className="prd-history-icon" aria-hidden="true">
+                        !
+                      </span>
+                      <span>
+                        <strong>Seen before:</strong> {historySummary}
+                      </span>
+                      <span className="prd-history-toggle">
+                        {historyOpen ? "Hide" : "Show"}
+                      </span>
+                    </button>
+                    {historyOpen ? (
+                      <ul className="prd-history-list">
+                        {historyItems.map((item) => (
+                          <li key={`${item.kind}-${item.record.uuid}`}>
+                            <button
+                              type="button"
+                              className="prd-history-item"
+                              onClick={() => openHistoryItem(item)}
+                            >
+                              <span className="prd-history-kind">
+                                {item.kind === "violation"
+                                  ? "Violation"
+                                  : "Report"}
+                              </span>
+                              <span className="prd-history-title">
+                                {formatStatus(item.record.type || "other")}
+                                <small>
+                                  {formatDateTime(item.record.created_at)} ·{" "}
+                                  {formatStatus(item.record.status)}
+                                </small>
+                              </span>
+                              <span className="prd-history-matches">
+                                {item.record.matched_on.map((match) => (
+                                  <span key={match} className="cd-tag">
+                                    Same {match === "vehicle" ? "vehicle" : match === "tag" ? "ID tag" : "student"}
+                                  </span>
+                                ))}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="prd-layout">
+                  <section className="prd-evidence" aria-label="Evidence">
+                    {incidentPhotoUrl ? (
+                      <button
+                        type="button"
+                        className="prd-photo"
+                        onClick={() => setExpandedPhotoUrl(incidentPhotoUrl)}
+                        aria-label="Expand incident photo"
+                      >
+                        <img src={incidentPhotoUrl} alt="Incident evidence" />
+                        <span className="prd-photo-hint">Click to expand</span>
+                      </button>
+                    ) : (
+                      <div className="parking-report-evidence-empty">
+                        No incident photo available.
+                      </div>
+                    )}
+                    {qrPhotoUrl ? (
+                      <button
+                        type="button"
+                        className="prd-photo-secondary"
+                        onClick={() => setExpandedPhotoUrl(qrPhotoUrl)}
+                      >
+                        <img src={qrPhotoUrl} alt="" />
+                        <span>Device QR photo (older report)</span>
+                      </button>
+                    ) : null}
+
+                    <div className="prd-block">
+                      <p className="vr-block-label">What the reporter said</p>
+                      <p className="prd-description">
+                        {selectedReport.description || "No description."}
+                      </p>
+                    </div>
+
+                    <dl className="prd-facts">
+                      <div>
+                        <dt>Location</dt>
+                        <dd>
+                          {formatLocationValue(selectedReport)}
+                          {selectedReport.location_accuracy_meters ? (
+                            <small>
+                              {" "}
+                              ±
+                              {Math.round(
+                                selectedReport.location_accuracy_meters,
+                              )}
+                              m
+                            </small>
                           ) : null}
+                          {mapUrl ? (
+                            <a href={mapUrl} target="_blank" rel="noreferrer">
+                              Open map
+                            </a>
+                          ) : null}
+                        </dd>
+                      </div>
+                      {selectedReport.pack_uuid ? (
+                        <div>
+                          <dt>Pack</dt>
+                          <dd>{selectedReport.pack_uuid}</dd>
+                        </div>
+                      ) : null}
+                      {selectedReport.spot_uuid ? (
+                        <div>
+                          <dt>Spot</dt>
+                          <dd>{selectedReport.spot_uuid}</dd>
+                        </div>
+                      ) : null}
+                      <div>
+                        <dt>Last updated</dt>
+                        <dd>{formatDateTime(selectedReport.updated_at)}</dd>
+                      </div>
+                      <div>
+                        <dt>Report ID</dt>
+                        <dd className="prd-mono">{selectedReport.report_uuid}</dd>
+                      </div>
+                    </dl>
+
+                    <div className="prd-block">
+                      <p className="vr-block-label">People and vehicle</p>
+                      <ul className="prd-people">
+                        <li>
+                          <span className="prd-people-role">Reported by</span>
+                          <span className="prd-people-name">
+                            {selectedReporterAvatar ? (
+                              <img
+                                className="cd-table-avatar"
+                                src={selectedReporterAvatar}
+                                alt=""
+                              />
+                            ) : null}
+                            {getReporterLabel(
+                              selectedReport,
+                              studentByMembership,
+                              studentByUser,
+                            )}
+                            {selectedReporter?.membership.student_id ? (
+                              <small>
+                                ID {selectedReporter.membership.student_id}
+                              </small>
+                            ) : null}
+                          </span>
+                          {selectedReporter ? (
+                            <button
+                              type="button"
+                              className="prd-link"
+                              onClick={() =>
+                                onOpenStudent(
+                                  selectedReporter.membership.membership_uuid,
+                                )
+                              }
+                            >
+                              View student
+                            </button>
+                          ) : null}
+                        </li>
+                        <li>
+                          <span className="prd-people-role">ID tag</span>
+                          <span className="prd-people-name">
+                            {selectedReport.scanned_pass_uuid ? (
+                              <>
+                                <span className="prd-mono">
+                                  {selectedReport.scanned_pass_uuid.slice(0, 8)}
+                                </span>
+                                {scannedPass ? (
+                                  <span
+                                    className={`cd-status ${
+                                      scannedPass.status === "active"
+                                        ? "cd-status-approved"
+                                        : "cd-status-inactive"
+                                    }`}
+                                  >
+                                    {describePassStatus(scannedPass)}
+                                  </span>
+                                ) : null}
+                                <HistoryBadge count={historyCounts.tag} />
+                              </>
+                            ) : (
+                              <span className="muted">Not scanned</span>
+                            )}
+                          </span>
+                          {selectedReport.scanned_pass_uuid ? (
+                            <button
+                              type="button"
+                              className="prd-link"
+                              onClick={() =>
+                                navigate(
+                                  `/device-tags?pass=${encodeURIComponent(
+                                    selectedReport.scanned_pass_uuid ?? "",
+                                  )}`,
+                                )
+                              }
+                            >
+                              View tag
+                            </button>
+                          ) : null}
+                        </li>
+                        {scannedPass?.user_uuid ? (
+                          <li>
+                            <span className="prd-people-role">
+                              {scannedPass.status === "active"
+                                ? "Tag belongs to"
+                                : "Tag last registered to"}
+                            </span>
+                            <span className="prd-people-name">
+                              {tagStudent
+                                ? getStudentLabel(tagStudent)
+                                : "A student not at this school"}
+                              {tagStudent?.membership.student_id ? (
+                                <small>
+                                  ID {tagStudent.membership.student_id}
+                                </small>
+                              ) : null}
+                              {context?.student_user_uuid ===
+                              scannedPass.user_uuid ? (
+                                <HistoryBadge count={historyCounts.student} />
+                              ) : null}
+                            </span>
+                            {tagStudent ? (
+                              <button
+                                type="button"
+                                className="prd-link"
+                                onClick={() =>
+                                  onOpenStudent(
+                                    tagStudent.membership.membership_uuid,
+                                  )
+                                }
+                              >
+                                View student
+                              </button>
+                            ) : null}
+                          </li>
+                        ) : null}
+                        {responsibleStudent &&
+                        responsibleStudent.user.k_guid !==
+                          tagStudent?.user.k_guid ? (
+                          <li>
+                            <span className="prd-people-role">Responsible</span>
+                            <span className="prd-people-name">
+                              {getStudentLabel(responsibleStudent)}
+                              {responsibleStudent.membership.student_id ? (
+                                <small>
+                                  ID {responsibleStudent.membership.student_id}
+                                </small>
+                              ) : null}
+                              <HistoryBadge count={historyCounts.student} />
+                            </span>
+                            <button
+                              type="button"
+                              className="prd-link"
+                              onClick={() =>
+                                onOpenStudent(
+                                  responsibleStudent.membership.membership_uuid,
+                                )
+                              }
+                            >
+                              View student
+                            </button>
+                          </li>
+                        ) : null}
+                        <li>
+                          <span className="prd-people-role">Vehicle</span>
+                          <span className="prd-people-name">
+                            {vehicleEntry ? (
+                              getDeviceLabel(vehicleEntry)
+                            ) : vehicleUUID ? (
+                              <span className="prd-mono">
+                                {vehicleUUID.slice(0, 8)}
+                              </span>
+                            ) : (
+                              <span className="muted">Not identified</span>
+                            )}
+                            {vehicleUUID ? (
+                              <HistoryBadge count={historyCounts.vehicle} />
+                            ) : null}
+                          </span>
+                          {vehicleUUID ? (
+                            <button
+                              type="button"
+                              className="prd-link"
+                              onClick={() =>
+                                onOpenStudentDevice(
+                                  vehicleEntry?.student.membership
+                                    ?.membership_uuid ??
+                                    responsibleStudent?.membership
+                                      .membership_uuid ??
+                                    "",
+                                  vehicleUUID,
+                                )
+                              }
+                            >
+                              View vehicle
+                            </button>
+                          ) : null}
+                        </li>
+                      </ul>
+                      {contextError ? (
+                        <p className="muted">
+                          Couldn&apos;t load the tag and history: {contextError}
+                        </p>
+                      ) : null}
+                    </div>
+                  </section>
+
+                  <section className="prd-manage" aria-label="Manage">
+                    <div className="prd-card">
+                      <p className="vr-block-label">Responsible student</p>
+                      {isTagMatch ? (
+                        <div className="prd-callout">
+                          <strong>Matched from the scanned ID tag.</strong>{" "}
+                          {responsibleStudent
+                            ? getStudentLabel(responsibleStudent)
+                            : "This student"}{" "}
+                          hasn&apos;t been notified and can&apos;t see this
+                          report until you confirm.
+                        </div>
+                      ) : null}
+                      {!selectedReport.assigned_user_uuid &&
+                      tagStudent &&
+                      assignedUserDraft !== tagStudent.user.k_guid ? (
+                        <div className="prd-callout">
+                          The ID tag {scannedPass?.status === "active" ? "belongs" : "was last registered"} to{" "}
+                          <strong>{getStudentLabel(tagStudent)}</strong>.{" "}
                           <button
                             type="button"
-                            className="danger-button"
-                            disabled={actionBusy === "delete"}
-                            onClick={() => void deleteSelectedReport()}
+                            className="prd-link"
+                            onClick={() => {
+                              setAssignedUserDraft(tagStudent.user.k_guid);
+                              setAssignedDeviceDraft(
+                                scannedPass?.registered_device_uuid ?? "",
+                              );
+                            }}
                           >
-                            {actionBusy === "delete" ? "Deleting..." : "Delete report"}
+                            Use this student
                           </button>
                         </div>
-
-                <div className="penalty-report-detail-grid">
-                  <div className="penalty-report-student-card">
-                    <div className="penalty-report-student-avatar">
-                      {selectedReporterAvatar ? (
-                        <img src={selectedReporterAvatar} alt="" />
-                      ) : (
-                        getInitials(
-                          getReporterLabel(
-                            selectedReport,
-                            studentByMembership,
-                            studentByUser,
-                          ),
-                        )
-                      )}
-                    </div>
-                    <div className="penalty-report-student-copy">
-                      <span>Reporter</span>
-                      <strong>
-                        {getReporterLabel(
-                          selectedReport,
-                          studentByMembership,
-                          studentByUser,
-                        )}
-                      </strong>
-                      <small>
-                        Student ID{" "}
-                        {selectedReporter?.membership.student_id || "N/A"}
-                      </small>
-                    </div>
-                    <button
-                      type="button"
-                      className="secondary-button penalty-report-student-link"
-                      disabled={!selectedReporter}
-                      onClick={() => {
-                        if (selectedReporter) {
-                          onOpenStudent(
-                            selectedReporter.membership.membership_uuid,
-                          );
-                        }
-                      }}
-                    >
-                      View Student
-                    </button>
-                  </div>
-
-                  <div>
-                    <span>Report type</span>
-                    <strong>{formatStatus(selectedReport.report_type)}</strong>
-                  </div>
-                  <div>
-                    <span>Submitted</span>
-                    <strong>{formatDateTime(selectedReport.created_at)}</strong>
-                  </div>
-                  <div>
-                    <span>Updated</span>
-                    <strong>{formatDateTime(selectedReport.updated_at)}</strong>
-                  </div>
-                          <div>
-                            <span>Status</span>
-                            <strong>{formatStatus(selectedReport.status)}</strong>
-                          </div>
-                          <div>
-                            <span>Responsible student</span>
-                            <strong>{selectedAssignedStudentLabel || "Unassigned"}</strong>
-                          </div>
-                          <div>
-                            <span>Consequence</span>
-                            <strong>{responsibilityConsequenceLabel || "No punishment"}</strong>
-                          </div>
-                          <div>
-                            <span>Linked violation</span>
-                            <strong>{linkedViolationLabel || "None"}</strong>
-                          </div>
-                          {selectedReport.responsibility_note ? (
-                            <div>
-                              <span>Consequence note</span>
-                              <strong>{selectedReport.responsibility_note}</strong>
-                            </div>
-                          ) : null}
-                          <div className="penalty-report-location-card">
-                    <span>Report location</span>
-                    <strong>{formatLocationValue(selectedReport)}</strong>
-                    {selectedReport.location_accuracy_meters ? (
-                      <small>
-                        Accuracy{" "}
-                        {Math.round(selectedReport.location_accuracy_meters)}m
-                      </small>
-                    ) : null}
-                    {mapUrl ? (
-                      <a href={mapUrl} target="_blank" rel="noreferrer">
-                        Open in Google Maps
-                      </a>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="penalty-report-detail-tabs">
-                  {(["evidence", "details", "review"] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      type="button"
-                      className={
-                        detailTab === tab
-                          ? "penalty-report-detail-tab penalty-report-detail-tab-active"
-                          : "penalty-report-detail-tab"
-                      }
-                      onClick={() => setDetailTab(tab)}
-                    >
-                      {tab === "evidence"
-                        ? "Evidence"
-                        : tab === "details"
-                          ? "Details"
-                          : "Review"}
-                    </button>
-                  ))}
-                </div>
-
-                {detailTab === "evidence" ? (
-                  <div className="parking-report-evidence-grid">
-                    <div className="parking-report-evidence-card">
-                      <div className="penalty-report-media-header">
-                        <div>
-                          <span>Incident photo</span>
-                          <h4>Submitted evidence</h4>
-                        </div>
+                      ) : null}
+                      <div className="penalty-report-form-grid">
+                        <label className="field">
+                          <span>Student</span>
+                          <select
+                            value={assignedUserDraft}
+                            onChange={(event) => {
+                              setAssignedUserDraft(event.target.value);
+                              setAssignedDeviceDraft("");
+                            }}
+                          >
+                            <option value="">Choose a student</option>
+                            {studentRoster.map((entry) => (
+                              <option
+                                key={entry.membership.membership_uuid}
+                                value={entry.user.k_guid}
+                              >
+                                {getStudentLabel(entry)}
+                                {entry.membership.student_id
+                                  ? ` · ${entry.membership.student_id}`
+                                  : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span>Vehicle</span>
+                          <select
+                            value={assignedDeviceDraft}
+                            onChange={(event) =>
+                              setAssignedDeviceDraft(event.target.value)
+                            }
+                            disabled={!assignedUserDraft}
+                          >
+                            <option value="">No vehicle selected</option>
+                            {assignmentDraftDevices.map((entry) => (
+                              <option
+                                key={entry.device.registered_device_uuid}
+                                value={entry.device.registered_device_uuid}
+                              >
+                                {getDeviceLabel(entry)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
                       </div>
-                      {incidentPhotoUrl ? (
-                        <img src={incidentPhotoUrl} alt="Incident evidence" />
-                      ) : (
-                        <div className="parking-report-evidence-empty">
-                          No signed incident photo available.
-                        </div>
-                      )}
-                    </div>
-                    <div className="parking-report-evidence-card">
-                      <div className="penalty-report-media-header">
-                        <div>
-                          <span>Device QR photo</span>
-                          <h4>Optional identifier</h4>
-                        </div>
+                      <div className="penalty-report-form-grid">
+                        <label className="field">
+                          <span>Consequence</span>
+                          <select
+                            value={responsibilityConsequenceDraft}
+                            onChange={(event) =>
+                              setResponsibilityConsequenceDraft(
+                                event.target
+                                  .value as ParkingIncidentResponsibilityConsequence,
+                              )
+                            }
+                          >
+                            <option value="none">None yet</option>
+                            <option value="points">Point loss</option>
+                            <option value="fine">Fine</option>
+                          </select>
+                        </label>
+                        {responsibilityConsequenceDraft === "points" ? (
+                          <label className="field">
+                            <span>Points lost</span>
+                            <input
+                              inputMode="numeric"
+                              value={responsibilityPointsDraft}
+                              onChange={(event) =>
+                                setResponsibilityPointsDraft(event.target.value)
+                              }
+                              placeholder="10"
+                            />
+                          </label>
+                        ) : null}
+                        {responsibilityConsequenceDraft === "fine" ? (
+                          <label className="field">
+                            <span>Fine amount</span>
+                            <input
+                              inputMode="decimal"
+                              value={responsibilityFineDollarsDraft}
+                              onChange={(event) =>
+                                setResponsibilityFineDollarsDraft(
+                                  event.target.value,
+                                )
+                              }
+                              placeholder="25.00"
+                            />
+                          </label>
+                        ) : null}
                       </div>
-                      {qrPhotoUrl ? (
-                        <img src={qrPhotoUrl} alt="Device QR evidence" />
-                      ) : (
-                        <div className="parking-report-evidence-empty">
-                          No QR photo attached.
-                        </div>
-                      )}
+                      <details className="prd-more">
+                        <summary>Notes</summary>
+                        <label className="field">
+                          <span>Assignment note</span>
+                          <textarea
+                            value={assignmentNoteDraft}
+                            onChange={(event) =>
+                              setAssignmentNoteDraft(event.target.value)
+                            }
+                            rows={2}
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Consequence note</span>
+                          <textarea
+                            value={responsibilityNoteDraft}
+                            onChange={(event) =>
+                              setResponsibilityNoteDraft(event.target.value)
+                            }
+                            rows={2}
+                            placeholder="Why this student, or why this consequence."
+                          />
+                        </label>
+                      </details>
+                      <div className="penalty-report-actions">
+                        <button
+                          type="button"
+                          className="primary-button"
+                          disabled={
+                            actionBusy === "assignment" || !assignedUserDraft
+                          }
+                          onClick={() => void saveAssignment()}
+                        >
+                          {actionBusy === "assignment"
+                            ? "Saving..."
+                            : isTagMatch &&
+                                assignedUserDraft ===
+                                  selectedReport.assigned_user_uuid
+                              ? "Confirm and notify student"
+                              : "Save and notify student"}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ) : null}
 
-                {detailTab === "details" ? (
-                  <div className="penalty-report-detail-grid parking-report-info-grid">
-                    <div className="parking-report-full-card">
-                      <span>Description</span>
-                      <p>{selectedReport.description}</p>
-                    </div>
-                    <div>
-                      <span>Pack</span>
-                      <strong>{selectedReport.pack_uuid || "N/A"}</strong>
-                    </div>
-                    <div>
-                      <span>Spot</span>
-                      <strong>{selectedReport.spot_uuid || "N/A"}</strong>
-                    </div>
-                    <div>
-                      <span>Reservation</span>
-                      <strong>
-                        {selectedReport.reservation_uuid || "N/A"}
-                      </strong>
-                    </div>
-                    <div>
-                      <span>Report ID</span>
-                      <strong>{selectedReport.report_uuid}</strong>
-                    </div>
-                    <div>
-                      <span>App</span>
-                      <strong>{selectedReport.app_id}</strong>
-                    </div>
-                    <div>
-                      <span>School</span>
-                      <strong>{selectedReport.school_id}</strong>
-                    </div>
-                  </div>
-                ) : null}
-
-                        {detailTab === "review" ? (
-                          <div className="parking-report-review-panel">
-                            <div className="vr-form-block">
-                              <p className="vr-block-label">Responsible student</p>
-                              <p className="muted">
-                                This identifies the student as responsible for the incident
-                                and immediately notifies them in the customer app.
-                              </p>
-                              <div className="penalty-report-form-grid">
-                                <label className="field">
-                                  <span>Student</span>
-                                  <select
-                                    value={assignedUserDraft}
-                                    onChange={(event) => {
-                                      setAssignedUserDraft(event.target.value);
-                                      setAssignedDeviceDraft("");
-                                    }}
-                                  >
-                                    <option value="">Choose a student</option>
-                                    {studentRoster.map((entry) => {
-                                      const name = [
-                                        entry.user.first_name,
-                                        entry.user.last_name,
-                                      ]
-                                        .filter(Boolean)
-                                        .join(" ")
-                                        .trim();
-                                      return (
-                                        <option
-                                          key={entry.membership.membership_uuid}
-                                          value={entry.user.k_guid}
-                                        >
-                                          {name ||
-                                            entry.user.username ||
-                                            entry.user.email ||
-                                            entry.user.k_guid}
-                                          {entry.membership.student_id
-                                            ? ` · ${entry.membership.student_id}`
-                                            : ""}
-                                        </option>
-                                      );
-                                    })}
-                                  </select>
-                                </label>
-                                <label className="field">
-                                  <span>Device</span>
-                                  <select
-                                    value={assignedDeviceDraft}
-                                    onChange={(event) =>
-                                      setAssignedDeviceDraft(event.target.value)
-                                    }
-                                    disabled={!assignedUserDraft}
-                                  >
-                                    <option value="">No device selected</option>
-                                    {assignmentDraftDevices.map((entry) => (
-                                      <option
-                                        key={entry.device.registered_device_uuid}
-                                        value={entry.device.registered_device_uuid}
-                                      >
-                                        {getDeviceLabel(entry)}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-                              </div>
-                              <label className="field">
-                                <span>Assignment note</span>
-                                <textarea
-                                  value={assignmentNoteDraft}
-                                  onChange={(event) =>
-                                    setAssignmentNoteDraft(event.target.value)
-                                  }
-                                  rows={3}
-                                />
-                              </label>
-                              <div className="penalty-report-form-grid">
-                                <label className="field">
-                                  <span>Student consequence</span>
-                                  <select
-                                    value={responsibilityConsequenceDraft}
-                                    onChange={(event) =>
-                                      setResponsibilityConsequenceDraft(
-                                        event.target
-                                          .value as ParkingIncidentResponsibilityConsequence,
-                                      )
-                                    }
-                                  >
-                                    <option value="none">No punishment yet</option>
-                                    <option value="points">Point loss</option>
-                                    <option value="fine">Fine</option>
-                                  </select>
-                                </label>
-                                {responsibilityConsequenceDraft === "points" ? (
-                                  <label className="field">
-                                    <span>Points lost</span>
-                                    <input
-                                      inputMode="numeric"
-                                      value={responsibilityPointsDraft}
-                                      onChange={(event) =>
-                                        setResponsibilityPointsDraft(
-                                          event.target.value,
-                                        )
-                                      }
-                                      placeholder="10"
-                                    />
-                                  </label>
-                                ) : null}
-                                {responsibilityConsequenceDraft === "fine" ? (
-                                  <label className="field">
-                                    <span>Fine amount</span>
-                                    <input
-                                      inputMode="decimal"
-                                      value={responsibilityFineDollarsDraft}
-                                      onChange={(event) =>
-                                        setResponsibilityFineDollarsDraft(
-                                          event.target.value,
-                                        )
-                                      }
-                                      placeholder="25.00"
-                                    />
-                                  </label>
-                                ) : null}
-                              </div>
-                              <label className="field">
-                                <span>Consequence note</span>
-                                <textarea
-                                  value={responsibilityNoteDraft}
-                                  onChange={(event) =>
-                                    setResponsibilityNoteDraft(event.target.value)
-                                  }
-                                  rows={3}
-                                  placeholder="Explain why this student is responsible or why this punishment was chosen."
-                                />
-                              </label>
-                              {responsibilityConsequenceDraft === "fine" ? (
-                                <p className="muted">
-                                  Save responsibility first, then use “Issue official
-                                  violation” to create the payable ticket for this fine.
-                                </p>
-                              ) : null}
-                              <div className="penalty-report-actions">
-                                <button
-                                  type="button"
-                                  className="primary-button"
-                                  disabled={actionBusy === "assignment"}
-                                  onClick={() => void saveAssignment()}
-                                >
-                                  {actionBusy === "assignment"
-                                    ? "Saving..."
-                                    : "Save responsibility"}
-                                </button>
-                              </div>
-                            </div>
-
-                            <div className="vr-form-block">
-                              <p className="vr-block-label">Enforcement flag</p>
-                              <div className="penalty-report-form-grid">
-                                <label className="field">
-                                  <span>Priority</span>
-                                  <select
-                                    value={flagPriorityDraft}
-                                    onChange={(event) =>
-                                      setFlagPriorityDraft(
-                                        event.target.value === "urgent"
-                                          ? "urgent"
-                                          : "normal",
-                                      )
-                                    }
-                                  >
-                                    <option value="normal">Normal</option>
-                                    <option value="urgent">Urgent</option>
-                                  </select>
-                                </label>
-                                <label className="field">
-                                  <span>Flag note</span>
-                                  <input
-                                    value={flagNoteDraft}
-                                    onChange={(event) =>
-                                      setFlagNoteDraft(event.target.value)
-                                    }
-                                    placeholder="What should enforcement know?"
-                                  />
-                                </label>
-                              </div>
-                              <div className="penalty-report-actions">
-                                <button
-                                  type="button"
-                                  className="primary-button"
-                                  disabled={actionBusy === "flag"}
-                                  onClick={() => void saveFlag()}
-                                >
-                                  {actionBusy === "flag"
-                                    ? "Flagging..."
-                                    : "Flag for enforcement"}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="secondary-button"
-                                  disabled={
-                                    actionBusy === "clear-flag" ||
-                                    !selectedReport.flagged_for_enforcement
-                                  }
-                                  onClick={() => void clearFlag()}
-                                >
-                                  {actionBusy === "clear-flag"
-                                    ? "Clearing..."
-                                    : "Clear flag"}
-                                </button>
-                              </div>
-                            </div>
-
-                            <div className="vr-form-block">
-                              <p className="vr-block-label">Set status</p>
+                    <div className="prd-card">
+                      <p className="vr-block-label">Status and notes</p>
                       <div className="vr-status-grid">
                         {statusOptions
                           .filter((status) => status !== "all")
@@ -1501,9 +1763,6 @@ export function ParkingReportsScreen({
                             </button>
                           ))}
                       </div>
-                    </div>
-
-                    <div className="penalty-report-form-grid">
                       <label className="field">
                         <span>Internal notes</span>
                         <textarea
@@ -1511,43 +1770,146 @@ export function ParkingReportsScreen({
                           onChange={(event) =>
                             setAdminNotesDraft(event.target.value)
                           }
-                          rows={4}
+                          rows={2}
                         />
                       </label>
                       <label className="field">
-                        <span>Student-visible note</span>
+                        <span>Note to the reporter</span>
                         <textarea
                           value={studentNoteDraft}
                           onChange={(event) =>
                             setStudentNoteDraft(event.target.value)
                           }
-                          rows={4}
+                          rows={2}
                         />
                       </label>
+                      <div className="penalty-report-actions">
+                        <button
+                          type="button"
+                          className="primary-button"
+                          disabled={saveBusy}
+                          onClick={() => void saveSelectedReport()}
+                        >
+                          {saveBusy ? "Saving..." : "Save status"}
+                        </button>
+                      </div>
                     </div>
 
-                            <div className="penalty-report-actions">
-                              <button
-                        type="button"
-                        className="primary-button"
-                        disabled={saveBusy}
-                        onClick={() => void saveSelectedReport()}
-                      >
-                                {saveBusy ? "Saving..." : "Save review"}
-                              </button>
-                              <button
-                                type="button"
-                                className="secondary-button"
-                                disabled={!!selectedReport.linked_violation_uuid}
-                                onClick={() => setIssueModalOpen(true)}
+                    <div className="prd-card">
+                      <p className="vr-block-label">Enforcement</p>
+                      {selectedReport.flagged_for_enforcement ? (
+                        <div className="prd-row">
+                          <span>
+                            Flagged
+                            {selectedReport.flag_priority === "urgent"
+                              ? " (urgent)"
+                              : ""}
+                            {selectedReport.flag_note
+                              ? `: ${selectedReport.flag_note}`
+                              : ""}
+                          </span>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            disabled={actionBusy === "clear-flag"}
+                            onClick={() => void clearFlag()}
+                          >
+                            {actionBusy === "clear-flag"
+                              ? "Clearing..."
+                              : "Clear flag"}
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="penalty-report-form-grid">
+                            <label className="field">
+                              <span>Priority</span>
+                              <select
+                                value={flagPriorityDraft}
+                                onChange={(event) =>
+                                  setFlagPriorityDraft(
+                                    event.target.value === "urgent"
+                                      ? "urgent"
+                                      : "normal",
+                                  )
+                                }
                               >
-                                {selectedReport.linked_violation_uuid
-                                  ? "Violation already issued"
-                                  : "Issue official violation"}
-                              </button>
-                            </div>
+                                <option value="normal">Normal</option>
+                                <option value="urgent">Urgent</option>
+                              </select>
+                            </label>
+                            <label className="field">
+                              <span>Note for officers</span>
+                              <input
+                                value={flagNoteDraft}
+                                onChange={(event) =>
+                                  setFlagNoteDraft(event.target.value)
+                                }
+                                placeholder="What should enforcement know?"
+                              />
+                            </label>
                           </div>
-                ) : null}
+                          <div className="penalty-report-actions">
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              disabled={actionBusy === "flag"}
+                              onClick={() => void saveFlag()}
+                            >
+                              {actionBusy === "flag"
+                                ? "Flagging..."
+                                : "Flag for enforcement"}
+                            </button>
+                          </div>
+                        </>
+                      )}
+
+                      <div className="prd-row prd-violation-row">
+                        {selectedReport.linked_violation_uuid ? (
+                          <>
+                            <span>
+                              Official violation issued{" "}
+                              {formatDateTime(selectedReport.violation_issued_at)}
+                            </span>
+                            <button
+                              type="button"
+                              className="prd-link"
+                              onClick={() =>
+                                navigate(
+                                  `/penalty-reports?report=${encodeURIComponent(
+                                    selectedReport.linked_violation_uuid ?? "",
+                                  )}`,
+                                )
+                              }
+                            >
+                              View violation
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="muted">
+                              {!selectedReport.assigned_user_uuid
+                                ? "Choose a responsible student to issue a violation."
+                                : isTagMatch
+                                  ? "Confirm the responsible student to issue a violation."
+                                  : "Ready to ticket the responsible student."}
+                            </span>
+                            <button
+                              type="button"
+                              className="primary-button"
+                              disabled={
+                                !selectedReport.assigned_user_uuid || isTagMatch
+                              }
+                              onClick={() => setIssueModalOpen(true)}
+                            >
+                              Issue violation
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+                </div>
               </article>
             </>
           ) : detailOpen ? (
@@ -1576,6 +1938,35 @@ export function ParkingReportsScreen({
           ) : null}
         </div>
       </div>
+
+              {expandedPhotoUrl ? (
+                <div
+                  className="prd-lightbox"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Incident photo"
+                  onClick={() => setExpandedPhotoUrl("")}
+                >
+                  <img
+                    src={expandedPhotoUrl}
+                    alt="Incident evidence, full size"
+                    onClick={(event) => event.stopPropagation()}
+                  />
+                  <div className="prd-lightbox-actions">
+                    <a
+                      href={expandedPhotoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      Open original
+                    </a>
+                    <button type="button" onClick={() => setExpandedPhotoUrl("")}>
+                      Close
+                    </button>
+                  </div>
+                </div>
+              ) : null}
 
               {filterModalOpen ? (
                 <div
