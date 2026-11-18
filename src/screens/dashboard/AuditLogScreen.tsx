@@ -13,6 +13,27 @@ import {
   type DashboardAuditPage,
 } from "../../lib/api";
 import { useDetailParamSync } from "../../lib/useDetailParamSync";
+import {
+  DataRow,
+  DataTable,
+  StatusBadge,
+  TableCard,
+  TableMessageRow,
+  type StatusTone,
+} from "../../components/table/DataTable";
+
+function outcomeTone(outcome: string): StatusTone {
+  if (outcome === "success") return "success";
+  if (outcome === "blocked") return "warning";
+  if (outcome === "failure") return "danger";
+  return "neutral";
+}
+
+function severityTone(severity: string): StatusTone {
+  if (severity === "high") return "danger";
+  if (severity === "warning") return "warning";
+  return "neutral";
+}
 
 const sourceServiceDisplayNames: Record<string, string> = {
   "billing-api-service": "Billing",
@@ -475,8 +496,8 @@ export function AuditLogScreen({ managedAppId, activeSchoolId }: Props) {
         {selected ? (
           <div className="audit-detail-page">
             <div className="audit-detail-badges">
-              <span className={`audit-badge audit-outcome-${selected.outcome}`}>{selected.outcome}</span>
-              <span className={`audit-badge audit-severity-${selected.severity}`}>{selected.severity}</span>
+              <StatusBadge tone={outcomeTone(selected.outcome)}>{selected.outcome}</StatusBadge>
+              <StatusBadge tone={severityTone(selected.severity)}>{selected.severity}</StatusBadge>
               <code className="audit-action-code">{selected.action}</code>
             </div>
             <dl className="audit-detail-grid">
@@ -725,8 +746,57 @@ export function AuditLogScreen({ managedAppId, activeSchoolId }: Props) {
 
       {error ? <div className="banner banner-error">{error}</div> : null}
 
-      <div className="table-scroll audit-table-scroll">
-        <table className="data-table audit-table">
+      <TableCard
+        className="audit-table-card"
+        maxHeight="70vh"
+        footer={
+          <div className="audit-pagination">
+            <span className="audit-pagination-info">
+              Page {cursorStack.length + 1} · {events.length} event{events.length === 1 ? "" : "s"}
+            </span>
+            <div className="audit-pagination-buttons">
+              <label className="audit-page-size">
+                Rows
+                <select
+                  value={pageSize}
+                  onChange={(event) => {
+                    setPageSize(Number(event.target.value));
+                    setCursor("");
+                    setCursorStack([]);
+                  }}
+                >
+                  {[25, 50, 100, 200].map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                className="secondary-button"
+                disabled={cursorStack.length === 0 || loading}
+                onClick={() => {
+                  setCursor(cursorStack[cursorStack.length - 1] ?? "");
+                  setCursorStack((current) => current.slice(0, -1));
+                }}
+              >
+                Previous
+              </button>
+              <button
+                className="secondary-button"
+                disabled={!nextCursor || loading}
+                onClick={() => {
+                  setCursorStack((current) => [...current, cursor]);
+                  setCursor(nextCursor);
+                }}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        }
+      >
+        <DataTable className="audit-table" minWidth={980} aria-label="Audit events">
           <thead>
             <tr>
               <th aria-sort={filters.sort === "asc" ? "ascending" : "descending"}>
@@ -747,7 +817,7 @@ export function AuditLogScreen({ managedAppId, activeSchoolId }: Props) {
           </thead>
           <tbody>
             {events.map((event) => (
-              <tr key={event.event_uuid} className="audit-table-row" onClick={() => setSelectedEventId(event.event_uuid)}>
+              <DataRow key={event.event_uuid} onOpen={() => setSelectedEventId(event.event_uuid)}>
                 <td className="audit-time-cell">
                   <span className="audit-time-exact">{formatDateTime(event.occurred_at)}</span>
                 </td>
@@ -791,9 +861,9 @@ export function AuditLogScreen({ managedAppId, activeSchoolId }: Props) {
                   )}
                 </td>
                 <td>
-                  <span className={`audit-badge audit-outcome-${event.outcome}`}>{event.outcome}</span>
+                  <StatusBadge tone={outcomeTone(event.outcome)}>{event.outcome}</StatusBadge>
                   {event.severity !== "info" ? (
-                    <span className={`audit-badge audit-severity-${event.severity}`}>{event.severity}</span>
+                    <StatusBadge tone={severityTone(event.severity)}>{event.severity}</StatusBadge>
                   ) : null}
                 </td>
                 <td className="audit-source-cell">
@@ -814,70 +884,20 @@ export function AuditLogScreen({ managedAppId, activeSchoolId }: Props) {
                   )}
                   <small>{formatSourceService(event.source_service)}</small>
                 </td>
-              </tr>
+              </DataRow>
             ))}
-            {loading ? (
-              <tr>
-                <td colSpan={6} className="audit-empty-cell">
-                  Loading audit events…
-                </td>
-              </tr>
+            {loading && events.length === 0 ? (
+              <TableMessageRow colSpan={6} tone="loading">
+                Loading audit events…
+              </TableMessageRow>
             ) : null}
             {!loading && events.length === 0 && !error ? (
-              <tr>
-                <td colSpan={6} className="audit-empty-cell">
-                  No audit events match these filters.
-                </td>
-              </tr>
+              <TableMessageRow colSpan={6}>No audit events match these filters.</TableMessageRow>
             ) : null}
           </tbody>
-        </table>
-      </div>
+        </DataTable>
+      </TableCard>
 
-      <div className="form-actions audit-pagination">
-        <span className="audit-pagination-info">
-          Page {cursorStack.length + 1} · {events.length} event{events.length === 1 ? "" : "s"}
-        </span>
-        <div className="audit-pagination-buttons">
-          <label className="audit-page-size">
-            Rows
-            <select
-              value={pageSize}
-              onChange={(event) => {
-                setPageSize(Number(event.target.value));
-                setCursor("");
-                setCursorStack([]);
-              }}
-            >
-              {[25, 50, 100, 200].map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            className="secondary-button"
-            disabled={cursorStack.length === 0 || loading}
-            onClick={() => {
-              setCursor(cursorStack[cursorStack.length - 1] ?? "");
-              setCursorStack((current) => current.slice(0, -1));
-            }}
-          >
-            Previous
-          </button>
-          <button
-            className="secondary-button"
-            disabled={!nextCursor || loading}
-            onClick={() => {
-              setCursorStack((current) => [...current, cursor]);
-              setCursor(nextCursor);
-            }}
-          >
-            Next
-          </button>
-        </div>
-      </div>
     </section>
   );
 }
