@@ -1,45 +1,213 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
-  fetchDashboardAuditEvents,
+  exportSchoolAuditEvents,
+  fetchSchoolAuditActions,
+  fetchSchoolAuditEvent,
+  fetchSchoolAuditEvents,
   type AuditOutcome,
   type AuditSeverity,
+  type DashboardAuditActionCount,
   type DashboardAuditEvent,
+  type DashboardAuditFilters,
+  type DashboardAuditPage,
 } from "../../lib/api";
-import { downloadCsv, type CsvCell } from "../../lib/csv";
+import { useDetailParamSync } from "../../lib/useDetailParamSync";
 
 const sourceServiceDisplayNames: Record<string, string> = {
   "billing-api-service": "Billing",
-  "global-auth-service": "Authentication Service",
+  dashboard: "Dashboard (browser-reported)",
+  "global-auth": "Sign-in service",
+  "global-auth-service": "Sign-in service",
   "hub-store-service": "Juise Bar Service",
-  "infra-secret-store": "Authentication Store",
   "kca-proxy": "Main Proxy",
-  "kca-push-notification": "Push Notification Service",
   "nebula-user-server": "User Server",
-  "partner-api": "Partner API",
-  "tcp-proxy-layer": "Cloud Communication Server",
-  "vehicle-store-service": "Vehicle Service",
-  "vehicle-store": "Vehicle Service",
-  "zone-cache-service": "Zone Service",
 };
 
 function formatSourceService(name: string): string {
   return sourceServiceDisplayNames[name] ?? name;
 }
 
-const outcomeFilters: Array<{ value: AuditOutcome | ""; label: string }> = [
-  { value: "", label: "All outcomes" },
-  { value: "success", label: "Success" },
-  { value: "failure", label: "Failure" },
-  { value: "blocked", label: "Blocked" },
+// Categories are action prefixes; the server filters on them.
+const categories: Array<{ value: string; label: string }> = [
+  { value: "", label: "All activity" },
+  { value: "auth.", label: "Sign-in & security" },
+  { value: "dashboard.parking_incident_reports", label: "Parking reports" },
+  { value: "dashboard.violations", label: "Violations" },
+  { value: "dashboard.violation_fee_rules", label: "Violation fees" },
+  { value: "dashboard.registered_devices", label: "Vehicle registrations" },
+  { value: "dashboard.registered_device_fee_rules", label: "Registration fees" },
+  { value: "dashboard.parking_pass", label: "Device ID tags" },
+  { value: "dashboard.staff", label: "Staff & access" },
+  { value: "dashboard.admin_school_memberships", label: "Admin memberships" },
+  { value: "dashboard.social_", label: "Social moderation" },
+  { value: "dashboard.students", label: "Student records viewed" },
+  { value: "dashboard.export", label: "Data exports" },
+  { value: "dashboard.audit_log", label: "Audit log exports" },
+  { value: "dashboard.challenges", label: "Challenges" },
+  { value: "dashboard.school", label: "School settings" },
 ];
 
-const severityFilters: Array<{ value: AuditSeverity | ""; label: string }> = [
-  { value: "", label: "All severities" },
-  { value: "info", label: "Info" },
-  { value: "warning", label: "Warning" },
-  { value: "high", label: "High" },
+const actionLabels: Record<string, string> = {
+  "auth.login.success": "Signed in",
+  "auth.login.failed": "Sign-in failed",
+  "auth.login.blocked": "Sign-in locked out",
+  "auth.login.repeated_blocks": "Repeated lockouts",
+  "auth.mfa.success": "MFA verified",
+  "auth.mfa.failed": "MFA failed",
+  "auth.mfa.enrollment_confirmed": "MFA set up",
+  "auth.mfa.webauthn_enrolled": "Passkey set up",
+  "auth.mfa.webauthn_added": "Passkey added",
+  "auth.mfa.webauthn_removed": "Passkey removed",
+  "auth.mfa.totp_added": "Authenticator app added",
+  "auth.mfa.totp_removed": "Authenticator app removed",
+  "auth.password_reset.requested": "Password reset requested",
+  "auth.password_reset.recovery_code_used": "Recovery code used",
+  "auth.password_recovery.failed": "Password recovery failed",
+  "auth.password.changed": "Password changed",
+  "auth.password.admin_set": "Password set by an admin",
+  "auth.account.school_admin_created": "School admin account created",
+  "auth.school_membership.joined": "Joined a school",
+  "auth.school_membership.left": "Left a school",
+  "dashboard.parking_incident_reports.assignment": "Parking report: responsible student set",
+  "dashboard.parking_incident_reports.flag": "Parking report flagged",
+  "dashboard.parking_incident_reports.clear_flag": "Parking report flag cleared",
+  "dashboard.parking_incident_reports.issue_violation": "Violation issued from report",
+  "dashboard.parking_incident_reports.update": "Parking report updated",
+  "dashboard.parking_incident_reports.delete": "Parking report deleted",
+  "dashboard.registered_devices.approve": "Vehicle registration approved",
+  "dashboard.registered_devices.decline": "Vehicle registration declined",
+  "dashboard.parking_passes.deactivate": "ID tag deactivated",
+  "dashboard.parking_passes.tags": "ID tag labels changed",
+  "dashboard.parking_pass_batches.create": "ID tag batch created",
+  "dashboard.staff.create": "Staff member added",
+  "dashboard.staff.update": "Staff access changed",
+  "dashboard.staff.delete": "Staff member removed",
+  "dashboard.social_post_reports.resolve": "Post report resolved",
+  "dashboard.social_comment_reports.resolve": "Comment report resolved",
+  "dashboard.audit_log.exported": "Audit log exported",
+  "dashboard.export.download": "Data exported",
+};
+
+function humanizeAction(action: string): string {
+  if (actionLabels[action]) {
+    return actionLabels[action];
+  }
+  const words = action
+    .replace(/^(dashboard|auth|billing|rider)\./, "")
+    .split(/[._]+/)
+    .filter(Boolean)
+    .join(" ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+const roleLabels: Record<string, string> = {
+  juise_admin: "Juise staff",
+  school_admin: "School admin",
+  enforcement_officer: "Officer",
+  rider: "Student",
+  user: "User",
+};
+
+// Where an event's resource opens in the Dashboard, when it has a screen.
+function resourceLink(event: DashboardAuditEvent): string | null {
+  const id = event.resource_id ? encodeURIComponent(event.resource_id) : "";
+  switch (event.resource_type) {
+    case "parking_incident_reports":
+      return id ? `/parking-reports?report=${id}` : "/parking-reports";
+    case "violations":
+      return id ? `/penalty-reports?report=${id}` : "/penalty-reports";
+    case "registered_devices":
+      return id
+        ? `/vehicle-registrations?registration=${id}`
+        : "/vehicle-registrations";
+    case "parking_passes":
+      return id ? `/device-tags?pass=${id}` : "/device-tags";
+    case "staff":
+    case "admin_school_memberships":
+      return "/staff";
+    case "violation_fee_rules":
+      return "/violation-fees";
+    case "registered_device_fee_rules":
+      return "/registration-fees";
+    case "challenges":
+    case "campaign_challenges":
+      return "/challenges";
+    case "social_post_reports":
+    case "social_comment_reports":
+      return "/social-reports";
+    default:
+      return null;
+  }
+}
+
+type RangePreset = "24h" | "7d" | "30d" | "90d" | "all" | "custom";
+
+const rangePresets: Array<{ value: RangePreset; label: string }> = [
+  { value: "24h", label: "Last 24 hours" },
+  { value: "7d", label: "Last 7 days" },
+  { value: "30d", label: "Last 30 days" },
+  { value: "90d", label: "Last 90 days" },
+  { value: "all", label: "All time" },
+  { value: "custom", label: "Custom range" },
 ];
+
+type AppliedFilters = {
+  q: string;
+  category: string;
+  action: string;
+  outcome: AuditOutcome | "";
+  severity: AuditSeverity | "";
+  actor: string;
+  actorLabel: string;
+  resourceType: string;
+  resourceId: string;
+  sourceIp: string;
+  range: RangePreset;
+  from: string;
+  to: string;
+  sort: "asc" | "desc";
+};
+
+const emptyFilters: AppliedFilters = {
+  q: "",
+  category: "",
+  action: "",
+  outcome: "",
+  severity: "",
+  actor: "",
+  actorLabel: "",
+  resourceType: "",
+  resourceId: "",
+  sourceIp: "",
+  range: "7d",
+  from: "",
+  to: "",
+  sort: "desc",
+};
+
+function rangeStart(range: RangePreset, now: number): string {
+  const hours: Record<string, number> = { "24h": 24, "7d": 24 * 7, "30d": 24 * 30, "90d": 24 * 90 };
+  const span = hours[range];
+  return span ? new Date(now - span * 3600 * 1000).toISOString() : "";
+}
+
+function toQuery(filters: AppliedFilters, now: number): DashboardAuditFilters {
+  return {
+    q: filters.q,
+    category: filters.category,
+    action: filters.action,
+    outcome: filters.outcome,
+    severity: filters.severity,
+    actor_user_uuid: filters.actor,
+    resource_type: filters.resourceType,
+    resource_id: filters.resourceId,
+    source_ip: filters.sourceIp,
+    from: filters.range === "custom" ? filters.from : rangeStart(filters.range, now),
+    to: filters.range === "custom" ? filters.to : "",
+    sort: filters.sort,
+  };
+}
 
 function formatDateTime(value: string): string {
   const date = new Date(value);
@@ -49,346 +217,302 @@ function formatDateTime(value: string): string {
   return date.toLocaleString(undefined, {
     month: "short",
     day: "numeric",
+    year: "numeric",
     hour: "numeric",
     minute: "2-digit",
     second: "2-digit",
   });
 }
 
-function formatRelativeTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-  const diffMs = Date.now() - date.getTime();
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return date.toLocaleDateString();
+function actorLabel(event: DashboardAuditEvent): string {
+  return (
+    event.actor_name ||
+    event.actor_email ||
+    event.actor_user_uuid ||
+    (event.actor_type === "anonymous" ? "Not signed in" : "Unknown")
+  );
 }
 
-export function AuditLogScreen({ appId }: { appId: string }) {
-  const [events, setEvents] = useState<DashboardAuditEvent[]>([]);
-  const [cursor, setCursor] = useState("");
-  const [nextCursor, setNextCursor] = useState("");
-  const [action, setAction] = useState("");
-  const [outcome, setOutcome] = useState<AuditOutcome | "">("");
-  const [severity, setSeverity] = useState<AuditSeverity | "">("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [pageIndex, setPageIndex] = useState(0);
-  const [exportOpen, setExportOpen] = useState(false);
-  const [exportStart, setExportStart] = useState("");
-  const [exportEnd, setExportEnd] = useState("");
-  const [exportBusy, setExportBusy] = useState(false);
-  const [exportError, setExportError] = useState("");
-  const [exportNotice, setExportNotice] = useState("");
-  const [filterModalOpen, setFilterModalOpen] = useState(false);
-  const [draftAction, setDraftAction] = useState("");
-  const [draftOutcome, setDraftOutcome] = useState<AuditOutcome | "">("");
-  const [draftSeverity, setDraftSeverity] = useState<AuditSeverity | "">("");
+function shortId(value: string): string {
+  return value.length > 14 ? `${value.slice(0, 8)}…` : value;
+}
+
+function saveBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+type Props = {
+  managedAppId: string;
+  activeSchoolId: string;
+};
+
+export function AuditLogScreen({ managedAppId, activeSchoolId }: Props) {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const selectedEventUuid = searchParams.get("event") ?? "";
+  const [filters, setFilters] = useState<AppliedFilters>(emptyFilters);
+  const [searchDraft, setSearchDraft] = useState("");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  // Cursors of the pages before the current one, for Previous.
+  const [cursorStack, setCursorStack] = useState<string[]>([]);
+  const [cursor, setCursor] = useState("");
+  const [pageSize, setPageSize] = useState(50);
+  // "now" is pinned when the filters change, so relative ranges stay stable
+  // while paging.
+  const [queryTime, setQueryTime] = useState(() => Date.now());
+  const [refreshCount, setRefreshCount] = useState(0);
+  const [selectedEventId, setSelectedEventId] = useState("");
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportMessage, setExportMessage] = useState("");
+  const [exportError, setExportError] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const page = await fetchDashboardAuditEvents(appId, {
-        action,
-        outcome,
-        severity,
-        cursor,
-        limit: 50,
-      });
-      setEvents(page.events ?? []);
-      setNextCursor(page.next_cursor ?? "");
-    } catch (caught) {
-      setEvents([]);
-      setNextCursor("");
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Unable to load audit events",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [appId, action, outcome, severity, cursor]);
+  useDetailParamSync("event", selectedEventId, setSelectedEventId);
+
+  const scope = `${managedAppId}:${activeSchoolId}`;
+  const query = useMemo(() => toQuery(filters, queryTime), [filters, queryTime]);
+  const requestKey = JSON.stringify({ scope, query, cursor, pageSize, refreshCount });
+
+  const [result, setResult] = useState<{
+    key: string;
+    page: DashboardAuditPage | null;
+    error: string;
+  }>({ key: "", page: null, error: "" });
+  const loading = result.key !== requestKey;
+
   useEffect(() => {
-    void load();
-  }, [load]);
-
-  const filteredEvents = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) {
-      return events;
+    if (!managedAppId || !activeSchoolId) {
+      return;
     }
-    return events.filter((event) => {
-      const haystack = [
-        event.action,
-        event.actor_user_uuid ?? "",
-        event.resource_type ?? "",
-        event.resource_id ?? "",
-        event.outcome,
-        event.severity,
-        event.source_service,
-        formatSourceService(event.source_service),
-        event.source_ip ?? "",
-        event.school_id ?? "",
-      ]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(query);
-    });
-  }, [events, searchQuery]);
+    let cancelled = false;
+    fetchSchoolAuditEvents(managedAppId, activeSchoolId, {
+      ...query,
+      cursor,
+      limit: pageSize,
+    }).then(
+      (page) => {
+        if (!cancelled) setResult({ key: requestKey, page, error: "" });
+      },
+      (caught: unknown) => {
+        if (!cancelled)
+          setResult({
+            key: requestKey,
+            page: null,
+            error: caught instanceof Error ? caught.message : "Unable to load audit events",
+          });
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+    // requestKey covers every input.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestKey]);
 
-  const selected = useMemo(
-    () =>
-      events.find((event) => event.event_uuid === selectedEventUuid) ?? null,
-    [events, selectedEventUuid],
-  );
-
-  const openEvent = (eventUuid: string) => {
-    const next = new URLSearchParams(searchParams);
-    next.set("event", eventUuid);
-    setSearchParams(next);
-  };
-
-  const backToList = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-    } else {
-      const next = new URLSearchParams(searchParams);
-      next.delete("event");
-      setSearchParams(next, { replace: true });
+  const [actions, setActions] = useState<{
+    scope: string;
+    list: DashboardAuditActionCount[];
+  }>({ scope: "", list: [] });
+  useEffect(() => {
+    if (!managedAppId || !activeSchoolId) {
+      return;
     }
-  };
+    let cancelled = false;
+    fetchSchoolAuditActions(managedAppId, activeSchoolId).then(
+      (list) => {
+        if (!cancelled) setActions({ scope, list });
+      },
+      () => {
+        if (!cancelled) setActions({ scope, list: [] });
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSchoolId, managedAppId, scope]);
+  const actionOptions = actions.scope === scope ? actions.list : [];
 
-  const exportRangeInvalid = Boolean(
-    exportStart && exportEnd && exportStart > exportEnd,
+  // Debounce the search box into the applied filters.
+  useEffect(() => {
+    if (searchDraft.trim() === filters.q) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      applyFilters({ q: searchDraft.trim() });
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [searchDraft, filters.q]);
+
+  function applyFilters(change: Partial<AppliedFilters>) {
+    setFilters((current) => ({ ...current, ...change }));
+    setCursor("");
+    setCursorStack([]);
+    setQueryTime(Date.now());
+  }
+
+  function clearFilters() {
+    setSearchDraft("");
+    applyFilters({ ...emptyFilters });
+  }
+
+  const events = useMemo(
+    () => (loading ? [] : (result.page?.events ?? [])),
+    [loading, result.page],
   );
+  const nextCursor = loading ? "" : (result.page?.next_cursor ?? "");
+  const error = loading ? "" : result.error;
 
-  const handleExport = async () => {
-    if (exportBusy || exportRangeInvalid) {
+  // The open event: from the page, else fetched (a deep link or an event
+  // on another page).
+  const [detail, setDetail] = useState<{
+    key: string;
+    event: DashboardAuditEvent | null;
+    error: string;
+  }>({ key: "", event: null, error: "" });
+  const pageEvent = events.find((event) => event.event_uuid === selectedEventId) ?? null;
+  const detailKey = `${scope}:${selectedEventId}`;
+  useEffect(() => {
+    if (!selectedEventId || pageEvent || !managedAppId || !activeSchoolId) {
+      return;
+    }
+    let cancelled = false;
+    fetchSchoolAuditEvent(managedAppId, activeSchoolId, selectedEventId).then(
+      (event) => {
+        if (!cancelled) setDetail({ key: detailKey, event, error: "" });
+      },
+      (caught: unknown) => {
+        if (!cancelled)
+          setDetail({
+            key: detailKey,
+            event: null,
+            error: caught instanceof Error ? caught.message : "Audit event not found",
+          });
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSchoolId, detailKey, managedAppId, pageEvent, selectedEventId]);
+  const selected =
+    pageEvent ?? (detail.key === detailKey ? detail.event : null);
+  const detailError = !pageEvent && detail.key === detailKey ? detail.error : "";
+
+  async function handleExport(format: "csv" | "json") {
+    if (exportBusy || !activeSchoolId) {
       return;
     }
     setExportBusy(true);
     setExportError("");
-    setExportNotice("");
+    setExportMessage("");
     try {
-      const startMs = exportStart
-        ? new Date(`${exportStart}T00:00:00`).getTime()
-        : null;
-      const endMs = exportEnd
-        ? new Date(`${exportEnd}T23:59:59.999`).getTime()
-        : null;
-
-      const collected: DashboardAuditEvent[] = [];
-      const maxEvents = 10000;
-      let pageCursor = "";
-      let truncated = false;
-
-      for (let pageCount = 0; pageCount < 200; pageCount += 1) {
-        const page = await fetchDashboardAuditEvents(appId, {
-          action,
-          outcome,
-          severity,
-          cursor: pageCursor,
-          limit: 50,
-        });
-        const pageEvents = page.events ?? [];
-        let reachedOlderThanStart = false;
-
-        // Events are returned newest-first across cursor pages, so once we
-        // see an event older than the start date we can stop paging.
-        for (const event of pageEvents) {
-          const occurredMs = new Date(event.occurred_at).getTime();
-          if (Number.isNaN(occurredMs)) {
-            continue;
-          }
-          if (endMs !== null && occurredMs > endMs) {
-            continue;
-          }
-          if (startMs !== null && occurredMs < startMs) {
-            reachedOlderThanStart = true;
-            continue;
-          }
-          if (collected.length >= maxEvents) {
-            truncated = true;
-            break;
-          }
-          collected.push(event);
-        }
-
-        if (truncated) {
-          break;
-        }
-        if (reachedOlderThanStart && startMs !== null) {
-          break;
-        }
-        pageCursor = page.next_cursor ?? "";
-        if (!pageCursor) {
-          break;
-        }
-      }
-
-      if (collected.length === 0) {
-        setExportError("No audit events found for the selected date range.");
-        return;
-      }
-
-      const header: CsvCell[] = [
-        "Occurred at",
-        "Action",
-        "Outcome",
-        "Severity",
-        "Actor",
-        "School",
-        "Resource type",
-        "Resource ID",
-        "HTTP status",
-        "Source IP",
-        "Service",
-        "Event UUID",
-        "Metadata",
-      ];
-      const rows: CsvCell[][] = [
-        header,
-        ...collected.map((event) => [
-          new Date(event.occurred_at).toISOString(),
-          event.action,
-          event.outcome,
-          event.severity,
-          event.actor_user_uuid ?? "",
-          event.school_id ?? "",
-          event.resource_type ?? "",
-          event.resource_id ?? "",
-          event.http_status ?? "",
-          event.source_ip ?? "",
-          formatSourceService(event.source_service),
-          event.event_uuid,
-          JSON.stringify(event.metadata ?? {}),
-        ]),
-      ];
-
-      const rangeLabel = [exportStart || "start", exportEnd || "today"].join(
-        "_to_",
+      const exported = await exportSchoolAuditEvents(
+        managedAppId,
+        activeSchoolId,
+        query,
+        format,
       );
-      downloadCsv(`audit-log_${rangeLabel}`, rows);
-      setExportNotice(
-        `Downloaded ${collected.length.toLocaleString()} event${
-          collected.length === 1 ? "" : "s"
-        }${truncated ? " (capped at 10,000 — narrow the date range for the rest)" : ""}.`,
+      saveBlob(exported.blob, exported.filename);
+      const count =
+        exported.count === null
+          ? "The audit log"
+          : `${exported.count.toLocaleString()} event${exported.count === 1 ? "" : "s"}`;
+      setExportMessage(
+        `${count} downloaded as ${format.toUpperCase()}.${
+          exported.truncated
+            ? " The export stopped at 50,000 events; narrow the date range for the rest."
+            : ""
+        } This export is recorded in the audit log.`,
       );
     } catch (caught) {
-      setExportError(
-        caught instanceof Error
-          ? caught.message
-          : "Unable to export audit events",
-      );
+      setExportError(caught instanceof Error ? caught.message : "Unable to export the audit log");
     } finally {
       setExportBusy(false);
     }
-  };
+  }
 
-  const activeFilterCount =
-    (action ? 1 : 0) + (outcome ? 1 : 0) + (severity ? 1 : 0);
-  const hasActiveFilters = activeFilterCount > 0;
+  const activeChips: Array<{ label: string; clear: () => void }> = [];
+  if (filters.q) activeChips.push({ label: `Search: “${filters.q}”`, clear: () => { setSearchDraft(""); applyFilters({ q: "" }); } });
+  if (filters.category)
+    activeChips.push({
+      label: categories.find((item) => item.value === filters.category)?.label ?? filters.category,
+      clear: () => applyFilters({ category: "" }),
+    });
+  if (filters.action) activeChips.push({ label: `Action: ${humanizeAction(filters.action)}`, clear: () => applyFilters({ action: "" }) });
+  if (filters.outcome) activeChips.push({ label: `Outcome: ${filters.outcome}`, clear: () => applyFilters({ outcome: "" }) });
+  if (filters.severity) activeChips.push({ label: `Severity: ${filters.severity}`, clear: () => applyFilters({ severity: "" }) });
+  if (filters.actor) activeChips.push({ label: `Actor: ${filters.actorLabel || shortId(filters.actor)}`, clear: () => applyFilters({ actor: "", actorLabel: "" }) });
+  if (filters.resourceType || filters.resourceId)
+    activeChips.push({
+      label: `Target: ${[filters.resourceType, filters.resourceId && shortId(filters.resourceId)].filter(Boolean).join(" ")}`,
+      clear: () => applyFilters({ resourceType: "", resourceId: "" }),
+    });
+  if (filters.sourceIp) activeChips.push({ label: `IP: ${filters.sourceIp}`, clear: () => applyFilters({ sourceIp: "" }) });
 
-  const clearFilters = () => {
-    setAction("");
-    setOutcome("");
-    setSeverity("");
-    setSearchQuery("");
-    setCursor("");
-    setPageIndex(0);
-  };
+  if (!activeSchoolId) {
+    return (
+      <section className="screen-section">
+        <div className="banner">Choose a school to view its audit log.</div>
+      </section>
+    );
+  }
 
-  const openFilterModal = () => {
-    setDraftAction(action);
-    setDraftOutcome(outcome);
-    setDraftSeverity(severity);
-    setFilterModalOpen(true);
-  };
-
-  const applyFilters = () => {
-    setAction(draftAction.trim());
-    setOutcome(draftOutcome);
-    setSeverity(draftSeverity);
-    setCursor("");
-    setPageIndex(0);
-    setFilterModalOpen(false);
-  };
-
-  const resetFilterModal = () => {
-    setDraftAction("");
-    setDraftOutcome("");
-    setDraftSeverity("");
-  };
-
-  if (selectedEventUuid) {
+  if (selectedEventId) {
+    const link = selected ? resourceLink(selected) : null;
     return (
       <section className="screen-section">
         <div className="section-heading">
           <div>
             <p className="eyebrow">Security &amp; compliance</p>
-            <h2>Audit Event</h2>
-            {selected ? (
-              <p>{new Date(selected.occurred_at).toLocaleString()}</p>
-            ) : null}
+            <h2>{selected ? humanizeAction(selected.action) : "Audit Event"}</h2>
+            {selected ? <p>{formatDateTime(selected.occurred_at)}</p> : null}
           </div>
-          <button className="secondary-button" onClick={backToList}>
+          <button className="secondary-button" onClick={() => setSelectedEventId("")}>
             ← Back to Audit Log
           </button>
         </div>
         {selected ? (
           <div className="audit-detail-page">
             <div className="audit-detail-badges">
-              <span className={`audit-badge audit-outcome-${selected.outcome}`}>
-                {selected.outcome}
-              </span>
-              <span
-                className={`audit-badge audit-severity-${selected.severity}`}
-              >
-                {selected.severity}
-              </span>
+              <span className={`audit-badge audit-outcome-${selected.outcome}`}>{selected.outcome}</span>
+              <span className={`audit-badge audit-severity-${selected.severity}`}>{selected.severity}</span>
+              <code className="audit-action-code">{selected.action}</code>
             </div>
-            <p>
-              <strong>
-                <code className="audit-action-code">{selected.action}</code>
-              </strong>
-            </p>
             <dl className="audit-detail-grid">
               <div>
-                <dt>Occurred</dt>
-                <dd>{new Date(selected.occurred_at).toLocaleString()}</dd>
+                <dt>When (UTC)</dt>
+                <dd>{new Date(selected.occurred_at).toISOString()}</dd>
               </div>
               <div>
-                <dt>Event</dt>
-                <dd>{selected.event_uuid}</dd>
+                <dt>Who</dt>
+                <dd>
+                  {actorLabel(selected)}
+                  {selected.actor_email && selected.actor_name ? <small> · {selected.actor_email}</small> : null}
+                  {selected.actor_role ? <small> · {roleLabels[selected.actor_role] ?? selected.actor_role}</small> : null}
+                </dd>
               </div>
               <div>
-                <dt>Actor</dt>
-                <dd>{selected.actor_user_uuid ?? "Unknown"}</dd>
+                <dt>Actor ID</dt>
+                <dd>{selected.actor_user_uuid ?? "—"}</dd>
+              </div>
+              <div>
+                <dt>Target</dt>
+                <dd>
+                  {[selected.resource_type, selected.resource_id].filter(Boolean).join(": ") || "—"}
+                  {link ? (
+                    <>
+                      {" "}
+                      <button type="button" className="audit-link" onClick={() => navigate(link)}>
+                        Open
+                      </button>
+                    </>
+                  ) : null}
+                </dd>
               </div>
               <div>
                 <dt>School</dt>
-                <dd>{selected.school_id ?? "App-wide"}</dd>
-              </div>
-              <div>
-                <dt>Resource</dt>
-                <dd>
-                  {[selected.resource_type, selected.resource_id]
-                    .filter(Boolean)
-                    .join(": ") || "—"}
-                </dd>
+                <dd>{selected.school_id ?? "Not school-specific"}</dd>
               </div>
               <div>
                 <dt>HTTP status</dt>
@@ -399,22 +523,64 @@ export function AuditLogScreen({ appId }: { appId: string }) {
                 <dd>{selected.source_ip ?? "—"}</dd>
               </div>
               <div>
-                <dt>Service</dt>
+                <dt>Recorded by</dt>
                 <dd>{formatSourceService(selected.source_service)}</dd>
               </div>
+              <div>
+                <dt>Request ID</dt>
+                <dd>{selected.correlation_id ?? "—"}</dd>
+              </div>
+              <div>
+                <dt>Event ID</dt>
+                <dd>{selected.event_uuid}</dd>
+              </div>
             </dl>
-            {selected.user_agent ? (
-              <p className="audit-user-agent">{selected.user_agent}</p>
-            ) : null}
-            <pre className="audit-metadata">
-              {JSON.stringify(selected.metadata, null, 2)}
-            </pre>
+            {selected.user_agent ? <p className="audit-user-agent">{selected.user_agent}</p> : null}
+            <div className="audit-related">
+              <span>Show all events for:</span>
+              {selected.actor_user_uuid ? (
+                <button
+                  type="button"
+                  className="cd-table-btn"
+                  onClick={() => {
+                    applyFilters({ actor: selected.actor_user_uuid ?? "", actorLabel: actorLabel(selected), range: "all" });
+                    setSelectedEventId("");
+                  }}
+                >
+                  This person
+                </button>
+              ) : null}
+              {selected.resource_id ? (
+                <button
+                  type="button"
+                  className="cd-table-btn"
+                  onClick={() => {
+                    applyFilters({ resourceType: selected.resource_type ?? "", resourceId: selected.resource_id ?? "", range: "all" });
+                    setSelectedEventId("");
+                  }}
+                >
+                  This target
+                </button>
+              ) : null}
+              {selected.source_ip ? (
+                <button
+                  type="button"
+                  className="cd-table-btn"
+                  onClick={() => {
+                    applyFilters({ sourceIp: selected.source_ip ?? "", range: "all" });
+                    setSelectedEventId("");
+                  }}
+                >
+                  This IP
+                </button>
+              ) : null}
+            </div>
+            <p className="audit-metadata-label">Details recorded with this event</p>
+            <pre className="audit-metadata">{JSON.stringify(selected.metadata ?? {}, null, 2)}</pre>
           </div>
         ) : (
-          <div className="banner">
-            {loading
-              ? "Loading audit event…"
-              : "This audit event is not on the currently loaded page. Go back to the audit log to browse events."}
+          <div className={`banner${detailError ? " banner-error" : ""}`}>
+            {detailError || "Loading audit event…"}
           </div>
         )}
       </section>
@@ -427,211 +593,133 @@ export function AuditLogScreen({ appId }: { appId: string }) {
         <div>
           <p className="eyebrow">Security &amp; compliance</p>
           <h2>Audit Log</h2>
-          <p>
-            Authentication, exports, sensitive access, and administrative
-            changes.
+          <p className="muted">
+            Changes made in the Dashboard and the enforcement app, sign-ins and security events
+            for your staff, and data exports. Records can&apos;t be edited or deleted.
           </p>
         </div>
         <div className="audit-heading-actions">
-          <button
-            className="secondary-button"
-            onClick={() => {
-              setExportOpen((open) => !open);
-              setExportError("");
-              setExportNotice("");
-            }}
-            aria-expanded={exportOpen}
-          >
-            {exportOpen ? "Close download" : "Download CSV"}
+          <button className="secondary-button" disabled={exportBusy} onClick={() => void handleExport("csv")}>
+            {exportBusy ? "Exporting…" : "Export CSV"}
           </button>
-          <button
-            className="secondary-button"
-            onClick={() => void load()}
-            disabled={loading}
-          >
-            {loading ? "Loading…" : "Refresh"}
+          <button className="secondary-button" disabled={exportBusy} onClick={() => void handleExport("json")}>
+            Export JSON
+          </button>
+          <button className="secondary-button" onClick={() => setRefreshCount((current) => current + 1)}>
+            Refresh
           </button>
         </div>
       </div>
+      {exportMessage ? <p className="audit-export-notice">{exportMessage}</p> : null}
+      {exportError ? <p className="audit-export-error">{exportError}</p> : null}
 
-      {exportOpen ? (
-        <div className="audit-export-panel">
-          <div className="audit-export-fields">
-            <label className="audit-export-field">
-              <span>Start date</span>
-              <input
-                type="date"
-                value={exportStart}
-                max={exportEnd || undefined}
-                onChange={(event) => setExportStart(event.target.value)}
-              />
+      <div className="audit-filter-bar">
+        <input
+          className="cd-table-search audit-search"
+          type="search"
+          value={searchDraft}
+          onChange={(event) => setSearchDraft(event.target.value)}
+          placeholder="Search people, actions, IDs, IPs, details…"
+          aria-label="Search the audit log"
+        />
+        <select
+          value={filters.range}
+          aria-label="Time range"
+          onChange={(event) => applyFilters({ range: event.target.value as RangePreset })}
+        >
+          {rangePresets.map((preset) => (
+            <option key={preset.value} value={preset.value}>
+              {preset.label}
+            </option>
+          ))}
+        </select>
+        {filters.range === "custom" ? (
+          <>
+            <label className="audit-date-field">
+              From
+              <input type="date" value={filters.from} max={filters.to || undefined} onChange={(event) => applyFilters({ from: event.target.value })} />
             </label>
-            <label className="audit-export-field">
-              <span>End date</span>
-              <input
-                type="date"
-                value={exportEnd}
-                min={exportStart || undefined}
-                onChange={(event) => setExportEnd(event.target.value)}
-              />
+            <label className="audit-date-field">
+              To
+              <input type="date" value={filters.to} min={filters.from || undefined} onChange={(event) => applyFilters({ to: event.target.value })} />
             </label>
-            <button
-              type="button"
-              className="primary-button audit-export-btn"
-              onClick={() => void handleExport()}
-              disabled={exportBusy || exportRangeInvalid}
-            >
-              {exportBusy ? "Preparing…" : "Download CSV"}
-            </button>
-          </div>
-          <p className="audit-export-hint">
-            Leave dates empty to export everything. Active outcome, severity,
-            and action filters are applied to the download.
-          </p>
-          {exportRangeInvalid ? (
-            <p className="audit-export-error">
-              Start date must be on or before the end date.
-            </p>
-          ) : null}
-          {exportError ? (
-            <p className="audit-export-error">{exportError}</p>
-          ) : null}
-          {exportNotice ? (
-            <p className="audit-export-notice">{exportNotice}</p>
-          ) : null}
+          </>
+        ) : null}
+        <select value={filters.category} aria-label="Category" onChange={(event) => applyFilters({ category: event.target.value })}>
+          {categories.map((category) => (
+            <option key={category.value || "all"} value={category.value}>
+              {category.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filters.outcome}
+          aria-label="Outcome"
+          onChange={(event) => applyFilters({ outcome: event.target.value as AuditOutcome | "" })}
+        >
+          <option value="">Any outcome</option>
+          <option value="success">Success</option>
+          <option value="failure">Failure</option>
+          <option value="blocked">Blocked</option>
+        </select>
+        <button type="button" className={`cd-table-btn${advancedOpen ? " cd-table-btn-active" : ""}`} onClick={() => setAdvancedOpen((current) => !current)}>
+          More filters
+        </button>
+      </div>
+
+      {advancedOpen ? (
+        <div className="audit-advanced">
+          <label className="field">
+            <span>Action</span>
+            <select value={filters.action} onChange={(event) => applyFilters({ action: event.target.value })}>
+              <option value="">Any action</option>
+              {actionOptions.map((option) => (
+                <option key={option.action} value={option.action}>
+                  {humanizeAction(option.action)} ({option.count.toLocaleString()})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Severity</span>
+            <select value={filters.severity} onChange={(event) => applyFilters({ severity: event.target.value as AuditSeverity | "" })}>
+              <option value="">Any severity</option>
+              <option value="info">Info</option>
+              <option value="warning">Warning</option>
+              <option value="high">High</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Source IP</span>
+            <input
+              defaultValue={filters.sourceIp}
+              key={`ip-${filters.sourceIp}`}
+              placeholder="203.0.113.7"
+              onBlur={(event) => applyFilters({ sourceIp: event.target.value.trim() })}
+            />
+          </label>
+          <label className="field">
+            <span>Target ID</span>
+            <input
+              defaultValue={filters.resourceId}
+              key={`resource-${filters.resourceId}`}
+              placeholder="Report, vehicle, tag or violation ID"
+              onBlur={(event) => applyFilters({ resourceId: event.target.value.trim() })}
+            />
+          </label>
         </div>
       ) : null}
 
-      <div className="audit-table-toolbar">
-        <input
-          className="cd-table-search"
-          type="search"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder="Search this page"
-        />
-        <div className="audit-table-toolbar-actions">
-          {hasActiveFilters || searchQuery ? (
-            <button
-              type="button"
-              className="cd-table-btn"
-              onClick={clearFilters}
-            >
-              Clear filters
+      {activeChips.length > 0 ? (
+        <div className="audit-chips">
+          {activeChips.map((chip) => (
+            <button key={chip.label} type="button" className="audit-chip" onClick={chip.clear}>
+              {chip.label} <span aria-hidden="true">×</span>
             </button>
-          ) : null}
-          <button
-            type="button"
-            className="cd-table-btn"
-            onClick={openFilterModal}
-          >
-            Filters
-            {activeFilterCount > 0 ? (
-              <span className="parking-report-filter-count">
-                {activeFilterCount}
-              </span>
-            ) : null}
+          ))}
+          <button type="button" className="audit-link" onClick={clearFilters}>
+            Clear all
           </button>
-        </div>
-      </div>
-
-      {filterModalOpen ? (
-        <div
-          className="management-modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="audit-filter-title"
-          onClick={() => setFilterModalOpen(false)}
-        >
-          <div
-            className="management-modal-sheet parking-report-filter-modal"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="management-modal-header">
-              <div>
-                <p className="section-eyebrow">Table filters</p>
-                <h3 id="audit-filter-title">Filter Audit Log</h3>
-                <p className="muted">
-                  Choose the outcome, severity, and action shown in the table.
-                </p>
-              </div>
-              <button
-                className="management-modal-close"
-                type="button"
-                onClick={() => setFilterModalOpen(false)}
-              >
-                Close
-              </button>
-            </div>
-            <div className="parking-report-filter-grid">
-              <div className="parking-report-filter-group">
-                <span className="parking-report-filter-label">Outcome</span>
-                <div className="parking-report-filter-chips">
-                  {outcomeFilters.map((option) => (
-                    <button
-                      key={option.value || "all"}
-                      type="button"
-                      className={`parking-report-filter-chip${
-                        draftOutcome === option.value
-                          ? " parking-report-filter-chip-active"
-                          : ""
-                      }`}
-                      aria-pressed={draftOutcome === option.value}
-                      onClick={() => setDraftOutcome(option.value)}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="parking-report-filter-group">
-                <span className="parking-report-filter-label">Severity</span>
-                <div className="parking-report-filter-chips">
-                  {severityFilters.map((option) => (
-                    <button
-                      key={option.value || "all"}
-                      type="button"
-                      className={`parking-report-filter-chip${
-                        draftSeverity === option.value
-                          ? " parking-report-filter-chip-active"
-                          : ""
-                      }`}
-                      aria-pressed={draftSeverity === option.value}
-                      onClick={() => setDraftSeverity(option.value)}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="parking-report-filter-group">
-                <span className="parking-report-filter-label">Action</span>
-                <input
-                  className="cd-table-search"
-                  type="search"
-                  value={draftAction}
-                  onChange={(event) => setDraftAction(event.target.value)}
-                  placeholder="e.g. auth.login"
-                />
-              </div>
-            </div>
-            <div className="parking-report-filter-actions">
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={resetFilterModal}
-              >
-                Reset
-              </button>
-              <button
-                className="primary-button"
-                type="button"
-                onClick={applyFilters}
-              >
-                Apply filters
-              </button>
-            </div>
-          </div>
         </div>
       ) : null}
 
@@ -641,64 +729,104 @@ export function AuditLogScreen({ appId }: { appId: string }) {
         <table className="data-table audit-table">
           <thead>
             <tr>
-              <th>Time</th>
-              <th>Action</th>
-              <th>Actor</th>
-              <th>Resource</th>
+              <th aria-sort={filters.sort === "asc" ? "ascending" : "descending"}>
+                <button
+                  type="button"
+                  className="audit-sort"
+                  onClick={() => applyFilters({ sort: filters.sort === "asc" ? "desc" : "asc" })}
+                >
+                  Time {filters.sort === "asc" ? "↑ oldest first" : "↓ newest first"}
+                </button>
+              </th>
+              <th>Event</th>
+              <th>Who</th>
+              <th>Target</th>
               <th>Outcome</th>
-              <th>Severity</th>
               <th>Source</th>
             </tr>
           </thead>
           <tbody>
-            {filteredEvents.map((event) => (
-              <tr
-                key={event.event_uuid}
-                className="audit-table-row"
-                onClick={() => openEvent(event.event_uuid)}
-              >
+            {events.map((event) => (
+              <tr key={event.event_uuid} className="audit-table-row" onClick={() => setSelectedEventId(event.event_uuid)}>
                 <td className="audit-time-cell">
-                  <span className="audit-time-relative">
-                    {formatRelativeTime(event.occurred_at)}
-                  </span>
-                  <span className="audit-time-exact">
-                    {formatDateTime(event.occurred_at)}
-                  </span>
+                  <span className="audit-time-exact">{formatDateTime(event.occurred_at)}</span>
                 </td>
                 <td>
+                  <span className="audit-event-label">{humanizeAction(event.action)}</span>
                   <code className="audit-action-code">{event.action}</code>
                 </td>
                 <td className="audit-actor-cell">
-                  {event.actor_user_uuid ?? "Unknown"}
+                  {event.actor_user_uuid ? (
+                    <button
+                      type="button"
+                      className="audit-link"
+                      title="Show only this person's events"
+                      onClick={(clickEvent) => {
+                        clickEvent.stopPropagation();
+                        applyFilters({ actor: event.actor_user_uuid ?? "", actorLabel: actorLabel(event) });
+                      }}
+                    >
+                      {actorLabel(event)}
+                    </button>
+                  ) : (
+                    actorLabel(event)
+                  )}
+                  {event.actor_role ? <small className="audit-role">{roleLabels[event.actor_role] ?? event.actor_role}</small> : null}
                 </td>
                 <td className="audit-resource-cell">
-                  {[event.resource_type, event.resource_id]
-                    .filter(Boolean)
-                    .join(": ") || "—"}
+                  {event.resource_id ? (
+                    <button
+                      type="button"
+                      className="audit-link"
+                      title="Show only events for this target"
+                      onClick={(clickEvent) => {
+                        clickEvent.stopPropagation();
+                        applyFilters({ resourceType: event.resource_type ?? "", resourceId: event.resource_id ?? "" });
+                      }}
+                    >
+                      {(event.resource_type ?? "").replace(/_/g, " ")} {shortId(event.resource_id)}
+                    </button>
+                  ) : (
+                    (event.resource_type ?? "—").replace(/_/g, " ")
+                  )}
                 </td>
                 <td>
-                  <span className={`audit-badge audit-outcome-${event.outcome}`}>
-                    {event.outcome}
-                  </span>
-                </td>
-                <td>
-                  <span
-                    className={`audit-badge audit-severity-${event.severity}`}
-                  >
-                    {event.severity}
-                  </span>
+                  <span className={`audit-badge audit-outcome-${event.outcome}`}>{event.outcome}</span>
+                  {event.severity !== "info" ? (
+                    <span className={`audit-badge audit-severity-${event.severity}`}>{event.severity}</span>
+                  ) : null}
                 </td>
                 <td className="audit-source-cell">
-                  {formatSourceService(event.source_service)}
+                  {event.source_ip ? (
+                    <button
+                      type="button"
+                      className="audit-link"
+                      title="Show only events from this IP"
+                      onClick={(clickEvent) => {
+                        clickEvent.stopPropagation();
+                        applyFilters({ sourceIp: event.source_ip ?? "" });
+                      }}
+                    >
+                      {event.source_ip}
+                    </button>
+                  ) : (
+                    "—"
+                  )}
+                  <small>{formatSourceService(event.source_service)}</small>
                 </td>
               </tr>
             ))}
-            {!loading && filteredEvents.length === 0 ? (
+            {loading ? (
               <tr>
-                <td colSpan={7} className="audit-empty-cell">
-                  {events.length > 0
-                    ? "No events on this page match your search."
-                    : "No matching audit events."}
+                <td colSpan={6} className="audit-empty-cell">
+                  Loading audit events…
+                </td>
+              </tr>
+            ) : null}
+            {!loading && events.length === 0 && !error ? (
+              <tr>
+                <td colSpan={6} className="audit-empty-cell">
+                  No audit events match these filters.
                 </td>
               </tr>
             ) : null}
@@ -708,34 +836,48 @@ export function AuditLogScreen({ appId }: { appId: string }) {
 
       <div className="form-actions audit-pagination">
         <span className="audit-pagination-info">
-          {searchQuery.trim()
-            ? `${filteredEvents.length} of ${events.length} events on page ${pageIndex + 1}`
-            : `Page ${pageIndex + 1} · ${events.length} events`}
+          Page {cursorStack.length + 1} · {events.length} event{events.length === 1 ? "" : "s"}
         </span>
         <div className="audit-pagination-buttons">
+          <label className="audit-page-size">
+            Rows
+            <select
+              value={pageSize}
+              onChange={(event) => {
+                setPageSize(Number(event.target.value));
+                setCursor("");
+                setCursorStack([]);
+              }}
+            >
+              {[25, 50, 100, 200].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             className="secondary-button"
-            disabled={!cursor || loading}
+            disabled={cursorStack.length === 0 || loading}
             onClick={() => {
-              setCursor("");
-              setPageIndex(0);
+              setCursor(cursorStack[cursorStack.length - 1] ?? "");
+              setCursorStack((current) => current.slice(0, -1));
             }}
           >
-            First page
+            Previous
           </button>
           <button
             className="secondary-button"
             disabled={!nextCursor || loading}
             onClick={() => {
+              setCursorStack((current) => [...current, cursor]);
               setCursor(nextCursor);
-              setPageIndex((current) => current + 1);
             }}
           >
-            Next page
+            Next
           </button>
         </div>
       </div>
-
     </section>
   );
 }
