@@ -1247,6 +1247,18 @@ interface ApiErrorPayload {
   retry_after_seconds?: number;
 }
 
+// A failed API response, with its HTTP status for callers that need to tell
+// an expected denial from a real failure.
+export class ApiRequestError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+  }
+}
+
 export class DashboardLoginLockedError extends Error {
   readonly blockedUntil: string;
   readonly retryAfterSeconds?: number;
@@ -1520,7 +1532,7 @@ async function request<T>(
     if (errorPayload.blocked_until) {
       throw new DashboardLoginLockedError(errorPayload);
     }
-    throw new Error(errorPayload.message);
+    throw new ApiRequestError(errorPayload.message, response.status);
   }
 
   if (authRequired && service !== "nebula" && method !== "GET") {
@@ -4114,18 +4126,23 @@ export async function fetchSchoolParkingViolations(
       ),
     ),
   );
-  const managedResult = results[0];
+  // A candidate app the school doesn't use answers 403 or 404; that's
+  // expected. Any other failure (including the managed app's own request
+  // failing at all) means the list would be incomplete, so it's thrown
+  // rather than returned as a short list.
+  results.forEach((result, index) => {
+    if (result.status !== "rejected") {
+      return;
+    }
+    const status =
+      result.reason instanceof ApiRequestError ? result.reason.status : 0;
+    if (index === 0 || (status !== 403 && status !== 404)) {
+      throw result.reason;
+    }
+  });
   const merged = results.flatMap((result) =>
     result.status === "fulfilled" ? (result.value ?? []) : [],
   );
-  if (merged.length === 0) {
-    // Keep the old behavior when nothing loaded: surface the managed app's
-    // error rather than a compatibility candidate's expected 403.
-    if (managedResult?.status === "rejected") {
-      throw managedResult.reason;
-    }
-    return [];
-  }
   return Array.from(
     new Map(
       merged
