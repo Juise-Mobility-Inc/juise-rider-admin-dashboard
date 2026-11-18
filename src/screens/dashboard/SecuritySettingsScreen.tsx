@@ -251,6 +251,8 @@ export function SecuritySettingsScreen({ authAppId }: Props) {
               <div className="mfa-enroll-qr">
                 {totpQrCode ? (
                   <img
+                    loading="lazy"
+                    decoding="async"
                     className="mfa-qr-code"
                     src={totpQrCode}
                     alt="Authenticator app setup QR code"

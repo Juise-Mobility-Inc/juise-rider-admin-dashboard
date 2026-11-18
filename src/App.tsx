@@ -59,6 +59,7 @@ import {
   getSessionRefreshExpiryMs,
   loginWithIdentifier,
   verifyMFA,
+  hasFreshAccessToken,
   refreshDashboardSession,
   requestPasswordReset,
   requestRecoveryCodePasswordReset,
@@ -160,6 +161,7 @@ import { ZonesScreen } from "./screens/dashboard/ZonesScreen";
 import { MapOverviewScreen } from "./screens/dashboard/MapOverviewScreen";
 import { SightingsMapScreen } from "./screens/dashboard/SightingsMapScreen";
 import {
+  ensureStudentRosterMedia,
   loadSelectedStudentDetail,
   loadStudentRoster,
   resetSelectedStudentState as resetStudentsSelectionState,
@@ -1427,6 +1429,8 @@ function SchoolLogoPreview(props: {
           }}
         >
           <img
+            loading="lazy"
+            decoding="async"
             className="school-logo-image"
             src={normalizedUrl}
             alt={alt}
@@ -1473,6 +1477,8 @@ function EntityImagePreview(props: {
           }}
         >
           <img
+            loading="lazy"
+            decoding="async"
             className="challenge-image-preview-image"
             src={normalizedUrl}
             alt={alt}
@@ -2299,7 +2305,7 @@ function App() {
         onClick={onClick}
       >
         {school.logo_url ? (
-          <img src={school.logo_url} alt="" className="school-option-logo" />
+          <img loading="lazy" decoding="async" src={school.logo_url} alt="" className="school-option-logo" />
         ) : (
           <span className="school-option-logo school-option-logo-placeholder">
             {label.charAt(0).toUpperCase()}
@@ -2329,6 +2335,7 @@ function App() {
     schoolStudentRoster,
     schoolStudentRosterBusy,
     schoolStudentRosterError,
+    schoolStudentRosterMediaRequested,
     schoolStudentRosterReady,
     selectedStudentMembershipId,
     studentBusy,
@@ -3070,6 +3077,14 @@ function App() {
 
     async function refreshStoredSession() {
       setApiSession(initialSession);
+      // Reuse a still-valid stored session instead of refreshing before
+      // anything can load; request() refreshes on the first 401.
+      if (initialSession && hasFreshAccessToken(initialSession)) {
+        sessionEndedGuardRef.current = false;
+        setSession(initialSession);
+        setAuthInitializing(false);
+        return;
+      }
       try {
         const nextSession = await refreshDashboardSession();
         if (cancelled) {
@@ -3389,6 +3404,43 @@ function App() {
   }, [
     activeSchoolId,
     context.managedAppId,
+    session?.claims.user_uuid,
+    studentsDispatch,
+  ]);
+
+  // Roster photos (avatars, ID photos) take several requests per student, so
+  // they load only on the screens that show them.
+  const rosterPhotosNeeded =
+    currentSection === "students" ||
+    currentSection === "notifications" ||
+    currentSection === "penaltyReports" ||
+    currentSection === "parkingReports";
+  useEffect(() => {
+    if (
+      !session ||
+      !activeSchoolId ||
+      !rosterPhotosNeeded ||
+      !schoolStudentRosterReady ||
+      schoolStudentRosterMediaRequested
+    ) {
+      return;
+    }
+
+    studentsDispatch(
+      ensureStudentRosterMedia({
+        scopeKey: `${context.managedAppId}:${activeSchoolId}:${session.claims.user_uuid}`,
+        managedAppId: context.managedAppId,
+        schoolId: activeSchoolId,
+        adminUserUUID: session.claims.user_uuid,
+      }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeSchoolId,
+    context.managedAppId,
+    rosterPhotosNeeded,
+    schoolStudentRosterMediaRequested,
+    schoolStudentRosterReady,
     session?.claims.user_uuid,
     studentsDispatch,
   ]);
@@ -5986,6 +6038,8 @@ function App() {
                     <div className="mfa-enroll-qr">
                       {addTotpQrCode ? (
                         <img
+                          loading="lazy"
+                          decoding="async"
                           className="mfa-qr-code"
                           src={addTotpQrCode}
                           alt="Authenticator app setup QR code"
@@ -6205,6 +6259,8 @@ function App() {
                       <div className="mfa-enroll-qr">
                         {mfaQrCode ? (
                           <img
+                            loading="lazy"
+                            decoding="async"
                             className="mfa-qr-code"
                             src={mfaQrCode}
                             alt="Two-step verification setup QR code"
@@ -7836,6 +7892,8 @@ function App() {
             >
               {findPickerSchool(activeSchoolId)?.logo_url ? (
                 <img
+                  loading="lazy"
+                  decoding="async"
                   src={findPickerSchool(activeSchoolId)?.logo_url}
                   alt=""
                   className="sidebar-school-switcher-logo"
@@ -8517,6 +8575,8 @@ function App() {
               Close
             </button>
             <img
+              loading="lazy"
+              decoding="async"
               className="image-lightbox-image"
               src={imagePreview.imageUrl}
               alt={imagePreview.alt}

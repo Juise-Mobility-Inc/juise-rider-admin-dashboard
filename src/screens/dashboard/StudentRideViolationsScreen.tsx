@@ -1383,7 +1383,7 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
                         />
                         <span className="rv-student-avatar">
                           {photo ? (
-                            <img src={photo} alt={name} />
+                            <img loading="lazy" decoding="async" src={photo} alt={name} />
                           ) : (
                             <span className="rv-student-avatar-fallback">
                               {(entry.user.first_name?.[0] ?? "?").toUpperCase()}

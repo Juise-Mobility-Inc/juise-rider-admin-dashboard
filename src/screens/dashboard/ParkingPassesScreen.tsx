@@ -668,7 +668,7 @@ export function ParkingPassesScreen({
                     {pass.user_uuid ? (
                       <div className="reg-table-identity">
                         {studentPhoto(vehicleFor(pass)) ? (
-                          <img src={studentPhoto(vehicleFor(pass))} alt="" className="reg-table-photo" />
+                          <img loading="lazy" decoding="async" src={studentPhoto(vehicleFor(pass))} alt="" className="reg-table-photo" />
                         ) : (
                           <div className="reg-table-avatar">{initials(studentName(vehicleFor(pass), pass))}</div>
                         )}
@@ -689,7 +689,7 @@ export function ParkingPassesScreen({
                     {pass.registered_device_uuid ? (
                       <div className="reg-table-identity">
                         {vehiclePhoto(vehicleFor(pass)) ? (
-                          <img src={vehiclePhoto(vehicleFor(pass))} alt="" className="reg-table-photo" />
+                          <img loading="lazy" decoding="async" src={vehiclePhoto(vehicleFor(pass))} alt="" className="reg-table-photo" />
                         ) : (
                           <div className="reg-table-avatar">🚲</div>
                         )}
@@ -782,7 +782,7 @@ function ParkingPassPairing({
         <p className="eyebrow">{inactive ? "Last student" : "Student"}</p>
         <div className="parking-pass-card-head">
           {studentPhotoUrl ? (
-            <img src={studentPhotoUrl} alt="" className="parking-pass-card-photo" />
+            <img loading="lazy" decoding="async" src={studentPhotoUrl} alt="" className="parking-pass-card-photo" />
           ) : (
             <div className="parking-pass-card-photo parking-pass-card-initials">{initials(name)}</div>
           )}
@@ -810,7 +810,7 @@ function ParkingPassPairing({
         <p className="eyebrow">{inactive ? "Last vehicle" : "Vehicle"}</p>
         <div className="parking-pass-card-head">
           {vehiclePhotoUrl ? (
-            <img src={vehiclePhotoUrl} alt="" className="parking-pass-card-photo" />
+            <img loading="lazy" decoding="async" src={vehiclePhotoUrl} alt="" className="parking-pass-card-photo" />
           ) : (
             <div className="parking-pass-card-photo parking-pass-card-initials">🚲</div>
           )}

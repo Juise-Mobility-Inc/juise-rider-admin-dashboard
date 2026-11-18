@@ -578,6 +578,8 @@ export function MapOverviewScreen({
                                                                         <div className="mo-popup">
                                                                                 {getPackPhotoUrl(pack) ? (
                                                                                         <img
+                                                                                                loading="lazy"
+                                                                                                decoding="async"
                                                                                                 className="mo-popup-pack-photo"
                                                                                                 src={getPackPhotoUrl(pack)}
                                                                                                 alt={pack.name || "Juise Pack"}
@@ -826,6 +828,8 @@ export function MapOverviewScreen({
 
                                                 {getPackPhotoUrl(selectedPack) ? (
                                                         <img
+                                                                loading="lazy"
+                                                                decoding="async"
                                                                 className="mo-detail-modal-pack-photo"
                                                                 src={getPackPhotoUrl(selectedPack)}
                                                                 alt={selectedPack.name || "Juise Pack"}

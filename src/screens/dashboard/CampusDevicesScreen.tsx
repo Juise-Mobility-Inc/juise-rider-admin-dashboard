@@ -740,6 +740,8 @@ export function CampusDevicesScreen({
               <div className="cd-detail-device-thumb">
                 {devicePhoto ? (
                   <img
+                    loading="lazy"
+                    decoding="async"
                     src={devicePhoto}
                     alt={formatDevice(selectedEntry)}
                     className="cd-device-photo"
@@ -1106,6 +1108,8 @@ export function CampusDevicesScreen({
                     <div className="cd-student-card-avatar">
                       {studentPhoto ? (
                         <img
+                          loading="lazy"
+                          decoding="async"
                           src={studentPhoto}
                           alt={formatName(selectedEntry)}
                           className="cd-avatar-img cd-avatar-img-lg"
@@ -1336,6 +1340,8 @@ export function CampusDevicesScreen({
                             <div className="reg-table-identity">
                               {devicePhotoUrl ? (
                                 <img
+                                  loading="lazy"
+                                  decoding="async"
                                   src={devicePhotoUrl}
                                   alt={deviceLabel}
                                   className="reg-table-photo"
@@ -1367,6 +1373,8 @@ export function CampusDevicesScreen({
                             <div className="reg-table-identity">
                               {studentPhotoUrl ? (
                                 <img
+                                  loading="lazy"
+                                  decoding="async"
                                   src={studentPhotoUrl}
                                   alt={name}
                                   className="reg-table-photo"

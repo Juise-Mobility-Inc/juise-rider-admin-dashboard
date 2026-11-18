@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { StudentEventMiniMap } from "../../components/StudentEventMiniMap";
 import { useImageCropper } from "../../components/useImageCropper";
+import { mapWithConcurrency } from "../../lib/concurrency";
 import { IMAGE_ASPECT } from "../../lib/imageCrop";
 import {
 	fetchSchoolParkingViolationMedia,
@@ -638,14 +639,14 @@ export function PenaltyReportsScreen({
 		}
 		setRideLoadBusy(true);
 		try {
-			const results = await Promise.all(
-				studentRoster.map((entry) =>
-					fetchStudentRouteHistory(
-						managedAppId,
-						activeSchoolId,
-						entry.membership.user_uuid?.trim() || entry.user.k_guid,
-					).catch(() => [] as StudentRouteHistorySession[]),
-				),
+			// One request per student; keep at most 6 in flight instead of
+			// firing the whole roster at once.
+			const results = await mapWithConcurrency(studentRoster, 6, (entry) =>
+				fetchStudentRouteHistory(
+					managedAppId,
+					activeSchoolId,
+					entry.membership.user_uuid?.trim() || entry.user.k_guid,
+				).catch(() => [] as StudentRouteHistorySession[]),
 			);
 			setRideSessions(results.flat().filter((s) => s.penalty_events.length > 0));
 			setRideLoaded(true);
@@ -1221,6 +1222,8 @@ export function PenaltyReportsScreen({
 								<div className="penalty-report-student-avatar">
 									{selectedStudentPhotoUrl ? (
 										<img
+											loading="lazy"
+											decoding="async"
 											src={selectedStudentPhotoUrl}
 											alt={`${formatStudentName(selectedStudentEntry)} profile`}
 										/>
@@ -1257,6 +1260,8 @@ export function PenaltyReportsScreen({
 								<div className="penalty-report-device-thumb">
 									{selectedDevicePhotoUrl ? (
 										<img
+											loading="lazy"
+											decoding="async"
 											src={selectedDevicePhotoUrl}
 											alt={`${formatDeviceName(selectedDevice)} device`}
 										/>
@@ -1564,6 +1569,8 @@ export function PenaltyReportsScreen({
 												type="button">
 												{item.get_url ? (
 													<img
+														loading="lazy"
+														decoding="async"
 														src={item.get_url}
 														alt="Penalty report evidence"
 													/>
