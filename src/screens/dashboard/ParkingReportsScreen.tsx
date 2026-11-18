@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -259,9 +259,27 @@ export function ParkingReportsScreen({
   // Reports opened from "Seen before" that aren't in the table's results,
   // by UUID. Kept apart from `reports` so they never show up in a filtered
   // table, and all kept so browser Back/Forward through them still resolves.
-  const [historyReports, setHistoryReports] = useState<
-    Record<string, StudentParkingIncidentReport>
-  >({});
+  // Scoped to the school and app: switching either empties it, so Back can't
+  // reopen another school's report under this one.
+  const historyScope = `${managedAppId}:${activeSchoolId}`;
+  const [historyCache, setHistoryCache] = useState<{
+    scope: string;
+    reports: Record<string, StudentParkingIncidentReport>;
+  }>({ scope: "", reports: {} });
+  const historyReports = useMemo(
+    () => (historyCache.scope === historyScope ? historyCache.reports : {}),
+    [historyCache, historyScope],
+  );
+  function setHistoryReports(
+    update: (
+      current: Record<string, StudentParkingIncidentReport>,
+    ) => Record<string, StudentParkingIncidentReport>,
+  ) {
+    setHistoryCache((cache) => ({
+      scope: historyScope,
+      reports: update(cache.scope === historyScope ? cache.reports : {}),
+    }));
+  }
   const [expandedPhotoUrl, setExpandedPhotoUrl] = useState("");
 
   useDetailParamSync(
@@ -953,20 +971,6 @@ export function ParkingReportsScreen({
           selectedReport?.school_id || activeSchoolId,
           reportUUID,
         );
-        const objectKeys = (report.media_assets ?? [])
-          .map((asset) => asset.object_key?.trim() ?? "")
-          .filter(Boolean);
-        if (objectKeys.length > 0) {
-          try {
-            const signed = await signSchoolMedia(
-              report.school_id || activeSchoolId,
-              objectKeys,
-            );
-            setSignedUrls((current) => ({ ...current, ...signed }));
-          } catch {
-            // The report still opens; its photo shows as unavailable.
-          }
-        }
         setHistoryReports((current) => ({
           ...current,
           [report.report_uuid]: report,
@@ -982,6 +986,33 @@ export function ParkingReportsScreen({
     setSelectedReportId(reportUUID);
     setDetailOpen(true);
   }
+
+  // Sign the open report's photos when they have no URL: a report opened
+  // from history isn't in the list a refresh signs, and Back/Forward can
+  // reopen it after a refresh replaced the signed URLs.
+  const missingMediaKeys =
+    detailOpen && selectedReport
+      ? (selectedReport.media_assets ?? [])
+          .map((asset) => asset.object_key?.trim() ?? "")
+          .filter((key) => key && !signedUrls[key])
+          .join("|")
+      : "";
+  const mediaSchoolId = selectedReport?.school_id || activeSchoolId;
+  const failedSignRef = useRef(new Set<string>());
+  useEffect(() => {
+    // A set of keys that failed to sign isn't retried, so a failure can't
+    // loop; the photo shows as unavailable.
+    if (!missingMediaKeys || failedSignRef.current.has(missingMediaKeys)) {
+      return;
+    }
+    const keys = missingMediaKeys;
+    signSchoolMedia(mediaSchoolId, keys.split("|")).then(
+      (signed) => setSignedUrls((current) => ({ ...current, ...signed })),
+      () => {
+        failedSignRef.current.add(keys);
+      },
+    );
+  }, [missingMediaKeys, mediaSchoolId]);
 
   useEffect(() => {
     if (!expandedPhotoUrl) {
