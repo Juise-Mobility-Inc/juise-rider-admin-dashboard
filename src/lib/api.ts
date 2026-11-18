@@ -4077,26 +4077,66 @@ export async function fetchSchoolParkingViolations(
     includeInactive?: boolean;
   } = {},
 ): Promise<StudentParkingViolation[]> {
-  const search = new URLSearchParams({
-    managed_app_id: managedAppId,
-  });
-  if (options.userUUID?.trim()) {
-    search.set("user_uuid", options.userUUID.trim());
-  }
-  if (options.membershipUUID?.trim()) {
-    search.set("membership_uuid", options.membershipUUID.trim());
-  }
-  if (options.includeInactive) {
-    search.set("include_inactive", "true");
-  }
-
-  return request<StudentParkingViolation[]>(
-    "kcaProxy",
-    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violations?${search.toString()}`,
-    {
-      appIdHeader: currentSession?.authAppId ?? managedAppId,
-    },
+  // Like parking reports, violations can live under a compatibility app ID
+  // (a violation issued from such a report keeps the report's app), so
+  // query every candidate and merge.
+  const appCandidates = buildManagedAppCandidates(managedAppId);
+  const appPriority = new Map(
+    appCandidates.map((value, index) => [value, index] as const),
   );
+  const buildSearch = (appId: string) => {
+    const search = new URLSearchParams({
+      managed_app_id: appId,
+    });
+    if (options.userUUID?.trim()) {
+      search.set("user_uuid", options.userUUID.trim());
+    }
+    if (options.membershipUUID?.trim()) {
+      search.set("membership_uuid", options.membershipUUID.trim());
+    }
+    if (options.includeInactive) {
+      search.set("include_inactive", "true");
+    }
+    return search;
+  };
+
+  const results = await Promise.allSettled(
+    appCandidates.map((appId) =>
+      request<StudentParkingViolation[]>(
+        "kcaProxy",
+        `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violations?${buildSearch(appId).toString()}`,
+        {
+          appIdHeader: currentSession?.authAppId ?? appId,
+          // Some candidates are expected not to match; a 403 from one isn't
+          // a sign the session is stale.
+          retryOnUnauthorized: false,
+        },
+      ),
+    ),
+  );
+  const managedResult = results[0];
+  const merged = results.flatMap((result) =>
+    result.status === "fulfilled" ? (result.value ?? []) : [],
+  );
+  if (merged.length === 0) {
+    // Keep the old behavior when nothing loaded: surface the managed app's
+    // error rather than a compatibility candidate's expected 403.
+    if (managedResult?.status === "rejected") {
+      throw managedResult.reason;
+    }
+    return [];
+  }
+  return Array.from(
+    new Map(
+      merged
+        .sort(
+          (left, right) =>
+            (appPriority.get(right.app_id) ?? appPriority.size) -
+            (appPriority.get(left.app_id) ?? appPriority.size),
+        )
+        .map((violation) => [violation.violation_uuid, violation]),
+    ).values(),
+  ).sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0));
 }
 
 export async function fetchSchoolParkingIncidentReports(

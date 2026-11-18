@@ -592,7 +592,7 @@ export function PenaltyReportsScreen({
 
 			try {
 				const nextMedia = await fetchSchoolParkingViolationMedia(
-					managedAppId,
+					report.app_id || managedAppId,
 					activeSchoolId,
 					report.violation_uuid,
 					report.user_uuid,
@@ -614,7 +614,7 @@ export function PenaltyReportsScreen({
 
 			try {
 				const nextHistory = await fetchSchoolParkingViolationHistory(
-					managedAppId,
+					report.app_id || managedAppId,
 					activeSchoolId,
 					report.violation_uuid,
 				);
@@ -820,7 +820,7 @@ export function PenaltyReportsScreen({
 			}
 
 			const updated = await updateSchoolParkingViolation(
-				managedAppId,
+				selectedReport.app_id || managedAppId,
 				activeSchoolId,
 				selectedReport.violation_uuid,
 				{
@@ -873,7 +873,7 @@ export function PenaltyReportsScreen({
 		setSuccess("");
 		try {
 			await uploadSchoolParkingViolationMedia(
-				managedAppId,
+				selectedReport.app_id || managedAppId,
 				activeSchoolId,
 				selectedReport,
 				file,
