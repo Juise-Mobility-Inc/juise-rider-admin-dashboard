@@ -6,7 +6,6 @@ import {
   clearSchoolParkingIncidentReportFlag,
   deleteSchoolParkingIncidentReport,
   fetchParkingViolationFeeRules,
-  fetchSchoolParkingIncidentReport,
   fetchSchoolParkingIncidentReportContext,
   findSchoolParkingIncidentReport,
   fetchSchoolParkingIncidentReports,
@@ -257,33 +256,17 @@ export function ParkingReportsScreen({
     error: string;
   }>({ key: "", value: null, error: "" });
   const [historyOpen, setHistoryOpen] = useState(false);
-  // Reports opened from "Seen before" that aren't in the table's results,
-  // by UUID. Kept apart from `reports` so they never show up in a filtered
-  // table, and all kept so browser Back/Forward through them still resolves.
-  // Scoped to the school and app: switching either empties it, so Back can't
-  // reopen another school's report under this one.
-  const historyScope = `${managedAppId}:${activeSchoolId}`;
-  const [historyCache, setHistoryCache] = useState<{
+  // A report opened by link (?report=, e.g. from "Seen before", which opens
+  // in a new tab) that isn't in the table's results. Kept apart from
+  // `reports` so it never shows up in a filtered table, and tied to the
+  // school and app so a switch can't show another school's report here.
+  const linkedScope = `${managedAppId}:${activeSchoolId}`;
+  const [linkedReportState, setLinkedReportState] = useState<{
     scope: string;
-    reports: Record<string, StudentParkingIncidentReport>;
-  }>({ scope: "", reports: {} });
-  const historyReports = useMemo(
-    () => (historyCache.scope === historyScope ? historyCache.reports : {}),
-    [historyCache, historyScope],
-  );
-  const setHistoryReports = useCallback(
-    (
-      update: (
-        current: Record<string, StudentParkingIncidentReport>,
-      ) => Record<string, StudentParkingIncidentReport>,
-    ) => {
-      setHistoryCache((cache) => ({
-        scope: historyScope,
-        reports: update(cache.scope === historyScope ? cache.reports : {}),
-      }));
-    },
-    [historyScope],
-  );
+    report: StudentParkingIncidentReport;
+  } | null>(null);
+  const linkedReport =
+    linkedReportState?.scope === linkedScope ? linkedReportState.report : null;
   // Set once the first list load finishes, so a ?report= selection is only
   // looked up on its own after the list had its chance to contain it.
   const [listLoadedOnce, setListLoadedOnce] = useState(false);
@@ -362,9 +345,8 @@ export function ParkingReportsScreen({
   const selectedReport = useMemo(
     () =>
       reports.find((report) => report.report_uuid === selectedReportId) ??
-      historyReports[selectedReportId] ??
-      null,
-    [historyReports, reports, selectedReportId],
+      (linkedReport?.report_uuid === selectedReportId ? linkedReport : null),
+    [linkedReport, reports, selectedReportId],
   );
 
   const closedReportCount = useMemo(
@@ -425,9 +407,9 @@ export function ParkingReportsScreen({
         },
       );
       setReports(nextReports);
-      // Reports opened from history may be stale now; drop them. An open one
-      // outside the new list is fetched fresh by the lookup effect.
-      setHistoryCache({ scope: "", reports: {} });
+      // A linked report may be stale now; drop it. If it's open and outside
+      // the new list, the lookup effect fetches it fresh.
+      setLinkedReportState(null);
       if (isUnfilteredReportView) {
         onOpenReportCountChange?.(countOpenReports(nextReports));
       }
@@ -517,9 +499,9 @@ export function ParkingReportsScreen({
     };
   }, [activeSchoolId, managedAppId]);
 
-  // A selection the loaded list doesn't contain (an old link, or Back to a
-  // report opened from history after leaving this screen): fetch it by UUID,
-  // and close the detail only if it can't be found.
+  // A selection the loaded list doesn't contain (a link from "Seen before",
+  // or any older or filtered-out report): fetch it by UUID, and close the
+  // detail only if it can't be found.
   useEffect(() => {
     if (!detailOpen || selectedReport || loadBusy || !listLoadedOnce) {
       return;
@@ -536,10 +518,7 @@ export function ParkingReportsScreen({
     ).then(
       (report) => {
         if (!cancelled) {
-          setHistoryReports((current) => ({
-            ...current,
-            [report.report_uuid]: report,
-          }));
+          setLinkedReportState({ scope: linkedScope, report });
         }
       },
       () => {
@@ -559,7 +538,7 @@ export function ParkingReportsScreen({
     managedAppId,
     selectedReport,
     selectedReportId,
-    setHistoryReports,
+    linkedScope,
   ]);
 
   useEffect(() => {
@@ -639,9 +618,9 @@ export function ParkingReportsScreen({
   }
 
   function replaceReport(updated: StudentParkingIncidentReport) {
-    setHistoryReports((current) =>
-      current[updated.report_uuid]
-        ? { ...current, [updated.report_uuid]: updated }
+    setLinkedReportState((current) =>
+      current?.report.report_uuid === updated.report_uuid
+        ? { ...current, report: updated }
         : current,
     );
     setReports((current) => {
@@ -786,14 +765,11 @@ export function ParkingReportsScreen({
         setSelectedReportId(nextReports[0]?.report_uuid ?? "");
         return nextReports;
       });
-      setHistoryReports((current) => {
-        if (!current[selectedReport.report_uuid]) {
-          return current;
-        }
-        const next = { ...current };
-        delete next[selectedReport.report_uuid];
-        return next;
-      });
+      setLinkedReportState((current) =>
+        current?.report.report_uuid === selectedReport.report_uuid
+          ? null
+          : current,
+      );
       setDetailOpen(false);
       setSignedUrls((current) => {
         const next = { ...current };
@@ -1006,49 +982,16 @@ export function ParkingReportsScreen({
       .replace(/, ([^,]*)$/, " or $1") +
     ".";
 
-  async function openHistoryItem(item: HistoryItem) {
-    if (item.kind === "violation") {
-      navigate(`/penalty-reports?report=${encodeURIComponent(item.record.uuid)}`);
-      return;
-    }
-    const reportUUID = item.record.uuid;
-    if (
-      !reports.some((report) => report.report_uuid === reportUUID) &&
-      !historyReports[reportUUID]
-    ) {
-      // The report can be outside the loaded list (filtered out, or past the
-      // 100 most recent): fetch it and hold it beside the list, so the
-      // detail doesn't close on a selection it can't resolve and the table
-      // still shows only the filtered results.
-      setActionBusy("history");
-      setError("");
-      try {
-        // Related reports come from the open report's app and school (some
-        // reports live under a compatibility app ID), so fetch under those.
-        const report = await fetchSchoolParkingIncidentReport(
-          selectedReport?.app_id || managedAppId,
-          selectedReport?.school_id || activeSchoolId,
-          reportUUID,
-        );
-        setHistoryReports((current) => ({
-          ...current,
-          [report.report_uuid]: report,
-        }));
-      } catch (nextError) {
-        setError(getErrorMessage(nextError));
-        return;
-      } finally {
-        setActionBusy("");
-      }
-    }
-    setHistoryOpen(false);
-    setSelectedReportId(reportUUID);
-    setDetailOpen(true);
+  // History items open in a new tab, so this report stays as it is.
+  function historyItemHref(item: HistoryItem): string {
+    const uuid = encodeURIComponent(item.record.uuid);
+    return item.kind === "violation"
+      ? `/penalty-reports?report=${uuid}`
+      : `/parking-reports?report=${uuid}`;
   }
 
-  // Sign the open report's photos when they have no URL: a report opened
-  // from history isn't in the list a refresh signs, and Back/Forward can
-  // reopen it after a refresh replaced the signed URLs.
+  // Sign the open report's photos when they have no URL: a linked report
+  // isn't in the list a refresh signs.
   const missingMediaKeys =
     detailOpen && selectedReport
       ? (selectedReport.media_assets ?? [])
@@ -1414,11 +1357,12 @@ export function ParkingReportsScreen({
                       <ul className="prd-history-list">
                         {historyItems.map((item) => (
                           <li key={`${item.kind}-${item.record.uuid}`}>
-                            <button
-                              type="button"
+                            <a
                               className="prd-history-item"
-                              disabled={actionBusy === "history"}
-                              onClick={() => void openHistoryItem(item)}
+                              href={historyItemHref(item)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Opens in a new tab"
                             >
                               <span className="prd-history-kind">
                                 {item.kind === "violation"
@@ -1439,7 +1383,7 @@ export function ParkingReportsScreen({
                                   </span>
                                 ))}
                               </span>
-                            </button>
+                            </a>
                           </li>
                         ))}
                       </ul>

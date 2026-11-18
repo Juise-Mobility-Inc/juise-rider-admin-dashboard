@@ -19145,6 +19145,7 @@
         color: var(--text-strong);
         font: inherit;
         text-align: left;
+        text-decoration: none;
         cursor: pointer;
 }
 
