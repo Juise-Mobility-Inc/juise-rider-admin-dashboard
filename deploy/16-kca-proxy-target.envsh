@@ -1,0 +1,28 @@
+#!/bin/sh
+# Sourced by the nginx image's docker-entrypoint.sh before the templates are
+# rendered (20-envsubst-on-templates.sh). Splits KCA_PROXY_TARGET (an HTTPS
+# origin such as https://kca-proxy.juisemobility.com, see
+# infrastructure-gcp modules/dashboard-edge-stack) into the pieces the
+# keepalive upstream needs. The names keep the KCA_PROXY_TARGET prefix so the
+# deployed NGINX_ENVSUBST_FILTER="KCA_PROXY_TARGET" still substitutes them.
+# No `set -e`/`-u` here: this file is sourced, so options would leak into
+# the entrypoint shell.
+
+target="${KCA_PROXY_TARGET:?KCA_PROXY_TARGET must be set}"
+case "$target" in
+  https://*) ;;
+  *)
+    echo "16-kca-proxy-target: KCA_PROXY_TARGET must start with https:// (got $target)" >&2
+    exit 1
+    ;;
+esac
+
+hostport="${target#https://}"
+hostport="${hostport%%/*}"
+host="${hostport%%:*}"
+if [ "$host" = "$hostport" ]; then
+  hostport="$host:443"
+fi
+
+export KCA_PROXY_TARGET_HOST="$host"
+export KCA_PROXY_TARGET_HOSTPORT="$hostport"
