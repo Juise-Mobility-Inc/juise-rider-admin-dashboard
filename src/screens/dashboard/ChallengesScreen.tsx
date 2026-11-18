@@ -36,6 +36,10 @@ import { useDetailParamSync } from "../../lib/useDetailParamSync";
 import { useImageCropper } from "../../components/useImageCropper";
 import { DialogBackdrop } from "../../components/DialogBackdrop";
 import { IMAGE_ASPECT } from "../../lib/imageCrop";
+import {
+  StatusBadge,
+  type StatusTone,
+} from "../../components/table/DataTable";
 
 function getErrorMessage(error: unknown): string {
         return error instanceof Error ? error.message : "Something went wrong.";
@@ -403,6 +407,12 @@ type Props = {
         handleImagePreview: (imageUrl: string, alt: string, label?: string) => void;
         uploadStopImage?: (file: File) => Promise<string>;
 };
+
+function challengeStatusTone(status: string): StatusTone {
+	if (status === "Live") return "success";
+	if (status === "Upcoming") return "info";
+	return "neutral";
+}
 
 function statusClass(status: string): string {
         if (status === "Live") return "challenge-status-live";
@@ -1194,8 +1204,8 @@ export function ChallengesScreen(props: Props) {
                                                                         </button>
                                                                 </div>
                                                         ) : (
-                                                                <div className="management-table-card reg-table-card">
-                                                                        <div className="reg-table-summary">
+                                                                <div className="dt-card">
+                                                                        <div className="dt-summary">
                                                                                 <strong>
                                                                                         {schoolChallenges.length.toLocaleString()}{" "}
                                                                                         {isGamesMode ? "games" : "challenges"}
@@ -1206,8 +1216,11 @@ export function ChallengesScreen(props: Props) {
                                                                                         {pastChallenges.length.toLocaleString()} past
                                                                                 </span>
                                                                         </div>
-                                                                        <div className="management-table-scroll">
-                                                                        <table className="management-table reg-review-table">
+                                                                        <div className="dt-scroll">
+                                                                        <table
+										className="dt"
+										style={{ minWidth: 760 }}
+										aria-label={isGamesMode ? "Games" : "Challenges"}>
                                                                                 <thead>
                                                                                         <tr>
                                                                                                 <th>
@@ -1236,7 +1249,8 @@ export function ChallengesScreen(props: Props) {
                                                                                                         return (
                                                                                                                 <tr
                                                                                                                         key={ch.challenge_uuid}
-                                                                                                                        className={`reg-review-row${isSelected ? " challenge-table-row-selected" : ""}`}
+                                                                                                                        className={`dt-row-clickable${isSelected ? " dt-row-selected" : ""}`}
+															aria-selected={isSelected || undefined}
                                                                                                                         tabIndex={0}
                                                                                                                         onClick={() => beginEditingChallenge(ch)}
                                                                                                                         onKeyDown={(event) => {
@@ -1271,10 +1285,7 @@ export function ChallengesScreen(props: Props) {
                                                                                                                                 </div>
                                                                                                                         </td>
                                                                                                                         <td>
-                                                                                                                                <span
-                                                                                                                                        className={`challenge-status-badge ${statusClass(status)}`}>
-                                                                                                                                        {status}
-                                                                                                                                </span>
+                                                                                                                                <StatusBadge tone={challengeStatusTone(status)}>{status}</StatusBadge>
                                                                                                                         </td>
                                                                                                                         <td>
                                                                                                                                 <strong>
@@ -1316,7 +1327,8 @@ export function ChallengesScreen(props: Props) {
                                                                                                         return (
                                                                                                                 <tr
                                                                                                                         key={ch.challenge_uuid}
-                                                                                                                        className={`reg-review-row${isSelected ? " challenge-table-row-selected" : ""}`}
+                                                                                                                        className={`dt-row-clickable${isSelected ? " dt-row-selected" : ""}`}
+															aria-selected={isSelected || undefined}
                                                                                                                         tabIndex={0}
                                                                                                                         onClick={() => beginEditingChallenge(ch)}
                                                                                                                         onKeyDown={(event) => {
@@ -1351,10 +1363,7 @@ export function ChallengesScreen(props: Props) {
                                                                                                                                 </div>
                                                                                                                         </td>
                                                                                                                         <td>
-                                                                                                                                <span
-                                                                                                                                        className={`challenge-status-badge ${statusClass(status)}`}>
-                                                                                                                                        {status}
-                                                                                                                                </span>
+                                                                                                                                <StatusBadge tone={challengeStatusTone(status)}>{status}</StatusBadge>
                                                                                                                         </td>
                                                                                                                         <td>
                                                                                                                                 <strong>
@@ -1371,15 +1380,9 @@ export function ChallengesScreen(props: Props) {
                                                                                                                                 </span>
                                                                                                                         </td>
                                                                                                                         <td className="challenge-table-action-cell">
-                                                                                                                                <button
-                                                                                                                                        className="primary-button"
-                                                                                                                                        type="button"
-                                                                                                                                        onClick={(e) => {
-                                                                                                                                                e.stopPropagation();
-                                                                                                                                                beginEditingChallenge(ch);
-                                                                                                                                        }}>
-                                                                                                                                        Edit →
-                                                                                                                                </button>
+                                                                                                                                <span className="challenge-table-view-arrow" aria-hidden="true">
+																	→
+																</span>
                                                                                                                         </td>
                                                                                                                 </tr>
                                                                                                         );

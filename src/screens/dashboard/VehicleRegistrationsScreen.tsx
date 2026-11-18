@@ -19,6 +19,16 @@ import {
 } from "../../lib/api";
 import { useDetailParamSync } from "../../lib/useDetailParamSync";
 import { confirmAction } from "../../lib/confirm";
+import {
+  DataRow,
+  DataTable,
+  StatusBadge,
+  TableCard,
+  TableMessageRow,
+  TableSearch,
+  TableToolbar,
+  type StatusTone,
+} from "../../components/table/DataTable";
 
 type Props = {
   activeSchoolId: string;
@@ -68,6 +78,13 @@ function getStatusLabel(device: RegisteredDevice) {
   if (device.payment_status === "awaiting_payment") return "Payment due";
   if (device.registration_fee_source === "waived") return "Accepted - fee waived";
   return "Accepted";
+}
+
+function getStatusTone(device: RegisteredDevice): StatusTone {
+  if (device.registration_status === "declined") return "danger";
+  if (device.registration_status === "pending") return "warning";
+  if (device.payment_status === "awaiting_payment") return "accent";
+  return "success";
 }
 
 function getStatusClass(device: RegisteredDevice) {
@@ -744,7 +761,7 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
         </button>
       </div>
 
-      <div className="reg-table-tools">
+      <TableToolbar>
         <div className="segmented-control">
           {filters.map((option) => (
             <button
@@ -760,29 +777,26 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
             </button>
           ))}
         </div>
-        <input
-          className="reg-table-search"
+        <TableSearch
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search student, device, serial, UUID..."
         />
-      </div>
+      </TableToolbar>
 
       {error ? <p className="error-text">{error}</p> : null}
       {success ? <p className="success-text">{success}</p> : null}
-      {busy ? <p className="muted-text">Loading registrations...</p> : null}
-
-      <div className="management-table-card reg-table-card">
-        <div className="reg-table-summary">
-          <strong>{visibleEntries.length.toLocaleString()} registrations</strong>
-          <span>
-            {filter
+      <TableCard
+        title={`${visibleEntries.length.toLocaleString()} registrations`}
+        meta={
+          busy && visibleEntries.length > 0
+            ? "Refreshing…"
+            : filter
               ? `${filters.find((option) => option.value === filter)?.label ?? "Filtered"} filter`
-              : "All statuses"}
-          </span>
-        </div>
-        <div className="management-table-scroll">
-          <table className="management-table reg-review-table">
+              : "All statuses"
+        }
+      >
+          <DataTable minWidth={960} aria-label="Vehicle registrations">
             <thead>
               <tr>
                 <th>Device</th>
@@ -803,22 +817,10 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
                 const photoUrl = devicePhotoUrls[deviceUUID];
                 const beaconInfo = getRegisteredDeviceBeaconInfo(device);
                 const statusLabel = getStatusLabel(device);
-                const statusClass = getStatusClass(device);
                 const studentId = entry.student.membership?.student_id ?? "";
 
                 return (
-                  <tr
-                    key={deviceUUID}
-                    className="reg-review-row"
-                    tabIndex={0}
-                    onClick={() => setSelectedUUID(deviceUUID)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setSelectedUUID(deviceUUID);
-                      }
-                    }}
-                  >
+                  <DataRow key={deviceUUID} onOpen={() => setSelectedUUID(deviceUUID)}>
                     <td>
                       <div className="reg-table-identity">
                         {photoUrl ? (
@@ -845,7 +847,7 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
                       <span>{studentId || entry.student.user.email || "-"}</span>
                     </td>
                     <td>
-                      <span className={statusClass}>{statusLabel}</span>
+                      <StatusBadge tone={getStatusTone(device)}>{statusLabel}</StatusBadge>
                     </td>
                     <td>
                       <strong>{getRegistrationFeeSummary(device, matchedRule)}</strong>
@@ -859,20 +861,22 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
                       <strong>{formatTimestamp(device.updated_at)}</strong>
                       <span>Open details</span>
                     </td>
-                  </tr>
+                  </DataRow>
                 );
               })}
+              {visibleEntries.length === 0 && busy ? (
+                <TableMessageRow colSpan={6} tone="loading">
+                  Loading registrations…
+                </TableMessageRow>
+              ) : null}
               {visibleEntries.length === 0 && !busy ? (
-                <tr>
-                  <td colSpan={6}>
-                    <span>No vehicle registrations match this filter.</span>
-                  </td>
-                </tr>
+                <TableMessageRow colSpan={6}>
+                  No vehicle registrations match this filter.
+                </TableMessageRow>
               ) : null}
             </tbody>
-          </table>
-        </div>
-      </div>
+          </DataTable>
+      </TableCard>
     </section>
   );
 }

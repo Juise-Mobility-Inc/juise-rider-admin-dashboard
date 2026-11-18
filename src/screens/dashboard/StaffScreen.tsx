@@ -10,6 +10,12 @@ import {
   type SchoolStaffMember,
 } from "../../lib/api";
 import { confirmAction } from "../../lib/confirm";
+import {
+  DataRow,
+  DataTable,
+  TableCard,
+  TableMessageRow,
+} from "../../components/table/DataTable";
 
 type Props = {
   activeSchoolId: string;
@@ -218,55 +224,80 @@ export function StaffScreen({
           {status ? <p className="muted-text">{status}</p> : null}
           {addError ? <p className="error-text">{addError}</p> : null}
           {staffError ? <p className="error-text">{staffError}</p> : null}
-          {staffBusy && staff.length === 0 ? (
-            <p className="muted-text">Loading staff…</p>
-          ) : staff.length === 0 ? (
-            <p className="muted-text">No staff yet.</p>
-          ) : (
-            <ul className="school-invite-list">
-              {staff.map((member) => {
-                const isSelf = member.user_uuid === currentUserUuid;
-                const busy = rowBusyUuid === member.user_uuid;
-                return (
-                  <li key={member.user_uuid} className="school-invite-list-item">
-                    <span className="school-invite-email">
-                      {staffName(member)}
-                      {member.email && member.email !== staffName(member)
-                        ? ` · ${member.email}`
-                        : ""}
-                      {isSelf ? " (you)" : ""}
-                    </span>
-                    <select
-                      value={member.level}
-                      onChange={(e) =>
-                        void handleLevelChange(
-                          member,
-                          e.target.value as SchoolStaffLevel,
-                        )
-                      }
-                      disabled={isSelf || busy}
-                      aria-label={`Level for ${staffName(member)}`}
-                    >
-                      <option value="admin">{LEVEL_LABELS.admin}</option>
-                      <option value="enforcement_officer">
-                        {LEVEL_LABELS.enforcement_officer}
-                      </option>
-                    </select>
-                    {isSelf ? null : (
-                      <button
-                        type="button"
-                        className="secondary-button school-invite-revoke-btn"
-                        onClick={() => void handleRemove(member)}
-                        disabled={busy}
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <TableCard
+            title={`${staff.length.toLocaleString()} staff member${staff.length === 1 ? "" : "s"}`}
+            meta={staffBusy && staff.length > 0 ? "Refreshing…" : undefined}
+          >
+            <DataTable minWidth={620} aria-label="Staff">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Level</th>
+                  <th aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {staff.map((member) => {
+                  const isSelf = member.user_uuid === currentUserUuid;
+                  const busy = rowBusyUuid === member.user_uuid;
+                  return (
+                    <DataRow key={member.user_uuid}>
+                      <td>
+                        <strong>
+                          {staffName(member)}
+                          {isSelf ? " (you)" : ""}
+                        </strong>
+                        <span>
+                          {member.email && member.email !== staffName(member)
+                            ? member.email
+                            : member.username || "—"}
+                        </span>
+                      </td>
+                      <td>
+                        <select
+                          className="staff-level-select"
+                          value={member.level}
+                          onChange={(e) =>
+                            void handleLevelChange(
+                              member,
+                              e.target.value as SchoolStaffLevel,
+                            )
+                          }
+                          disabled={isSelf || busy}
+                          aria-label={`Level for ${staffName(member)}`}
+                        >
+                          <option value="admin">{LEVEL_LABELS.admin}</option>
+                          <option value="enforcement_officer">
+                            {LEVEL_LABELS.enforcement_officer}
+                          </option>
+                        </select>
+                      </td>
+                      <td className="dt-actions-cell">
+                        {isSelf ? null : (
+                          <button
+                            type="button"
+                            className="secondary-button school-invite-revoke-btn"
+                            onClick={() => void handleRemove(member)}
+                            disabled={busy}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </td>
+                    </DataRow>
+                  );
+                })}
+                {staffBusy && staff.length === 0 ? (
+                  <TableMessageRow colSpan={3} tone="loading">
+                    Loading staff…
+                  </TableMessageRow>
+                ) : null}
+                {!staffBusy && staff.length === 0 ? (
+                  <TableMessageRow colSpan={3}>No staff yet.</TableMessageRow>
+                ) : null}
+              </tbody>
+            </DataTable>
+          </TableCard>
         </div>
       )}
     </section>

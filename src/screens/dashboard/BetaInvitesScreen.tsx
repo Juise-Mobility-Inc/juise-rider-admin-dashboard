@@ -7,6 +7,14 @@ import {
   revokeSchoolInvite,
   type SchoolEmailInvite,
 } from "../../lib/api";
+import {
+  DataRow,
+  DataTable,
+  StatusBadge,
+  TableCard,
+  TableMessageRow,
+  type StatusTone,
+} from "../../components/table/DataTable";
 
 type Props = {
   activeSchoolId: string;
@@ -52,6 +60,13 @@ function dedupeEmails(emails: string[]): string[] {
   return result;
 }
 
+
+function inviteStatusTone(status: string): StatusTone {
+  if (status === "accepted") return "success";
+  if (status === "pending") return "warning";
+  if (status === "revoked") return "danger";
+  return "neutral";
+}
 export function BetaInvitesScreen({ activeSchoolId, managedAppId }: Props) {
   const navigate = useNavigate();
   const [schoolInvites, setSchoolInvites] = useState<SchoolEmailInvite[]>([]);
@@ -329,38 +344,54 @@ export function BetaInvitesScreen({ activeSchoolId, managedAppId }: Props) {
           {schoolInvitesError ? (
             <p className="error-text">{schoolInvitesError}</p>
           ) : null}
-          {schoolInvitesBusy ? (
-            <p className="muted-text">Loading invites…</p>
-          ) : schoolInvites.length === 0 ? (
-            <p className="muted-text">No pending invites yet.</p>
-          ) : (
-            <ul className="school-invite-list">
-              {schoolInvites.map((invite) => (
-                <li
-                  key={invite.invite_uuid}
-                  className="school-invite-list-item"
-                >
-                  <span className="school-invite-email">{invite.email}</span>
-                  <span
-                    className={`school-invite-status school-invite-status-${invite.status}`}
-                  >
-                    {invite.status}
-                  </span>
-                  {invite.status === "pending" ? (
-                    <button
-                      type="button"
-                      className="secondary-button school-invite-revoke-btn"
-                      onClick={() =>
-                        void handleRevokeInvite(invite.invite_uuid)
-                      }
-                    >
-                      Revoke
-                    </button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
+          <TableCard
+            title={`${schoolInvites.length.toLocaleString()} invite${schoolInvites.length === 1 ? "" : "s"}`}
+          >
+            <DataTable minWidth={560} aria-label="Invites">
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>Status</th>
+                  <th aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {schoolInvites.map((invite) => (
+                  <DataRow key={invite.invite_uuid}>
+                    <td>
+                      <strong>{invite.email}</strong>
+                    </td>
+                    <td>
+                      <StatusBadge tone={inviteStatusTone(invite.status)}>
+                        {invite.status}
+                      </StatusBadge>
+                    </td>
+                    <td className="dt-actions-cell">
+                      {invite.status === "pending" ? (
+                        <button
+                          type="button"
+                          className="secondary-button school-invite-revoke-btn"
+                          onClick={() =>
+                            void handleRevokeInvite(invite.invite_uuid)
+                          }
+                        >
+                          Revoke
+                        </button>
+                      ) : null}
+                    </td>
+                  </DataRow>
+                ))}
+                {schoolInvitesBusy && schoolInvites.length === 0 ? (
+                  <TableMessageRow colSpan={3} tone="loading">
+                    Loading invites…
+                  </TableMessageRow>
+                ) : null}
+                {!schoolInvitesBusy && schoolInvites.length === 0 ? (
+                  <TableMessageRow colSpan={3}>No pending invites yet.</TableMessageRow>
+                ) : null}
+              </tbody>
+            </DataTable>
+          </TableCard>
         </div>
       )}
     </section>

@@ -1991,6 +1991,18 @@ export function StudentsScreen(props: Props) {
                                                                                                                                                                 <tbody key={rowKey}>
                                                                                                                                                                         <tr
                                                                                                                                                                                 className={`act-row${isOpen ? " act-row-open" : ""}`}
+                                                                                                                                                                                tabIndex={0}
+                                                                                                                                                                                aria-expanded={isOpen}
+                                                                                                                                                                                onKeyDown={(event) => {
+                                                                                                                                                                                	// Keys on the "View Ride" button inside the row are that button's.
+                                                                                                                                                                                	if (event.target !== event.currentTarget) {
+                                                                                                                                                                                		return;
+                                                                                                                                                                                	}
+                                                                                                                                                                                	if (event.key === "Enter" || event.key === " ") {
+                                                                                                                                                                                		event.preventDefault();
+                                                                                                                                                                                		setExpandedActivityKey(isOpen ? null : rowKey);
+                                                                                                                                                                                	}
+                                                                                                                                                                                }}
                                                                                                                                                                                 onClick={() =>
                                                                                                                                                                                         setExpandedActivityKey(
                                                                                                                                                                                                 isOpen ? null : rowKey,
@@ -2330,6 +2342,18 @@ export function StudentsScreen(props: Props) {
                                                                                                                                                         <tbody key={rowKey}>
                                                                                                                                                                 <tr
                                                                                                                                                                         className={`act-row${isOpen ? " act-row-open" : ""}`}
+                                                                                                                                                                        tabIndex={0}
+                                                                                                                                                                        aria-expanded={isOpen}
+                                                                                                                                                                        onKeyDown={(event) => {
+                                                                                                                                                                        	// Keys on the "View Ride" button inside the row are that button's.
+                                                                                                                                                                        	if (event.target !== event.currentTarget) {
+                                                                                                                                                                        		return;
+                                                                                                                                                                        	}
+                                                                                                                                                                        	if (event.key === "Enter" || event.key === " ") {
+                                                                                                                                                                        		event.preventDefault();
+                                                                                                                                                                        		setExpandedActivityKey(isOpen ? null : rowKey);
+                                                                                                                                                                        	}
+                                                                                                                                                                        }}
                                                                                                                                                                         onClick={() =>
                                                                                                                                                                                 setExpandedActivityKey(
                                                                                                                                                                                         isOpen ? null : rowKey,
