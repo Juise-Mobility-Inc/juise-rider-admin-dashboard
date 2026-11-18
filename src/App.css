@@ -14934,55 +14934,6 @@
         gap: 10px;
 }
 
-.audit-export-panel {
-        display: grid;
-        gap: 8px;
-        margin-bottom: 14px;
-        padding: 14px 16px;
-        border: 1px solid #d4dae0;
-        border-radius: 12px;
-        background: #f8fafb;
-}
-
-.audit-export-fields {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: flex-end;
-        gap: 12px;
-}
-
-.audit-export-field {
-        display: grid;
-        gap: 4px;
-}
-
-.audit-export-field span {
-        font-size: 0.75rem;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: #5c6670;
-}
-
-.audit-export-field input {
-        padding: 7px 10px;
-        border: 1px solid #d4dae0;
-        border-radius: 8px;
-        background: #fff;
-        font-size: 0.85rem;
-        color: #2c3640;
-}
-
-.audit-export-btn {
-        white-space: nowrap;
-}
-
-.audit-export-hint {
-        margin: 0;
-        font-size: 0.78rem;
-        color: #5c6670;
-}
-
 .audit-export-error {
         margin: 0;
         font-size: 0.8rem;
@@ -14997,22 +14948,6 @@
         color: #178a3e;
 }
 
-.audit-table-toolbar {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        margin-bottom: 14px;
-}
-
-.audit-table-toolbar-actions {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-left: auto;
-}
-
 .audit-table-row {
         cursor: pointer;
 }
@@ -15023,11 +14958,6 @@
 
 .audit-time-cell {
         white-space: nowrap;
-}
-
-.audit-time-relative {
-        display: block;
-        font-weight: 600;
 }
 
 .audit-time-exact {
