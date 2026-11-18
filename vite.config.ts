@@ -94,6 +94,27 @@ export default defineConfig(({ mode }) => {
       ),
       "import.meta.env.VITE_GIT_BRANCH": JSON.stringify(gitBranch),
     },
+    build: {
+      rolldownOptions: {
+        output: {
+          // Screens are lazy-loaded (App.tsx). These groups keep the big,
+          // rarely changing libraries in their own long-cached files so an
+          // app deploy doesn't make every user download React again.
+          codeSplitting: {
+            groups: [
+              {
+                name: "react-vendor",
+                test: /[\\/]node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom|react-redux|@reduxjs|redux|redux-thunk|immer|reselect|use-sync-external-store)[\\/]/,
+              },
+              {
+                name: "leaflet",
+                test: /[\\/]node_modules[\\/](leaflet|react-leaflet|@react-leaflet)[\\/]/,
+              },
+            ],
+          },
+        },
+      },
+    },
     server: {
       host: "0.0.0.0",
       port: 5000,

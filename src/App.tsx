@@ -2,6 +2,7 @@ import {
   type ChangeEvent,
   type CSSProperties,
   type FormEvent,
+  Suspense,
   useCallback,
   useEffect,
   useDeferredValue,
@@ -10,7 +11,6 @@ import {
   useState,
 } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import QRCode from "qrcode";
 import "./App.css";
 import {
   approveReservation,
@@ -111,11 +111,11 @@ import {
   normalizeSchoolColorScheme,
   resolveHexColor,
 } from "./lib/colors";
-import {
-  type PackMapMarker,
-  type PackMapPoint,
+import type {
+  PackMapMarker,
+  PackMapPoint,
 } from "./components/PackLocationPicker";
-import { type SchoolZoneMapPolygon } from "./components/SchoolZoneMapEditor";
+import type { SchoolZoneMapPolygon } from "./components/SchoolZoneMapEditor";
 import { useImageCropper } from "./components/useImageCropper";
 import { IMAGE_ASPECT } from "./lib/imageCrop";
 import {
@@ -131,35 +131,6 @@ import {
   writeDashboardSession,
   type DashboardContext,
 } from "./lib/storage";
-import { CampusDevicesScreen } from "./screens/dashboard/CampusDevicesScreen";
-import { AuditLogScreen } from "./screens/dashboard/AuditLogScreen";
-import { ChallengesScreen } from "./screens/dashboard/ChallengesScreen";
-import { DashboardScreen } from "./screens/dashboard/DashboardScreen";
-import { BetaInvitesScreen } from "./screens/dashboard/BetaInvitesScreen";
-import { StaffScreen } from "./screens/dashboard/StaffScreen";
-import { OfficerViolationsView } from "./screens/dashboard/OfficerViolationsView";
-import { StudentLeaderboardScreen } from "./screens/dashboard/StudentLeaderboardScreen";
-import { NotificationsScreen } from "./screens/dashboard/NotificationsScreen";
-import { FeedbackScreen } from "./screens/dashboard/FeedbackScreen";
-import { SecuritySettingsScreen } from "./screens/dashboard/SecuritySettingsScreen";
-import { PacksScreen } from "./screens/dashboard/PacksScreen";
-import { ParkingReportsScreen } from "./screens/dashboard/ParkingReportsScreen";
-import { PenaltyReportsScreen } from "./screens/dashboard/PenaltyReportsScreen";
-import { SocialReportsScreen } from "./screens/dashboard/social-reports/SocialReportsScreen";
-import { PoisScreen } from "./screens/dashboard/PoisScreen";
-import { RegistrationFeesScreen } from "./screens/dashboard/RegistrationFeesScreen";
-import { ReportsScreen } from "./screens/dashboard/ReportsScreen";
-import { StudentRideViolationsScreen } from "./screens/dashboard/StudentRideViolationsScreen";
-import { ReservationsScreen } from "./screens/dashboard/ReservationsScreen";
-import { SchoolProfileScreen } from "./screens/dashboard/SchoolProfileScreen";
-import { StudentVehicleDetailModal } from "./screens/dashboard/StudentVehicleDetailModal";
-import { StudentsScreen } from "./screens/dashboard/StudentsScreen";
-import { VehicleRegistrationsScreen } from "./screens/dashboard/VehicleRegistrationsScreen";
-import { ParkingPassesScreen } from "./screens/dashboard/ParkingPassesScreen";
-import { ViolationFeesScreen } from "./screens/dashboard/ViolationFeesScreen";
-import { ZonesScreen } from "./screens/dashboard/ZonesScreen";
-import { MapOverviewScreen } from "./screens/dashboard/MapOverviewScreen";
-import { SightingsMapScreen } from "./screens/dashboard/SightingsMapScreen";
 import {
   ensureStudentRosterMedia,
   loadSelectedStudentDetail,
@@ -170,6 +141,101 @@ import {
   setStudentsScope,
 } from "./features/students/studentsSlice";
 import { useAppDispatch, useAppSelector } from "./store/hooks";
+import { lazyScreen } from "./lib/lazyScreen";
+
+// Every screen is its own chunk, loaded the first time it's opened, so the
+// first page load only downloads the shell and the current screen.
+const CampusDevicesScreen = lazyScreen(() =>
+  import("./screens/dashboard/CampusDevicesScreen").then((m) => m.CampusDevicesScreen),
+);
+const AuditLogScreen = lazyScreen(() =>
+  import("./screens/dashboard/AuditLogScreen").then((m) => m.AuditLogScreen),
+);
+const ChallengesScreen = lazyScreen(() =>
+  import("./screens/dashboard/ChallengesScreen").then((m) => m.ChallengesScreen),
+);
+const DashboardScreen = lazyScreen(() =>
+  import("./screens/dashboard/DashboardScreen").then((m) => m.DashboardScreen),
+);
+const BetaInvitesScreen = lazyScreen(() =>
+  import("./screens/dashboard/BetaInvitesScreen").then((m) => m.BetaInvitesScreen),
+);
+const StaffScreen = lazyScreen(() =>
+  import("./screens/dashboard/StaffScreen").then((m) => m.StaffScreen),
+);
+const OfficerViolationsView = lazyScreen(() =>
+  import("./screens/dashboard/OfficerViolationsView").then((m) => m.OfficerViolationsView),
+);
+const StudentLeaderboardScreen = lazyScreen(() =>
+  import("./screens/dashboard/StudentLeaderboardScreen").then((m) => m.StudentLeaderboardScreen),
+);
+const NotificationsScreen = lazyScreen(() =>
+  import("./screens/dashboard/NotificationsScreen").then((m) => m.NotificationsScreen),
+);
+const FeedbackScreen = lazyScreen(() =>
+  import("./screens/dashboard/FeedbackScreen").then((m) => m.FeedbackScreen),
+);
+const SecuritySettingsScreen = lazyScreen(() =>
+  import("./screens/dashboard/SecuritySettingsScreen").then((m) => m.SecuritySettingsScreen),
+);
+const PacksScreen = lazyScreen(() =>
+  import("./screens/dashboard/PacksScreen").then((m) => m.PacksScreen),
+);
+const ParkingReportsScreen = lazyScreen(() =>
+  import("./screens/dashboard/ParkingReportsScreen").then((m) => m.ParkingReportsScreen),
+);
+const PenaltyReportsScreen = lazyScreen(() =>
+  import("./screens/dashboard/PenaltyReportsScreen").then((m) => m.PenaltyReportsScreen),
+);
+const SocialReportsScreen = lazyScreen(() =>
+  import("./screens/dashboard/social-reports/SocialReportsScreen").then((m) => m.SocialReportsScreen),
+);
+const PoisScreen = lazyScreen(() =>
+  import("./screens/dashboard/PoisScreen").then((m) => m.PoisScreen),
+);
+const RegistrationFeesScreen = lazyScreen(() =>
+  import("./screens/dashboard/RegistrationFeesScreen").then((m) => m.RegistrationFeesScreen),
+);
+const ReportsScreen = lazyScreen(() =>
+  import("./screens/dashboard/ReportsScreen").then((m) => m.ReportsScreen),
+);
+const StudentRideViolationsScreen = lazyScreen(() =>
+  import("./screens/dashboard/StudentRideViolationsScreen").then((m) => m.StudentRideViolationsScreen),
+);
+const ReservationsScreen = lazyScreen(() =>
+  import("./screens/dashboard/ReservationsScreen").then((m) => m.ReservationsScreen),
+);
+const SchoolProfileScreen = lazyScreen(() =>
+  import("./screens/dashboard/SchoolProfileScreen").then((m) => m.SchoolProfileScreen),
+);
+const StudentVehicleDetailModal = lazyScreen(() =>
+  import("./screens/dashboard/StudentVehicleDetailModal").then((m) => m.StudentVehicleDetailModal),
+);
+const StudentsScreen = lazyScreen(() =>
+  import("./screens/dashboard/StudentsScreen").then((m) => m.StudentsScreen),
+);
+const VehicleRegistrationsScreen = lazyScreen(() =>
+  import("./screens/dashboard/VehicleRegistrationsScreen").then((m) => m.VehicleRegistrationsScreen),
+);
+const ParkingPassesScreen = lazyScreen(() =>
+  import("./screens/dashboard/ParkingPassesScreen").then((m) => m.ParkingPassesScreen),
+);
+const ViolationFeesScreen = lazyScreen(() =>
+  import("./screens/dashboard/ViolationFeesScreen").then((m) => m.ViolationFeesScreen),
+);
+const ZonesScreen = lazyScreen(() =>
+  import("./screens/dashboard/ZonesScreen").then((m) => m.ZonesScreen),
+);
+const MapOverviewScreen = lazyScreen(() =>
+  import("./screens/dashboard/MapOverviewScreen").then((m) => m.MapOverviewScreen),
+);
+// Dev-only screen (its nav link is gated on import.meta.env.DEV); keep it
+// out of the production build entirely.
+const SightingsMapScreen = import.meta.env.DEV
+  ? lazyScreen(() =>
+      import("./screens/dashboard/SightingsMapScreen").then((m) => m.SightingsMapScreen),
+    )
+  : () => null;
 
 type Section =
   | "dashboard"
@@ -1575,6 +1641,17 @@ function resolveSectionFromPathname(pathname: string): Section | null {
     ({ path }) => path === normalizedPath,
   );
   return matchingSection?.section ?? null;
+}
+
+// Shown while a screen's chunk downloads (usually a few hundred ms on first
+// visit only). Fixed min-height so the workspace doesn't collapse and jump.
+function ScreenLoadingFallback() {
+  return (
+    <div className="screen-loading-fallback" role="status" aria-live="polite">
+      <span className="screen-loading-spinner" aria-hidden="true" />
+      <span>Loading…</span>
+    </div>
+  );
 }
 
 function App() {
@@ -4344,7 +4421,7 @@ function App() {
       );
       setMfaEnrollment(enrollment);
       setMfaQrCode(
-        await QRCode.toDataURL(enrollment.otpauth_uri, {
+        await (await import("qrcode")).default.toDataURL(enrollment.otpauth_uri, {
           // Rendered on a desktop monitor and scanned by a phone camera:
           // a wider quiet zone and higher error correction let the phone
           // lock on faster despite glare / off-angle capture.
@@ -4463,7 +4540,7 @@ function App() {
       setAddTotpEnrollment(enrollment);
       setAddTotpCode("");
       setAddTotpQrCode(
-        await QRCode.toDataURL(enrollment.otpauth_uri, {
+        await (await import("qrcode")).default.toDataURL(enrollment.otpauth_uri, {
           width: 232,
           margin: 3,
           errorCorrectionLevel: "Q",
@@ -6960,11 +7037,13 @@ function App() {
     activeMemberships.length === 0
   ) {
     return (
-      <OfficerViolationsView
-        managedAppId={context.managedAppId}
-        userUuid={session.claims.user_uuid}
-        onLogout={handleLogout}
-      />
+      <Suspense fallback={<ScreenLoadingFallback />}>
+        <OfficerViolationsView
+          managedAppId={context.managedAppId}
+          userUuid={session.claims.user_uuid}
+          onLogout={handleLogout}
+        />
+      </Suspense>
     );
   }
 
@@ -7557,7 +7636,12 @@ function App() {
           />
         );
       case "auditLog":
-        return <AuditLogScreen appId={authAppId} />;
+        return (
+          <AuditLogScreen
+            managedAppId={context.managedAppId}
+            activeSchoolId={activeSchoolId}
+          />
+        );
       case "studentLeaderboard":
         return (
           <StudentLeaderboardScreen
@@ -8437,7 +8521,9 @@ function App() {
           </div>
         ) : null}
 
-        {sectionContent}
+        <Suspense fallback={<ScreenLoadingFallback />}>
+          {sectionContent}
+        </Suspense>
       </main>
       {appImageCropModal}
       {seriesEditPrompt ? (
@@ -8588,21 +8674,23 @@ function App() {
         </div>
       ) : null}
       {selectedStudentDevice ? (
-        <StudentVehicleDetailModal
-          device={selectedStudentDevice}
-          studentName={selectedStudentFullName}
-          primaryPhotoUrl={
-            studentDevicePhotoUrls[
-              selectedStudentDevice.registered_device_uuid
-            ] ?? ""
-          }
-          mediaAssets={selectedStudentDeviceMediaAssets}
-          signedMediaUrls={studentDeviceSignedMediaUrls}
-          onClose={() => setSelectedStudentDeviceUUID(null)}
-          onCopy={handleCopyUuid}
-          onPreviewImage={handleOpenImagePreview}
-          formatUnixTimestamp={formatUnixTimestamp}
-        />
+        <Suspense fallback={null}>
+          <StudentVehicleDetailModal
+            device={selectedStudentDevice}
+            studentName={selectedStudentFullName}
+            primaryPhotoUrl={
+              studentDevicePhotoUrls[
+                selectedStudentDevice.registered_device_uuid
+              ] ?? ""
+            }
+            mediaAssets={selectedStudentDeviceMediaAssets}
+            signedMediaUrls={studentDeviceSignedMediaUrls}
+            onClose={() => setSelectedStudentDeviceUUID(null)}
+            onCopy={handleCopyUuid}
+            onPreviewImage={handleOpenImagePreview}
+            formatUnixTimestamp={formatUnixTimestamp}
+          />
+        </Suspense>
       ) : null}
     </div>
   );

@@ -49,6 +49,13 @@ export interface DashboardAuditEvent {
   app_id: string;
   school_id?: string;
   actor_user_uuid?: string;
+  // user, service, or anonymous; and the role the request was authorized
+  // under (juise_admin, school_admin, enforcement_officer, rider, user).
+  actor_type?: string;
+  actor_role?: string;
+  // Looked up when the log is read.
+  actor_name?: string;
+  actor_email?: string;
   action: string;
   resource_type?: string;
   resource_id?: string;
@@ -58,6 +65,7 @@ export interface DashboardAuditEvent {
   source_ip?: string;
   user_agent?: string;
   source_service: string;
+  correlation_id?: string;
   metadata: Record<string, unknown>;
 }
 export interface DashboardAuditPage {
@@ -66,11 +74,27 @@ export interface DashboardAuditPage {
 }
 export interface DashboardAuditFilters {
   action?: string;
+  // An action prefix, e.g. "auth." or "dashboard.parking_incident_reports".
+  category?: string;
   outcome?: AuditOutcome | "";
   severity?: AuditSeverity | "";
   actor_user_uuid?: string;
+  resource_type?: string;
+  resource_id?: string;
+  source_ip?: string;
+  source_service?: string;
+  // RFC 3339 times or YYYY-MM-DD dates (a "to" date covers that whole day).
+  from?: string;
+  to?: string;
+  // Free text across action, ids, IP, user agent, actor and metadata.
+  q?: string;
+  sort?: "asc" | "desc";
   cursor?: string;
   limit?: number;
+}
+export interface DashboardAuditActionCount {
+  action: string;
+  count: number;
 }
 
 export interface UserMediaAsset {
@@ -1657,8 +1681,16 @@ async function requestBlob(
   service: ServiceName,
   path: string,
   appIdHeader: string,
-  retryOnUnauthorized = true,
 ): Promise<Blob> {
+  return (await requestDownload(service, path, appIdHeader)).blob;
+}
+
+async function requestDownload(
+  service: ServiceName,
+  path: string,
+  appIdHeader: string,
+  retryOnUnauthorized = true,
+): Promise<{ blob: Blob; headers: Headers }> {
   const bearerToken = currentSession?.tokens.access_token.token;
   if (!bearerToken) {
     throw new Error("Login required");
@@ -1673,7 +1705,7 @@ async function requestBlob(
 
   if (response.status === 401 && retryOnUnauthorized) {
     await refreshSession();
-    return requestBlob(service, path, appIdHeader, false);
+    return requestDownload(service, path, appIdHeader, false);
   }
   if (
     response.status === 403 &&
@@ -1682,12 +1714,12 @@ async function requestBlob(
   ) {
     lastForbiddenRecoveryAt = Date.now();
     await refreshSession();
-    return requestBlob(service, path, appIdHeader, false);
+    return requestDownload(service, path, appIdHeader, false);
   }
   if (!response.ok) {
     throw new Error(await parseErrorMessage(response));
   }
-  return response.blob();
+  return { blob: await response.blob(), headers: response.headers };
 }
 
 export function setApiSession(session: AdminSession | null) {
@@ -1728,18 +1760,80 @@ export async function submitFeedback(input: {
   });
 }
 
-export async function fetchDashboardAuditEvents(
-  appId: string,
-  filters: DashboardAuditFilters = {},
-): Promise<DashboardAuditPage> {
+function auditQuery(filters: DashboardAuditFilters): string {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(filters))
     if (value !== undefined && value !== "") query.set(key, String(value));
+  return query.toString();
+}
+
+function schoolAuditPath(managedAppId: string, schoolId: string): string {
+  return `/api/v1/apps/${encodeURIComponent(managedAppId)}/schools/${encodeURIComponent(schoolId)}/audit-events`;
+}
+
+// The school's audit log: events at the school plus sign-in and security
+// events by its admins and officers. School admins only.
+export async function fetchSchoolAuditEvents(
+  managedAppId: string,
+  schoolId: string,
+  filters: DashboardAuditFilters = {},
+): Promise<DashboardAuditPage> {
   return request<DashboardAuditPage>(
     "nebula",
-    `/api/v1/apps/${encodeURIComponent(appId)}/audit-events?${query.toString()}`,
-    { appIdHeader: appId },
+    `${schoolAuditPath(managedAppId, schoolId)}?${auditQuery(filters)}`,
+    { appIdHeader: managedAppId },
   );
+}
+
+export async function fetchSchoolAuditEvent(
+  managedAppId: string,
+  schoolId: string,
+  eventUUID: string,
+): Promise<DashboardAuditEvent> {
+  return request<DashboardAuditEvent>(
+    "nebula",
+    `${schoolAuditPath(managedAppId, schoolId)}/${encodeURIComponent(eventUUID)}`,
+    { appIdHeader: managedAppId },
+  );
+}
+
+export async function fetchSchoolAuditActions(
+  managedAppId: string,
+  schoolId: string,
+): Promise<DashboardAuditActionCount[]> {
+  const response = await request<{ actions?: DashboardAuditActionCount[] }>(
+    "nebula",
+    `${schoolAuditPath(managedAppId, schoolId)}/actions`,
+    { appIdHeader: managedAppId },
+  );
+  return response.actions ?? [];
+}
+
+// Downloads the filtered log. The server records the export itself as an
+// audit event, so no client-side event is sent.
+export async function exportSchoolAuditEvents(
+  managedAppId: string,
+  schoolId: string,
+  filters: DashboardAuditFilters,
+  format: "csv" | "json",
+): Promise<{ blob: Blob; filename: string; count: number | null; truncated: boolean }> {
+  const { cursor: _cursor, limit: _limit, ...exportFilters } = filters;
+  void _cursor;
+  void _limit;
+  const { blob, headers } = await requestDownload(
+    "nebula",
+    `${schoolAuditPath(managedAppId, schoolId)}/export?${auditQuery({ ...exportFilters })}&format=${format}`,
+    managedAppId,
+  );
+  const disposition = headers.get("Content-Disposition") ?? "";
+  const match = /filename="([^"]+)"/.exec(disposition);
+  const countHeader = headers.get("X-Audit-Export-Count");
+  return {
+    blob,
+    filename: match?.[1] ?? `audit-log.${format}`,
+    count: countHeader ? Number(countHeader) : null,
+    truncated: headers.get("X-Audit-Export-Truncated") === "true",
+  };
 }
 
 export function setSessionObserver(

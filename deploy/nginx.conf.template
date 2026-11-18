@@ -1,3 +1,12 @@
+# Reused TLS connections to kca-proxy. Without an upstream block nginx opens
+# a new TCP + TLS connection for every /kca-api request. The host and port are
+# derived from KCA_PROXY_TARGET by deploy/16-kca-proxy-target.envsh.
+upstream kca_proxy {
+    server ${KCA_PROXY_TARGET_HOSTPORT};
+    keepalive 16;
+    keepalive_timeout 60s;
+}
+
 server {
     listen 8080;
     server_name _;
@@ -6,6 +15,22 @@ server {
 
     server_tokens off;
     client_max_body_size 20m;
+
+    # The app bundle is about 1.4 MB of JS/CSS uncompressed; gzip brings it
+    # to roughly a quarter. API JSON from kca-proxy is compressed here too.
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_min_length 1024;
+    gzip_types
+        application/javascript
+        application/json
+        application/manifest+json
+        image/svg+xml
+        text/css
+        text/javascript
+        text/plain;
 
     location = /health/live {
         include /etc/nginx/security-headers.conf;
@@ -26,13 +51,15 @@ server {
         return 308 /kca-api/;
     }
 
-    location /kca-api/ {
+    location ^~ /kca-api/ {
         include /etc/nginx/security-headers.conf;
         rewrite ^/kca-api(/.*)$ $1 break;
-        proxy_pass ${KCA_PROXY_TARGET};
+        proxy_pass https://kca_proxy;
         proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_ssl_server_name on;
-        proxy_set_header Host $proxy_host;
+        proxy_ssl_name ${KCA_PROXY_TARGET_HOST};
+        proxy_set_header Host ${KCA_PROXY_TARGET_HOST};
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -41,16 +68,32 @@ server {
         proxy_send_timeout 60s;
     }
 
-    location /assets/ {
+    # Hashed build output never changes under the same name.
+    location ^~ /assets/ {
         include /etc/nginx/security-headers.conf;
         try_files $uri =404;
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
 
+    # Unhashed files from public/ (favicon, sidebar logo, map markers): cache
+    # for a day instead of downloading them again on every visit.
+    location ~* \.(?:svg|png|ico|webp|jpe?g|gif|woff2?)$ {
+        include /etc/nginx/security-headers.conf;
+        try_files $uri =404;
+        add_header Cache-Control "public, max-age=86400";
+    }
+
+    # index.html must always be revalidated so a deploy is picked up, but it
+    # can still be served from cache when unchanged.
+    location = /index.html {
+        include /etc/nginx/security-headers.conf;
+        add_header Cache-Control "no-cache";
+    }
+
     location / {
         include /etc/nginx/security-headers.conf;
         try_files $uri $uri/ /index.html;
-        add_header Cache-Control "no-store";
+        add_header Cache-Control "no-cache";
     }
 }
