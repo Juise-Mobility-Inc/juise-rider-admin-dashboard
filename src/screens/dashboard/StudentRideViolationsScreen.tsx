@@ -1,3 +1,4 @@
+import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { LatLngBounds } from "leaflet";
@@ -1383,7 +1384,7 @@ export function StudentRideViolationsScreen({ activeSchoolId, managedAppId }: Pr
                         />
                         <span className="rv-student-avatar">
                           {photo ? (
-                            <img src={photo} alt={name} />
+                            <img loading="lazy" decoding="async" src={photo} alt={name} />
                           ) : (
                             <span className="rv-student-avatar-fallback">
                               {(entry.user.first_name?.[0] ?? "?").toUpperCase()}

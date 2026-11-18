@@ -455,6 +455,8 @@ export function ReservationsScreen(props: Props) {
                           >
                             {photoUrl ? (
                               <img
+                                loading="lazy"
+                                decoding="async"
                                 className="device-card-photo"
                                 src={photoUrl}
                                 alt={`${device.nickname || device.device_type} device`}

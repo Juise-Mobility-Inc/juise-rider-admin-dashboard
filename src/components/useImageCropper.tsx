@@ -1,7 +1,7 @@
-import { useCallback, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 
 import { IMAGE_ASPECT, type ImageAspect } from "../lib/imageCrop";
-import { ImageCropModal } from "./ImageCropModal";
+import { LazyImageCropModal } from "./LazyImageCropModal";
 
 const RATIO_LABEL: Record<ImageAspect, string> = {
   [IMAGE_ASPECT.square]: "square (1:1)",
@@ -39,18 +39,20 @@ export function useImageCropper() {
   );
 
   const cropModal = pending ? (
-    <ImageCropModal
-      file={pending.file}
-      aspect={pending.aspect}
-      title={pending.title}
-      ratioLabel={RATIO_LABEL[pending.aspect]}
-      onCancel={() => setPending(null)}
-      onComplete={(croppedFile) => {
-        const callback = pending.onCropped;
-        setPending(null);
-        callback(croppedFile);
-      }}
-    />
+    <Suspense fallback={null}>
+      <LazyImageCropModal
+        file={pending.file}
+        aspect={pending.aspect}
+        title={pending.title}
+        ratioLabel={RATIO_LABEL[pending.aspect]}
+        onCancel={() => setPending(null)}
+        onComplete={(croppedFile) => {
+          const callback = pending.onCropped;
+          setPending(null);
+          callback(croppedFile);
+        }}
+      />
+    </Suspense>
   ) : null;
 
   return { beginCrop, cropModal, cropInProgress: pending !== null };

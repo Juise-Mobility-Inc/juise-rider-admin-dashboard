@@ -456,6 +456,8 @@ function NotificationStudentAvatar({ photoUrl, initials }: { photoUrl: string; i
 		<span className="notification-student-avatar">
 			{showPhoto ? (
 				<img
+					loading="lazy"
+					decoding="async"
 					src={normalizedPhotoUrl}
 					alt=""
 					onError={() => setFailedPhotoUrl(normalizedPhotoUrl)}
@@ -1490,7 +1492,7 @@ export function NotificationsScreen({
 									</div>
 									<div className="notification-preview-large-icon">
 										{isRemoteImageUrl(previewLargeIcon) ? (
-											<img src={previewLargeIcon} alt="" />
+											<img loading="lazy" decoding="async" src={previewLargeIcon} alt="" />
 										) : (
 											<div
 												className={`notification-preview-large-mark notification-preview-large-mark-${largeIconChoice}`}>
@@ -1501,7 +1503,7 @@ export function NotificationsScreen({
 								</div>
 								{previewImageUrl ? (
 									<div className="notification-preview-image">
-										<img src={previewImageUrl} alt="" />
+										<img loading="lazy" decoding="async" src={previewImageUrl} alt="" />
 									</div>
 								) : null}
 							</div>
