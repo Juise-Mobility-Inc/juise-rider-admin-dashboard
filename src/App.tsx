@@ -2,7 +2,6 @@ import {
   type ChangeEvent,
   type CSSProperties,
   type FormEvent,
-  lazy,
   Suspense,
   useCallback,
   useEffect,
@@ -140,100 +139,99 @@ import {
   setStudentsScope,
 } from "./features/students/studentsSlice";
 import { useAppDispatch, useAppSelector } from "./store/hooks";
+import { lazyScreen } from "./lib/lazyScreen";
 
 // Every screen is its own chunk, loaded the first time it's opened, so the
 // first page load only downloads the shell and the current screen.
-const CampusDevicesScreen = lazy(() =>
-  import("./screens/dashboard/CampusDevicesScreen").then((m) => ({ default: m.CampusDevicesScreen })),
+const CampusDevicesScreen = lazyScreen(() =>
+  import("./screens/dashboard/CampusDevicesScreen").then((m) => m.CampusDevicesScreen),
 );
-const AuditLogScreen = lazy(() =>
-  import("./screens/dashboard/AuditLogScreen").then((m) => ({ default: m.AuditLogScreen })),
+const AuditLogScreen = lazyScreen(() =>
+  import("./screens/dashboard/AuditLogScreen").then((m) => m.AuditLogScreen),
 );
-const ChallengesScreen = lazy(() =>
-  import("./screens/dashboard/ChallengesScreen").then((m) => ({ default: m.ChallengesScreen })),
+const ChallengesScreen = lazyScreen(() =>
+  import("./screens/dashboard/ChallengesScreen").then((m) => m.ChallengesScreen),
 );
-const DashboardScreen = lazy(() =>
-  import("./screens/dashboard/DashboardScreen").then((m) => ({ default: m.DashboardScreen })),
+const DashboardScreen = lazyScreen(() =>
+  import("./screens/dashboard/DashboardScreen").then((m) => m.DashboardScreen),
 );
-const BetaInvitesScreen = lazy(() =>
-  import("./screens/dashboard/BetaInvitesScreen").then((m) => ({ default: m.BetaInvitesScreen })),
+const BetaInvitesScreen = lazyScreen(() =>
+  import("./screens/dashboard/BetaInvitesScreen").then((m) => m.BetaInvitesScreen),
 );
-const StaffScreen = lazy(() =>
-  import("./screens/dashboard/StaffScreen").then((m) => ({ default: m.StaffScreen })),
+const StaffScreen = lazyScreen(() =>
+  import("./screens/dashboard/StaffScreen").then((m) => m.StaffScreen),
 );
-const OfficerViolationsView = lazy(() =>
-  import("./screens/dashboard/OfficerViolationsView").then((m) => ({ default: m.OfficerViolationsView })),
+const OfficerViolationsView = lazyScreen(() =>
+  import("./screens/dashboard/OfficerViolationsView").then((m) => m.OfficerViolationsView),
 );
-const StudentLeaderboardScreen = lazy(() =>
-  import("./screens/dashboard/StudentLeaderboardScreen").then((m) => ({ default: m.StudentLeaderboardScreen })),
+const StudentLeaderboardScreen = lazyScreen(() =>
+  import("./screens/dashboard/StudentLeaderboardScreen").then((m) => m.StudentLeaderboardScreen),
 );
-const NotificationsScreen = lazy(() =>
-  import("./screens/dashboard/NotificationsScreen").then((m) => ({ default: m.NotificationsScreen })),
+const NotificationsScreen = lazyScreen(() =>
+  import("./screens/dashboard/NotificationsScreen").then((m) => m.NotificationsScreen),
 );
-const FeedbackScreen = lazy(() =>
-  import("./screens/dashboard/FeedbackScreen").then((m) => ({ default: m.FeedbackScreen })),
+const FeedbackScreen = lazyScreen(() =>
+  import("./screens/dashboard/FeedbackScreen").then((m) => m.FeedbackScreen),
 );
-const SecuritySettingsScreen = lazy(() =>
-  import("./screens/dashboard/SecuritySettingsScreen").then((m) => ({ default: m.SecuritySettingsScreen })),
+const SecuritySettingsScreen = lazyScreen(() =>
+  import("./screens/dashboard/SecuritySettingsScreen").then((m) => m.SecuritySettingsScreen),
 );
-const PacksScreen = lazy(() =>
-  import("./screens/dashboard/PacksScreen").then((m) => ({ default: m.PacksScreen })),
+const PacksScreen = lazyScreen(() =>
+  import("./screens/dashboard/PacksScreen").then((m) => m.PacksScreen),
 );
-const ParkingReportsScreen = lazy(() =>
-  import("./screens/dashboard/ParkingReportsScreen").then((m) => ({ default: m.ParkingReportsScreen })),
+const ParkingReportsScreen = lazyScreen(() =>
+  import("./screens/dashboard/ParkingReportsScreen").then((m) => m.ParkingReportsScreen),
 );
-const PenaltyReportsScreen = lazy(() =>
-  import("./screens/dashboard/PenaltyReportsScreen").then((m) => ({ default: m.PenaltyReportsScreen })),
+const PenaltyReportsScreen = lazyScreen(() =>
+  import("./screens/dashboard/PenaltyReportsScreen").then((m) => m.PenaltyReportsScreen),
 );
-const SocialReportsScreen = lazy(() =>
-  import("./screens/dashboard/social-reports/SocialReportsScreen").then((m) => ({ default: m.SocialReportsScreen })),
+const SocialReportsScreen = lazyScreen(() =>
+  import("./screens/dashboard/social-reports/SocialReportsScreen").then((m) => m.SocialReportsScreen),
 );
-const PoisScreen = lazy(() =>
-  import("./screens/dashboard/PoisScreen").then((m) => ({ default: m.PoisScreen })),
+const PoisScreen = lazyScreen(() =>
+  import("./screens/dashboard/PoisScreen").then((m) => m.PoisScreen),
 );
-const RegistrationFeesScreen = lazy(() =>
-  import("./screens/dashboard/RegistrationFeesScreen").then((m) => ({ default: m.RegistrationFeesScreen })),
+const RegistrationFeesScreen = lazyScreen(() =>
+  import("./screens/dashboard/RegistrationFeesScreen").then((m) => m.RegistrationFeesScreen),
 );
-const ReportsScreen = lazy(() =>
-  import("./screens/dashboard/ReportsScreen").then((m) => ({ default: m.ReportsScreen })),
+const ReportsScreen = lazyScreen(() =>
+  import("./screens/dashboard/ReportsScreen").then((m) => m.ReportsScreen),
 );
-const StudentRideViolationsScreen = lazy(() =>
-  import("./screens/dashboard/StudentRideViolationsScreen").then((m) => ({ default: m.StudentRideViolationsScreen })),
+const StudentRideViolationsScreen = lazyScreen(() =>
+  import("./screens/dashboard/StudentRideViolationsScreen").then((m) => m.StudentRideViolationsScreen),
 );
-const ReservationsScreen = lazy(() =>
-  import("./screens/dashboard/ReservationsScreen").then((m) => ({ default: m.ReservationsScreen })),
+const ReservationsScreen = lazyScreen(() =>
+  import("./screens/dashboard/ReservationsScreen").then((m) => m.ReservationsScreen),
 );
-const SchoolProfileScreen = lazy(() =>
-  import("./screens/dashboard/SchoolProfileScreen").then((m) => ({ default: m.SchoolProfileScreen })),
+const SchoolProfileScreen = lazyScreen(() =>
+  import("./screens/dashboard/SchoolProfileScreen").then((m) => m.SchoolProfileScreen),
 );
-const StudentVehicleDetailModal = lazy(() =>
-  import("./screens/dashboard/StudentVehicleDetailModal").then((m) => ({ default: m.StudentVehicleDetailModal })),
+const StudentVehicleDetailModal = lazyScreen(() =>
+  import("./screens/dashboard/StudentVehicleDetailModal").then((m) => m.StudentVehicleDetailModal),
 );
-const StudentsScreen = lazy(() =>
-  import("./screens/dashboard/StudentsScreen").then((m) => ({ default: m.StudentsScreen })),
+const StudentsScreen = lazyScreen(() =>
+  import("./screens/dashboard/StudentsScreen").then((m) => m.StudentsScreen),
 );
-const VehicleRegistrationsScreen = lazy(() =>
-  import("./screens/dashboard/VehicleRegistrationsScreen").then((m) => ({ default: m.VehicleRegistrationsScreen })),
+const VehicleRegistrationsScreen = lazyScreen(() =>
+  import("./screens/dashboard/VehicleRegistrationsScreen").then((m) => m.VehicleRegistrationsScreen),
 );
-const ParkingPassesScreen = lazy(() =>
-  import("./screens/dashboard/ParkingPassesScreen").then((m) => ({ default: m.ParkingPassesScreen })),
+const ParkingPassesScreen = lazyScreen(() =>
+  import("./screens/dashboard/ParkingPassesScreen").then((m) => m.ParkingPassesScreen),
 );
-const ViolationFeesScreen = lazy(() =>
-  import("./screens/dashboard/ViolationFeesScreen").then((m) => ({ default: m.ViolationFeesScreen })),
+const ViolationFeesScreen = lazyScreen(() =>
+  import("./screens/dashboard/ViolationFeesScreen").then((m) => m.ViolationFeesScreen),
 );
-const ZonesScreen = lazy(() =>
-  import("./screens/dashboard/ZonesScreen").then((m) => ({ default: m.ZonesScreen })),
+const ZonesScreen = lazyScreen(() =>
+  import("./screens/dashboard/ZonesScreen").then((m) => m.ZonesScreen),
 );
-const MapOverviewScreen = lazy(() =>
-  import("./screens/dashboard/MapOverviewScreen").then((m) => ({ default: m.MapOverviewScreen })),
+const MapOverviewScreen = lazyScreen(() =>
+  import("./screens/dashboard/MapOverviewScreen").then((m) => m.MapOverviewScreen),
 );
 // Dev-only screen (its nav link is gated on import.meta.env.DEV); keep it
 // out of the production build entirely.
 const SightingsMapScreen = import.meta.env.DEV
-  ? lazy(() =>
-      import("./screens/dashboard/SightingsMapScreen").then((m) => ({
-        default: m.SightingsMapScreen,
-      })),
+  ? lazyScreen(() =>
+      import("./screens/dashboard/SightingsMapScreen").then((m) => m.SightingsMapScreen),
     )
   : () => null;
 
