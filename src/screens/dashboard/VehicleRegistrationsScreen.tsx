@@ -231,10 +231,20 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
   // can't wipe a valid ?registration= deep link before its data arrives.
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
+  // The status filter the current entries were fetched with, and a
+  // ?registration= deep link not yet found in them. A link (e.g. from the
+  // Audit Log) can name a vehicle of any status, so one that isn't in the
+  // filtered list switches the list to All before giving up on it.
+  const [loadedFilter, setLoadedFilter] = useState<string | null>(null);
+  const [linkedUUID, setLinkedUUID] = useState("");
+
   useDetailParamSync(
     "registration",
     selectedUUID,
-    setSelectedUUID,
+    (value) => {
+      setSelectedUUID(value);
+      setLinkedUUID(value);
+    },
     hasLoadedOnce,
   );
   const [feeChoices, setFeeChoices] = useState<Record<string, FeeChoice>>({});
@@ -303,6 +313,7 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
         fetchRegisteredDeviceFeeRules(managedAppId, activeSchoolId),
       ]);
       setEntries(nextEntries);
+      setLoadedFilter(filter);
       setRules(nextRules);
 
       // Collect one object_key per device (first active media asset)
@@ -339,15 +350,22 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
   }, [refresh]);
 
   useEffect(() => {
-    if (!selectedUUID) return;
+    if (!selectedUUID || busy) return;
     if (
-      !sortedEntries.some(
+      sortedEntries.some(
         (entry) => entry.device.registered_device_uuid === selectedUUID,
       )
     ) {
-      setSelectedUUID("");
+      if (linkedUUID) setLinkedUUID("");
+      return;
     }
-  }, [selectedUUID, sortedEntries]);
+    if (linkedUUID === selectedUUID && loadedFilter !== "") {
+      setFilter("");
+      return;
+    }
+    setSelectedUUID("");
+    setLinkedUUID("");
+  }, [busy, linkedUUID, loadedFilter, selectedUUID, sortedEntries]);
 
   async function applyDecision(
     entry: RegisteredDeviceReviewEntry,
@@ -623,7 +641,7 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
         <div className="reg-detail-panel">
           <header className="reg-detail-header">
             {photoUrl ? (
-              <img className="reg-detail-photo" src={photoUrl} alt={deviceLabel} />
+              <img loading="lazy" decoding="async" className="reg-detail-photo" src={photoUrl} alt={deviceLabel} />
             ) : (
               <div className="reg-detail-avatar">{getInitials(studentName) || "?"}</div>
             )}
@@ -805,6 +823,8 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
                       <div className="reg-table-identity">
                         {photoUrl ? (
                           <img
+                            loading="lazy"
+                            decoding="async"
                             className="reg-table-photo"
                             src={photoUrl}
                             alt={deviceLabel}

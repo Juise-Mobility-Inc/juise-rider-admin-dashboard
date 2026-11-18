@@ -149,6 +149,8 @@ export function StudentVehicleDetailModal({
           <div className="vehicle-modal-hero-card">
             {primaryPhotoUrl ? (
               <img
+                loading="lazy"
+                decoding="async"
                 className="vehicle-modal-hero-image"
                 src={primaryPhotoUrl}
                 alt={`${device.nickname || device.device_type} primary`}
@@ -440,6 +442,8 @@ export function StudentVehicleDetailModal({
                   }
                 >
                   <img
+                    loading="lazy"
+                    decoding="async"
                     className="vehicle-modal-media-image"
                     src={url}
                     alt={`${device.nickname || device.device_type} ${asset.slot || "photo"}`}

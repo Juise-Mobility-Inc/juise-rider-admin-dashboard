@@ -1210,6 +1210,8 @@ export function StudentsScreen(props: Props) {
                                                                                                         rosterProfilePhotoUrl,
                                                                                                 ) ? (
                                                                                                         <img
+                                                                                                                loading="lazy"
+                                                                                                                decoding="async"
                                                                                                                 className="student-list-avatar-image"
                                                                                                                 src={rosterProfilePhotoUrl}
                                                                                                                 alt={`${formatNebulaUserName(entry.user)} profile`}
@@ -1348,6 +1350,8 @@ export function StudentsScreen(props: Props) {
                                                                                         <div className="student-detail-avatar">
                                                                                                 {shouldRenderProfilePhoto(profileImageUrl) ? (
                                                                                                         <img
+                                                                                                                loading="lazy"
+                                                                                                                decoding="async"
                                                                                                                 className="student-detail-avatar-image"
                                                                                                                 src={profileImageUrl}
                                                                                                                 alt={`${fullName} profile`}
@@ -1536,6 +1540,8 @@ export function StudentsScreen(props: Props) {
                                                                                                                         <span>Front of ID</span>
                                                                                                                         {frontPhotoUrl ? (
                                                                                                                                 <img
+                                                                                                                                        loading="lazy"
+                                                                                                                                        decoding="async"
                                                                                                                                         className="student-photo-image"
                                                                                                                                         src={frontPhotoUrl}
                                                                                                                                         alt={`${fullName} front ID`}
@@ -1557,6 +1563,8 @@ export function StudentsScreen(props: Props) {
                                                                                                                         <span>Back of ID</span>
                                                                                                                         {backPhotoUrl ? (
                                                                                                                                 <img
+                                                                                                                                        loading="lazy"
+                                                                                                                                        decoding="async"
                                                                                                                                         className="student-photo-image"
                                                                                                                                         src={backPhotoUrl}
                                                                                                                                         alt={`${fullName} back ID`}
@@ -1615,6 +1623,8 @@ export function StudentsScreen(props: Props) {
                                                                                                                                                         }>
                                                                                                                                                         {devicePhotoUrl ? (
                                                                                                                                                                 <img
+                                                                                                                                                                        loading="lazy"
+                                                                                                                                                                        decoding="async"
                                                                                                                                                                         className="device-card-photo"
                                                                                                                                                                         src={devicePhotoUrl}
                                                                                                                                                                         alt={`${device.nickname || device.device_type} device`}
@@ -1755,6 +1765,8 @@ export function StudentsScreen(props: Props) {
                                                                                                                                                                 <span>Juise Pack Photo</span>
                                                                                                                                                                 {packPhotoUrl ? (
                                                                                                                                                                         <img
+                                                                                                                                                                                loading="lazy"
+                                                                                                                                                                                decoding="async"
                                                                                                                                                                                 className="student-photo-image"
                                                                                                                                                                                 src={packPhotoUrl}
                                                                                                                                                                                 alt={`${
@@ -2640,6 +2652,8 @@ export function StudentsScreen(props: Props) {
                                                                                                                                                                                                         )}
                                                                                                                                                                                                 </span>
                                                                                                                                                                                                 <img
+                                                                                                                                                                                                        loading="lazy"
+                                                                                                                                                                                                        decoding="async"
                                                                                                                                                                                                         className="student-photo-image"
                                                                                                                                                                                                         src={violationPhotoUrl}
                                                                                                                                                                                                         alt={`${fullName} violation photo ${index + 1}`}

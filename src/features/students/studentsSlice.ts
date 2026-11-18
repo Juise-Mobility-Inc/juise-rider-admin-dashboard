@@ -23,6 +23,14 @@ import {
   type UserSchoolMembership,
 } from "../../lib/api";
 import type { AppDispatch, RootState } from "../../store";
+import {
+  mapWithConcurrency,
+  settleWithConcurrency,
+} from "../../lib/concurrency";
+
+// Per-student photo lookups run at most this many at a time (they used to all
+// fire at once: several requests per student, thousands for a big school).
+const rosterMediaConcurrency = 6;
 
 type StudentIdPhotoSlot = "front" | "back";
 type StudentIdPhotoKeys = Partial<Record<StudentIdPhotoSlot, string>>;
@@ -49,6 +57,9 @@ type StudentsState = StudentsScope & {
   schoolStudentRosterError: string;
   schoolStudentRosterReady: boolean;
   schoolStudentRosterHydrating: boolean;
+  // Photo lookups start only when a screen that shows roster photos asks
+  // (ensureStudentRosterMedia), not on every roster load.
+  schoolStudentRosterMediaRequested: boolean;
   selectedStudentMembershipId: string | null;
   studentProfile: StudentProfileBundle | null;
   studentPublicProfile: StudentPublicProfile | null;
@@ -97,6 +108,7 @@ const initialState: StudentsState = {
   schoolStudentRosterError: "",
   schoolStudentRosterReady: false,
   schoolStudentRosterHydrating: false,
+  schoolStudentRosterMediaRequested: false,
   selectedStudentMembershipId: null,
   studentProfile: null,
   studentPublicProfile: null,
@@ -295,8 +307,10 @@ async function resolveSchoolStudentAvatarMediaUrls(
   }
 
   const avatarEntries = (
-    await Promise.all(
-      uniqueUserUUIDs.map(async (userUUID) => {
+    await mapWithConcurrency(
+      uniqueUserUUIDs,
+      rosterMediaConcurrency,
+      async (userUUID) => {
         const assets = await fetchUserMediaAssets(
           managedAppId,
           userUUID,
@@ -316,7 +330,7 @@ async function resolveSchoolStudentAvatarMediaUrls(
           userUUID,
           objectKey: avatarAsset.object_key,
         };
-      }),
+      },
     )
   ).filter(
     (
@@ -394,8 +408,10 @@ async function resolveSchoolStudentPublicProfilePhotoUrls(
     return resolvedUrls;
   }
 
-  const publicProfileResults = await Promise.allSettled(
-    missingUserUUIDs.map(async (userUUID) => {
+  const publicProfileResults = await settleWithConcurrency(
+    missingUserUUIDs,
+    rosterMediaConcurrency,
+    async (userUUID) => {
       const profile = await fetchStudentPublicProfile(
         managedAppId,
         schoolId,
@@ -410,7 +426,7 @@ async function resolveSchoolStudentPublicProfilePhotoUrls(
         userUUID,
         profileImageUrl,
       };
-    }),
+    },
   );
 
   for (const result of publicProfileResults) {
@@ -442,8 +458,10 @@ async function resolveSchoolStudentPhotoState(
     );
   });
 
-  const fallbackMediaResults = await Promise.allSettled(
-    fallbackMediaEntries.map(async (entry) => {
+  const fallbackMediaResults = await settleWithConcurrency(
+    fallbackMediaEntries,
+    rosterMediaConcurrency,
+    async (entry) => {
       const membership = entry.membership;
       const assets = await fetchUserMediaAssets(
         managedAppId,
@@ -456,7 +474,7 @@ async function resolveSchoolStudentPhotoState(
         membershipUUID: membership.membership_uuid,
         photoKeys: collectStudentIdPhotoKeys(assets),
       };
-    }),
+    },
   );
 
   for (const result of fallbackMediaResults) {
@@ -594,7 +612,8 @@ const studentsSlice = createSlice({
       state.schoolStudentRosterBusy = false;
       state.schoolStudentRosterError = "";
       state.schoolStudentRosterReady = true;
-      state.schoolStudentRosterHydrating = true;
+      state.schoolStudentRosterHydrating = false;
+      state.schoolStudentRosterMediaRequested = false;
       state.schoolStudentMediaUrls = {};
       state.schoolStudentProfilePhotoUrls = {};
       state.schoolStudentPhotoKeys = {};
@@ -609,6 +628,11 @@ const studentsSlice = createSlice({
       state.schoolStudentRosterError = action.payload;
       state.schoolStudentRosterReady = false;
       state.schoolStudentRosterHydrating = false;
+      state.schoolStudentRosterMediaRequested = false;
+    },
+    rosterMediaRequested(state) {
+      state.schoolStudentRosterMediaRequested = true;
+      state.schoolStudentRosterHydrating = true;
     },
     rosterHydrationFinished(state) {
       state.schoolStudentRosterHydrating = false;
@@ -747,6 +771,7 @@ export const {
   rosterReceived,
   rosterRequested,
   rosterHydrationFinished,
+  rosterMediaRequested,
   setSelectedStudentMembershipId,
   setStudentsScope,
   studentDetailRequested,
@@ -867,6 +892,28 @@ async function hydrateStudentRosterMedia(
   }
 }
 
+// Loads roster photos (avatars, ID photos) once per roster load. Called by
+// the screens that show them; a no-op until the roster itself has loaded.
+export function ensureStudentRosterMedia(args: LoadStudentRosterArgs) {
+  return (dispatch: AppDispatch, getState: () => RootState) => {
+    const state = getState().students;
+    if (
+      !isCurrentScope(getState(), args.scopeKey) ||
+      !state.schoolStudentRosterReady ||
+      state.schoolStudentRosterMediaRequested
+    ) {
+      return;
+    }
+    dispatch(rosterMediaRequested());
+    void hydrateStudentRosterMedia(
+      dispatch,
+      getState,
+      args,
+      state.schoolStudentRoster,
+    );
+  };
+}
+
 export function loadStudentRoster(args: LoadStudentRosterArgs) {
   return async (dispatch: AppDispatch, getState: () => RootState) => {
     const state = getState().students;
@@ -905,7 +952,8 @@ export function loadStudentRoster(args: LoadStudentRosterArgs) {
         }),
       );
 
-      void hydrateStudentRosterMedia(dispatch, getState, args, roster);
+      // Photos load separately via ensureStudentRosterMedia, only on screens
+      // that show them.
       void dispatch(loadStudentSharedData(args));
     } catch (error) {
       if (!isCurrentScope(getState(), args.scopeKey)) {
