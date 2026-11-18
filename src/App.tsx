@@ -7607,6 +7607,7 @@ function App() {
             studentRoster={sortedSchoolStudentRoster}
             studentProfilePhotoUrls={schoolStudentProfilePhotoUrls}
             onOpenStudent={handleOpenStudentFromDashboard}
+            onOpenStudentDevice={handleOpenStudentDeviceFromDashboard}
             onOpenReportCountChange={setOpenParkingReportCount}
           />
         );

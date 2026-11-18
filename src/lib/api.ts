@@ -1271,6 +1271,18 @@ interface ApiErrorPayload {
   retry_after_seconds?: number;
 }
 
+// A failed API response, with its HTTP status for callers that need to tell
+// an expected denial from a real failure.
+export class ApiRequestError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+  }
+}
+
 export class DashboardLoginLockedError extends Error {
   readonly blockedUntil: string;
   readonly retryAfterSeconds?: number;
@@ -1544,7 +1556,7 @@ async function request<T>(
     if (errorPayload.blocked_until) {
       throw new DashboardLoginLockedError(errorPayload);
     }
-    throw new Error(errorPayload.message);
+    throw new ApiRequestError(errorPayload.message, response.status);
   }
 
   if (authRequired && service !== "nebula" && method !== "GET") {
@@ -3855,6 +3867,12 @@ export interface StudentParkingIncidentReport {
   assigned_by_user_uuid?: string | null;
   assigned_at?: number | null;
   assignment_note?: string;
+  // "tag" while the responsible student is an unconfirmed match from the
+  // scanned identification tag (the student can't see the report yet);
+  // "admin" or unset once an admin assigned or confirmed them.
+  assignment_source?: "tag" | "admin" | string | null;
+  // The device identification tag the reporter scanned, if any.
+  scanned_pass_uuid?: string | null;
   flagged_for_enforcement?: boolean;
   flag_priority?: "normal" | "urgent" | string;
   flag_note?: string;
@@ -3874,6 +3892,35 @@ export interface StudentParkingIncidentReport {
   created_at: number;
   updated_at: number;
   media_assets?: UserMediaAsset[];
+}
+
+// Another report or violation at the school that shares this report's
+// student, vehicle, or scanned tag.
+export interface ParkingIncidentRelatedRecord {
+  uuid: string;
+  type: string;
+  status: string;
+  created_at: number;
+  matched_on: Array<"student" | "vehicle" | "tag">;
+}
+
+export interface ParkingIncidentScannedPass {
+  pass_uuid: string;
+  school_id: string;
+  status: ParkingPassStatus;
+  registered_device_uuid?: string | null;
+  user_uuid?: string | null;
+  deactivated_reason?: ParkingPassDeactivatedReason | null;
+}
+
+export interface ParkingIncidentReportContext {
+  report_uuid: string;
+  scanned_pass?: ParkingIncidentScannedPass | null;
+  // The assigned student and vehicle, else the scanned tag's.
+  student_user_uuid?: string | null;
+  registered_device_uuid?: string | null;
+  related_reports: ParkingIncidentRelatedRecord[];
+  related_violations: ParkingIncidentRelatedRecord[];
 }
 
 export interface StudentParkingIncidentReportUpdateInput {
@@ -4136,26 +4183,73 @@ export async function fetchSchoolParkingViolations(
     includeInactive?: boolean;
   } = {},
 ): Promise<StudentParkingViolation[]> {
-  const search = new URLSearchParams({
-    managed_app_id: managedAppId,
-  });
-  if (options.userUUID?.trim()) {
-    search.set("user_uuid", options.userUUID.trim());
-  }
-  if (options.membershipUUID?.trim()) {
-    search.set("membership_uuid", options.membershipUUID.trim());
-  }
-  if (options.includeInactive) {
-    search.set("include_inactive", "true");
-  }
-
-  return request<StudentParkingViolation[]>(
-    "kcaProxy",
-    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violations?${search.toString()}`,
-    {
-      appIdHeader: currentSession?.authAppId ?? managedAppId,
-    },
+  // Like parking reports, violations can live under a compatibility app ID
+  // (a violation issued from such a report keeps the report's app), so
+  // query every candidate and merge.
+  const appCandidates = buildManagedAppCandidates(managedAppId);
+  const appPriority = new Map(
+    appCandidates.map((value, index) => [value, index] as const),
   );
+  const buildSearch = (appId: string) => {
+    const search = new URLSearchParams({
+      managed_app_id: appId,
+    });
+    if (options.userUUID?.trim()) {
+      search.set("user_uuid", options.userUUID.trim());
+    }
+    if (options.membershipUUID?.trim()) {
+      search.set("membership_uuid", options.membershipUUID.trim());
+    }
+    if (options.includeInactive) {
+      search.set("include_inactive", "true");
+    }
+    return search;
+  };
+
+  const results = await Promise.allSettled(
+    appCandidates.map((appId, index) =>
+      request<StudentParkingViolation[]>(
+        "kcaProxy",
+        `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violations?${buildSearch(appId).toString()}`,
+        {
+          appIdHeader: currentSession?.authAppId ?? appId,
+          // The managed app's request keeps the usual session recovery (an
+          // expired token is refreshed). Compatibility candidates are
+          // expected not to match, and a 403 from one isn't a sign the
+          // session is stale.
+          retryOnUnauthorized: index === 0,
+        },
+      ),
+    ),
+  );
+  // A candidate app the school doesn't use answers 403 or 404; that's
+  // expected. Any other failure (including the managed app's own request
+  // failing at all) means the list would be incomplete, so it's thrown
+  // rather than returned as a short list.
+  results.forEach((result, index) => {
+    if (result.status !== "rejected") {
+      return;
+    }
+    const status =
+      result.reason instanceof ApiRequestError ? result.reason.status : 0;
+    if (index === 0 || (status !== 403 && status !== 404)) {
+      throw result.reason;
+    }
+  });
+  const merged = results.flatMap((result) =>
+    result.status === "fulfilled" ? (result.value ?? []) : [],
+  );
+  return Array.from(
+    new Map(
+      merged
+        .sort(
+          (left, right) =>
+            (appPriority.get(right.app_id) ?? appPriority.size) -
+            (appPriority.get(left.app_id) ?? appPriority.size),
+        )
+        .map((violation) => [violation.violation_uuid, violation]),
+    ).values(),
+  ).sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0));
 }
 
 export async function fetchSchoolParkingIncidentReports(
@@ -4244,6 +4338,47 @@ export async function fetchSchoolParkingIncidentReport(
       appIdHeader: currentSession?.authAppId ?? managedAppId,
     },
   );
+}
+
+// Finds one report by UUID under any of the managed app's IDs (some reports
+// live under a compatibility app ID, as the list call accounts for).
+export async function findSchoolParkingIncidentReport(
+  managedAppId: string,
+  schoolId: string,
+  reportUUID: string,
+): Promise<StudentParkingIncidentReport> {
+  let lastError: unknown = new Error("Parking report not found");
+  for (const appId of buildManagedAppCandidates(managedAppId)) {
+    try {
+      return await fetchSchoolParkingIncidentReport(appId, schoolId, reportUUID);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+export async function fetchSchoolParkingIncidentReportContext(
+  managedAppId: string,
+  schoolId: string,
+  reportUUID: string,
+): Promise<ParkingIncidentReportContext> {
+  const search = new URLSearchParams({
+    managed_app_id: managedAppId,
+  });
+
+  const context = await request<ParkingIncidentReportContext>(
+    "kcaProxy",
+    `/api/v1/admin/school/${encodeURIComponent(schoolId)}/parking-incident-reports/${encodeURIComponent(reportUUID)}/context?${search.toString()}`,
+    {
+      appIdHeader: currentSession?.authAppId ?? managedAppId,
+    },
+  );
+  return {
+    ...context,
+    related_reports: context.related_reports ?? [],
+    related_violations: context.related_violations ?? [],
+  };
 }
 
 export async function updateSchoolParkingIncidentReport(
