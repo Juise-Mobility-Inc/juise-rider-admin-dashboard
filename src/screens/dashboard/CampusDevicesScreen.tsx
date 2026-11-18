@@ -24,6 +24,16 @@ import {
   type RegisteredDeviceReviewEntry,
   type StudentParkingViolation,
 } from "../../lib/api";
+import {
+  DataRow,
+  DataTable,
+  StatusBadge,
+  TableCard,
+  TableMessageRow,
+  TableSearch,
+  TableToolbar,
+  type StatusTone,
+} from "../../components/table/DataTable";
 
 const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 const TILE_ATTR =
@@ -88,16 +98,16 @@ function getDeviceStatusLabel(entry: RegisteredDeviceReviewEntry) {
   return "Active";
 }
 
-function getDeviceStatusClass(label: string) {
+function getDeviceStatusTone(label: string): StatusTone {
   switch (label) {
     case "Declined":
-      return "reg-status reg-status-declined";
+      return "danger";
     case "Pending":
-      return "reg-status reg-status-pending";
+      return "warning";
     case "Inactive":
-      return "reg-status reg-status-inactive";
+      return "neutral";
     default:
-      return "reg-status reg-status-approved";
+      return "success";
   }
 }
 
@@ -769,9 +779,9 @@ export function CampusDevicesScreen({
                   </p>
                 )}
                 <div className="cd-detail-badges">
-                  <span className={getDeviceStatusClass(statusLabel)}>
+                  <StatusBadge tone={getDeviceStatusTone(statusLabel)}>
                     {statusLabel}
-                  </span>
+                  </StatusBadge>
                   {selectedEntry.device.powertrain_type && (
                     <span className="cd-tag">
                       {capitalize(selectedEntry.device.powertrain_type)}
@@ -1244,7 +1254,7 @@ export function CampusDevicesScreen({
               </span>
             </div>
           </div>
-          <div className="reg-table-tools">
+          <TableToolbar>
             <div className="segmented-control">
               {STATUS_TABS.map((tab) => (
                 <button
@@ -1257,35 +1267,23 @@ export function CampusDevicesScreen({
                 </button>
               ))}
             </div>
-            <input
-              type="search"
-              className="reg-table-search"
+            <TableSearch
               placeholder="Search by student, device, serial..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-          </div>
+          </TableToolbar>
         </div>
 
-        {loadState === "error" ? (
-          <p className="cd-empty">{errorMsg}</p>
-        ) : loadState === "loading" ? (
-          <p className="cd-empty">Loading devices...</p>
-        ) : (
-          <div className="management-table-card reg-table-card">
-            <div className="reg-table-summary">
-              <strong>{filteredEntries.length.toLocaleString()} devices</strong>
-              <span>
-                {statusFilter !== "all"
-                  ? `${STATUS_TABS.find((tab) => tab.key === statusFilter)?.label ?? "Filtered"} filter`
-                  : "All statuses"}
-              </span>
-            </div>
-            {filteredEntries.length === 0 ? (
-              <p className="cd-empty">No devices match this filter.</p>
-            ) : (
-              <div className="management-table-scroll">
-                <table className="management-table reg-review-table">
+          <TableCard
+            title={`${filteredEntries.length.toLocaleString()} devices`}
+            meta={
+              statusFilter !== "all"
+                ? `${STATUS_TABS.find((tab) => tab.key === statusFilter)?.label ?? "Filtered"} filter`
+                : "All statuses"
+            }
+          >
+                <DataTable minWidth={960} aria-label="Campus devices">
                   <thead>
                     <tr>
                       <th>Device</th>
@@ -1325,18 +1323,7 @@ export function CampusDevicesScreen({
                       const liveBeacon = beaconLocationByDevice.get(rowUUID);
 
                       return (
-                        <tr
-                          key={rowUUID}
-                          className="reg-review-row"
-                          tabIndex={0}
-                          onClick={() => openDetail(rowUUID)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              openDetail(rowUUID);
-                            }
-                          }}
-                        >
+                        <DataRow key={rowUUID} onOpen={() => openDetail(rowUUID)}>
                           <td>
                             <div className="reg-table-identity">
                               {devicePhotoUrl ? (
@@ -1398,9 +1385,9 @@ export function CampusDevicesScreen({
                             <span>{capitalize(entry.device.color) || "-"}</span>
                           </td>
                           <td>
-                            <span className={getDeviceStatusClass(statusLabel)}>
+                            <StatusBadge tone={getDeviceStatusTone(statusLabel)}>
                               {statusLabel}
-                            </span>
+                            </StatusBadge>
                           </td>
                           <td>
                             {entry.device.parking_pass ? (
@@ -1435,15 +1422,29 @@ export function CampusDevicesScreen({
                             </strong>
                             <span>Open details</span>
                           </td>
-                        </tr>
+                        </DataRow>
                       );
                     })}
+                    {loadState === "loading" ? (
+                      <TableMessageRow colSpan={7} tone="loading">
+                        Loading devices…
+                      </TableMessageRow>
+                    ) : null}
+                    {loadState === "error" ? (
+                      <TableMessageRow colSpan={7} tone="error">
+                        {errorMsg}
+                      </TableMessageRow>
+                    ) : null}
+                    {loadState !== "loading" &&
+                    loadState !== "error" &&
+                    filteredEntries.length === 0 ? (
+                      <TableMessageRow colSpan={7}>
+                        No devices match this filter.
+                      </TableMessageRow>
+                    ) : null}
                   </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
+                </DataTable>
+          </TableCard>
       </div>
     </div>
   );

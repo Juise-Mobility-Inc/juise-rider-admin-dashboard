@@ -20,6 +20,15 @@ import {
   juiseColors,
   mixHexColors,
 } from "../../lib/colors";
+import {
+  DataRow,
+  DataTable,
+  StatusBadge as TableStatusBadge,
+  TableCard,
+  TableMessageRow,
+  TableSearch,
+  type StatusTone,
+} from "../../components/table/DataTable";
 
 type Props = {
   activeSchoolId: string;
@@ -74,6 +83,14 @@ function getReservationStatusBaseColor(status: string): string {
     return "#b33a3a";
   }
   return defaultSchoolColorScheme.secondary;
+}
+
+function reservationStatusTone(status: string): StatusTone {
+  const normalized = status.toLowerCase();
+  if (normalized === "pending") return "warning";
+  if (normalized === "approved") return "success";
+  if (normalized === "denied") return "danger";
+  return "neutral";
 }
 
 function StatusBadge({
@@ -524,9 +541,7 @@ export function ReservationsScreen(props: Props) {
               </h2>
             </div>
             <div className="res-table-view-actions">
-              <input
-                type="search"
-                className="res-table-search"
+              <TableSearch
                 placeholder="Search by pack, spot, term, status..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -553,23 +568,16 @@ export function ReservationsScreen(props: Props) {
             <p>All caught up</p>
             <p className="muted-text">No pending reservations right now.</p>
           </div>
-        ) : filteredReservations.length === 0 ? (
-          <p className="res-empty-text">No requests match this search.</p>
         ) : (
-          <div className="management-table-card reg-table-card">
-            <div className="reg-table-summary">
-              <strong>
-                {filteredReservations.length.toLocaleString()} reservation
-                {filteredReservations.length !== 1 ? "s" : ""}
-              </strong>
-              <span>
-                {search.trim()
-                  ? `Filtered from ${reservations.length.toLocaleString()} total`
-                  : `${reservations.filter((r) => r.status?.toLowerCase() === "pending").length} pending`}
-              </span>
-            </div>
-            <div className="management-table-scroll">
-              <table className="management-table reg-review-table">
+          <TableCard
+            title={`${filteredReservations.length.toLocaleString()} reservation${filteredReservations.length !== 1 ? "s" : ""}`}
+            meta={
+              search.trim()
+                ? `Filtered from ${reservations.length.toLocaleString()} total`
+                : `${reservations.filter((r) => r.status?.toLowerCase() === "pending").length} pending`
+            }
+          >
+              <DataTable minWidth={760} aria-label="Reservation requests">
                 <thead>
                   <tr>
                     <th>Pack / Spot</th>
@@ -585,17 +593,9 @@ export function ReservationsScreen(props: Props) {
                     const spotLabel =
                       r.spot_number != null ? `Spot ${r.spot_number}` : "TBD";
                     return (
-                      <tr
+                      <DataRow
                         key={r.reservation_uuid}
-                        className="reg-review-row"
-                        tabIndex={0}
-                        onClick={() => openReservation(r.reservation_uuid)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            openReservation(r.reservation_uuid);
-                          }
-                        }}
+                        onOpen={() => openReservation(r.reservation_uuid)}
                       >
                         <td>
                           <div className="reg-table-identity">
@@ -620,22 +620,29 @@ export function ReservationsScreen(props: Props) {
                           <strong>{r.reservation_kind || "—"}</strong>
                         </td>
                         <td>
-                          <StatusBadge
-                            status={r.status}
-                            backgroundColor={backgroundColor}
-                            preferredTextColor={preferredTextColor}
-                          />
+                          <TableStatusBadge tone={reservationStatusTone(r.status)}>
+                            {r.status || "Unknown"}
+                          </TableStatusBadge>
                         </td>
                         <td>
                           <strong>{formatUnixTimestamp(r.updated)}</strong>
                         </td>
-                      </tr>
+                      </DataRow>
                     );
                   })}
+                  {filteredReservations.length === 0 && reservationsBusy ? (
+                    <TableMessageRow colSpan={5} tone="loading">
+                      Loading reservations…
+                    </TableMessageRow>
+                  ) : null}
+                  {filteredReservations.length === 0 && !reservationsBusy ? (
+                    <TableMessageRow colSpan={5}>
+                      No requests match this search.
+                    </TableMessageRow>
+                  ) : null}
                 </tbody>
-              </table>
-            </div>
-          </div>
+              </DataTable>
+          </TableCard>
         )}
       </div>
     </div>

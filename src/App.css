@@ -2675,20 +2675,13 @@
         overflow-x: auto;
 }
 
-.challenge-table-row-selected {
-        background: rgba(39, 204, 94, 0.1);
-}
-
-.challenge-table-row-selected:hover {
-        background: rgba(39, 204, 94, 0.14);
-}
-
 .challenge-table-group-row {
         cursor: default;
 }
 
+.dt .challenge-table-group-label,
 .challenge-table-group-label {
-        padding: 10px 12px 6px;
+        padding: 10px 14px 6px;
         font-size: 0.75rem;
         font-weight: 700;
         text-transform: uppercase;
@@ -2702,17 +2695,17 @@
         white-space: nowrap;
 }
 
-.challenge-table-action-cell .primary-button {
-        padding: 9px 20px;
-        font-size: 0.92rem;
-        font-weight: 700;
-        letter-spacing: 0.01em;
-}
-
 .challenge-table-view-arrow {
+        display: inline-block;
         color: #6b7280;
         font-size: 16px;
         transition: color 0.12s, transform 0.12s;
+}
+
+.dt-row-clickable:hover .challenge-table-view-arrow,
+.dt-row-clickable:focus-visible .challenge-table-view-arrow {
+        color: var(--text-strong);
+        transform: translateX(2px);
 }
 
 /* Compact header: thumbnail + title/chips + actions in one row */
@@ -3788,12 +3781,6 @@
         margin-bottom: 4px;
 }
 
-.res-empty-text {
-        padding: 32px 20px;
-        text-align: center;
-        color: var(--muted);
-}
-
 /* ── Root wrapper for table/detail toggle ── */
 .res-root {
         display: flex;
@@ -3836,20 +3823,6 @@
         display: flex;
         align-items: center;
         gap: 10px;
-}
-
-.res-table-search {
-        min-width: 260px;
-        padding: 9px 14px;
-        border-radius: 10px;
-        border: 1px solid var(--panel-border);
-        font-size: 13px;
-        background: #fff;
-}
-
-.res-table-search:focus {
-        outline: none;
-        border-color: rgba(246, 174, 45, 0.7);
 }
 
 /* ── Detail panel ── */
@@ -10678,33 +10651,6 @@
         font-size: 0.82rem;
 }
 
-.reg-review-table {
-        min-width: 960px;
-}
-
-.reg-review-row {
-        cursor: pointer;
-}
-
-.reg-review-row:hover td,
-.reg-review-row:focus td {
-        background: rgba(44, 124, 92, 0.08);
-}
-
-.reg-review-row:focus {
-        outline: none;
-}
-
-.reg-review-row:focus-visible {
-        outline: 2px solid var(--brand-primary, #27cc5e);
-        outline-offset: -2px;
-}
-
-.reg-review-table .reg-status {
-        display: inline-flex;
-        width: fit-content;
-}
-
 .reg-table-identity {
         display: flex;
         align-items: center;
@@ -10986,11 +10932,6 @@
 .reg-status-declined {
         background: rgba(239, 68, 68, 0.12);
         color: #b91c1c;
-}
-
-.reg-status-inactive {
-        background: rgba(148, 163, 184, 0.18);
-        color: #475569;
 }
 
 /* chips (shared, used by other screens) */
@@ -15198,16 +15139,6 @@
   color: #15803d;
 }
 
-.parking-pass-status-unassigned {
-  background: rgba(148, 163, 184, 0.18);
-  color: #475569;
-}
-
-.parking-pass-status-inactive {
-  background: rgba(239, 68, 68, 0.12);
-  color: #b91c1c;
-}
-
 .parking-pass-actions {
   display: flex;
   flex-wrap: wrap;
@@ -15474,72 +15405,12 @@
   background: rgba(39, 204, 94, 0.08);
 }
 
-.parking-pass-table-card {
-  gap: 0;
-  overflow: hidden;
-  padding: 0;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 14px 34px rgba(17, 45, 78, 0.07);
-}
-
-.parking-pass-table-card .reg-table-summary {
-  min-height: 58px;
-  padding: 13px 18px;
-  background: rgba(255, 255, 255, 0.7);
-}
-
-.parking-pass-table-card .reg-table-summary > div {
-  display: grid;
-  gap: 2px;
-}
-
-.parking-pass-table-card .reg-table-summary strong {
-  font-size: 0.98rem;
-}
-
-.parking-pass-table-card .reg-table-summary span {
-  font-size: 0.78rem;
-}
-
-.parking-pass-table-card .management-table-scroll {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.parking-pass-table-card .reg-review-table {
-  min-width: 820px;
-  table-layout: auto;
-}
-
-.parking-pass-table-card .management-table th,
-.parking-pass-table-card .management-table td {
-  padding: 14px 13px;
-  vertical-align: middle;
-  line-height: 1.4;
-}
-
-.parking-pass-table-card .management-table th {
-  white-space: nowrap;
-  background: rgba(17, 45, 78, 0.045);
-}
-
-.parking-pass-table-card .reg-review-row:nth-child(even) td {
-  background: rgba(17, 45, 78, 0.018);
-}
-
-.parking-pass-table-card .reg-review-row:hover td,
-.parking-pass-table-card .reg-review-row:focus td {
-  background: rgba(39, 204, 94, 0.09);
-}
-
-.parking-pass-table-card .parking-pass-check {
+.parking-pass-table .parking-pass-check {
   width: 42px;
   text-align: center;
 }
 
-.parking-pass-table-card .parking-pass-check input {
+.parking-pass-table .parking-pass-check input {
   width: 17px;
   height: 17px;
   cursor: pointer;
@@ -15549,17 +15420,17 @@
   min-width: 130px;
 }
 
-.parking-pass-table-card .reg-table-identity {
+.parking-pass-table .reg-table-identity {
   min-width: 150px;
   gap: 10px;
 }
 
-.parking-pass-table-card .reg-table-identity > div:last-child {
+.parking-pass-table .reg-table-identity > div:last-child {
   min-width: 0;
 }
 
-.parking-pass-table-card .reg-table-identity strong,
-.parking-pass-table-card .reg-table-identity .link-button {
+.parking-pass-table .reg-table-identity strong,
+.parking-pass-table .reg-table-identity .link-button {
   display: block;
   max-width: 240px;
   overflow: hidden;
@@ -15568,7 +15439,7 @@
   white-space: nowrap;
 }
 
-.parking-pass-table-card .reg-table-identity span {
+.parking-pass-table .reg-table-identity span {
   display: block;
   max-width: 250px;
   margin-top: 3px;
@@ -15579,7 +15450,7 @@
   white-space: nowrap;
 }
 
-.parking-pass-table-card .parking-pass-activity-cell {
+.parking-pass-table .parking-pass-activity-cell {
   min-width: 170px;
   color: var(--muted-strong);
   font-size: 0.8rem;
@@ -15796,17 +15667,6 @@
   .parking-pass-table-tools .reg-table-search {
     flex-basis: 100%;
     width: 100%;
-  }
-
-  .parking-pass-table-card .reg-table-summary {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 4px;
-    padding: 12px 14px;
-  }
-
-  .parking-pass-table-card .reg-review-table {
-    min-width: 720px;
   }
 
   .parking-pass-detail-screen .parking-pass-details {
@@ -16264,4 +16124,21 @@
         .dt-search {
                 flex-basis: 100%;
         }
+}
+
+/* Photo + two-line identity cells inside shared tables. */
+.dt .reg-table-identity strong,
+.dt .reg-table-identity > div > span {
+        display: block;
+}
+
+.dt .reg-table-identity strong {
+        color: var(--text-strong);
+        margin-bottom: 2px;
+}
+
+.dt .reg-table-identity > div > span {
+        color: var(--muted);
+        font-size: 0.8rem;
+        line-height: 1.35;
 }

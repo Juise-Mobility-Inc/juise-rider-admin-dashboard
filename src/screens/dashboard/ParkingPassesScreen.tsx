@@ -15,6 +15,16 @@ import {
 import { downloadCsv, sanitizeCsvFilename } from "../../lib/csv";
 import { parkingPassEventLabels, shortPassId } from "../../lib/parkingPasses";
 import { useDetailParamSync } from "../../lib/useDetailParamSync";
+import {
+  DataRow,
+  DataTable,
+  StatusBadge,
+  TableCard,
+  TableMessageRow,
+  TableSearch,
+  TableToolbar,
+  type StatusTone,
+} from "../../components/table/DataTable";
 
 type Props = {
   activeSchoolId: string;
@@ -126,6 +136,12 @@ function passActivity(pass: SchoolParkingPass): string {
     return `Last activated · ${formatTimestamp(pass.activated_at)}`;
   }
   return "No activity yet";
+}
+
+function passStatusTone(status: string): StatusTone {
+  if (status === "active") return "success";
+  if (status === "unassigned") return "info";
+  return "neutral";
 }
 
 export function ParkingPassesScreen({
@@ -390,9 +406,9 @@ export function ParkingPassesScreen({
               <div>
                 <dt>Status</dt>
                 <dd>
-                  <span className={`parking-pass-status parking-pass-status-${pass.status}`}>
+                  <StatusBadge tone={passStatusTone(pass.status)}>
                     {statusLabels[pass.status]}
-                  </span>
+                  </StatusBadge>
                   {pass.deactivated_reason ? ` · ${reasonLabels[pass.deactivated_reason] ?? pass.deactivated_reason}` : ""}
                 </dd>
               </div>
@@ -474,9 +490,8 @@ export function ParkingPassesScreen({
                 </div>
                 <span>{shownDetail?.events.length ?? 0} events</span>
               </div>
-              <div className="management-table-card">
-                <div className="management-table-scroll">
-                  <table className="management-table">
+              <TableCard>
+                  <DataTable minWidth={560} aria-label="Tag history">
                     <thead>
                       <tr>
                         <th>When</th>
@@ -492,10 +507,12 @@ export function ParkingPassesScreen({
                           <td>{event.note || "—"}</td>
                         </tr>
                       ))}
+                      {(shownDetail?.events ?? []).length === 0 ? (
+                        <TableMessageRow colSpan={3}>No history yet.</TableMessageRow>
+                      ) : null}
                     </tbody>
-                  </table>
-                </div>
-              </div>
+                  </DataTable>
+              </TableCard>
             </div>
           </>
         )}
@@ -524,7 +541,7 @@ export function ParkingPassesScreen({
         </div>
       </div>
 
-      <div className="reg-table-tools parking-pass-table-tools">
+      <TableToolbar className="parking-pass-table-tools">
         <div className="segmented-control">
           {statusFilters.map((option) => (
             <button
@@ -538,13 +555,12 @@ export function ParkingPassesScreen({
             </button>
           ))}
         </div>
-        <input
-          className="reg-table-search"
+        <TableSearch
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search tag, student, vehicle, label..."
         />
-      </div>
+      </TableToolbar>
 
       {allTags.length > 0 ? (
         <div className="parking-pass-tag-filters">
@@ -601,22 +617,18 @@ export function ParkingPassesScreen({
 
       {error ? <p className="error-text">{error}</p> : null}
       {success ? <p className="success-text">{success}</p> : null}
-      {busy ? <p className="muted-text">Loading parking passes...</p> : null}
-
-      <div className="management-table-card reg-table-card parking-pass-table-card">
-        <div className="reg-table-summary">
-          <strong>{visiblePasses.length.toLocaleString()} tags</strong>
-          <span>
-            {[
-              statusFilter ? statusLabels[statusFilter] : "All statuses",
-              tagFilter ? `tag "${tagFilter}"` : "",
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </span>
-        </div>
-        <div className="management-table-scroll">
-          <table className="management-table reg-review-table">
+      <TableCard
+        className="parking-pass-table"
+        title={`${visiblePasses.length.toLocaleString()} tags`}
+        meta={[
+          busy && visiblePasses.length > 0 ? "Refreshing…" : "",
+          statusFilter ? statusLabels[statusFilter] : "All statuses",
+          tagFilter ? `tag "${tagFilter}"` : "",
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+      >
+          <DataTable minWidth={820} aria-label="Device identification tags">
             <thead>
               <tr>
                 <th className="parking-pass-check">
@@ -636,17 +648,10 @@ export function ParkingPassesScreen({
             </thead>
             <tbody>
               {visiblePasses.map((pass) => (
-                <tr
+                <DataRow
                   key={pass.pass_uuid}
-                  className="reg-review-row"
-                  tabIndex={0}
-                  onClick={() => setSelectedUUID(pass.pass_uuid)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      setSelectedUUID(pass.pass_uuid);
-                    }
-                  }}
+                  selected={checked.has(pass.pass_uuid)}
+                  onOpen={() => setSelectedUUID(pass.pass_uuid)}
                 >
                   <td className="parking-pass-check" onClick={(event) => event.stopPropagation()}>
                     <input
@@ -660,9 +665,9 @@ export function ParkingPassesScreen({
                     <strong>{shortPassId(pass.pass_uuid)}</strong>
                   </td>
                   <td>
-                    <span className={`parking-pass-status parking-pass-status-${pass.status}`}>
+                    <StatusBadge tone={passStatusTone(pass.status)}>
                       {statusLabels[pass.status]}
-                    </span>
+                    </StatusBadge>
                   </td>
                   <td>
                     {pass.user_uuid ? (
@@ -722,23 +727,23 @@ export function ParkingPassesScreen({
                   <td className="parking-pass-activity-cell">
                     <span>{passActivity(pass)}</span>
                   </td>
-                </tr>
+                </DataRow>
               ))}
+              {visiblePasses.length === 0 && busy ? (
+                <TableMessageRow colSpan={6} tone="loading">
+                  Loading tags…
+                </TableMessageRow>
+              ) : null}
               {visiblePasses.length === 0 && !busy ? (
-                <tr>
-                  <td colSpan={6}>
-                    <span>
-                      {passes.length === 0
-                        ? "No device identification tags have been printed for this school yet."
-                        : "No device identification tags match these filters."}
-                    </span>
-                  </td>
-                </tr>
+                <TableMessageRow colSpan={6}>
+                  {passes.length === 0
+                    ? "No device identification tags have been printed for this school yet."
+                    : "No device identification tags match these filters."}
+                </TableMessageRow>
               ) : null}
             </tbody>
-          </table>
-        </div>
-      </div>
+          </DataTable>
+      </TableCard>
     </section>
   );
 }
