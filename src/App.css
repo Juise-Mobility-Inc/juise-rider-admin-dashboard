@@ -19059,6 +19059,131 @@
         color: #fff;
 }
 
+/* ── Audit Log: filters, chips, links ── */
+.audit-filter-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin: 10px 0;
+}
+
+.audit-filter-bar select,
+.audit-filter-bar input[type="date"],
+.audit-advanced select,
+.audit-advanced input,
+.audit-page-size select {
+        min-height: 36px;
+        padding: 6px 10px;
+        border: 1px solid #d4dae0;
+        border-radius: 8px;
+        background: #fff;
+        color: #1f2a33;
+        font: inherit;
+        font-size: 0.86rem;
+}
+
+.audit-search {
+        flex: 1 1 260px;
+        min-width: 200px;
+}
+
+.audit-date-field,
+.audit-page-size {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: #5c6670;
+}
+
+.audit-advanced {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 10px;
+        margin-bottom: 10px;
+        padding: 12px;
+        border: 1px solid #d4dae0;
+        border-radius: 10px;
+        background: #f8fafb;
+}
+
+.audit-chips {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 10px;
+}
+
+.audit-chip {
+        padding: 4px 10px;
+        border: 1px solid #27cc5e;
+        border-radius: 999px;
+        background: rgba(39, 204, 94, 0.08);
+        color: #178a3e;
+        font: inherit;
+        font-size: 0.8rem;
+        font-weight: 700;
+        cursor: pointer;
+}
+
+.audit-link,
+.audit-sort {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--accent, #0b6f8f);
+        font: inherit;
+        font-weight: 700;
+        text-align: left;
+        cursor: pointer;
+}
+
+.audit-link:hover,
+.audit-sort:hover {
+        text-decoration: underline;
+}
+
+.audit-sort {
+        color: inherit;
+        white-space: nowrap;
+}
+
+.audit-event-label {
+        display: block;
+        font-weight: 700;
+        color: var(--text-strong, #112d4e);
+}
+
+.audit-actor-cell small,
+.audit-source-cell small,
+.audit-role {
+        display: block;
+        color: var(--muted, #5c6670);
+        font-size: 0.75rem;
+}
+
+.audit-related {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin: 12px 0;
+        font-size: 0.86rem;
+        color: #5c6670;
+}
+
+.audit-metadata-label {
+        margin: 12px 0 4px;
+        font-size: 0.75rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #5c6670;
+}
+
 /* ── Parking report detail: evidence and management on one screen ── */
 .prd {
         display: grid;

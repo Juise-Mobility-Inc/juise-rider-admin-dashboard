@@ -7501,7 +7501,12 @@ function App() {
           />
         );
       case "auditLog":
-        return <AuditLogScreen appId={authAppId} />;
+        return (
+          <AuditLogScreen
+            managedAppId={context.managedAppId}
+            activeSchoolId={activeSchoolId}
+          />
+        );
       case "studentLeaderboard":
         return (
           <StudentLeaderboardScreen
