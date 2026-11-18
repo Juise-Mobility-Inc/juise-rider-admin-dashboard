@@ -1,6 +1,10 @@
 name: Deploy Production to Google Cloud
 
 on:
+  # A merge to prod deploys production; a manual run is still available.
+  push:
+    branches:
+      - prod
   workflow_dispatch:
     inputs:
       change_reference:
@@ -46,13 +50,13 @@ jobs:
       - uses: actions/checkout@v5
       - name: Verify production deployment context
         env:
-          CHANGE_REFERENCE: ${{ inputs.change_reference }}
+          CHANGE_REFERENCE: ${{ inputs.change_reference || format('{0}/{1}/commit/{2}', github.server_url, github.repository, github.sha) }}
         run: |
           set -euo pipefail
           test -n "${CHANGE_REFERENCE}"
           test "${GITHUB_REPOSITORY_OWNER}" = "Juise-Mobility-Inc"
           test "${GITHUB_REF}" = "refs/heads/prod"
-          test "${GITHUB_EVENT_NAME}" = "workflow_dispatch"
+          [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" || "${GITHUB_EVENT_NAME}" == "push" ]]
       - uses: google-github-actions/auth@v3
         with:
           project_id: ${{ env.GCP_PROJECT_ID }}
@@ -73,7 +77,7 @@ jobs:
         run: gcloud run services describe "${SERVICE_NAME}" --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" >/dev/null
       - name: Deploy and verify production
         env:
-          CHANGE_REFERENCE: ${{ inputs.change_reference }}
+          CHANGE_REFERENCE: ${{ inputs.change_reference || format('{0}/{1}/commit/{2}', github.server_url, github.repository, github.sha) }}
         run: |
           set -euo pipefail
           gcloud run services update "${SERVICE_NAME}" --image "${SERVICE_DIGEST_REF}" --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" --quiet
