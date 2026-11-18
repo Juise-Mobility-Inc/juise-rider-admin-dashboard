@@ -425,6 +425,9 @@ export function ParkingReportsScreen({
         },
       );
       setReports(nextReports);
+      // Reports opened from history may be stale now; drop them. An open one
+      // outside the new list is fetched fresh by the lookup effect.
+      setHistoryCache({ scope: "", reports: {} });
       if (isUnfilteredReportView) {
         onOpenReportCountChange?.(countOpenReports(nextReports));
       }

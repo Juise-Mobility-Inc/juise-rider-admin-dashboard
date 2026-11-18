@@ -4113,15 +4113,17 @@ export async function fetchSchoolParkingViolations(
   };
 
   const results = await Promise.allSettled(
-    appCandidates.map((appId) =>
+    appCandidates.map((appId, index) =>
       request<StudentParkingViolation[]>(
         "kcaProxy",
         `/api/v1/admin/school/${encodeURIComponent(schoolId)}/violations?${buildSearch(appId).toString()}`,
         {
           appIdHeader: currentSession?.authAppId ?? appId,
-          // Some candidates are expected not to match; a 403 from one isn't
-          // a sign the session is stale.
-          retryOnUnauthorized: false,
+          // The managed app's request keeps the usual session recovery (an
+          // expired token is refreshed). Compatibility candidates are
+          // expected not to match, and a 403 from one isn't a sign the
+          // session is stale.
+          retryOnUnauthorized: index === 0,
         },
       ),
     ),
