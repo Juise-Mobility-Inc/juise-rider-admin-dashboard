@@ -256,6 +256,10 @@ export function ParkingReportsScreen({
     error: string;
   }>({ key: "", value: null, error: "" });
   const [historyOpen, setHistoryOpen] = useState(false);
+  // A report opened from "Seen before" that isn't in the table's results.
+  // Kept apart from `reports` so it never shows up in a filtered table.
+  const [historyReport, setHistoryReport] =
+    useState<StudentParkingIncidentReport | null>(null);
   const [expandedPhotoUrl, setExpandedPhotoUrl] = useState("");
 
   useDetailParamSync(
@@ -326,8 +330,9 @@ export function ParkingReportsScreen({
 
   const selectedReport = useMemo(
     () =>
-      reports.find((report) => report.report_uuid === selectedReportId) ?? null,
-    [reports, selectedReportId],
+      reports.find((report) => report.report_uuid === selectedReportId) ??
+      (historyReport?.report_uuid === selectedReportId ? historyReport : null),
+    [historyReport, reports, selectedReportId],
   );
 
   const closedReportCount = useMemo(
@@ -545,15 +550,7 @@ export function ParkingReportsScreen({
           student_visible_note: studentNoteDraft,
         },
       );
-      setReports((current) => {
-        const nextReports = current.map((report) =>
-          report.report_uuid === updated.report_uuid ? updated : report,
-        );
-        if (statusFilter === "all" && typeFilter === "all") {
-          onOpenReportCountChange?.(countOpenReports(nextReports));
-        }
-        return nextReports;
-      });
+      replaceReport(updated);
     } catch (nextError) {
       setError(getErrorMessage(nextError));
     } finally {
@@ -562,6 +559,9 @@ export function ParkingReportsScreen({
   }
 
   function replaceReport(updated: StudentParkingIncidentReport) {
+    setHistoryReport((current) =>
+      current?.report_uuid === updated.report_uuid ? updated : current,
+    );
     setReports((current) => {
       const nextReports = current.map((report) =>
         report.report_uuid === updated.report_uuid ? updated : report,
@@ -704,6 +704,9 @@ export function ParkingReportsScreen({
         setSelectedReportId(nextReports[0]?.report_uuid ?? "");
         return nextReports;
       });
+      setHistoryReport((current) =>
+        current?.report_uuid === selectedReport.report_uuid ? null : current,
+      );
       setDetailOpen(false);
       setSignedUrls((current) => {
         const next = { ...current };
@@ -924,8 +927,9 @@ export function ParkingReportsScreen({
     const reportUUID = item.record.uuid;
     if (!reports.some((report) => report.report_uuid === reportUUID)) {
       // The report can be outside the loaded list (filtered out, or past the
-      // 100 most recent): fetch it and add it before selecting it, so the
-      // detail doesn't close on a selection it can't resolve.
+      // 100 most recent): fetch it and hold it beside the list, so the
+      // detail doesn't close on a selection it can't resolve and the table
+      // still shows only the filtered results.
       setActionBusy("history");
       setError("");
       try {
@@ -948,11 +952,7 @@ export function ParkingReportsScreen({
             // The report still opens; its photo shows as unavailable.
           }
         }
-        setReports((current) =>
-          current.some((entry) => entry.report_uuid === report.report_uuid)
-            ? current
-            : [...current, report],
-        );
+        setHistoryReport(report);
       } catch (nextError) {
         setError(getErrorMessage(nextError));
         return;
