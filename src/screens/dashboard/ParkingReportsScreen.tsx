@@ -1184,6 +1184,8 @@ export function ParkingReportsScreen({
                           <td>
                             {incidentUrl ? (
                               <img
+                                loading="lazy"
+                                decoding="async"
                                 className="parking-report-table-thumb"
                                 src={incidentUrl}
                                 alt=""
@@ -1198,6 +1200,8 @@ export function ParkingReportsScreen({
                             <div className="cd-table-student-cell">
                               {reporterAvatar ? (
                                 <img
+                                  loading="lazy"
+                                  decoding="async"
                                   className="cd-table-avatar"
                                   src={reporterAvatar}
                                   alt=""
@@ -1400,7 +1404,7 @@ export function ParkingReportsScreen({
                         onClick={() => setExpandedPhotoUrl(incidentPhotoUrl)}
                         aria-label="Expand incident photo"
                       >
-                        <img src={incidentPhotoUrl} alt="Incident evidence" />
+                        <img loading="lazy" decoding="async" src={incidentPhotoUrl} alt="Incident evidence" />
                         <span className="prd-photo-hint">Click to expand</span>
                       </button>
                     ) : (
@@ -1414,7 +1418,7 @@ export function ParkingReportsScreen({
                         className="prd-photo-secondary"
                         onClick={() => setExpandedPhotoUrl(qrPhotoUrl)}
                       >
-                        <img src={qrPhotoUrl} alt="" />
+                        <img loading="lazy" decoding="async" src={qrPhotoUrl} alt="" />
                         <span>Device QR photo (older report)</span>
                       </button>
                     ) : null}
@@ -1478,6 +1482,8 @@ export function ParkingReportsScreen({
                           <span className="prd-people-name">
                             {selectedReporterAvatar ? (
                               <img
+                                loading="lazy"
+                                decoding="async"
                                 className="cd-table-avatar"
                                 src={selectedReporterAvatar}
                                 alt=""
@@ -2037,6 +2043,8 @@ export function ParkingReportsScreen({
                   onClick={() => setExpandedPhotoUrl("")}
                 >
                   <img
+                    loading="lazy"
+                    decoding="async"
                     src={expandedPhotoUrl}
                     alt="Incident evidence, full size"
                     onClick={(event) => event.stopPropagation()}

@@ -638,7 +638,7 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
         <div className="reg-detail-panel">
           <header className="reg-detail-header">
             {photoUrl ? (
-              <img className="reg-detail-photo" src={photoUrl} alt={deviceLabel} />
+              <img loading="lazy" decoding="async" className="reg-detail-photo" src={photoUrl} alt={deviceLabel} />
             ) : (
               <div className="reg-detail-avatar">{getInitials(studentName) || "?"}</div>
             )}
@@ -820,6 +820,8 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
                       <div className="reg-table-identity">
                         {photoUrl ? (
                           <img
+                            loading="lazy"
+                            decoding="async"
                             className="reg-table-photo"
                             src={photoUrl}
                             alt={deviceLabel}

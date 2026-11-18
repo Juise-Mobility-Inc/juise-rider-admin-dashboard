@@ -5,6 +5,7 @@ import type {
   RegistrationResponseJSON,
 } from "@simplewebauthn/browser";
 
+import { mapWithConcurrency } from "./concurrency";
 import { BEACONS_ENABLED } from "./flags";
 
 export interface TokenPair {
@@ -1153,6 +1154,10 @@ interface RequestOptions {
   // (Authorization bearer) - a challenge token proves possession of a
   // delivered/consumed recovery credential, not a signed-in session.
   challengeToken?: string;
+  // A POST that doesn't change data (signing media URLs, writing an audit
+  // event). Unlike other writes it leaves shared reads in place - see
+  // request().
+  readOnly?: boolean;
 }
 
 function normalizeBaseUrl(value: string | undefined): string {
@@ -1441,6 +1446,21 @@ async function performRefresh(): Promise<AdminSession> {
   }
 }
 
+// True when the stored access token is still good for at least
+// `minRemainingMs`, so a page load can reuse it instead of refreshing first
+// (three sequential auth requests before anything else can load). An expired
+// or revoked token still gets refreshed by request()'s 401 handling.
+export function hasFreshAccessToken(
+  session: AdminSession,
+  minRemainingMs = 60_000,
+): boolean {
+  return (
+    Boolean(session.tokens?.access_token?.token) &&
+    Boolean(session.claims?.user_uuid) &&
+    !isTokenExpired(session.tokens.access_token, minRemainingMs)
+  );
+}
+
 export async function refreshDashboardSession(): Promise<AdminSession> {
   return refreshSession();
 }
@@ -1449,7 +1469,93 @@ export function getSessionRefreshExpiryMs(session: AdminSession): number {
   return tokenExpiryToMs(session.tokens.refresh_token.exp);
 }
 
+// Identical GETs that overlap share one network call. On first load the
+// App shell and the Dashboard screen ask for the same roster, violations,
+// devices and reservations at the same moment; React StrictMode (dev) runs
+// every mount effect twice. A read is also reused for a few seconds after it
+// settles, which covers effects that fire right after one another. Any write
+// (non-GET, or a request with a body) clears everything, so a screen never
+// reads back data from before its own change. Errors are never reused.
+// Each caller gets its own copy, so a caller sorting or mutating its result
+// in place can't affect another's.
+const sharedReadReuseMs = 3_000;
+interface SharedRead {
+  promise: Promise<unknown>;
+  settledAt: number | null;
+}
+const sharedReads = new Map<string, SharedRead>();
+let sharedReadsGeneration = -1;
+
+function cloneSharedRead<T>(value: T): T {
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+  return structuredClone(value);
+}
+
+export function clearSharedReads() {
+  sharedReads.clear();
+}
+
 async function request<T>(
+  service: ServiceName,
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
+  const method = options.method ?? "GET";
+  if (method !== "GET" || options.body !== undefined) {
+    try {
+      return await requestUncached<T>(service, path, options);
+    } finally {
+      if (!options.readOnly) {
+        sharedReads.clear();
+      }
+    }
+  }
+
+  if (sharedReadsGeneration !== sessionGeneration) {
+    sharedReads.clear();
+    sharedReadsGeneration = sessionGeneration;
+  }
+  const now = Date.now();
+  for (const [key, entry] of sharedReads) {
+    if (entry.settledAt !== null && now - entry.settledAt >= sharedReadReuseMs) {
+      sharedReads.delete(key);
+    }
+  }
+
+  const key = [
+    service,
+    path,
+    options.appIdHeader ?? "",
+    options.authRequired === false ? "public" : "auth",
+    options.accessToken ?? "",
+    options.challengeToken ?? "",
+    options.retryOnUnauthorized === false ? "no-retry" : "retry",
+  ].join("\u0000");
+  const existing = sharedReads.get(key);
+  if (existing) {
+    return cloneSharedRead((await existing.promise) as T);
+  }
+
+  const entry: SharedRead = { promise: Promise.resolve(), settledAt: null };
+  entry.promise = requestUncached<T>(service, path, options).then(
+    (value) => {
+      entry.settledAt = Date.now();
+      return value;
+    },
+    (error: unknown) => {
+      if (sharedReads.get(key) === entry) {
+        sharedReads.delete(key);
+      }
+      throw error;
+    },
+  );
+  sharedReads.set(key, entry);
+  return cloneSharedRead((await entry.promise) as T);
+}
+
+async function requestUncached<T>(
   service: ServiceName,
   path: string,
   options: RequestOptions = {},
@@ -1502,7 +1608,7 @@ async function request<T>(
     retryOnUnauthorized
   ) {
     await refreshSession();
-    return request<T>(service, path, {
+    return requestUncached<T>(service, path, {
       ...options,
       retryOnUnauthorized: false,
     });
@@ -1535,7 +1641,7 @@ async function request<T>(
       lastForbiddenRecoveryAt = 0;
       throw refreshError;
     }
-    return request<T>(service, path, {
+    return requestUncached<T>(service, path, {
       ...options,
       retryOnUnauthorized: false,
     });
@@ -1633,7 +1739,7 @@ export async function emitDashboardAudit(input: {
   await request(
     "nebula",
     `/api/v1/apps/${encodeURIComponent(appId)}/audit-events/client`,
-    { method: "POST", body: input, appIdHeader: appId },
+    { method: "POST", body: input, appIdHeader: appId, readOnly: true },
   );
 }
 
@@ -3400,10 +3506,15 @@ export async function signSchoolMedia(
     return {};
   }
   const signedUrls: Record<string, string> = {};
-
+  const chunks: string[][] = [];
   for (let index = 0; index < uniqueObjectKeys.length; index += 50) {
-    const chunk = uniqueObjectKeys.slice(index, index + 50);
-    const response = await request<{
+    chunks.push(uniqueObjectKeys.slice(index, index + 50));
+  }
+
+  // Chunks were signed one after another; a few at a time cuts the wait for
+  // big rosters without flooding kca-proxy.
+  const responses = await mapWithConcurrency(chunks, 4, (chunk) =>
+    request<{
       items: SignedSchoolMediaItem[];
     }>(
       "kcaProxy",
@@ -3411,12 +3522,15 @@ export async function signSchoolMedia(
       {
         method: "POST",
         retryOnUnauthorized: false,
+        readOnly: true,
         body: {
           object_keys: chunk,
         },
       },
-    );
+    ),
+  );
 
+  for (const response of responses) {
     Object.assign(
       signedUrls,
       Object.fromEntries(
