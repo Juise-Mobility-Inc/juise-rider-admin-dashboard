@@ -8,6 +8,7 @@ import {
   type SocialCommentReportDetail,
 } from "../../../lib/api";
 import { formatWhen, getErrorMessage, reasonLabel, userLabel } from "./format";
+import { confirmAction } from "../../../lib/confirm";
 
 type Props = {
   managedAppId: string;
@@ -80,7 +81,15 @@ export function CommentReportDetail({
         : action === "ban_user"
           ? `Remove the comment and ban ${userLabel(detail.reported_user)} from Social? This also removes their other posts and comments.`
           : "Dismiss every report on this comment and restore it?";
-    if (!window.confirm(confirmCopy)) return;
+    if (
+      !(await confirmAction({
+        title: action === "dismiss" ? "Dismiss reports?" : "Are you sure?",
+        message: confirmCopy,
+        confirmLabel: action === "dismiss" ? "Dismiss" : "Continue",
+        tone: action === "dismiss" ? "default" : "danger",
+      }))
+    )
+      return;
     const forReport = reportUUID;
     setActionBusy(true);
     setMessage(null);

@@ -1,4 +1,4 @@
-import type { AdminSession } from './api'
+import type { AdminSession, SchoolColorScheme } from './api'
 
 export interface DashboardContext {
   managedAppId: string
@@ -49,4 +49,41 @@ export function readDashboardContext(defaultManagedAppId: string): DashboardCont
 
 export function writeDashboardContext(context: DashboardContext) {
   window.localStorage.setItem(contextStorageKey, JSON.stringify(context))
+}
+
+// The last-seen name and colors of each school, so a page load paints in the
+// school's theme right away instead of the default colors (and the raw
+// school id as the title) until the school record loads.
+export interface SchoolAppearance {
+  name: string
+  title: string
+  color_scheme: SchoolColorScheme
+}
+
+const schoolAppearanceStorageKey = 'juise-rider-admin-dashboard.school-appearance'
+
+export function readSchoolAppearance(schoolId: string): SchoolAppearance | null {
+  if (!schoolId) {
+    return null
+  }
+  const stored = readJson<Record<string, SchoolAppearance>>(schoolAppearanceStorageKey)
+  const appearance = stored?.[schoolId]
+  return appearance && typeof appearance === 'object' ? appearance : null
+}
+
+export function writeSchoolAppearance(schoolId: string, appearance: SchoolAppearance) {
+  if (!schoolId) {
+    return
+  }
+  try {
+    const stored = readJson<Record<string, SchoolAppearance>>(schoolAppearanceStorageKey) ?? {}
+    stored[schoolId] = {
+      name: appearance.name ?? '',
+      title: appearance.title ?? '',
+      color_scheme: appearance.color_scheme ?? {},
+    }
+    window.localStorage.setItem(schoolAppearanceStorageKey, JSON.stringify(stored))
+  } catch {
+    // Storage full or unavailable: the theme just loads a moment later.
+  }
 }

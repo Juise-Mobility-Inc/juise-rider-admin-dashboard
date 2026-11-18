@@ -18,6 +18,7 @@ import {
   type RegisteredDeviceReviewEntry,
 } from "../../lib/api";
 import { useDetailParamSync } from "../../lib/useDetailParamSync";
+import { confirmAction } from "../../lib/confirm";
 
 type Props = {
   activeSchoolId: string;
@@ -581,12 +582,14 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
               className="text-button reg-decline-button"
               type="button"
               disabled={isBusy}
-              onClick={() => {
+              onClick={async () => {
                 if (
                   paid &&
-                  !window.confirm(
-                    `This vehicle's ${formatCurrency(device.registration_fee_amount_cents)} fee was paid. Declining clears the payment record and doesn't refund it. If you approve it again with a fee, the student is asked to pay again. Decline anyway?`,
-                  )
+                  !(await confirmAction({
+                    title: "Decline a paid registration?",
+                    message: `This vehicle's ${formatCurrency(device.registration_fee_amount_cents)} fee was paid. Declining clears the payment record and doesn't refund it. If you approve it again with a fee, the student is asked to pay again. Decline anyway?`,
+                    confirmLabel: "Decline",
+                  }))
                 ) {
                   return;
                 }
@@ -638,7 +641,7 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
         <div className="reg-detail-panel">
           <header className="reg-detail-header">
             {photoUrl ? (
-              <img className="reg-detail-photo" src={photoUrl} alt={deviceLabel} />
+              <img loading="lazy" decoding="async" className="reg-detail-photo" src={photoUrl} alt={deviceLabel} />
             ) : (
               <div className="reg-detail-avatar">{getInitials(studentName) || "?"}</div>
             )}
@@ -820,6 +823,8 @@ export function VehicleRegistrationsScreen({ activeSchoolId, managedAppId }: Pro
                       <div className="reg-table-identity">
                         {photoUrl ? (
                           <img
+                            loading="lazy"
+                            decoding="async"
                             className="reg-table-photo"
                             src={photoUrl}
                             alt={deviceLabel}

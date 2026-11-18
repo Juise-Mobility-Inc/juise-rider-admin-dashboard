@@ -21,6 +21,7 @@ import {
   sanitizeCsvFilename,
   type CsvCell,
 } from "../../lib/csv";
+import { DialogBackdrop } from "../../components/DialogBackdrop";
 
 type Props = any;
 
@@ -482,12 +483,13 @@ export function PacksScreen(props: Props) {
       ) : null}
 
       {isImportModalOpen ? (
-        <div
+        <DialogBackdrop
           className="management-modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-label="Upload Juise Packs CSV"
           onClick={() => setIsImportModalOpen(false)}
+          onClose={() => setIsImportModalOpen(false)}
         >
           <div
             className="management-modal-sheet management-import-modal"
@@ -585,16 +587,17 @@ export function PacksScreen(props: Props) {
               </div>
             </div>
           </div>
-        </div>
+        </DialogBackdrop>
       ) : null}
 
       {activePackTab === "create" ? (
-        <div
+        <DialogBackdrop
           className="management-modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-label="Create Juise Pack"
           onClick={closeCreateModal}
+          onClose={closeCreateModal}
         >
           <form
             className="management-modal-sheet"
@@ -775,16 +778,17 @@ export function PacksScreen(props: Props) {
               </div>
             </div>
           </form>
-        </div>
+        </DialogBackdrop>
       ) : null}
 
       {editingPack && packEditDraft ? (
-        <div
+        <DialogBackdrop
           className="management-modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-label="Edit Juise Pack"
           onClick={handleCancelPackEdit}
+          onClose={handleCancelPackEdit}
         >
           <form
             className="management-modal-sheet"
@@ -1000,7 +1004,7 @@ export function PacksScreen(props: Props) {
               </div>
             </div>
           </form>
-        </div>
+        </DialogBackdrop>
       ) : null}
     </section>
   );

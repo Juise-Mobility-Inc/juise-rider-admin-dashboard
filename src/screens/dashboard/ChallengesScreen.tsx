@@ -34,6 +34,7 @@ import {
 } from "../../lib/csv";
 import { useDetailParamSync } from "../../lib/useDetailParamSync";
 import { useImageCropper } from "../../components/useImageCropper";
+import { DialogBackdrop } from "../../components/DialogBackdrop";
 import { IMAGE_ASPECT } from "../../lib/imageCrop";
 
 function getErrorMessage(error: unknown): string {
@@ -1248,6 +1249,8 @@ export function ChallengesScreen(props: Props) {
                                                                                                                                 <div className="reg-table-identity">
                                                                                                                                         {ch.image_url.trim() ? (
                                                                                                                                                 <img
+                                                                                                                                                        loading="lazy"
+                                                                                                                                                        decoding="async"
                                                                                                                                                         src={ch.image_url}
                                                                                                                                                         alt={ch.title}
                                                                                                                                                         className="reg-table-photo"
@@ -1326,6 +1329,8 @@ export function ChallengesScreen(props: Props) {
                                                                                                                                 <div className="reg-table-identity">
                                                                                                                                         {ch.image_url.trim() ? (
                                                                                                                                                 <img
+                                                                                                                                                        loading="lazy"
+                                                                                                                                                        decoding="async"
                                                                                                                                                         src={ch.image_url}
                                                                                                                                                         alt={ch.title}
                                                                                                                                                         className="reg-table-photo"
@@ -1399,6 +1404,8 @@ export function ChallengesScreen(props: Props) {
                                                         <div className="cdv-header-card">
                                                                 {selectedChallenge.image_url.trim() ? (
                                                                         <img
+                                                                                loading="lazy"
+                                                                                decoding="async"
                                                                                 src={selectedChallenge.image_url}
                                                                                 alt={selectedChallenge.title}
                                                                                 className="cdv-header-img"
@@ -1534,6 +1541,8 @@ export function ChallengesScreen(props: Props) {
                                                                                                         <div className="cdv-stop-number">{idx + 1}</div>
                                                                                                         {cp.image_url.trim() ? (
                                                                                                                 <img
+                                                                                                                        loading="lazy"
+                                                                                                                        decoding="async"
                                                                                                                         src={cp.image_url}
                                                                                                                         alt={cp.title}
                                                                                                                         className="cdv-stop-img"
@@ -1634,6 +1643,8 @@ export function ChallengesScreen(props: Props) {
                                                         <div className="challenge-form-preview-row">
                                                                 {challengeDraft.image_url.trim() ? (
                                                                         <img
+                                                                                loading="lazy"
+                                                                                decoding="async"
                                                                                 src={challengeDraft.image_url}
                                                                                 alt={`${itemLabelTitle} cover`}
                                                                                 className="challenge-form-preview-img"
@@ -2146,6 +2157,8 @@ export function ChallengesScreen(props: Props) {
                                                                                                         <div className="challenge-stop-thumb-wrap">
                                                                                                                 {checkpoint.image_url ? (
                                                                                                                         <img
+                                                                                                                                loading="lazy"
+                                                                                                                                decoding="async"
                                                                                                                                 src={checkpoint.image_url}
                                                                                                                                 className="challenge-stop-thumb-img"
                                                                                                                                 alt={checkpoint.title || "Stop image"}
@@ -2756,12 +2769,13 @@ export function ChallengesScreen(props: Props) {
                                                                 [],
                                                         );
                                                 return (
-                                                        <div
+                                                        <DialogBackdrop
                                                                 className="management-modal-backdrop"
                                                                 role="dialog"
                                                                 aria-modal="true"
                                                                 aria-label={stopLabel}
-                                                                onClick={closeStopModal}>
+                                                                onClick={closeStopModal}
+                                                                onClose={closeStopModal}>
                                                                 <div
                                                                         className="management-modal-sheet poi-editor-modal stop-modal-sheet"
                                                                         onClick={(e) => e.stopPropagation()}>
@@ -2952,6 +2966,8 @@ export function ChallengesScreen(props: Props) {
                                                                                                         </div>
                                                                                                         {d.image_url && (
                                                                                                                 <img
+                                                                                                                        loading="lazy"
+                                                                                                                        decoding="async"
                                                                                                                         src={d.image_url}
                                                                                                                         alt="Stop preview"
                                                                                                                         style={{
@@ -3001,7 +3017,7 @@ export function ChallengesScreen(props: Props) {
                                                                                 </button>
                                                                         </div>
                                                                 </div>
-                                                        </div>
+                                                        </DialogBackdrop>
                                                 );
                                         })()
                                 : null}

@@ -8,6 +8,7 @@ import {
   type RegisteredDeviceFeeRule,
   type RegisteredDeviceFeeRuleInput,
 } from "../../lib/api";
+import { confirmAction } from "../../lib/confirm";
 
 type Props = {
   activeSchoolId: string;
@@ -184,7 +185,14 @@ export function RegistrationFeesScreen({ activeSchoolId, managedAppId }: Props) 
   }
 
   async function handleDelete(rule: RegisteredDeviceFeeRule) {
-    if (!window.confirm(`Delete "${rule.label || "this fee rule"}"?`)) return;
+    if (
+      !(await confirmAction({
+        title: "Delete fee rule?",
+        message: `Delete "${rule.label || "this fee rule"}"?`,
+        confirmLabel: "Delete",
+      }))
+    )
+      return;
     setBusy(true);
     setError("");
     setSuccess("");

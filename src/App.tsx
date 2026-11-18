@@ -2,8 +2,10 @@ import {
   type ChangeEvent,
   type CSSProperties,
   type FormEvent,
+  createContext,
   Suspense,
   useCallback,
+  useContext,
   useEffect,
   useDeferredValue,
   useMemo,
@@ -59,6 +61,7 @@ import {
   getSessionRefreshExpiryMs,
   loginWithIdentifier,
   verifyMFA,
+  hasFreshAccessToken,
   refreshDashboardSession,
   requestPasswordReset,
   requestRecoveryCodePasswordReset,
@@ -126,11 +129,14 @@ import {
   clearDashboardSession,
   readDashboardContext,
   readDashboardSession,
+  readSchoolAppearance,
   writeDashboardContext,
   writeDashboardSession,
+  writeSchoolAppearance,
   type DashboardContext,
 } from "./lib/storage";
 import {
+  ensureStudentRosterMedia,
   loadSelectedStudentDetail,
   loadStudentRoster,
   resetSelectedStudentState as resetStudentsSelectionState,
@@ -139,6 +145,10 @@ import {
   setStudentsScope,
 } from "./features/students/studentsSlice";
 import { useAppDispatch, useAppSelector } from "./store/hooks";
+import { ScreenErrorBoundary } from "./components/ErrorBoundary";
+import { ConfirmDialogHost } from "./components/ConfirmDialog";
+import { confirmAction } from "./lib/confirm";
+import { DialogBackdrop } from "./components/DialogBackdrop";
 import { lazyScreen } from "./lib/lazyScreen";
 
 // Every screen is its own chunk, loaded the first time it's opened, so the
@@ -635,6 +645,14 @@ function schoolToDraft(school: School): SchoolDraft {
     metadata: prettyJson(school.metadata),
     active: school.active,
   };
+}
+
+function rememberSchoolAppearance(school: School) {
+  writeSchoolAppearance(school.school_id, {
+    name: school.name,
+    title: school.title,
+    color_scheme: school.color_scheme,
+  });
 }
 
 function termToDraft(term: SchoolTerm): TermDraft {
@@ -1493,6 +1511,8 @@ function SchoolLogoPreview(props: {
           }}
         >
           <img
+            loading="lazy"
+            decoding="async"
             className="school-logo-image"
             src={normalizedUrl}
             alt={alt}
@@ -1539,6 +1559,8 @@ function EntityImagePreview(props: {
           }}
         >
           <img
+            loading="lazy"
+            decoding="async"
             className="challenge-image-preview-image"
             src={normalizedUrl}
             alt={alt}
@@ -1637,6 +1659,26 @@ function resolveSectionFromPathname(pathname: string): Section | null {
   return matchingSection?.section ?? null;
 }
 
+// Stable wrappers that open the shared image lightbox. They used to be
+// inline arrow components created on every App render, which made React
+// remount every preview image (flicker, and lost "failed to load" state).
+type ImagePreviewHandler = (imageUrl: string, alt: string, label?: string) => void;
+const ImagePreviewContext = createContext<ImagePreviewHandler | undefined>(
+  undefined,
+);
+
+function PreviewableEntityImage(
+  props: Parameters<typeof EntityImagePreview>[0],
+) {
+  const onPreview = useContext(ImagePreviewContext);
+  return <EntityImagePreview {...props} onPreview={onPreview} />;
+}
+
+function PreviewableSchoolLogo(props: Parameters<typeof SchoolLogoPreview>[0]) {
+  const onPreview = useContext(ImagePreviewContext);
+  return <SchoolLogoPreview {...props} onPreview={onPreview} />;
+}
+
 // Shown while a screen's chunk downloads (usually a few hundred ms on first
 // visit only). Fixed min-height so the workspace doesn't collapse and jump.
 function ScreenLoadingFallback() {
@@ -1668,6 +1710,7 @@ function App() {
     return saved ? Math.max(180, Math.min(480, Number(saved))) : 260;
   });
   const sidebarWidthRef = useRef(sidebarWidth);
+  const appShellRef = useRef<HTMLDivElement>(null);
   const [sidebarDragging, setSidebarDragging] = useState(false);
   const [initialSession] = useState<AdminSession | null>(() =>
     readDashboardSession(),
@@ -1777,6 +1820,29 @@ function App() {
     readDashboardContext(defaultManagedAppId),
   );
   const [banner, setBanner] = useState<BannerState | null>(null);
+  const bannerShownAtRef = useRef(0);
+  useEffect(() => {
+    if (!banner) {
+      return;
+    }
+    bannerShownAtRef.current = Date.now();
+    if (banner.tone === "error") {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setBanner((current) => (current === banner ? null : current));
+    }, 6_000);
+    return () => window.clearTimeout(timer);
+  }, [banner]);
+  // A message from the previous page shouldn't follow you to the next one
+  // (a save that navigates right away still gets to show its message).
+  const bannerPathname = location.pathname;
+  useEffect(() => {
+    if (Date.now() - bannerShownAtRef.current < 1_500) {
+      return;
+    }
+    setBanner(null);
+  }, [bannerPathname]);
   const [authMode, setAuthMode] = useState<AuthMode>("login");
 
   const [initialLoginLock] = useState<StoredLoginLock | null>(() =>
@@ -1923,6 +1989,9 @@ function App() {
   const [schoolDraft, setSchoolDraft] = useState<SchoolDraft>(() =>
     createEmptySchoolDraft(),
   );
+  // Which school's record has actually been fetched (schoolDraft.school_id is
+  // set to the active school before the fetch finishes).
+  const [schoolRecordLoadedFor, setSchoolRecordLoadedFor] = useState("");
   const [resolvedSchoolLogoUrl, setResolvedSchoolLogoUrl] = useState("");
   const [termDrafts, setTermDrafts] = useState<TermDraft[]>([]);
   const [poiDrafts, setPoiDrafts] = useState<POIDraft[]>([]);
@@ -2376,7 +2445,7 @@ function App() {
         onClick={onClick}
       >
         {school.logo_url ? (
-          <img src={school.logo_url} alt="" className="school-option-logo" />
+          <img loading="lazy" decoding="async" src={school.logo_url} alt="" className="school-option-logo" />
         ) : (
           <span className="school-option-logo school-option-logo-placeholder">
             {label.charAt(0).toUpperCase()}
@@ -2406,6 +2475,7 @@ function App() {
     schoolStudentRoster,
     schoolStudentRosterBusy,
     schoolStudentRosterError,
+    schoolStudentRosterMediaRequested,
     schoolStudentRosterReady,
     selectedStudentMembershipId,
     studentBusy,
@@ -2725,9 +2795,44 @@ function App() {
     [challengeParticipants],
   );
 
+  // Until this school's record loads, paint with its last-seen name and
+  // colors (or the public school list's) instead of the default theme.
+  const schoolDetailsLoaded =
+    activeSchoolId !== "" &&
+    schoolRecordLoadedFor === activeSchoolId &&
+    schoolDraft.school_id === activeSchoolId;
+  const rememberedSchoolAppearance = useMemo(() => {
+    if (!activeSchoolId) {
+      return null;
+    }
+    const remembered = readSchoolAppearance(activeSchoolId);
+    if (remembered) {
+      return remembered;
+    }
+    const listed = pickerSchools.find(
+      (school) => school.school_id === activeSchoolId,
+    );
+    return listed
+      ? {
+          name: listed.name,
+          title: listed.title,
+          color_scheme: listed.color_scheme,
+        }
+      : null;
+  }, [activeSchoolId, pickerSchools]);
+  const themeColorScheme =
+    !schoolDetailsLoaded && rememberedSchoolAppearance
+      ? normalizeSchoolColorScheme(rememberedSchoolAppearance.color_scheme)
+      : schoolDraft.color_scheme;
+  const workspaceTitle = schoolDetailsLoaded
+    ? schoolDraft.title || schoolDraft.name || activeSchoolId || "School dashboard"
+    : rememberedSchoolAppearance?.title ||
+      rememberedSchoolAppearance?.name ||
+      "";
+
   const dashboardThemeColors = useMemo(
-    () => buildDashboardThemeColors(schoolDraft.color_scheme),
-    [schoolDraft.color_scheme],
+    () => buildDashboardThemeColors(themeColorScheme),
+    [themeColorScheme],
   );
 
   const resolvedSchoolColors = useMemo(
@@ -3147,6 +3252,14 @@ function App() {
 
     async function refreshStoredSession() {
       setApiSession(initialSession);
+      // Reuse a still-valid stored session instead of refreshing before
+      // anything can load; request() refreshes on the first 401.
+      if (initialSession && hasFreshAccessToken(initialSession)) {
+        sessionEndedGuardRef.current = false;
+        setSession(initialSession);
+        setAuthInitializing(false);
+        return;
+      }
       try {
         const nextSession = await refreshDashboardSession();
         if (cancelled) {
@@ -3470,6 +3583,43 @@ function App() {
     studentsDispatch,
   ]);
 
+  // Roster photos (avatars, ID photos) take several requests per student, so
+  // they load only on the screens that show them.
+  const rosterPhotosNeeded =
+    currentSection === "students" ||
+    currentSection === "notifications" ||
+    currentSection === "penaltyReports" ||
+    currentSection === "parkingReports";
+  useEffect(() => {
+    if (
+      !session ||
+      !activeSchoolId ||
+      !rosterPhotosNeeded ||
+      !schoolStudentRosterReady ||
+      schoolStudentRosterMediaRequested
+    ) {
+      return;
+    }
+
+    studentsDispatch(
+      ensureStudentRosterMedia({
+        scopeKey: `${context.managedAppId}:${activeSchoolId}:${session.claims.user_uuid}`,
+        managedAppId: context.managedAppId,
+        schoolId: activeSchoolId,
+        adminUserUUID: session.claims.user_uuid,
+      }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeSchoolId,
+    context.managedAppId,
+    rosterPhotosNeeded,
+    schoolStudentRosterMediaRequested,
+    schoolStudentRosterReady,
+    session?.claims.user_uuid,
+    studentsDispatch,
+  ]);
+
   useEffect(() => {
     if (!imagePreview && !selectedStudentDeviceUUID) {
       return;
@@ -3640,6 +3790,8 @@ function App() {
         }
 
         setSchoolDraft(schoolToDraft(school));
+        rememberSchoolAppearance(school);
+        setSchoolRecordLoadedFor(school.school_id);
         setTermDrafts(school.terms.map(termToDraft));
       } catch (error) {
         if (!cancelled) {
@@ -3649,6 +3801,7 @@ function App() {
               ...createEmptySchoolDraft(),
               school_id: activeSchoolId,
             });
+            setSchoolRecordLoadedFor(activeSchoolId);
             setTermDrafts([]);
           } else {
             setBanner({
@@ -4043,6 +4196,8 @@ function App() {
     try {
       const school = await fetchSchool(context.managedAppId, activeSchoolId);
       setSchoolDraft(schoolToDraft(school));
+      rememberSchoolAppearance(school);
+      setSchoolRecordLoadedFor(school.school_id);
       setTermDrafts(school.terms.map(termToDraft));
     } catch (error) {
       const message = getErrorMessage(error);
@@ -4051,6 +4206,7 @@ function App() {
           ...createEmptySchoolDraft(),
           school_id: activeSchoolId,
         });
+        setSchoolRecordLoadedFor(activeSchoolId);
         setTermDrafts([]);
       } else {
         setBanner({
@@ -4974,6 +5130,8 @@ function App() {
       );
 
       setSchoolDraft(schoolToDraft(savedSchool));
+      rememberSchoolAppearance(savedSchool);
+      setSchoolRecordLoadedFor(savedSchool.school_id);
       setTermDrafts(savedTerms.map(termToDraft));
       setBanner({
         tone: "success",
@@ -5688,7 +5846,7 @@ function App() {
     });
   }
 
-  function handleDeleteSelectedChallenge() {
+  async function handleDeleteSelectedChallenge() {
     if (!selectedChallenge || !activeSchoolId) {
       return;
     }
@@ -5719,23 +5877,25 @@ function App() {
       }
     }
 
-    const shouldContinue = window.confirm(
-      `Delete ${isGame ? "game" : "challenge"} "${
-        selectedChallenge.title
+    // Captured before asking: the selection can change while the dialog
+    // is open.
+    const target = {
+      challengeUUID: selectedChallenge.challenge_uuid,
+      title: selectedChallenge.title,
+      isGame,
+    };
+    const shouldContinue = await confirmAction({
+      title: `Delete ${isGame ? "game" : "challenge"}?`,
+      message: `Delete ${isGame ? "game" : "challenge"} "${
+        target.title
       }"? Riders will no longer be able to join it.`,
-    );
+      confirmLabel: "Delete",
+    });
     if (!shouldContinue) {
       return;
     }
 
-    void performDeleteChallenge(
-      {
-        challengeUUID: selectedChallenge.challenge_uuid,
-        title: selectedChallenge.title,
-        isGame,
-      },
-      false,
-    );
+    void performDeleteChallenge(target, false);
   }
 
   async function performDeleteChallenge(
@@ -5939,9 +6099,11 @@ function App() {
       return;
     }
 
-    const shouldContinue = window.confirm(
-      `Deny reservation ${selectedReservation.reservation_uuid}? This removes it from the pending queue.`,
-    );
+    const shouldContinue = await confirmAction({
+      title: "Deny reservation?",
+      message: `Deny reservation ${selectedReservation.reservation_uuid}? This removes it from the pending queue.`,
+      confirmLabel: "Deny",
+    });
     if (!shouldContinue) {
       return;
     }
@@ -6063,6 +6225,8 @@ function App() {
                     <div className="mfa-enroll-qr">
                       {addTotpQrCode ? (
                         <img
+                          loading="lazy"
+                          decoding="async"
                           className="mfa-qr-code"
                           src={addTotpQrCode}
                           alt="Authenticator app setup QR code"
@@ -6282,6 +6446,8 @@ function App() {
                       <div className="mfa-enroll-qr">
                         {mfaQrCode ? (
                           <img
+                            loading="lazy"
+                            decoding="async"
                             className="mfa-qr-code"
                             src={mfaQrCode}
                             alt="Two-step verification setup QR code"
@@ -7301,12 +7467,13 @@ function App() {
           </button>
         </div>
         {pendingLeaveMembership ? (
-          <div
+          <DialogBackdrop
             className="management-modal-backdrop"
             role="dialog"
             aria-modal="true"
             aria-label="Leave school"
             onClick={cancelLeaveSchool}
+            onClose={cancelLeaveSchool}
           >
             <div
               className="management-modal-sheet leave-school-modal"
@@ -7341,7 +7508,7 @@ function App() {
                 </button>
               </div>
             </div>
-          </div>
+          </DialogBackdrop>
         ) : null}
       </div>
     );
@@ -7364,9 +7531,7 @@ function App() {
       termDrafts={termDrafts}
       setTermDrafts={setTermDrafts}
       createEmptyTermDraft={createEmptyTermDraft}
-      SchoolLogoPreview={(props: Parameters<typeof SchoolLogoPreview>[0]) => (
-        <SchoolLogoPreview {...props} onPreview={handleOpenImagePreview} />
-      )}
+      SchoolLogoPreview={PreviewableSchoolLogo}
     />
   );
 
@@ -7461,14 +7626,7 @@ function App() {
             formatChallengeMetricValue={formatChallengeMetricValue}
             formatDateTimeForDisplay={formatDateTimeForDisplay}
             formatNebulaUserName={formatNebulaUserName}
-            EntityImagePreview={(
-              props: Parameters<typeof EntityImagePreview>[0],
-            ) => (
-              <EntityImagePreview
-                {...props}
-                onPreview={handleOpenImagePreview}
-              />
-            )}
+            EntityImagePreview={PreviewableEntityImage}
             DetailRow={DetailRow}
             newChallengeSelectionId={newChallengeSelectionId}
             handleImagePreview={handleOpenImagePreview}
@@ -7512,14 +7670,7 @@ function App() {
             formatChallengeMetricValue={formatChallengeMetricValue}
             formatDateTimeForDisplay={formatDateTimeForDisplay}
             formatNebulaUserName={formatNebulaUserName}
-            EntityImagePreview={(
-              props: Parameters<typeof EntityImagePreview>[0],
-            ) => (
-              <EntityImagePreview
-                {...props}
-                onPreview={handleOpenImagePreview}
-              />
-            )}
+            EntityImagePreview={PreviewableEntityImage}
             DetailRow={DetailRow}
             newChallengeSelectionId={newChallengeSelectionId}
             handleImagePreview={handleOpenImagePreview}
@@ -7749,14 +7900,7 @@ function App() {
             setPackDraft={setPackDraft}
             schoolDraft={schoolDraft}
             packPhotoPreviewUrl={packPhotoPreviewUrl}
-            EntityImagePreview={(
-              props: Parameters<typeof EntityImagePreview>[0],
-            ) => (
-              <EntityImagePreview
-                {...props}
-                onPreview={handleOpenImagePreview}
-              />
-            )}
+            EntityImagePreview={PreviewableEntityImage}
             packPhotoFile={packPhotoFile}
             handlePackPhotoFileChange={handlePackPhotoFileChange}
             setPackPhotoFile={setPackPhotoFile}
@@ -7821,15 +7965,33 @@ function App() {
     const startWidth = sidebarWidthRef.current;
     setSidebarDragging(true);
 
+    // While dragging, write the width straight to the CSS variable once per
+    // frame instead of re-rendering the whole app (maps included) on every
+    // mousemove; React state catches up on mouseup.
+    let frame = 0;
     const onMove = (ev: MouseEvent) => {
       const next = Math.max(
         180,
         Math.min(480, startWidth + ev.clientX - startX),
       );
       sidebarWidthRef.current = next;
-      setSidebarWidth(next);
+      if (frame) {
+        return;
+      }
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        appShellRef.current?.style.setProperty(
+          "--sidebar-w",
+          `${sidebarWidthRef.current}px`,
+        );
+      });
     };
     const onUp = () => {
+      if (frame) {
+        window.cancelAnimationFrame(frame);
+        frame = 0;
+      }
+      setSidebarWidth(sidebarWidthRef.current);
       setSidebarDragging(false);
       localStorage.setItem("sidebarWidth", String(sidebarWidthRef.current));
       document.removeEventListener("mousemove", onMove);
@@ -7847,6 +8009,7 @@ function App() {
 
   return (
     <div
+      ref={appShellRef}
       className={`app-shell${sidebarDragging ? " sidebar-is-dragging" : ""}${!sidebarOpen ? " app-shell--sidebar-closed" : ""}`}
       style={
         {
@@ -7920,6 +8083,8 @@ function App() {
             >
               {findPickerSchool(activeSchoolId)?.logo_url ? (
                 <img
+                  loading="lazy"
+                  decoding="async"
                   src={findPickerSchool(activeSchoolId)?.logo_url}
                   alt=""
                   className="sidebar-school-switcher-logo"
@@ -8427,22 +8592,16 @@ function App() {
               <SchoolLogoPreview
                 key={`header-${resolvedSchoolLogoUrl || schoolDraft.logo_url || "fallback"}`}
                 logoUrl={resolvedSchoolLogoUrl || schoolDraft.logo_url}
-                label={
-                  schoolDraft.title ||
-                  schoolDraft.name ||
-                  activeSchoolId ||
-                  "Juise"
-                }
+                label={workspaceTitle || "Juise"}
                 size="header"
                 onPreview={handleOpenImagePreview}
               />
               <div>
                 <p className="eyebrow">Workspace</p>
                 <h1>
-                  {schoolDraft.title ||
-                    schoolDraft.name ||
-                    activeSchoolId ||
-                    "School dashboard"}
+                  {/* Non-breaking space keeps the header height while the
+                      school name loads, so the page doesn't jump. */}
+                  {workspaceTitle || "\u00a0"}
                 </h1>
               </div>
             </div>
@@ -8450,8 +8609,23 @@ function App() {
           {/* workspace-header-start */}
         </header>
 
+        <ScreenErrorBoundary resetKey={currentSection}>
+          <ImagePreviewContext.Provider value={handleOpenImagePreview}>
+            <Suspense fallback={<ScreenLoadingFallback />}>
+              {sectionContent}
+            </Suspense>
+          </ImagePreviewContext.Provider>
+        </ScreenErrorBoundary>
+      </main>
+      {/* Floating, so a message never pushes the page down. Errors stay
+          until dismissed; success/info messages clear themselves. */}
+      <ConfirmDialogHost />
+      <div className="toast-region" aria-live="polite">
         {banner ? (
-          <div className={`banner banner-${banner.tone}`}>
+          <div
+            className={`banner toast banner-${banner.tone}`}
+            role={banner.tone === "error" ? "alert" : "status"}
+          >
             <span>{banner.message}</span>
             <button
               className="text-button"
@@ -8462,19 +8636,16 @@ function App() {
             </button>
           </div>
         ) : null}
-
-        <Suspense fallback={<ScreenLoadingFallback />}>
-          {sectionContent}
-        </Suspense>
-      </main>
+      </div>
       {appImageCropModal}
       {seriesEditPrompt ? (
-        <div
+        <DialogBackdrop
           className="management-modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-label="Update repeating challenge"
           onClick={() => setSeriesEditPrompt(null)}
+          onClose={() => setSeriesEditPrompt(null)}
         >
           <div
             className="management-modal-sheet series-edit-modal"
@@ -8522,16 +8693,17 @@ function App() {
               </button>
             </div>
           </div>
-        </div>
+        </DialogBackdrop>
       ) : null}
 
       {seriesDeletePrompt ? (
-        <div
+        <DialogBackdrop
           className="management-modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-label="Delete repeating challenge"
           onClick={() => setSeriesDeletePrompt(null)}
+          onClose={() => setSeriesDeletePrompt(null)}
         >
           <div
             className="management-modal-sheet series-edit-modal"
@@ -8580,16 +8752,17 @@ function App() {
               </button>
             </div>
           </div>
-        </div>
+        </DialogBackdrop>
       ) : null}
 
       {imagePreview ? (
-        <div
+        <DialogBackdrop
           className="image-lightbox"
           role="dialog"
           aria-modal="true"
           aria-label={imagePreview.label || imagePreview.alt}
           onClick={() => setImagePreview(null)}
+          onClose={() => setImagePreview(null)}
         >
           <div
             className="image-lightbox-sheet"
@@ -8603,6 +8776,8 @@ function App() {
               Close
             </button>
             <img
+              loading="lazy"
+              decoding="async"
               className="image-lightbox-image"
               src={imagePreview.imageUrl}
               alt={imagePreview.alt}
@@ -8611,7 +8786,7 @@ function App() {
               <p className="image-lightbox-caption">{imagePreview.label}</p>
             ) : null}
           </div>
-        </div>
+        </DialogBackdrop>
       ) : null}
       {selectedStudentDevice ? (
         <Suspense fallback={null}>

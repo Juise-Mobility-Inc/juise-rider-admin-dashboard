@@ -9,20 +9,23 @@
   --nav-bg: #0b1b30;
   --text: #305163;
   --text-strong: #112d4e;
-  --muted: rgba(48, 81, 99, 0.72);
+  --muted: rgba(48, 81, 99, 0.82);
   --muted-strong: rgba(17, 45, 78, 0.72);
   --input-border: rgba(22, 66, 91, 0.16);
   --sans:
-    'Space Grotesk',
-    'IBM Plex Sans',
     'Avenir Next',
     'Segoe UI',
+    system-ui,
     sans-serif;
   --mono:
     'IBM Plex Mono',
     'SFMono-Regular',
     'Menlo',
     monospace;
+
+  /* Fixed brand colors used directly by component styles. */
+  --navy: #112d4e;
+  --gold: #f6ae2d;
 
   color: var(--text);
   background:
@@ -34,6 +37,22 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/*
+ * Names App.css uses that were never defined anywhere (about 150 uses):
+ * borders vanished and some backgrounds went transparent (e.g. white text on
+ * nothing). They alias the theme variables. Declared on .app-shell too,
+ * because the school theme is set inline there and an alias declared only on
+ * :root would resolve against the default theme instead.
+ */
+:root,
+.app-shell {
+  --border-muted: var(--panel-border);
+  --surface: var(--panel-bg);
+  --surface-elevated: var(--panel-bg-elevated, var(--panel-bg));
+  --text-muted: var(--muted);
+  --workspace-bg: var(--bg);
 }
 
 * {
@@ -113,4 +132,15 @@ a {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

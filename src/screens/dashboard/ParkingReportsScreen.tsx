@@ -26,6 +26,16 @@ import {
   updateSchoolParkingIncidentReport,
 } from "../../lib/api";
 import { useDetailParamSync } from "../../lib/useDetailParamSync";
+import { confirmAction } from "../../lib/confirm";
+import { DialogBackdrop } from "../../components/DialogBackdrop";
+import {
+  DataRow,
+  DataTable,
+  StatusBadge,
+  TableCard,
+  TableMessageRow,
+  type StatusTone,
+} from "../../components/table/DataTable";
 
 type Props = {
   activeSchoolId: string;
@@ -120,6 +130,23 @@ function getInitials(label: string): string {
     .slice(0, 2)
     .map((word) => word.charAt(0).toUpperCase())
     .join("");
+}
+
+// The list request is capped; the table says so when it's hit.
+const REPORT_FETCH_LIMIT = 100;
+
+function getReportStatusTone(status: ParkingIncidentReportStatus): StatusTone {
+  switch (status) {
+    case "resolved":
+      return "success";
+    case "under_review":
+      return "info";
+    case "dismissed":
+      return "neutral";
+    case "submitted":
+    default:
+      return "warning";
+  }
 }
 
 function getReportStatusClass(status: ParkingIncidentReportStatus): string {
@@ -403,7 +430,7 @@ export function ParkingReportsScreen({
           status: statusFilter === "all" ? undefined : statusFilter,
           reportType: typeFilter === "all" ? undefined : typeFilter,
           includeInactive: true,
-          limit: 100,
+          limit: REPORT_FETCH_LIMIT,
         },
       );
       setReports(nextReports);
@@ -741,9 +768,12 @@ export function ParkingReportsScreen({
     if (!selectedReport) {
       return;
     }
-    const confirmed = window.confirm(
-      `Delete this parking report permanently?\n\nThis removes the report from the dashboard and student history. This cannot be undone.`,
-    );
+    const confirmed = await confirmAction({
+      title: "Delete this parking report permanently?",
+      message:
+        "This removes the report from the dashboard and student history. This cannot be undone.",
+      confirmLabel: "Delete",
+    });
     if (!confirmed) {
       return;
     }
@@ -1068,7 +1098,7 @@ export function ParkingReportsScreen({
               {!detailOpen ? (
                 <>
                   <input
-                    className="cd-table-search"
+                    className="dt-search"
                     type="search"
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
@@ -1128,9 +1158,19 @@ export function ParkingReportsScreen({
           ) : null}
 
           {!detailOpen ? (
-            <section className="parking-reports-table-card">
-              <div className="cd-table-scroll">
-                <table className="cd-table">
+            <TableCard
+              className="parking-reports-table-card"
+              maxHeight="70vh"
+              title={`${filteredReports.length.toLocaleString()} report${filteredReports.length === 1 ? "" : "s"}`}
+              meta={
+                reports.length >= REPORT_FETCH_LIMIT
+                  ? `Showing the newest ${REPORT_FETCH_LIMIT} reports`
+                  : showClosed || statusFilter !== "all"
+                    ? "Filtered view"
+                    : "Open reports"
+              }
+            >
+                <DataTable minWidth={900} aria-label="Parking reports">
                   <thead>
                     <tr>
                       <th>Evidence</th>
@@ -1169,14 +1209,10 @@ export function ParkingReportsScreen({
                         typeof report.violation_latitude === "number" &&
                         typeof report.violation_longitude === "number";
                       return (
-                        <tr
+                        <DataRow
                           key={report.report_uuid}
-                          className={`cd-table-row ${
-                            report.report_uuid === selectedReportId
-                              ? "cd-table-row-selected"
-                              : ""
-                          }`}
-                          onClick={() => {
+                          selected={report.report_uuid === selectedReportId}
+                          onOpen={() => {
                             setSelectedReportId(report.report_uuid);
                             setDetailOpen(true);
                           }}
@@ -1184,6 +1220,8 @@ export function ParkingReportsScreen({
                           <td>
                             {incidentUrl ? (
                               <img
+                                loading="lazy"
+                                decoding="async"
                                 className="parking-report-table-thumb"
                                 src={incidentUrl}
                                 alt=""
@@ -1198,6 +1236,8 @@ export function ParkingReportsScreen({
                             <div className="cd-table-student-cell">
                               {reporterAvatar ? (
                                 <img
+                                  loading="lazy"
+                                  decoding="async"
                                   className="cd-table-avatar"
                                   src={reporterAvatar}
                                   alt=""
@@ -1229,28 +1269,24 @@ export function ParkingReportsScreen({
                           </td>
                                   <td>
                                     <div className="parking-report-status-stack">
-                                      <span
-                                        className={`cd-status ${getReportStatusClass(
-                                          report.status,
-                                        )}`}
-                                      >
+                                      <StatusBadge tone={getReportStatusTone(report.status)}>
                                         {formatStatus(report.status)}
-                                      </span>
+                                      </StatusBadge>
                                       {report.flagged_for_enforcement ? (
-                                        <span className="cd-status cd-status-declined">
+                                        <StatusBadge tone="danger">
                                           {report.flag_priority === "urgent"
                                             ? "Urgent flag"
                                             : "Flagged"}
-                                        </span>
+                                        </StatusBadge>
                                       ) : null}
                                       {report.assigned_user_uuid ? (
-                                        <span className="cd-tag">
+                                        <StatusBadge tone="info">
                                           {report.assignment_source === "tag"
                                             ? "Tag match"
                                             : "Assigned"}
-                                        </span>
+                                        </StatusBadge>
                                       ) : report.scanned_pass_uuid ? (
-                                        <span className="cd-tag">ID tag</span>
+                                        <StatusBadge tone="info">ID tag</StatusBadge>
                                       ) : null}
                                     </div>
                                   </td>
@@ -1258,26 +1294,26 @@ export function ParkingReportsScreen({
                             {formatDateTime(report.created_at)}
                           </td>
                           <td>
-                            <span className="cd-tag">
+                            <StatusBadge tone={rowHasLocation ? "neutral" : "warning"}>
                               {rowHasLocation ? "Captured" : "Missing"}
-                            </span>
+                            </StatusBadge>
                           </td>
-                        </tr>
+                        </DataRow>
                       );
                     })}
+                    {loadBusy && filteredReports.length === 0 ? (
+                      <TableMessageRow colSpan={6} tone="loading">
+                        Loading reports…
+                      </TableMessageRow>
+                    ) : null}
+                    {!loadBusy && filteredReports.length === 0 ? (
+                      <TableMessageRow colSpan={6}>
+                        No reports match this view.
+                      </TableMessageRow>
+                    ) : null}
                   </tbody>
-                </table>
-              </div>
-              {loadBusy ? (
-                <div className="cd-empty">Loading reports...</div>
-              ) : null}
-              {!loadBusy && filteredReports.length === 0 ? (
-                <div className="cd-empty">
-                  No reports match this table view for school{" "}
-                  {activeSchoolId || "none"}.
-                </div>
-              ) : null}
-            </section>
+                </DataTable>
+            </TableCard>
           ) : null}
 
           {detailOpen && selectedReport ? (
@@ -1400,7 +1436,7 @@ export function ParkingReportsScreen({
                         onClick={() => setExpandedPhotoUrl(incidentPhotoUrl)}
                         aria-label="Expand incident photo"
                       >
-                        <img src={incidentPhotoUrl} alt="Incident evidence" />
+                        <img loading="lazy" decoding="async" src={incidentPhotoUrl} alt="Incident evidence" />
                         <span className="prd-photo-hint">Click to expand</span>
                       </button>
                     ) : (
@@ -1414,7 +1450,7 @@ export function ParkingReportsScreen({
                         className="prd-photo-secondary"
                         onClick={() => setExpandedPhotoUrl(qrPhotoUrl)}
                       >
-                        <img src={qrPhotoUrl} alt="" />
+                        <img loading="lazy" decoding="async" src={qrPhotoUrl} alt="" />
                         <span>Device QR photo (older report)</span>
                       </button>
                     ) : null}
@@ -1478,6 +1514,8 @@ export function ParkingReportsScreen({
                           <span className="prd-people-name">
                             {selectedReporterAvatar ? (
                               <img
+                                loading="lazy"
+                                decoding="async"
                                 className="cd-table-avatar"
                                 src={selectedReporterAvatar}
                                 alt=""
@@ -2029,14 +2067,17 @@ export function ParkingReportsScreen({
       </div>
 
               {expandedPhotoUrl ? (
-                <div
+                <DialogBackdrop
                   className="prd-lightbox"
                   role="dialog"
                   aria-modal="true"
                   aria-label="Incident photo"
                   onClick={() => setExpandedPhotoUrl("")}
+                  onClose={() => setExpandedPhotoUrl("")}
                 >
                   <img
+                    loading="lazy"
+                    decoding="async"
                     src={expandedPhotoUrl}
                     alt="Incident evidence, full size"
                     onClick={(event) => event.stopPropagation()}
@@ -2054,16 +2095,17 @@ export function ParkingReportsScreen({
                       Close
                     </button>
                   </div>
-                </div>
+                </DialogBackdrop>
               ) : null}
 
               {filterModalOpen ? (
-                <div
+                <DialogBackdrop
           className="management-modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-labelledby="parking-report-filter-title"
           onClick={() => setFilterModalOpen(false)}
+          onClose={() => setFilterModalOpen(false)}
         >
           <div
             className="management-modal-sheet parking-report-filter-modal"
@@ -2144,16 +2186,17 @@ export function ParkingReportsScreen({
               </button>
             </div>
           </div>
-                </div>
+                </DialogBackdrop>
               ) : null}
 
               {issueModalOpen && selectedReport ? (
-                <div
+                <DialogBackdrop
                   className="management-modal-backdrop"
                   role="dialog"
                   aria-modal="true"
                   aria-labelledby="parking-report-issue-title"
                   onClick={() => setIssueModalOpen(false)}
+                  onClose={() => setIssueModalOpen(false)}
                 >
                   <div
                     className="management-modal-sheet parking-report-filter-modal"
@@ -2267,7 +2310,7 @@ export function ParkingReportsScreen({
                       </button>
                     </div>
                   </div>
-                </div>
+                </DialogBackdrop>
               ) : null}
             </div>
           );

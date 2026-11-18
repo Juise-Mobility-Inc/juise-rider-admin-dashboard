@@ -6,6 +6,7 @@ import {
   type UserMediaAsset,
 } from "../../lib/api";
 import { shortPassId } from "../../lib/parkingPasses";
+import { DialogBackdrop } from "../../components/DialogBackdrop";
 
 type Props = {
   device: RegisteredDevice;
@@ -115,12 +116,13 @@ export function StudentVehicleDetailModal({
   );
 
   return (
-    <div
+    <DialogBackdrop
       className="vehicle-modal-backdrop"
       role="dialog"
       aria-modal="true"
       aria-label={`${device.nickname || device.device_type} details`}
       onClick={onClose}
+      onClose={onClose}
     >
       <div
         className="vehicle-modal-sheet"
@@ -147,6 +149,8 @@ export function StudentVehicleDetailModal({
           <div className="vehicle-modal-hero-card">
             {primaryPhotoUrl ? (
               <img
+                loading="lazy"
+                decoding="async"
                 className="vehicle-modal-hero-image"
                 src={primaryPhotoUrl}
                 alt={`${device.nickname || device.device_type} primary`}
@@ -438,6 +442,8 @@ export function StudentVehicleDetailModal({
                   }
                 >
                   <img
+                    loading="lazy"
+                    decoding="async"
                     className="vehicle-modal-media-image"
                     src={url}
                     alt={`${device.nickname || device.device_type} ${asset.slot || "photo"}`}
@@ -458,6 +464,6 @@ export function StudentVehicleDetailModal({
           </pre>
         </div>
       </div>
-    </div>
+    </DialogBackdrop>
   );
 }
