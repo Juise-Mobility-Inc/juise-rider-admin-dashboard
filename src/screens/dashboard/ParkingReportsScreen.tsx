@@ -6,6 +6,7 @@ import {
   clearSchoolParkingIncidentReportFlag,
   deleteSchoolParkingIncidentReport,
   fetchParkingViolationFeeRules,
+  fetchSchoolParkingIncidentReport,
   fetchSchoolParkingIncidentReportContext,
   fetchSchoolParkingIncidentReports,
   fetchSchoolRegisteredDevices,
@@ -915,17 +916,52 @@ export function ParkingReportsScreen({
       .replace(/, ([^,]*)$/, " or $1") +
     ".";
 
-  function openHistoryItem(item: HistoryItem) {
+  async function openHistoryItem(item: HistoryItem) {
     if (item.kind === "violation") {
       navigate(`/penalty-reports?report=${encodeURIComponent(item.record.uuid)}`);
       return;
     }
+    const reportUUID = item.record.uuid;
+    if (!reports.some((report) => report.report_uuid === reportUUID)) {
+      // The report can be outside the loaded list (filtered out, or past the
+      // 100 most recent): fetch it and add it before selecting it, so the
+      // detail doesn't close on a selection it can't resolve.
+      setActionBusy("history");
+      setError("");
+      try {
+        const report = await fetchSchoolParkingIncidentReport(
+          managedAppId,
+          activeSchoolId,
+          reportUUID,
+        );
+        const objectKeys = (report.media_assets ?? [])
+          .map((asset) => asset.object_key?.trim() ?? "")
+          .filter(Boolean);
+        if (objectKeys.length > 0) {
+          try {
+            const signed = await signSchoolMedia(
+              report.school_id || activeSchoolId,
+              objectKeys,
+            );
+            setSignedUrls((current) => ({ ...current, ...signed }));
+          } catch {
+            // The report still opens; its photo shows as unavailable.
+          }
+        }
+        setReports((current) =>
+          current.some((entry) => entry.report_uuid === report.report_uuid)
+            ? current
+            : [...current, report],
+        );
+      } catch (nextError) {
+        setError(getErrorMessage(nextError));
+        return;
+      } finally {
+        setActionBusy("");
+      }
+    }
     setHistoryOpen(false);
-    // Clear filters so the report is in the list whatever its status.
-    setShowClosed(true);
-    setStatusFilter("all");
-    setTypeFilter("all");
-    setSelectedReportId(item.record.uuid);
+    setSelectedReportId(reportUUID);
     setDetailOpen(true);
   }
 
@@ -1273,7 +1309,8 @@ export function ParkingReportsScreen({
                             <button
                               type="button"
                               className="prd-history-item"
-                              onClick={() => openHistoryItem(item)}
+                              disabled={actionBusy === "history"}
+                              onClick={() => void openHistoryItem(item)}
                             >
                               <span className="prd-history-kind">
                                 {item.kind === "violation"
