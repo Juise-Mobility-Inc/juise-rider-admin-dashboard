@@ -177,9 +177,11 @@ export function StaffScreen({
           <h2>Staff &amp; Access</h2>
           <p className="muted-text">
             Admins manage this school in the Dashboard and the Juise
-            Enforcement app. Enforcement officers use only the Juise
-            Enforcement app. To add someone, they first create a Dashboard
-            account; then add them here by that account&apos;s email.
+            e-nforce app. Enforcement officers use only the Juise e-nforce
+            app. Officers can sign up themselves in the app with this
+            school&apos;s join code (shown in the sidebar) and join as
+            officers. You can also add anyone with a Dashboard account here
+            by their email, or change their level.
           </p>
         </div>
       </div>

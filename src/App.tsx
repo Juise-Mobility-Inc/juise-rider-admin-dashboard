@@ -8109,10 +8109,18 @@ function App() {
                 ? "Loading…"
                 : viewJoinCode !== null
                   ? "Hide join code"
-                  : "Show join code to invite admins"}
+                  : "Show join code"}
             </button>
             {viewJoinCode !== null ? (
-              <p className="sidebar-join-code-value">{viewJoinCode}</p>
+              <>
+                <p className="sidebar-join-code-value">{viewJoinCode}</p>
+                <p className="sidebar-join-code-hint">
+                  Enforcement officers enter this code in the Juise e-nforce
+                  app to sign up as officers. Admins use it to join this
+                  school from the Dashboard, so share it only with people you
+                  trust.
+                </p>
+              </>
             ) : null}
           </div>
 
