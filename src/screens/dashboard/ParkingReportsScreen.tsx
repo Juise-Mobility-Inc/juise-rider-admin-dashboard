@@ -26,6 +26,13 @@ import {
   updateSchoolParkingIncidentReport,
 } from "../../lib/api";
 import { useDetailParamSync } from "../../lib/useDetailParamSync";
+import {
+  OTHER_VIOLATION_REASON,
+  VIOLATION_REASONS,
+  VIOLATION_TITLE_MAX_LENGTH,
+  findViolationReason,
+  normalizeViolationReason,
+} from "../../lib/violationReasons";
 import { confirmAction } from "../../lib/confirm";
 import { DialogBackdrop } from "../../components/DialogBackdrop";
 import {
@@ -343,7 +350,8 @@ export function ParkingReportsScreen({
     "normal",
   );
   const [flagNoteDraft, setFlagNoteDraft] = useState("");
-  const [issueViolationType, setIssueViolationType] = useState("other");
+  const [issueViolationType, setIssueViolationType] = useState("");
+  const [issueViolationTitle, setIssueViolationTitle] = useState("");
   const [issueStatus, setIssueStatus] = useState("reported");
   const [issueAmountDollars, setIssueAmountDollars] = useState("");
   const [issueAdminNotes, setIssueAdminNotes] = useState("");
@@ -608,7 +616,16 @@ export function ParkingReportsScreen({
       selectedReport.flag_priority === "urgent" ? "urgent" : "normal",
     );
     setFlagNoteDraft(selectedReport.flag_note ?? "");
-    setIssueViolationType("other");
+    // Start from the closest reason to what the reporter chose; the admin
+    // can change it.
+    setIssueViolationType(
+      selectedReport.report_type === "reserved_spot_occupied"
+        ? "unauthorized_parking"
+        : selectedReport.report_type === "blocking_access"
+          ? "blocking_access"
+          : "",
+    );
+    setIssueViolationTitle("");
     setIssueStatus("reported");
     setIssueAmountDollars(
       selectedReport.responsibility_fine_cents
@@ -835,6 +852,15 @@ export function ParkingReportsScreen({
       setError("Enter a valid dollar amount.");
       return;
     }
+    if (!issueViolationType) {
+      setError("Choose a violation reason.");
+      return;
+    }
+    const issueTitle = issueViolationTitle.trim();
+    if (issueViolationType === OTHER_VIOLATION_REASON && !issueTitle) {
+      setError('Give the "Other" reason a short title.');
+      return;
+    }
     setActionBusy("issue");
     setError("");
     try {
@@ -853,6 +879,8 @@ export function ParkingReportsScreen({
             selectedReport.assigned_registered_device_uuid ||
             null,
           violation_type: issueViolationType,
+          violation_title:
+            issueViolationType === OTHER_VIOLATION_REASON ? issueTitle : undefined,
           description: selectedReport.description || "Parking incident report",
           status: issueStatus,
           admin_notes: issueAdminNotes,
@@ -2223,32 +2251,56 @@ export function ParkingReportsScreen({
                     </div>
                     <div className="parking-report-filter-grid">
                       <label>
-                        Violation type
+                        Violation reason
                         <select
                           value={issueViolationType}
                           onChange={(event) => {
                             const nextType = event.target.value;
                             setIssueViolationType(nextType);
                             const rule = activeFeeRules.find(
-                              (item) => item.violation_type === nextType,
+                              (item) =>
+                                normalizeViolationReason(item.violation_type) ===
+                                nextType,
                             );
                             if (rule) {
                               setIssueAmountDollars(centsToDollars(rule.amount_cents));
                             }
                           }}
                         >
-                          <option value="other">Other</option>
-                          {activeFeeRules.map((rule) => (
-                            <option
-                              key={rule.fee_rule_uuid}
-                              value={rule.violation_type}
-                            >
-                              {rule.label || formatStatus(rule.violation_type)} · $
-                              {centsToDollars(rule.amount_cents)}
-                            </option>
-                          ))}
+                          <option value="">Choose a reason…</option>
+                          {VIOLATION_REASONS.map((reason) => {
+                            const rule = activeFeeRules.find(
+                              (item) =>
+                                normalizeViolationReason(item.violation_type) ===
+                                reason.value,
+                            );
+                            return (
+                              <option key={reason.value} value={reason.value}>
+                                {reason.label}
+                                {rule ? ` · $${centsToDollars(rule.amount_cents)}` : ""}
+                              </option>
+                            );
+                          })}
                         </select>
+                        {findViolationReason(issueViolationType) ? (
+                          <span className="vr-reason-hint">
+                            {findViolationReason(issueViolationType)?.description}
+                          </span>
+                        ) : null}
                       </label>
+                      {issueViolationType === OTHER_VIOLATION_REASON ? (
+                        <label>
+                          Title for &ldquo;Other&rdquo;
+                          <input
+                            value={issueViolationTitle}
+                            maxLength={VIOLATION_TITLE_MAX_LENGTH}
+                            onChange={(event) =>
+                              setIssueViolationTitle(event.target.value)
+                            }
+                            placeholder="e.g. Bike chained to a railing"
+                          />
+                        </label>
+                      ) : null}
                       <label>
                         Status
                         <select

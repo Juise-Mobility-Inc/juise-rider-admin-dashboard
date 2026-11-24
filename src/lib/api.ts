@@ -3897,6 +3897,8 @@ export interface StudentParkingViolation {
   registered_device_uuid?: string | null;
   reported_by_user_uuid: string;
   violation_type: string;
+  // The admin's or officer's own title when violation_type is "other".
+  violation_title?: string;
   description: string;
   admin_notes: string;
   appeal_description: string;
@@ -3940,6 +3942,7 @@ export interface StudentParkingViolationUpdateInput {
   admin_notes?: string;
   description?: string;
   violation_type?: string;
+  violation_title?: string;
   payment_amount_cents?: number | null;
   payment_requested_at?: number | null;
   payment_collected_at?: number | null;
@@ -4065,6 +4068,7 @@ export interface StudentParkingIncidentReportIssueViolationInput {
   membership_uuid?: string | null;
   registered_device_uuid?: string | null;
   violation_type?: string;
+  violation_title?: string;
   description: string;
   status?: string;
   admin_notes?: string;
