@@ -9152,6 +9152,13 @@
         border-color: var(--navy);
 }
 
+.vr-reason-hint {
+        margin: 0;
+        font-size: 0.84rem;
+        line-height: 1.45;
+        color: var(--muted-strong);
+}
+
 /* ── VR: LIST ITEM IMPROVEMENTS ─────────────────────── */
 .vr-list-item-row {
         display: flex;

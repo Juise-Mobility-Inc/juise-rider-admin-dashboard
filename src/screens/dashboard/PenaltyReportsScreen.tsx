@@ -26,6 +26,14 @@ import {
 	type StudentRouteHistorySession,
 	type StudentRouteHistoryPenaltyEvent,
 } from "../../lib/api";
+import {
+	OTHER_VIOLATION_REASON,
+	VIOLATION_REASONS,
+	VIOLATION_TITLE_MAX_LENGTH,
+	findViolationReason,
+	normalizeViolationReason,
+	violationReasonLabel,
+} from "../../lib/violationReasons";
 
 type Props = {
 	activeSchoolId: string;
@@ -51,17 +59,6 @@ const statusOptions = [
 	"resolved",
 	"closed",
 ];
-
-const fallbackViolationTypes = [
-	"no_permit",
-	"wrong_spot",
-	"expired_reservation",
-	"blocking_access",
-	"unauthorized_parking",
-	"other",
-];
-
-const customViolationTypeValue = "__custom_violation_type__";
 
 function getErrorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : "Something went wrong.";
@@ -195,13 +192,7 @@ function normalizeRuleToken(value?: string | null): string {
 }
 
 function normalizeViolationType(value?: string | null): string {
-	return (value ?? "")
-		.trim()
-		.toLowerCase()
-		.replace(/[\s-]+/g, "_")
-		.replace(/[^a-z0-9_]/g, "")
-		.replace(/_+/g, "_")
-		.replace(/^_+|_+$/g, "");
+	return normalizeViolationReason(value);
 }
 
 function normalizeStatusValue(value: string): string {
@@ -293,28 +284,6 @@ function resolveDevicePhotoObjectKey(assets: UserMediaAsset[]): string {
 			})[0]
 			?.object_key?.trim() ?? ""
 	);
-}
-
-function buildViolationTypeOptions(
-	feeRules: ParkingViolationFeeRule[],
-	currentType?: string | null,
-) {
-	const options: string[] = [];
-	const pushOption = (value?: string | null) => {
-		const normalized = normalizeViolationType(value);
-		if (
-			normalized &&
-			!options.some((option) => normalizeViolationType(option) === normalized)
-		) {
-			options.push(normalized);
-		}
-	};
-
-	pushOption(currentType);
-	feeRules.filter((rule) => rule.active).forEach((rule) => pushOption(rule.violation_type));
-	fallbackViolationTypes.forEach(pushOption);
-
-	return options.sort((left, right) => left.localeCompare(right));
 }
 
 function isOpenReport(report: StudentParkingViolation): boolean {
@@ -421,6 +390,7 @@ export function PenaltyReportsScreen({
 	const [statusDraft, setStatusDraft] = useState("reported");
 	const [notesDraft, setNotesDraft] = useState("");
 	const [violationTypeDraft, setViolationTypeDraft] = useState("");
+	const [violationTitleDraft, setViolationTitleDraft] = useState("");
 	const [paymentAmountDraft, setPaymentAmountDraft] = useState("");
 	const [feeRules, setFeeRules] = useState<ParkingViolationFeeRule[]>([]);
 	const [feeRulesBusy, setFeeRulesBusy] = useState(false);
@@ -474,19 +444,15 @@ export function PenaltyReportsScreen({
 		: "";
 	const selectedDeviceUUID = selectedReport?.registered_device_uuid?.trim() ?? "";
 	const selectedCampusId = selectedStudentEntry?.membership.campus_id?.trim() ?? "";
-	const violationTypeOptions = useMemo(
-		() => buildViolationTypeOptions(feeRules, selectedReport?.violation_type),
-		[feeRules, selectedReport?.violation_type],
-	);
-	const selectedViolationTypeOption = useMemo(() => {
-		const normalizedDraft = normalizeViolationType(violationTypeDraft);
-		return (
-			violationTypeOptions.find(
-				(option) => normalizeViolationType(option) === normalizedDraft,
-			) ?? customViolationTypeValue
-		);
-	}, [violationTypeDraft, violationTypeOptions]);
-	const isCustomViolationType = selectedViolationTypeOption === customViolationTypeValue;
+	// A report saved before the fixed list may carry a type that isn't on it;
+	// keep it selectable so saving other changes doesn't force a new reason.
+	const unlistedViolationType = useMemo(() => {
+		const current = normalizeViolationType(selectedReport?.violation_type);
+		return current && !findViolationReason(current) ? current : "";
+	}, [selectedReport?.violation_type]);
+	const selectedViolationReason = findViolationReason(violationTypeDraft);
+	const isOtherViolationReason =
+		normalizeViolationType(violationTypeDraft) === OTHER_VIOLATION_REASON;
 	const isPaidLocked = normalizeStatusValue(selectedReport?.status ?? "") === "paid";
 	const matchedFeeRule = useMemo(
 		() =>
@@ -688,7 +654,8 @@ export function PenaltyReportsScreen({
 	useEffect(() => {
 		setStatusDraft(selectedReport?.status || "reported");
 		setNotesDraft(selectedReport?.admin_notes || "");
-		setViolationTypeDraft(selectedReport?.violation_type || "");
+		setViolationTypeDraft(normalizeViolationType(selectedReport?.violation_type));
+		setViolationTitleDraft(selectedReport?.violation_title || "");
 		setPaymentAmountDraft(formatCentsForInput(selectedReport?.payment_amount_cents));
 		void refreshMedia(selectedReport);
 		void refreshHistory(selectedReport);
@@ -794,8 +761,13 @@ export function PenaltyReportsScreen({
 			const isRequestingPayment = normalizedStatus === "awaiting_payment";
 			const hasMatchedRule = Boolean(matchedFeeRule);
 			let paymentAmountCents: number | undefined;
+			const violationTitle = violationTitleDraft.trim();
 			if (isRequestingPayment && !normalizedViolationType) {
-				setError("Select or create a violation type before requesting payment.");
+				setError("Choose a violation reason before requesting payment.");
+				return;
+			}
+			if (normalizedViolationType === OTHER_VIOLATION_REASON && !violationTitle) {
+				setError("Give the \"Other\" reason a short title.");
 				return;
 			}
 			if (isRequestingPayment && hasMatchedRule) {
@@ -828,6 +800,10 @@ export function PenaltyReportsScreen({
 					status: nextStatus,
 					admin_notes: notesDraft,
 					violation_type: normalizedViolationType || undefined,
+					violation_title:
+						normalizedViolationType === OTHER_VIOLATION_REASON
+							? violationTitle
+							: undefined,
 					payment_amount_cents: paymentAmountCents,
 					payment_requested_at: options?.paymentRequestedAt ?? null,
 					payment_collected_at: options?.paymentCollectedAt ?? null,
@@ -1043,7 +1019,10 @@ export function PenaltyReportsScreen({
 										<strong>{report.description || "Parking report"}</strong>
 										{report.violation_type ? (
 											<span className="vr-list-type-badge">
-												{formatStatus(report.violation_type)}
+												{violationReasonLabel(
+													report.violation_type,
+													report.violation_title,
+												)}
 											</span>
 										) : null}
 									</div>
@@ -1312,10 +1291,13 @@ export function PenaltyReportsScreen({
 								</strong>
 							</div>
 							<div>
-								<span>Violation type</span>
+								<span>Violation reason</span>
 								<strong>
 									{selectedReport.violation_type
-										? formatStatus(selectedReport.violation_type)
+										? violationReasonLabel(
+												selectedReport.violation_type,
+												selectedReport.violation_title,
+											)
 										: "Not set"}
 								</strong>
 							</div>
@@ -1383,8 +1365,15 @@ export function PenaltyReportsScreen({
 									<dd>{formatStatus(selectedReport.status)}</dd>
 								</div>
 								<div>
-									<dt>Violation type</dt>
-									<dd>{selectedReport.violation_type ? formatStatus(selectedReport.violation_type) : "Unspecified"}</dd>
+									<dt>Violation reason</dt>
+									<dd>
+										{selectedReport.violation_type
+											? violationReasonLabel(
+													selectedReport.violation_type,
+													selectedReport.violation_title,
+												)
+											: "Unspecified"}
+									</dd>
 								</div>
 								<div>
 									<dt>Amount</dt>
@@ -1439,36 +1428,43 @@ export function PenaltyReportsScreen({
 										</div>
 
 										<div className="vr-form-block">
-											<p className="vr-block-label">Violation type</p>
-											<div className="vr-type-grid">
-												{violationTypeOptions.map((type) => (
-													<button
-														key={type}
-														type="button"
-														className={`vr-type-btn${normalizeViolationType(violationTypeDraft) === type && !isCustomViolationType ? " vr-type-btn-active" : ""}`}
-														onClick={() => setViolationTypeDraft(type)}>
-														{formatStatus(type)}
-													</button>
+											<label className="vr-block-label" htmlFor="penalty-violation-reason">
+												Violation reason
+											</label>
+											<select
+												id="penalty-violation-reason"
+												className="vr-type-custom"
+												value={violationTypeDraft}
+												onChange={(event) =>
+													setViolationTypeDraft(event.target.value)
+												}>
+												<option value="">Choose a reason…</option>
+												{VIOLATION_REASONS.map((reason) => (
+													<option key={reason.value} value={reason.value}>
+														{reason.label}
+													</option>
 												))}
-												<button
-													type="button"
-													className={`vr-type-btn vr-type-btn-custom${isCustomViolationType ? " vr-type-btn-active" : ""}`}
-													onClick={() => setViolationTypeDraft("")}>
-													Custom…
-												</button>
-											</div>
-											{isCustomViolationType ? (
+												{unlistedViolationType ? (
+													<option value={unlistedViolationType}>
+														{violationReasonLabel(unlistedViolationType)} (no longer on the list)
+													</option>
+												) : null}
+											</select>
+											{selectedViolationReason ? (
+												<p className="vr-reason-hint">
+													{selectedViolationReason.description}
+												</p>
+											) : null}
+											{isOtherViolationReason ? (
 												<input
 													className="vr-type-custom"
-													value={violationTypeDraft}
+													value={violationTitleDraft}
+													maxLength={VIOLATION_TITLE_MAX_LENGTH}
 													onChange={(event) =>
-														setViolationTypeDraft(event.target.value)
+														setViolationTitleDraft(event.target.value)
 													}
-													placeholder={
-														feeRulesBusy
-															? "Loading types…"
-															: "Enter type, e.g. no_permit"
-													}
+													placeholder="Short title, e.g. Bike chained to a railing"
+													aria-label="Title for the other reason"
 												/>
 											) : null}
 										</div>
@@ -1501,12 +1497,14 @@ export function PenaltyReportsScreen({
 										</div>
 
 										<div className="penalty-report-fee-match">
-											{matchedFeeRule ? (
+											{feeRulesBusy ? (
+												<span>Checking this school&apos;s fees…</span>
+											) : matchedFeeRule ? (
 												<span>
 													Matched fee:{" "}
 													<strong>
 														{matchedFeeRule.label ||
-															formatStatus(
+															violationReasonLabel(
 																matchedFeeRule.violation_type,
 															)}
 													</strong>{" "}

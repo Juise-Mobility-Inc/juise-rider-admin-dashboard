@@ -10,6 +10,12 @@ import {
 } from "../../lib/api";
 import { confirmAction } from "../../lib/confirm";
 import {
+  VIOLATION_REASONS,
+  findViolationReason,
+  normalizeViolationReason,
+  violationReasonLabel,
+} from "../../lib/violationReasons";
+import {
   DataRow,
   DataTable,
   StatusBadge,
@@ -42,17 +48,7 @@ const emptyDraft: FeeRuleDraft = {
   active: true,
 };
 
-const customViolationTypeValue = "__custom_violation_type__";
 const customDeviceTypeValue = "__custom_device_type__";
-
-const fallbackViolationTypes = [
-  "no_permit",
-  "wrong_spot",
-  "expired_reservation",
-  "blocking_access",
-  "unauthorized_parking",
-  "other",
-];
 
 const fallbackDeviceTypes = [
   "ebike",
@@ -84,7 +80,7 @@ function normalizeToken(value?: string | null): string {
     .replace(/^_+|_+$/g, "");
 }
 
-function formatViolationType(value: string): string {
+function formatDeviceType(value: string): string {
   return value
     .split(/[_\-\s]+/)
     .filter(Boolean)
@@ -104,7 +100,7 @@ function draftFromRule(rule: ParkingViolationFeeRule): FeeRuleDraft {
   return {
     fee_rule_uuid: rule.fee_rule_uuid,
     description: rule.label ?? "",
-    violation_type: rule.violation_type ?? "",
+    violation_type: normalizeViolationReason(rule.violation_type),
     device_type: rule.device_type ?? "",
     powertrain_type:
       rule.powertrain_type === "electric" || rule.powertrain_type === "non_electric"
@@ -174,14 +170,6 @@ export function ViolationFeesScreen({ activeSchoolId, managedAppId }: Props) {
       }),
     [rules],
   );
-  const violationTypeOptions = useMemo(
-    () =>
-      buildUniqueOptions(
-        rules.map((rule) => rule.violation_type),
-        fallbackViolationTypes,
-      ),
-    [rules],
-  );
   const deviceTypeOptions = useMemo(
     () =>
       buildUniqueOptions(
@@ -190,10 +178,13 @@ export function ViolationFeesScreen({ activeSchoolId, managedAppId }: Props) {
       ),
     [rules],
   );
-  const selectedViolationTypeOption =
-    violationTypeOptions.find(
-      (option) => normalizeToken(option) === normalizeToken(draft.violation_type),
-    ) ?? customViolationTypeValue;
+  const selectedViolationReason = findViolationReason(draft.violation_type);
+  // A rule saved before the fixed list may use a type that isn't on it; keep
+  // it selectable so editing its amount doesn't force a new reason.
+  const unlistedViolationType =
+    draft.violation_type.trim() && !selectedViolationReason
+      ? normalizeToken(draft.violation_type)
+      : "";
   const selectedDeviceTypeOption = draft.device_type.trim()
     ? deviceTypeOptions.find(
         (option) => normalizeToken(option) === normalizeToken(draft.device_type),
@@ -263,7 +254,7 @@ export function ViolationFeesScreen({ activeSchoolId, managedAppId }: Props) {
   async function handleDelete(rule: ParkingViolationFeeRule) {
     const shouldDelete = await confirmAction({
       title: "Delete fee?",
-      message: `Delete the ${formatViolationType(rule.violation_type)} fee?`,
+      message: `Delete the ${violationReasonLabel(rule.violation_type)} fee?`,
       confirmLabel: "Delete",
     });
     if (!shouldDelete) {
@@ -321,7 +312,7 @@ export function ViolationFeesScreen({ activeSchoolId, managedAppId }: Props) {
             <div>
               <h3>
                 {draft.violation_type
-                  ? formatViolationType(draft.violation_type)
+                  ? violationReasonLabel(draft.violation_type)
                   : draft.fee_rule_uuid
                     ? "Edit fee"
                     : "New fee rule"}
@@ -331,40 +322,33 @@ export function ViolationFeesScreen({ activeSchoolId, managedAppId }: Props) {
           </div>
 
           <div className="vr-form-block">
-            <p className="vr-block-label">Violation type</p>
-            <div className="vr-type-grid">
-              {violationTypeOptions.map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  className={`vr-type-btn${selectedViolationTypeOption === type ? " vr-type-btn-active" : ""}`}
-                  onClick={() =>
-                    setDraft((current) => ({ ...current, violation_type: type }))
-                  }>
-                  {formatViolationType(type)}
-                </button>
+            <label className="vr-block-label" htmlFor="fee-rule-violation-reason">
+              Violation reason
+            </label>
+            <select
+              id="fee-rule-violation-reason"
+              className="vr-type-custom"
+              value={draft.violation_type}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  violation_type: event.target.value,
+                }))
+              }>
+              <option value="">Choose a reason…</option>
+              {VIOLATION_REASONS.map((reason) => (
+                <option key={reason.value} value={reason.value}>
+                  {reason.label}
+                </option>
               ))}
-              <button
-                type="button"
-                className={`vr-type-btn vr-type-btn-custom${selectedViolationTypeOption === customViolationTypeValue ? " vr-type-btn-active" : ""}`}
-                onClick={() =>
-                  setDraft((current) => ({ ...current, violation_type: "" }))
-                }>
-                Custom…
-              </button>
-            </div>
-            {selectedViolationTypeOption === customViolationTypeValue ? (
-              <input
-                className="vr-type-custom"
-                value={draft.violation_type}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    violation_type: event.target.value,
-                  }))
-                }
-                placeholder="e.g. no_permit"
-              />
+              {unlistedViolationType ? (
+                <option value={unlistedViolationType}>
+                  {violationReasonLabel(unlistedViolationType)} (no longer on the list)
+                </option>
+              ) : null}
+            </select>
+            {selectedViolationReason ? (
+              <p className="vr-reason-hint">{selectedViolationReason.description}</p>
             ) : null}
           </div>
 
@@ -417,7 +401,7 @@ export function ViolationFeesScreen({ activeSchoolId, managedAppId }: Props) {
                     setIsDeviceTypeCustom(false);
                     setDraft((current) => ({ ...current, device_type: type }));
                   }}>
-                  {formatViolationType(type)}
+                  {formatDeviceType(type)}
                 </button>
               ))}
               <button
@@ -534,7 +518,7 @@ export function ViolationFeesScreen({ activeSchoolId, managedAppId }: Props) {
                     className={rule.active ? undefined : "dt-row-inactive"}
                   >
                     <td>
-                      <strong>{formatViolationType(rule.violation_type)}</strong>
+                      <strong>{violationReasonLabel(rule.violation_type)}</strong>
                       {rule.label.trim() ? <span>{rule.label.trim()}</span> : null}
                     </td>
                     <td>

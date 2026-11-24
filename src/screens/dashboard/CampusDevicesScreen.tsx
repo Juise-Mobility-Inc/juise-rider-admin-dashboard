@@ -13,6 +13,7 @@ import {
 } from "react-leaflet";
 import { juisePackIcon } from "../../lib/mapIcons";
 import { shortPassId } from "../../lib/parkingPasses";
+import { violationReasonLabel } from "../../lib/violationReasons";
 import {
   fetchSchoolBeaconLocations,
   fetchSchoolParkingViolations,
@@ -286,7 +287,7 @@ function violationPositions(
     )
     .map((v) => ({
       pos: [v.violation_latitude!, v.violation_longitude!] as [number, number],
-      label: capitalize(v.violation_type) || "Violation",
+      label: violationReasonLabel(v.violation_type, v.violation_title) || "Violation",
     }));
 }
 
@@ -1184,7 +1185,7 @@ export function CampusDevicesScreen({
                           >
                             <div className="cd-violation-card-header">
                               <strong className="cd-violation-type">
-                                {capitalize(v.violation_type) || "Violation"}
+                                {violationReasonLabel(v.violation_type, v.violation_title) || "Violation"}
                               </strong>
                               <div className="cd-violation-badges">
                                 <span
